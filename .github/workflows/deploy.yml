@@ -1,0 +1,106 @@
+name: bexia deploy
+
+on:
+  push:
+    branches:
+      - grupol7/develop   # test
+      - grupol7/main      # prod
+  workflow_dispatch:
+
+# evita despliegues solapados por entorno
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy_test:
+    if: github.ref == 'refs/heads/grupol7/develop'
+    name: deploy_test
+    runs-on: ubuntu-latest
+    environment:
+      name: test
+      url: https://test.grupol7.bexia.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+
+      - name: Trust host
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
+
+      # sincroniza al directorio de TEST en el droplet
+      - name: Rsync source to server (test)
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude "storage/logs/*" \
+            --exclude "vendor" \
+            ./ ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}:${{ secrets.DO_TEST_PATH }}/
+
+      - name: Deploy (docker compose up -d)
+        run: |
+          ssh ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} << 'EOF'
+            set -e
+            cd ${{ secrets.DO_TEST_PATH }}
+            # .env de TEST ya debe existir en el servidor
+            docker compose pull || true
+            docker compose build --no-cache
+            docker compose up -d --remove-orphans
+            docker compose exec -T app php artisan key:generate --force || true
+            docker compose exec -T app php artisan migrate --force
+            docker compose exec -T app php artisan config:cache
+            docker compose exec -T app php artisan route:cache
+            docker compose exec -T app php artisan view:cache
+          EOF
+
+  deploy_prod:
+    if: github.ref == 'refs/heads/grupol7/main'
+    name: deploy_prod
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://grupol7.bexia.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+
+      - name: Trust host
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
+
+      # sincroniza al directorio de PROD en el droplet
+      - name: Rsync source to server (prod)
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude "storage/logs/*" \
+            --exclude "vendor" \
+            ./ ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}:${{ secrets.DO_PROD_PATH }}/
+
+      - name: Deploy (docker compose up -d)
+        run: |
+          ssh ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} << 'EOF'
+            set -e
+            cd ${{ secrets.DO_PROD_PATH }}
+            # .env de PROD ya debe existir en el servidor
+            docker compose pull || true
+            docker compose build --no-cache
+            docker compose up -d --remove-orphans
+            docker compose exec -T app php artisan key:generate --force || true
+            docker compose exec -T app php artisan migrate --force
+            docker compose exec -T app php artisan config:cache
+            docker compose exec -T app php artisan route:cache
+            docker compose exec -T app php artisan view:cache
+          EOF
