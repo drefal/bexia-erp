@@ -36,7 +36,7 @@ jobs:
         run: |
           if [[ "${GITHUB_REF##*/}" == "grupol7/main" ]]; then
             echo "path=$DO_PATH_PROD" >> "$GITHUB_OUTPUT"
-            echo "env=prod"        >> "$GITHUB_OUTPUT"
+            echo "env=prod"          >> "$GITHUB_OUTPUT"
           else
             echo "path=$DO_PATH_TEST" >> "$GITHUB_OUTPUT"
             echo "env=test"           >> "$GITHUB_OUTPUT"
@@ -59,14 +59,28 @@ jobs:
 
       # Subir .env desde secrets SOLO si existen
       - name: Upload .env (TEST)
-        if: ${{ steps.target.outputs.env == 'test' && secrets.ENV_TEST }}
+        if: ${{ steps.target.outputs.env == 'test' }}
+        env:
+          ENV_TEST: ${{ secrets.ENV_TEST }}
         run: |
-          ssh $DO_USER@$DO_HOST "cat > ${{ steps.target.outputs.path }}/.env" <<< "${{ secrets.ENV_TEST }}"
+          if [ -n "$ENV_TEST" ]; then
+            echo "Uploading .env (TEST)…"
+            ssh $DO_USER@$DO_HOST "cat > ${{ steps.target.outputs.path }}/.env" <<< "$ENV_TEST"
+          else
+            echo "ENV_TEST no está definido. Omitiendo."
+          fi
 
       - name: Upload .env (PROD)
-        if: ${{ steps.target.outputs.env == 'prod' && secrets.ENV_PROD }}
+        if: ${{ steps.target.outputs.env == 'prod' }}
+        env:
+          ENV_PROD: ${{ secrets.ENV_PROD }}
         run: |
-          ssh $DO_USER@$DO_HOST "cat > ${{ steps.target.outputs.path }}/.env" <<< "${{ secrets.ENV_PROD }}"
+          if [ -n "$ENV_PROD" ]; then
+            echo "Uploading .env (PROD)…"
+            ssh $DO_USER@$DO_HOST "cat > ${{ steps.target.outputs.path }}/.env" <<< "$ENV_PROD"
+          else
+            echo "ENV_PROD no está definido. Omitiendo."
+          fi
 
       - name: Docker Compose up (build & run)
         run: |
