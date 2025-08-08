@@ -1,106 +1,113 @@
-name: bexia deploy
+name: Bexia ERP – Deploy
 
 on:
   push:
     branches:
-      - grupol7/develop   # test
-      - grupol7/main      # prod
+      - grupol7/develop
+      - grupol7/main
   workflow_dispatch:
 
-# evita despliegues solapados por entorno
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: bexia-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy_test:
+    name: Deploy TEST (grupol7/develop)
     if: github.ref == 'refs/heads/grupol7/develop'
-    name: deploy_test
     runs-on: ubuntu-latest
-    environment:
-      name: test
-      url: https://test.grupol7.bexia.com
+
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Add SSH key
+      - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+          ssh-private-key: ${{ secrets.DO_KEY }}
 
-      - name: Trust host
+      - name: Trust host key
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
 
-      # sincroniza al directorio de TEST en el droplet
-      - name: Rsync source to server (test)
-        run: |
-          rsync -az --delete \
-            --exclude ".git" \
-            --exclude "storage/logs/*" \
-            --exclude "vendor" \
-            ./ ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}:${{ secrets.DO_TEST_PATH }}/
+      - name: Ensure remote directory exists
+        run: ssh ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} "mkdir -p '${{ secrets.DO_PATH_TEST }}'"
 
-      - name: Deploy (docker compose up -d)
+      - name: Sync files to TEST (rsync)
         run: |
-          ssh ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} << 'EOF'
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='vendor' \
+            --exclude='node_modules' \
+            ./ ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}:${{ secrets.DO_PATH_TEST }}/
+
+      - name: Build & deploy on server (TEST)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_KEY }}
+          script: |
             set -e
-            cd ${{ secrets.DO_TEST_PATH }}
-            # .env de TEST ya debe existir en el servidor
+            cd "${{ secrets.DO_PATH_TEST }}"
             docker compose pull || true
-            docker compose build --no-cache
-            docker compose up -d --remove-orphans
+            docker compose build --no-cache app || true
+            docker compose up -d
+            # Dependencias y optimizaciones
+            docker compose exec -T app composer install --no-interaction --prefer-dist --optimize-autoloader
             docker compose exec -T app php artisan key:generate --force || true
             docker compose exec -T app php artisan migrate --force
             docker compose exec -T app php artisan config:cache
             docker compose exec -T app php artisan route:cache
             docker compose exec -T app php artisan view:cache
-          EOF
 
   deploy_prod:
+    name: Deploy PROD (grupol7/main)
     if: github.ref == 'refs/heads/grupol7/main'
-    name: deploy_prod
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://grupol7.bexia.com
+
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Add SSH key
+      - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+          ssh-private-key: ${{ secrets.DO_KEY }}
 
-      - name: Trust host
+      - name: Trust host key
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
 
-      # sincroniza al directorio de PROD en el droplet
-      - name: Rsync source to server (prod)
-        run: |
-          rsync -az --delete \
-            --exclude ".git" \
-            --exclude "storage/logs/*" \
-            --exclude "vendor" \
-            ./ ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}:${{ secrets.DO_PROD_PATH }}/
+      - name: Ensure remote directory exists
+        run: ssh ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} "mkdir -p '${{ secrets.DO_PATH_PROD }}'"
 
-      - name: Deploy (docker compose up -d)
+      - name: Sync files to PROD (rsync)
         run: |
-          ssh ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} << 'EOF'
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='vendor' \
+            --exclude='node_modules' \
+            ./ ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}:${{ secrets.DO_PATH_PROD }}/
+
+      - name: Build & deploy on server (PROD)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_KEY }}
+          script: |
             set -e
-            cd ${{ secrets.DO_PROD_PATH }}
-            # .env de PROD ya debe existir en el servidor
+            cd "${{ secrets.DO_PATH_PROD }}"
             docker compose pull || true
-            docker compose build --no-cache
-            docker compose up -d --remove-orphans
+            docker compose build --no-cache app || true
+            docker compose up -d
+            # Dependencias y optimizaciones
+            docker compose exec -T app composer install --no-interaction --prefer-dist --optimize-autoloader
             docker compose exec -T app php artisan key:generate --force || true
             docker compose exec -T app php artisan migrate --force
             docker compose exec -T app php artisan config:cache
             docker compose exec -T app php artisan route:cache
             docker compose exec -T app php artisan view:cache
-          EOF
