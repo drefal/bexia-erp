@@ -11,68 +11,68 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env:
-      DO_HOST: ${{ secrets.DO_HOST }}          # 134.199.219.36
-      DO_USER: ${{ secrets.DO_USER }}          # root
-      DO_PATH_TEST: ${{ secrets.DO_PATH_TEST }}  # /opt/bexia/test/grupol7
-      DO_PATH_PROD: ${{ secrets.DO_PATH_PROD }}  # /opt/bexia/prod/grupol7
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # Mantén la clave privada como SECRET (DO_KEY) en GitHub
       - name: Start ssh-agent & add key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DO_KEY }}   # clave privada SIN passphrase
+          ssh-private-key: -----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACASmIaRVMEqa4L5sclyxYwLizcqKUnKm2XBFCDtBHEA7gAAAJAzJjluMyY5
+bgAAAAtzc2gtZWQyNTUxOQAAACASmIaRVMEqa4L5sclyxYwLizcqKUnKm2XBFCDtBHEA7g
+AAAEDAxzRtx5Sub9A/l0K72BoV6MbOp1AzLC8mHk5eaL06BBKYhpFUwSprgvmxyXLFjAuL
+NyopScqbZcEUIO0EcQDuAAAABmdsNy1jaQECAwQFBgc=
+-----END OPENSSH PRIVATE KEY-----
 
-      - name: Trust host key
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H "$DO_HOST" >> ~/.ssh/known_hosts
 
+      # Fijamos HOST/USER/RUTAS sin variables
       - name: Set deploy target (TEST/PROD)
         id: target
+        shell: bash
         run: |
+          echo "host=134.199.219.36" >> $GITHUB_OUTPUT
+          echo "user=root" >> $GITHUB_OUTPUT
           if [[ "${GITHUB_REF##*/}" == "grupol7/main" ]]; then
-            echo "path=$DO_PATH_PROD" >> $GITHUB_OUTPUT
+            echo "path=/opt/bexia/prod/grupol7" >> $GITHUB_OUTPUT
             echo "env=prod" >> $GITHUB_OUTPUT
           else
-            echo "path=$DO_PATH_TEST" >> $GITHUB_OUTPUT
+            echo "path=/opt/bexia/test/grupol7" >> $GITHUB_OUTPUT
             echo "env=test" >> $GITHUB_OUTPUT
           fi
-          echo "Deploy path: $(cat $GITHUB_OUTPUT)"
 
+      # Crear ruta remota y mostrar info básica
       - name: Preflight (create dir, perms, space)
         run: |
-          ssh $DO_USER@$DO_HOST "set -e
-            P='${{ steps.target.outputs.path }}'
-            mkdir -p \"\$P\"
-            stat -c '%U:%G %A %n' \"\$P\" || true
-            df -h \"\$P\" | tail -1
-          "
+          ssh -o StrictHostKeyChecking=no \
+            ${{ steps.target.outputs.user }}@${{ steps.target.outputs.host }} "set -e
+              P='${{ steps.target.outputs.path }}'
+              mkdir -p \"\$P\"
+              stat -c '%U:%G %A %n' \"\$P\" || true
+              df -h \"\$P\" | tail -1
+            "
 
+      # Sincroniza código (excluye cosas pesadas)
       - name: Sync files with rsync
         run: |
-          rsync -az --delete -e "ssh" \
+          rsync -az --delete -e "ssh -o StrictHostKeyChecking=no" \
             --exclude ".git" \
             --exclude ".github" \
             --exclude "node_modules" \
             --exclude "vendor" \
-            ./ $DO_USER@$DO_HOST:${{ steps.target.outputs.path }}/
+            ./ \
+            ${{ steps.target.outputs.user }}@${{ steps.target.outputs.host }}:${{ steps.target.outputs.path }}/
 
-      # Opcional: subir/actualizar .env remoto por entorno (si lo manejas como secret)
-      # - name: Upload .env (optional)
-      #   if: steps.target.outputs.env == 'test' && secrets.ENV_TEST
-      #   run: |
-      #     ssh $DO_USER@$DO_HOST "cat > ${{ steps.target.outputs.path }}/.env" <<< "${{ secrets.ENV_TEST }}"
-
+      # Levanta con Docker Compose en el servidor
       - name: Build & up with Docker Compose on server
         run: |
-          ssh $DO_USER@$DO_HOST "set -e
-            cd ${{ steps.target.outputs.path }}
-            docker compose pull || true
-            docker compose build --pull || true
-            docker compose up -d
-            docker compose ps
-          "
+          ssh -o StrictHostKeyChecking=no \
+            ${{ steps.target.outputs.user }}@${{ steps.target.outputs.host }} "set -e
+              cd ${{ steps.target.outputs.path }}
+              docker compose pull || true
+              docker compose build --pull || true
+              docker compose up -d
+              docker compose ps
+            "
