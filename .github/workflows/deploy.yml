@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DO_HOST: ${{ secrets.DO_HOST }}          # 134.199.219.36
-      DO_USER: ${{ secrets.DO_USER }}          # root
-      DO_PATH_TEST: ${{ secrets.DO_PATH_TEST }}  # /opt/bexia/test/grupol7
-      DO_PATH_PROD: ${{ secrets.DO_PATH_PROD }}  # /opt/bexia/prod/grupol7
+      DO_HOST: ${{ secrets.DO_HOST }}
+      DO_USER: ${{ secrets.DO_USER }}
+      DO_PATH_TEST: ${{ secrets.DO_PATH_TEST }}
+      DO_PATH_PROD: ${{ secrets.DO_PATH_PROD }}
 
     steps:
       - name: Checkout repo
@@ -24,7 +24,7 @@ jobs:
       - name: Start ssh-agent & add key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DO_KEY }}   # Pega la clave privada COMPLETA en el secret
+          ssh-private-key: ${{ secrets.DO_KEY }}
 
       - name: Trust droplet host key
         run: |
@@ -36,12 +36,11 @@ jobs:
         run: |
           if [[ "${GITHUB_REF##*/}" == "grupol7/main" ]]; then
             echo "path=$DO_PATH_PROD" >> "$GITHUB_OUTPUT"
-            echo "env=prod" >> "$GITHUB_OUTPUT"
+            echo "env=prod"        >> "$GITHUB_OUTPUT"
           else
             echo "path=$DO_PATH_TEST" >> "$GITHUB_OUTPUT"
-            echo "env=test" >> "$GITHUB_OUTPUT"
+            echo "env=test"           >> "$GITHUB_OUTPUT"
           fi
-          echo "Using path: $(cat $GITHUB_OUTPUT)"
 
       - name: Preflight (create dir, perms, space)
         run: |
@@ -55,20 +54,17 @@ jobs:
       - name: Sync files with rsync
         run: |
           rsync -az --delete -e "ssh -o StrictHostKeyChecking=no" \
-            --exclude ".git" \
-            --exclude ".github" \
-            --exclude "node_modules" \
-            --exclude "vendor" \
+            --exclude ".git" --exclude ".github" --exclude "node_modules" --exclude "vendor" \
             ./ $DO_USER@$DO_HOST:${{ steps.target.outputs.path }}/
 
-      # OPCIONAL: subir .env desde Secrets según entorno
+      # Subir .env desde secrets SOLO si existen
       - name: Upload .env (TEST)
-        if: steps.target.outputs.env == 'test' && secrets.ENV_TEST
+        if: ${{ steps.target.outputs.env == 'test' && secrets.ENV_TEST }}
         run: |
           ssh $DO_USER@$DO_HOST "cat > ${{ steps.target.outputs.path }}/.env" <<< "${{ secrets.ENV_TEST }}"
 
       - name: Upload .env (PROD)
-        if: steps.target.outputs.env == 'prod' && secrets.ENV_PROD
+        if: ${{ steps.target.outputs.env == 'prod' && secrets.ENV_PROD }}
         run: |
           ssh $DO_USER@$DO_HOST "cat > ${{ steps.target.outputs.path }}/.env" <<< "${{ secrets.ENV_PROD }}"
 
@@ -82,7 +78,6 @@ jobs:
             docker compose ps
           "
 
-      # Migrations + permisos (dentro del contenedor app)
       - name: Run migrations and optimize
         run: |
           ssh $DO_USER@$DO_HOST "set -e
