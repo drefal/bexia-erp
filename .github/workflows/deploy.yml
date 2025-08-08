@@ -7,107 +7,72 @@ on:
       - grupol7/main
   workflow_dispatch:
 
-concurrency:
-  group: bexia-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  deploy_test:
-    name: Deploy TEST (grupol7/develop)
-    if: github.ref == 'refs/heads/grupol7/develop'
+  deploy:
     runs-on: ubuntu-latest
+
+    env:
+      DO_HOST: ${{ secrets.DO_HOST }}          # 134.199.219.36
+      DO_USER: ${{ secrets.DO_USER }}          # root
+      DO_PATH_TEST: ${{ secrets.DO_PATH_TEST }}  # /opt/bexia/test/grupol7
+      DO_PATH_PROD: ${{ secrets.DO_PATH_PROD }}  # /opt/bexia/prod/grupol7
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Load SSH key
+      - name: Start ssh-agent & add key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DO_KEY }}
+          ssh-private-key: ${{ secrets.DO_KEY }}   # clave privada SIN passphrase
 
       - name: Trust host key
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H "$DO_HOST" >> ~/.ssh/known_hosts
 
-      - name: Ensure remote directory exists
-        run: ssh ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} "mkdir -p '${{ secrets.DO_PATH_TEST }}'"
-
-      - name: Sync files to TEST (rsync)
+      - name: Set deploy target (TEST/PROD)
+        id: target
         run: |
-          rsync -avz --delete \
-            --exclude='.git' \
-            --exclude='vendor' \
-            --exclude='node_modules' \
-            ./ ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}:${{ secrets.DO_PATH_TEST }}/
+          if [[ "${GITHUB_REF##*/}" == "grupol7/main" ]]; then
+            echo "path=$DO_PATH_PROD" >> $GITHUB_OUTPUT
+            echo "env=prod" >> $GITHUB_OUTPUT
+          else
+            echo "path=$DO_PATH_TEST" >> $GITHUB_OUTPUT
+            echo "env=test" >> $GITHUB_OUTPUT
+          fi
+          echo "Deploy path: $(cat $GITHUB_OUTPUT)"
 
-      - name: Build & deploy on server (TEST)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_KEY }}
-          script: |
-            set -e
-            cd "${{ secrets.DO_PATH_TEST }}"
+      - name: Preflight (create dir, perms, space)
+        run: |
+          ssh $DO_USER@$DO_HOST "set -e
+            P='${{ steps.target.outputs.path }}'
+            mkdir -p \"\$P\"
+            stat -c '%U:%G %A %n' \"\$P\" || true
+            df -h \"\$P\" | tail -1
+          "
+
+      - name: Sync files with rsync
+        run: |
+          rsync -az --delete -e "ssh" \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude "node_modules" \
+            --exclude "vendor" \
+            ./ $DO_USER@$DO_HOST:${{ steps.target.outputs.path }}/
+
+      # Opcional: subir/actualizar .env remoto por entorno (si lo manejas como secret)
+      # - name: Upload .env (optional)
+      #   if: steps.target.outputs.env == 'test' && secrets.ENV_TEST
+      #   run: |
+      #     ssh $DO_USER@$DO_HOST "cat > ${{ steps.target.outputs.path }}/.env" <<< "${{ secrets.ENV_TEST }}"
+
+      - name: Build & up with Docker Compose on server
+        run: |
+          ssh $DO_USER@$DO_HOST "set -e
+            cd ${{ steps.target.outputs.path }}
             docker compose pull || true
-            docker compose build --no-cache app || true
+            docker compose build --pull || true
             docker compose up -d
-            # Dependencias y optimizaciones
-            docker compose exec -T app composer install --no-interaction --prefer-dist --optimize-autoloader
-            docker compose exec -T app php artisan key:generate --force || true
-            docker compose exec -T app php artisan migrate --force
-            docker compose exec -T app php artisan config:cache
-            docker compose exec -T app php artisan route:cache
-            docker compose exec -T app php artisan view:cache
-
-  deploy_prod:
-    name: Deploy PROD (grupol7/main)
-    if: github.ref == 'refs/heads/grupol7/main'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DO_KEY }}
-
-      - name: Trust host key
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Ensure remote directory exists
-        run: ssh ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} "mkdir -p '${{ secrets.DO_PATH_PROD }}'"
-
-      - name: Sync files to PROD (rsync)
-        run: |
-          rsync -avz --delete \
-            --exclude='.git' \
-            --exclude='vendor' \
-            --exclude='node_modules' \
-            ./ ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}:${{ secrets.DO_PATH_PROD }}/
-
-      - name: Build & deploy on server (PROD)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_KEY }}
-          script: |
-            set -e
-            cd "${{ secrets.DO_PATH_PROD }}"
-            docker compose pull || true
-            docker compose build --no-cache app || true
-            docker compose up -d
-            # Dependencias y optimizaciones
-            docker compose exec -T app composer install --no-interaction --prefer-dist --optimize-autoloader
-            docker compose exec -T app php artisan key:generate --force || true
-            docker compose exec -T app php artisan migrate --force
-            docker compose exec -T app php artisan config:cache
-            docker compose exec -T app php artisan route:cache
-            docker compose exec -T app php artisan view:cache
+            docker compose ps
+          "
