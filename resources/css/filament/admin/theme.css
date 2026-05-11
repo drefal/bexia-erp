@@ -1,0 +1,857 @@
+@import '/vendor/filament/filament/resources/css/theme.css';
+
+/* =========================================
+   BEXIA PREMIUM V2
+   ========================================= */
+:root {
+    --bexia-primary: #2f6fed;
+    --bexia-primary-hover: #1e5ae0;
+    --bexia-primary-pressed: #1749b7;
+    --bexia-primary-soft: #eaf1ff;
+    --bexia-primary-soft-2: #f4f8ff;
+    --bexia-primary-dark: #163b78;
+
+    --bexia-text: #1f2937;
+    --bexia-text-soft: #6b7280;
+    --bexia-text-muted: #94a3b8;
+
+    --bexia-border: #d7dfea;
+    --bexia-border-strong: #c3cfdf;
+
+    --bexia-bg: #f5f7fb;
+    --bexia-surface: #ffffff;
+    --bexia-surface-soft: #fbfcfe;
+
+    --bexia-success: #16a34a;
+    --bexia-warning: #d97706;
+    --bexia-danger: #dc2626;
+
+    --bexia-radius: 18px;
+    --bexia-radius-sm: 12px;
+    --bexia-shadow-sm: 0 6px 18px rgba(15, 23, 42, 0.05);
+    --bexia-shadow-md: 0 12px 30px rgba(15, 23, 42, 0.08);
+    --bexia-shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.10);
+}
+
+/* fondo general */
+html,
+body,
+.fi-body,
+.fi-layout,
+.fi-main,
+.fi-main-ctn {
+    background: linear-gradient(180deg, #f8faff 0%, var(--bexia-bg) 100%) !important;
+    color: var(--bexia-text) !important;
+}
+
+/* cards / modales / tablas */
+.fi-section,
+.fi-widget,
+.fi-ta,
+.fi-modal-window,
+.fi-dropdown-panel,
+.fi-simple-page-section,
+.fi-in-card,
+.fi-card {
+    background: var(--bexia-surface) !important;
+    border: 1px solid var(--bexia-border) !important;
+    border-radius: 18px !important;
+    box-shadow: var(--bexia-shadow-sm) !important;
+}
+
+.fi-section:hover,
+.fi-widget:hover,
+.fi-ta:hover {
+    box-shadow: var(--bexia-shadow-md) !important;
+}
+
+/* topbar y sidebar */
+.fi-topbar {
+    background: rgba(255, 255, 255, 0.92) !important;
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--bexia-border) !important;
+}
+
+.fi-sidebar {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
+    border-right: 1px solid var(--bexia-border) !important;
+}
+
+/* item activo lateral */
+.fi-sidebar-item-button {
+    border-radius: 14px !important;
+    transition: all 0.2s ease !important;
+}
+
+.fi-sidebar-item-button:hover {
+    background: var(--bexia-primary-soft-2) !important;
+}
+
+.fi-sidebar-item-button.fi-active,
+.fi-sidebar-item-button[aria-current="page"] {
+    background: linear-gradient(90deg, var(--bexia-primary-soft) 0%, #f4f8ff 100%) !important;
+    color: var(--bexia-primary-dark) !important;
+    border-radius: 14px !important;
+    box-shadow: inset 0 0 0 1px rgba(47, 111, 237, 0.12) !important;
+}
+
+/* encabezados */
+h1,
+h2,
+h3,
+.fi-header-heading {
+    color: #0f172a !important;
+    letter-spacing: -0.02em;
+}
+
+/* botones */
+.fi-btn {
+    border-radius: 14px !important;
+    font-weight: 600 !important;
+    transition: transform 0.12s ease, box-shadow 0.2s ease, background-color 0.2s ease !important;
+}
+
+.fi-btn:hover {
+    transform: translateY(-1px);
+}
+
+/* botones primarios reales de filament */
+button[type="submit"],
+input[type="submit"],
+.fi-btn.fi-color-primary,
+.fi-ac-btn-action,
+.fi-form-actions .fi-btn,
+.fi-modal-footer .fi-btn.fi-color-primary,
+a.fi-btn.fi-color-primary {
+    background: linear-gradient(135deg, var(--bexia-primary) 0%, var(--bexia-primary-hover) 100%) !important;
+    border: 1px solid transparent !important;
+    color: #ffffff !important;
+    border-radius: 14px !important;
+    box-shadow: 0 10px 24px rgba(47, 111, 237, 0.24) !important;
+}
+
+button[type="submit"]:hover,
+input[type="submit"]:hover,
+.fi-btn.fi-color-primary:hover,
+.fi-ac-btn-action:hover,
+.fi-form-actions .fi-btn:hover,
+.fi-modal-footer .fi-btn.fi-color-primary:hover,
+a.fi-btn.fi-color-primary:hover {
+    background: linear-gradient(135deg, var(--bexia-primary-hover) 0%, var(--bexia-primary-pressed) 100%) !important;
+    color: #ffffff !important;
+}
+
+button[type="submit"] *,
+input[type="submit"] *,
+.fi-btn.fi-color-primary *,
+.fi-ac-btn-action *,
+.fi-form-actions .fi-btn *,
+.fi-modal-footer .fi-btn.fi-color-primary *,
+a.fi-btn.fi-color-primary * {
+    color: #ffffff !important;
+}
+
+/* botones secundarios */
+.fi-btn.fi-color-gray,
+a.fi-btn.fi-color-gray,
+button.fi-btn.fi-color-gray {
+    background: #ffffff !important;
+    color: var(--bexia-text) !important;
+    border: 1px solid var(--bexia-border) !important;
+    border-radius: 14px !important;
+}
+
+.fi-btn.fi-color-gray:hover,
+a.fi-btn.fi-color-gray:hover,
+button.fi-btn.fi-color-gray:hover {
+    background: #f8fafc !important;
+    border-color: var(--bexia-border-strong) !important;
+}
+
+/* inputs */
+.fi-input,
+.fi-select-input,
+.fi-textarea,
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+    border-color: var(--bexia-border) !important;
+    border-radius: 14px !important;
+    background: #ffffff !important;
+    min-height: 46px;
+}
+
+.fi-input:focus,
+.fi-select-input:focus,
+.fi-textarea:focus,
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+    border-color: var(--bexia-primary) !important;
+    box-shadow: 0 0 0 4px rgba(47, 111, 237, 0.12) !important;
+}
+
+/* tabs */
+.fi-tabs-item {
+    border-radius: 12px !important;
+}
+
+.fi-tabs-item.fi-active {
+    background: var(--bexia-primary-soft) !important;
+    color: var(--bexia-primary-dark) !important;
+    box-shadow: inset 0 0 0 1px rgba(47, 111, 237, 0.15) !important;
+}
+
+/* badges */
+.fi-badge {
+    border-radius: 999px !important;
+    font-weight: 600 !important;
+}
+
+.fi-badge.fi-color-primary {
+    background: var(--bexia-primary-soft) !important;
+    color: var(--bexia-primary-dark) !important;
+}
+
+/* checks / toggles */
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+    background-color: var(--bexia-primary) !important;
+    border-color: var(--bexia-primary) !important;
+}
+
+.fi-fo-toggle button[aria-checked="true"] {
+    background: var(--bexia-primary) !important;
+}
+
+/* modales / dropdowns */
+.fi-modal-window,
+.fi-dropdown-panel {
+    border-radius: 20px !important;
+    box-shadow: var(--bexia-shadow-lg) !important;
+}
+
+/* login premium */
+.fi-simple-main-ctn,
+.fi-simple-page {
+    background:
+        radial-gradient(circle at top left, rgba(47, 111, 237, 0.10), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(22, 59, 120, 0.10), transparent 28%),
+        linear-gradient(180deg, #f8fbff 0%, #f3f7fd 100%);
+}
+
+/* =========================================
+   FIX BOTON SECUNDARIO / CANCELAR
+   ========================================= */
+.fi-form-actions .fi-btn:not(.fi-color-primary),
+.fi-ac-actions .fi-btn:not(.fi-color-primary),
+.fi-modal-footer .fi-btn:not(.fi-color-primary),
+a.fi-btn.fi-color-gray,
+button.fi-btn.fi-color-gray,
+.fi-btn.fi-color-gray {
+    background: #ffffff !important;
+    color: #1f2937 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06) !important;
+}
+
+.fi-form-actions .fi-btn:not(.fi-color-primary):hover,
+.fi-ac-actions .fi-btn:not(.fi-color-primary):hover,
+.fi-modal-footer .fi-btn:not(.fi-color-primary):hover,
+a.fi-btn.fi-color-gray:hover,
+button.fi-btn.fi-color-gray:hover,
+.fi-btn.fi-color-gray:hover {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    border-color: #94a3b8 !important;
+}
+
+.fi-form-actions .fi-btn:not(.fi-color-primary) *,
+.fi-ac-actions .fi-btn:not(.fi-color-primary) *,
+.fi-modal-footer .fi-btn:not(.fi-color-primary) *,
+a.fi-btn.fi-color-gray *,
+button.fi-btn.fi-color-gray *,
+.fi-btn.fi-color-gray * {
+    color: #1f2937 !important;
+    fill: #1f2937 !important;
+    stroke: #1f2937 !important;
+}
+
+/* =========================================
+   FIX TOGGLE / ACTIVA
+   ========================================= */
+.fi-fo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.fi-fo-toggle button {
+    min-width: 3.4rem !important;
+    width: 3.4rem !important;
+    height: 2rem !important;
+    border-radius: 999px !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #e2e8f0 !important;
+    box-shadow:
+        inset 0 1px 2px rgba(15, 23, 42, 0.08),
+        0 1px 2px rgba(15, 23, 42, 0.04) !important;
+    opacity: 1 !important;
+}
+
+.fi-fo-toggle button:hover {
+    border-color: #94a3b8 !important;
+}
+
+.fi-fo-toggle button[aria-checked="true"] {
+    background: linear-gradient(135deg, #2f6fed 0%, #1e5ae0 100%) !important;
+    border-color: #1e5ae0 !important;
+    box-shadow:
+        0 8px 18px rgba(47, 111, 237, 0.28),
+        inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
+}
+
+.fi-fo-toggle button[aria-checked="false"] {
+    background: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
+}
+
+.fi-fo-toggle button > span {
+    background: #ffffff !important;
+    border-radius: 999px !important;
+    box-shadow:
+        0 2px 8px rgba(15, 23, 42, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.fi-fo-toggle button:focus-visible {
+    outline: none !important;
+    box-shadow:
+        0 0 0 4px rgba(47, 111, 237, 0.16),
+        0 8px 18px rgba(47, 111, 237, 0.18) !important;
+}
+
+.fi-fo-field-wrp-label,
+.fi-fo-field-wrp-label span {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+}
+
+/* =========================================
+   FIX TOGGLE / ACTIVA
+   ========================================= */
+.fi-fo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.fi-fo-toggle button {
+    min-width: 3.4rem !important;
+    width: 3.4rem !important;
+    height: 2rem !important;
+    border-radius: 999px !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #e2e8f0 !important;
+    box-shadow:
+        inset 0 1px 2px rgba(15, 23, 42, 0.08),
+        0 1px 2px rgba(15, 23, 42, 0.04) !important;
+    opacity: 1 !important;
+}
+
+.fi-fo-toggle button:hover {
+    border-color: #94a3b8 !important;
+}
+
+.fi-fo-toggle button[aria-checked="true"] {
+    background: linear-gradient(135deg, #2f6fed 0%, #1e5ae0 100%) !important;
+    border-color: #1e5ae0 !important;
+    box-shadow:
+        0 8px 18px rgba(47, 111, 237, 0.28),
+        inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
+}
+
+.fi-fo-toggle button[aria-checked="false"] {
+    background: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
+}
+
+.fi-fo-toggle button > span {
+    background: #ffffff !important;
+    border-radius: 999px !important;
+    box-shadow:
+        0 2px 8px rgba(15, 23, 42, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.fi-fo-toggle button:focus-visible {
+    outline: none !important;
+    box-shadow:
+        0 0 0 4px rgba(47, 111, 237, 0.16),
+        0 8px 18px rgba(47, 111, 237, 0.18) !important;
+}
+
+.fi-fo-field-wrp-label,
+.fi-fo-field-wrp-label span {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+}
+
+/* =========================================
+   FORCE FIX TOGGLES / SWITCHES FILAMENT
+   ========================================= */
+
+/* contenedor del campo */
+.fi-fo-field-wrp:has([aria-checked]),
+.fi-fo-field-wrp:has(button[role="switch"]) {
+    align-items: center;
+}
+
+/* switch base apagado */
+button[role="switch"],
+button[aria-checked="false"],
+.fi-fo-toggle button,
+.fi-toggle button {
+    min-width: 3.5rem !important;
+    width: 3.5rem !important;
+    height: 2rem !important;
+    border-radius: 999px !important;
+    background: #cbd5e1 !important;
+    border: 1px solid #94a3b8 !important;
+    opacity: 1 !important;
+    box-shadow:
+        inset 0 1px 2px rgba(15, 23, 42, 0.10),
+        0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* switch encendido */
+button[role="switch"][aria-checked="true"],
+button[aria-checked="true"],
+.fi-fo-toggle button[aria-checked="true"],
+.fi-toggle button[aria-checked="true"] {
+    background: linear-gradient(135deg, #2f6fed 0%, #1e5ae0 100%) !important;
+    border-color: #1e5ae0 !important;
+    box-shadow:
+        0 8px 18px rgba(47, 111, 237, 0.25),
+        inset 0 1px 1px rgba(255, 255, 255, 0.18) !important;
+}
+
+/* bolita interior */
+button[role="switch"] > span,
+button[aria-checked] > span,
+.fi-fo-toggle button > span,
+.fi-toggle button > span {
+    background: #ffffff !important;
+    border-radius: 999px !important;
+    box-shadow:
+        0 2px 8px rgba(15, 23, 42, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+/* foco */
+button[role="switch"]:focus-visible,
+button[aria-checked]:focus-visible,
+.fi-fo-toggle button:focus-visible,
+.fi-toggle button:focus-visible {
+    outline: none !important;
+    box-shadow:
+        0 0 0 4px rgba(47, 111, 237, 0.16),
+        0 8px 18px rgba(47, 111, 237, 0.18) !important;
+}
+
+/* label más visible */
+.fi-fo-field-wrp-label,
+.fi-fo-field-wrp-label span {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+}
+
+/* =========================================
+   FORCE FIX TOGGLES / SWITCHES FILAMENT
+   ========================================= */
+
+/* contenedor del campo */
+.fi-fo-field-wrp:has([aria-checked]),
+.fi-fo-field-wrp:has(button[role="switch"]) {
+    align-items: center;
+}
+
+/* switch base apagado */
+button[role="switch"],
+button[aria-checked="false"],
+.fi-fo-toggle button,
+.fi-toggle button {
+    min-width: 3.5rem !important;
+    width: 3.5rem !important;
+    height: 2rem !important;
+    border-radius: 999px !important;
+    background: #cbd5e1 !important;
+    border: 1px solid #94a3b8 !important;
+    opacity: 1 !important;
+    box-shadow:
+        inset 0 1px 2px rgba(15, 23, 42, 0.10),
+        0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* switch encendido */
+button[role="switch"][aria-checked="true"],
+button[aria-checked="true"],
+.fi-fo-toggle button[aria-checked="true"],
+.fi-toggle button[aria-checked="true"] {
+    background: linear-gradient(135deg, #2f6fed 0%, #1e5ae0 100%) !important;
+    border-color: #1e5ae0 !important;
+    box-shadow:
+        0 8px 18px rgba(47, 111, 237, 0.25),
+        inset 0 1px 1px rgba(255, 255, 255, 0.18) !important;
+}
+
+/* bolita interior */
+button[role="switch"] > span,
+button[aria-checked] > span,
+.fi-fo-toggle button > span,
+.fi-toggle button > span {
+    background: #ffffff !important;
+    border-radius: 999px !important;
+    box-shadow:
+        0 2px 8px rgba(15, 23, 42, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+/* foco */
+button[role="switch"]:focus-visible,
+button[aria-checked]:focus-visible,
+.fi-fo-toggle button:focus-visible,
+.fi-toggle button:focus-visible {
+    outline: none !important;
+    box-shadow:
+        0 0 0 4px rgba(47, 111, 237, 0.16),
+        0 8px 18px rgba(47, 111, 237, 0.18) !important;
+}
+
+/* label más visible */
+.fi-fo-field-wrp-label,
+.fi-fo-field-wrp-label span {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+}
+
+/* =========================================
+   SWITCHES / CHECKS MAS COMPACTOS
+   ========================================= */
+
+/* switch general de filament */
+button[role="switch"],
+button[aria-checked],
+.fi-fo-toggle button,
+.fi-toggle button {
+    min-width: 2.6rem !important;
+    width: 2.6rem !important;
+    height: 1.45rem !important;
+    border-radius: 999px !important;
+    background: #e5e7eb !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    transition: all 0.2s ease !important;
+}
+
+/* encendido */
+button[role="switch"][aria-checked="true"],
+button[aria-checked="true"],
+.fi-fo-toggle button[aria-checked="true"],
+.fi-toggle button[aria-checked="true"] {
+    background: linear-gradient(135deg, #2f6fed 0%, #1e5ae0 100%) !important;
+    border-color: #1e5ae0 !important;
+    box-shadow: 0 4px 10px rgba(47, 111, 237, 0.22) !important;
+}
+
+/* bolita interior */
+button[role="switch"] > span,
+button[aria-checked] > span,
+.fi-fo-toggle button > span,
+.fi-toggle button > span {
+    width: 1.05rem !important;
+    height: 1.05rem !important;
+    min-width: 1.05rem !important;
+    min-height: 1.05rem !important;
+    border-radius: 999px !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18) !important;
+}
+
+/* separación con label */
+.fi-fo-field-wrp:has(button[role="switch"]),
+.fi-fo-field-wrp:has(button[aria-checked]),
+.fi-fo-toggle {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.55rem !important;
+}
+
+/* label */
+.fi-fo-field-wrp-label,
+.fi-fo-field-wrp-label span {
+    font-weight: 600 !important;
+    color: #0f172a !important;
+}
+
+/* =========================================
+   FIX CHECKBOXES DE PERMISOS / ROLES
+   ========================================= */
+
+/* contenedor de cada opción */
+.fi-fo-checkbox-list-option-label,
+.fi-checkbox-list-option-label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+}
+
+/* checkbox real de permisos */
+.fi-fo-checkbox-list-option-label input[type="checkbox"],
+.fi-checkbox-list-option-label input[type="checkbox"] {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 1.2rem !important;
+    min-width: 1.2rem !important;
+    max-width: 1.2rem !important;
+    height: 1.2rem !important;
+    min-height: 1.2rem !important;
+    max-height: 1.2rem !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0.35rem !important;
+    border: 1.5px solid #94a3b8 !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
+    display: inline-block !important;
+    vertical-align: middle !important;
+    cursor: pointer !important;
+}
+
+/* hover */
+.fi-fo-checkbox-list-option-label input[type="checkbox"]:hover,
+.fi-checkbox-list-option-label input[type="checkbox"]:hover {
+    border-color: #64748b !important;
+    background: #f8fafc !important;
+}
+
+/* checked */
+.fi-fo-checkbox-list-option-label input[type="checkbox"]:checked,
+.fi-checkbox-list-option-label input[type="checkbox"]:checked {
+    background-color: #2f6fed !important;
+    border-color: #1e5ae0 !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 10.5L8.5 14L15 7.5' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-size: 0.8rem 0.8rem !important;
+    box-shadow: 0 4px 10px rgba(47, 111, 237, 0.18) !important;
+}
+
+/* focus */
+.fi-fo-checkbox-list-option-label input[type="checkbox"]:focus,
+.fi-checkbox-list-option-label input[type="checkbox"]:focus {
+    outline: none !important;
+    box-shadow:
+        0 0 0 3px rgba(47, 111, 237, 0.14),
+        0 1px 2px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* texto de la opción */
+.fi-fo-checkbox-list-option-label span,
+.fi-checkbox-list-option-label span {
+    line-height: 1.35 !important;
+}
+
+/* seleccionar todos */
+.fi-fo-field-wrp input[type="checkbox"] + label,
+.fi-checkbox-list input[type="checkbox"] + label {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.6rem !important;
+}
+
+
+
+/* ===== FIX FINAL CHECKBOX TABLA FILAMENT ===== */
+
+/* Reset general para checkboxes normales */
+input[type="checkbox"]:not([role="switch"]),
+input[type="radio"] {
+    min-height: 16px !important;
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    min-height: 16px !important;
+    max-width: 16px !important;
+    max-height: 16px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 4px !important;
+    box-sizing: border-box !important;
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    transform: none !important;
+    aspect-ratio: 1 / 1 !important;
+}
+
+/* Solo tabla de Filament */
+.fi-ta-table th[data-column="select"],
+.fi-ta-table td[data-column="select"] {
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    text-align: center !important;
+}
+
+.fi-ta-table th[data-column="select"] label,
+.fi-ta-table td[data-column="select"] label,
+.fi-ta-table th[data-column="select"] .fi-checkbox,
+.fi-ta-table td[data-column="select"] .fi-checkbox,
+.fi-ta-table th[data-column="select"] div,
+.fi-ta-table td[data-column="select"] div,
+.fi-ta-table th[data-column="select"] span,
+.fi-ta-table td[data-column="select"] span {
+    min-height: auto !important;
+    width: auto !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+.fi-ta-table th[data-column="select"] input[type="checkbox"],
+.fi-ta-table td[data-column="select"] input[type="checkbox"] {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    min-height: 16px !important;
+    max-width: 16px !important;
+    max-height: 16px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    display: block !important;
+    flex: none !important;
+}
+
+
+/* =========================================
+   FORCE LIGHT MODE GLOBAL
+   ========================================= */
+
+html,
+html.dark,
+html.dark body,
+html.dark .fi-body,
+html.dark .fi-layout,
+html.dark .fi-main,
+html.dark .fi-main-ctn {
+    color-scheme: light !important;
+    background: linear-gradient(180deg, #f8faff 0%, var(--bexia-bg) 100%) !important;
+    color: var(--bexia-text) !important;
+}
+
+html.dark .fi-topbar,
+html.dark .fi-sidebar,
+html.dark .fi-section,
+html.dark .fi-widget,
+html.dark .fi-ta,
+html.dark .fi-modal-window,
+html.dark .fi-dropdown-panel,
+html.dark .fi-simple-page-section,
+html.dark .fi-in-card,
+html.dark .fi-card {
+    background: var(--bexia-surface) !important;
+    color: var(--bexia-text) !important;
+    border-color: var(--bexia-border) !important;
+}
+
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6,
+html.dark p,
+html.dark span,
+html.dark label,
+html.dark div,
+html.dark .fi-header-heading,
+html.dark .fi-fo-field-wrp-label,
+html.dark .fi-fo-field-wrp-label span,
+html.dark .fi-ta-text,
+html.dark .fi-ta-header-cell,
+html.dark .fi-ta-cell,
+html.dark .fi-badge {
+    color: var(--bexia-text) !important;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea,
+html.dark .fi-input,
+html.dark .fi-select-input,
+html.dark .fi-textarea {
+    background: #ffffff !important;
+    color: #1f2937 !important;
+    -webkit-text-fill-color: #1f2937 !important;
+    caret-color: #1f2937 !important;
+    border-color: var(--bexia-border) !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder,
+html.dark .fi-input::placeholder,
+html.dark .fi-textarea::placeholder {
+    color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+}
+
+html.dark option {
+    background: #ffffff !important;
+    color: #1f2937 !important;
+}
+
+html.dark .fi-btn.fi-color-gray,
+html.dark a.fi-btn.fi-color-gray,
+html.dark button.fi-btn.fi-color-gray {
+    background: #ffffff !important;
+    color: #1f2937 !important;
+    border-color: var(--bexia-border) !important;
+}
+
+html.dark .fi-topbar nav,
+html.dark .fi-sidebar-nav,
+html.dark .fi-sidebar-item-button,
+html.dark .fi-sidebar-item-group-button {
+    color: var(--bexia-text) !important;
+}
+
+@media (max-width: 768px) {
+    html.dark input,
+    html.dark select,
+    html.dark textarea,
+    html.dark .fi-input,
+    html.dark .fi-select-input,
+    html.dark .fi-textarea {
+        font-size: 16px !important;
+    }
+}
+
+/* FIX dropdown usuario / cerrar sesión */
+.fi-topbar {
+    overflow: visible !important;
+    z-index: 50 !important;
+}
+
+.fi-dropdown-panel {
+    z-index: 99999 !important;
+}
+
+.fi-dropdown {
+    z-index: 99999 !important;
+}

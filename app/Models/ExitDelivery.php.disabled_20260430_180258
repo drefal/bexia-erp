@@ -1,0 +1,28 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class ExitDelivery extends Model
+{
+    protected $fillable = [
+        'form_submission_id',
+        'company_id',
+        'number',
+        'origin_folio',
+        'status',
+        'delivered_at',
+        'warehouse_id',
+        'source_location_id',
+        'destination_location_id',
+        'stock_movement_id',
+        'created_by_user_id',
+        'delivered_by_user_id',
+        'notes',
+    ];
+
+    protected $casts = [
+        'delivered_at' => 'datetime',
+    ];
+}

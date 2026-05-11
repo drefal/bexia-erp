@@ -1,0 +1,292 @@
+<?php
+
+namespace App\Support;
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use RuntimeException;
+
+class ExitDeliveryService
+{
+    public function deliver(int $exitInventoryItemId, float $quantity, ?string $notes = null): int
+    {
+        if ($quantity <= 0) {
+            throw new RuntimeException('La cantidad a entregar debe ser mayor a cero.');
+        }
+
+        return DB::transaction(function () use ($exitInventoryItemId, $quantity, $notes): int {
+            $item = DB::table('exit_inventory_items')
+                ->where('id', $exitInventoryItemId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $item) {
+                throw new RuntimeException('No se encontró el artículo de salida.');
+            }
+
+            $pending = round((float) ($item->requested_quantity ?? 0) - (float) ($item->delivered_quantity ?? 0), 6);
+
+            if ($pending <= 0) {
+                throw new RuntimeException('Este artículo ya fue entregado por completo.');
+            }
+
+            if ($quantity > $pending) {
+                throw new RuntimeException('No puedes entregar más de lo pendiente. Pendiente: ' . number_format($pending, 6));
+            }
+
+            $productId = (int) ($item->product_id ?? 0);
+            $variantId = (int) ($item->product_variant_id ?? 0);
+
+            if ($productId <= 0) {
+                throw new RuntimeException('Primero debes mapear este artículo a un producto de inventario.');
+            }
+
+            $operation = $this->deliveryOperation((int) ($item->company_id ?? 0), (int) ($item->warehouse_id ?? 0));
+
+            if (! $operation) {
+                throw new RuntimeException('No existe tipo de operación ENTREGA activo para esta empresa.');
+            }
+
+            $warehouseId = (int) ($item->warehouse_id ?: ($operation->warehouse_id ?? 0));
+            $sourceLocationId = (int) ($item->source_location_id ?: ($operation->source_location_id ?? 0));
+            $destinationLocationId = (int) ($item->destination_location_id ?: ($operation->destination_location_id ?? 0));
+
+            if ($warehouseId <= 0 || $sourceLocationId <= 0 || $destinationLocationId <= 0) {
+                throw new RuntimeException('Falta configuración de almacén/origen/destino para la entrega.');
+            }
+
+            $quant = $this->lockedQuant(
+                (int) ($item->company_id ?? 0),
+                $warehouseId,
+                $sourceLocationId,
+                $productId,
+                $variantId
+            );
+
+            if (! $quant) {
+                throw new RuntimeException('No hay existencia para este producto en la ubicación origen.');
+            }
+
+            $available = (float) ($quant->quantity ?? 0) - (float) ($quant->reserved_quantity ?? 0);
+
+            if ($available < $quantity) {
+                throw new RuntimeException(
+                    'Existencia insuficiente. Disponible: ' . number_format($available, 6)
+                    . ', requerido: ' . number_format($quantity, 6)
+                );
+            }
+
+            $number = $this->nextDeliveryNumber((string) ($operation->reference_prefix ?? 'OUT'));
+
+            $movementId = $this->createStockMovement(
+                $item,
+                $operation,
+                $number,
+                $warehouseId,
+                $sourceLocationId,
+                $destinationLocationId,
+                $notes
+            );
+
+            $unitCost = (float) ($quant->average_cost ?? 0);
+
+            $movementLineId = DB::table('stock_movement_lines')->insertGetId([
+                'stock_movement_id' => $movementId,
+                'product_id' => $productId,
+                'product_variant_id' => $variantId > 0 ? $variantId : null,
+                'lot_id' => null,
+                'requested_quantity' => $quantity,
+                'done_quantity' => $quantity,
+                'unit_cost' => $unitCost,
+                'notes' => $item->item_description,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('stock_quants')
+                ->where('id', $quant->id)
+                ->update([
+                    'quantity' => round((float) $quant->quantity - $quantity, 6),
+                    'updated_at' => now(),
+                ]);
+
+            $deliveryId = DB::table('exit_deliveries')->insertGetId([
+                'form_submission_id' => $item->form_submission_id,
+                'company_id' => $item->company_id,
+                'number' => $number,
+                'origin_folio' => $item->folio,
+                'status' => 'done',
+                'delivered_at' => now(),
+                'warehouse_id' => $warehouseId,
+                'source_location_id' => $sourceLocationId,
+                'destination_location_id' => $destinationLocationId,
+                'stock_movement_id' => $movementId,
+                'created_by_user_id' => auth()->id(),
+                'delivered_by_user_id' => auth()->id(),
+                'notes' => $notes,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            DB::table('exit_delivery_lines')->insert([
+                'exit_delivery_id' => $deliveryId,
+                'exit_inventory_item_id' => $item->id,
+                'product_id' => $productId,
+                'product_variant_id' => $variantId > 0 ? $variantId : null,
+                'quantity' => $quantity,
+                'unit_cost' => $unitCost,
+                'stock_movement_line_id' => $movementLineId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $newDelivered = round((float) ($item->delivered_quantity ?? 0) + $quantity, 6);
+            $newStatus = $newDelivered >= (float) ($item->requested_quantity ?? 0) ? 'delivered' : 'partial';
+
+            DB::table('exit_inventory_items')
+                ->where('id', $item->id)
+                ->update([
+                    'delivered_quantity' => $newDelivered,
+                    'delivery_status' => $newStatus,
+                    'warehouse_id' => $warehouseId,
+                    'source_location_id' => $sourceLocationId,
+                    'destination_location_id' => $destinationLocationId,
+                    'updated_at' => now(),
+                ]);
+
+            $this->refreshSubmissionStatus((int) $item->form_submission_id);
+
+            return $deliveryId;
+        });
+    }
+
+    protected function deliveryOperation(int $companyId, int $warehouseId): ?object
+    {
+        $query = DB::table('stock_operation_types')
+            ->where('operation_kind', 'delivery')
+            ->where('is_active', true);
+
+        if ($companyId > 0 && Schema::hasColumn('stock_operation_types', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        if ($warehouseId > 0 && Schema::hasColumn('stock_operation_types', 'warehouse_id')) {
+            $query->where(function ($q) use ($warehouseId) {
+                $q->where('warehouse_id', $warehouseId)
+                    ->orWhereNull('warehouse_id');
+            });
+        }
+
+        $operation = $query
+            ->orderByDesc('warehouse_id')
+            ->orderBy('id')
+            ->first();
+
+        if ($operation) {
+            return $operation;
+        }
+
+        return DB::table('stock_operation_types')
+            ->where('operation_kind', 'delivery')
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->first();
+    }
+
+    protected function lockedQuant(int $companyId, int $warehouseId, int $locationId, int $productId, int $variantId): ?object
+    {
+        $query = DB::table('stock_quants')
+            ->where('company_id', $companyId)
+            ->where('warehouse_id', $warehouseId)
+            ->where('location_id', $locationId)
+            ->where('product_id', $productId);
+
+        $variantId > 0
+            ? $query->where('product_variant_id', $variantId)
+            : $query->whereNull('product_variant_id');
+
+        return $query->lockForUpdate()->first();
+    }
+
+    protected function createStockMovement(
+        object $item,
+        object $operation,
+        string $number,
+        int $warehouseId,
+        int $sourceLocationId,
+        int $destinationLocationId,
+        ?string $notes
+    ): int {
+        return DB::table('stock_movements')->insertGetId([
+            'company_id' => $item->company_id,
+            'warehouse_id' => $warehouseId,
+            'stock_operation_type_id' => $operation->id,
+            'source_location_id' => $sourceLocationId,
+            'destination_location_id' => $destinationLocationId,
+            'reference' => $number,
+            'movement_at' => now(),
+            'status' => 'done',
+            'origin_document' => 'exit:' . ($item->folio ?: $item->form_submission_id),
+            'contact_id' => null,
+            'notes' => $notes ?: ('Entrega generada desde salida ' . ($item->folio ?: $item->form_submission_id)),
+            'created_by' => auth()->id(),
+            'confirmed_by' => auth()->id(),
+            'confirmed_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    protected function nextDeliveryNumber(string $prefix): string
+    {
+        $prefix = trim($prefix) !== '' ? trim($prefix) : 'OUT';
+        $date = now()->format('Ymd');
+        $base = $prefix . '-' . $date . '-';
+
+        $last = DB::table('stock_movements')
+            ->where('reference', 'like', $base . '%')
+            ->orderByDesc('reference')
+            ->value('reference');
+
+        $next = 1;
+
+        if ($last && preg_match('/(\d+)$/', (string) $last, $m)) {
+            $next = ((int) $m[1]) + 1;
+        }
+
+        return $base . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function refreshSubmissionStatus(int $submissionId): void
+    {
+        if (! Schema::hasTable('exit_inventory_items') || ! Schema::hasTable('form_submissions')) {
+            return;
+        }
+
+        $items = DB::table('exit_inventory_items')
+            ->where('form_submission_id', $submissionId)
+            ->get();
+
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $allDelivered = $items->every(fn ($item): bool => (string) $item->delivery_status === 'delivered');
+        $anyDelivered = $items->contains(fn ($item): bool => in_array((string) $item->delivery_status, ['partial', 'delivered'], true));
+
+        if ($allDelivered) {
+            $status = 'ENTREGADA';
+        } elseif ($anyDelivered) {
+            $status = 'PARCIALMENTE_ENTREGADA';
+        } else {
+            return;
+        }
+
+        DB::table('form_submissions')
+            ->where('id', $submissionId)
+            ->update([
+                'status' => $status,
+                'updated_at' => now(),
+            ]);
+    }
+}

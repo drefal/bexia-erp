@@ -1,0 +1,11 @@
+<?php
+
+namespace App\Filament\Resources\PurchaseReceiptResource\Pages;
+
+use App\Filament\Resources\PurchaseReceiptResource;
+use Filament\Resources\Pages\ListRecords;
+
+class ListPurchaseReceipts extends ListRecords
+{
+    protected static string $resource = PurchaseReceiptResource::class;
+}

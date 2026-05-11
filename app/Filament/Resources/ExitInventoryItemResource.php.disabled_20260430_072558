@@ -1,0 +1,297 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\ExitInventoryItemResource\Pages;
+use App\Models\ExitInventoryItem;
+use App\Support\ExitDeliveryService;
+use Filament\Facades\Filament;
+use Filament\Forms;
+use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
+
+class ExitInventoryItemResource extends Resource
+{
+    protected static ?string $model = ExitInventoryItem::class;
+
+    protected static ?string $tenantOwnershipRelationshipName = 'company';
+
+    protected static ?string $navigationIcon = 'heroicon-o-truck';
+
+    protected static ?string $navigationGroup = 'Salidas';
+
+    protected static ?string $navigationLabel = 'Entrega salidas almacén';
+
+    protected static ?string $modelLabel = 'entrega salida almacén';
+
+    protected static ?string $pluralModelLabel = 'entrega salidas almacén';
+
+    protected static ?int $navigationSort = 2;
+
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::canViewAny();
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = Filament::auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
+            return true;
+        }
+
+        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
+            return true;
+        }
+
+        return $user->can('salidas.ver')
+            || $user->can('salidas.view')
+            || $user->can('salidas.access')
+            || $user->can('salidas.create')
+            || $user->can('salidas.update');
+    }
+
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('folio')
+                    ->label('Salida')
+                    ->searchable()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('item_description')
+                    ->label('Artículo')
+                    ->searchable()
+                    ->wrap(),
+
+                Tables\Columns\TextColumn::make('source_warehouse_label')
+                    ->label('Almacén envío')
+                    ->searchable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('destination_warehouse_label')
+                    ->label('Destino')
+                    ->searchable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('requested_quantity')
+                    ->label('Solicitado')
+                    ->numeric(decimalPlaces: 6)
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('delivered_quantity')
+                    ->label('Entregado')
+                    ->numeric(decimalPlaces: 6)
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('pending')
+                    ->label('Pendiente')
+                    ->state(fn (ExitInventoryItem $record): string => number_format($record->pending_quantity, 6))
+                    ->sortable(false),
+
+                Tables\Columns\TextColumn::make('mapped_product')
+                    ->label('Producto mapeado')
+                    ->state(fn (ExitInventoryItem $record): string => static::mappedProductLabel($record))
+                    ->wrap(),
+
+                Tables\Columns\BadgeColumn::make('delivery_status')
+                    ->label('Estado entrega')
+                    ->formatStateUsing(fn (?string $state): string => match ((string) $state) {
+                        'pending' => 'Pendiente',
+                        'partial' => 'Parcial',
+                        'delivered' => 'Entregada',
+                        default => (string) $state,
+                    })
+                    ->colors([
+                        'warning' => 'pending',
+                        'info' => 'partial',
+                        'success' => 'delivered',
+                    ]),
+            ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('delivery_status')
+                    ->label('Estado')
+                    ->options([
+                        'pending' => 'Pendiente',
+                        'partial' => 'Parcial',
+                        'delivered' => 'Entregada',
+                    ]),
+            ])
+            ->actions([
+                Tables\Actions\Action::make('map_product')
+                    ->label('Mapear')
+                    ->icon('heroicon-o-link')
+                    ->color('gray')
+                    ->form([
+                        Forms\Components\Select::make('product_key')
+                            ->label('Producto / variante')
+                            ->searchable()
+                            ->required()
+                            ->default(fn (ExitInventoryItem $record): ?string => $record->product_id
+                                ? ((int) $record->product_id . '|' . (int) ($record->product_variant_id ?? 0))
+                                : null
+                            )
+                            ->getSearchResultsUsing(fn (string $search, ExitInventoryItem $record): array => static::productSearchOptions($search, (int) $record->company_id))
+                            ->getOptionLabelUsing(fn ($value): ?string => static::productOptionLabel((string) $value)),
+                    ])
+                    ->action(function (ExitInventoryItem $record, array $data): void {
+                        [$productId, $variantId] = array_pad(explode('|', (string) ($data['product_key'] ?? '')), 2, 0);
+
+                        $record->update([
+                            'product_id' => (int) $productId ?: null,
+                            'product_variant_id' => (int) $variantId ?: null,
+                        ]);
+
+                        Notification::make()
+                            ->title('Producto mapeado')
+                            ->success()
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('needs_mapping')
+                    ->label('Mapear primero')
+                    ->icon('heroicon-o-exclamation-triangle')
+                    ->color('warning')
+                    ->visible(fn (ExitInventoryItem $record): bool => $record->pending_quantity > 0 && ! (int) ($record->product_id ?? 0))
+                    ->disabled()
+                    ->tooltip('Antes de entregar debes mapear este artículo a un producto real de inventario.'),
+
+                Tables\Actions\Action::make('deliver')
+                    ->label('Entregar')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->visible(fn (ExitInventoryItem $record): bool => $record->pending_quantity > 0 && (int) ($record->product_id ?? 0) > 0)
+                    ->form([
+                        Forms\Components\TextInput::make('quantity')
+                            ->label('Cantidad a entregar')
+                            ->numeric()
+                            ->required()
+                            ->minValue(0.000001)
+                            ->default(fn (ExitInventoryItem $record): float => $record->pending_quantity),
+
+                        Forms\Components\Textarea::make('notes')
+                            ->label('Notas')
+                            ->rows(3),
+                    ])
+                    ->requiresConfirmation()
+                    ->modalHeading('Confirmar entrega')
+                    ->modalDescription('Se generará un movimiento OUT por la cantidad entregada y se descontará inventario. Puedes entregar parcial o total.')
+                    ->modalSubmitActionLabel('Entregar')
+                    ->action(function (ExitInventoryItem $record, array $data): void {
+                        app(ExitDeliveryService::class)->deliver(
+                            (int) $record->getKey(),
+                            (float) ($data['quantity'] ?? 0),
+                            $data['notes'] ?? null
+                        );
+
+                        Notification::make()
+                            ->title('Entrega registrada')
+                            ->body('Se generó movimiento de almacén y se descontó inventario.')
+                            ->success()
+                            ->send();
+                    }),
+            ])
+            ->defaultSort('id', 'desc');
+    }
+
+    protected static function mappedProductLabel(ExitInventoryItem $record): string
+    {
+        if (! $record->product_id) {
+            return 'Pendiente de mapear';
+        }
+
+        return static::productLabel((int) $record->product_id, (int) ($record->product_variant_id ?? 0));
+    }
+
+    protected static function productSearchOptions(string $search, int $companyId): array
+    {
+        $search = trim($search);
+
+        if ($search === '') {
+            return [];
+        }
+
+        return DB::table('products')
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->where(function ($q) use ($search) {
+                $like = '%' . $search . '%';
+
+                $q->where('name', 'like', $like)
+                    ->orWhere('sku', 'like', $like)
+                    ->orWhere('barcode', 'like', $like)
+                    ->orWhere('internal_reference', 'like', $like)
+                    ->orWhere('variant_value', 'like', $like);
+            })
+            ->orderBy('internal_reference')
+            ->orderBy('name')
+            ->limit(50)
+            ->get()
+            ->mapWithKeys(function ($product) {
+                $isVariant = (bool) ($product->is_variant ?? false);
+                $productId = $isVariant && $product->parent_product_id ? (int) $product->parent_product_id : (int) $product->id;
+                $variantId = $isVariant ? (int) $product->id : 0;
+
+                return [$productId . '|' . $variantId => static::productLabel($productId, $variantId)];
+            })
+            ->all();
+    }
+
+    protected static function productOptionLabel(string $value): ?string
+    {
+        [$productId, $variantId] = array_pad(explode('|', $value), 2, 0);
+
+        return static::productLabel((int) $productId, (int) $variantId);
+    }
+
+    protected static function productLabel(int $productId, int $variantId = 0): string
+    {
+        $product = DB::table('products')->where('id', $productId)->first();
+
+        if (! $product) {
+            return 'Producto #' . $productId;
+        }
+
+        $ref = trim((string) ($product->internal_reference ?? $product->sku ?? $product->barcode ?? ''));
+        $name = trim((string) ($product->name ?? ('Producto #' . $productId)));
+
+        $label = trim(($ref ? $ref . ' - ' : '') . $name);
+
+        if ($variantId > 0) {
+            $variant = DB::table('products')->where('id', $variantId)->first();
+
+            if ($variant) {
+                $variantText = trim((string) ($variant->variant_value ?? $variant->variant_name ?? $variant->name ?? ''));
+
+                if ($variantText !== '') {
+                    $label .= ' / ' . $variantText;
+                }
+            }
+        }
+
+        return $label;
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListExitInventoryItems::route('/'),
+        ];
+    }
+}

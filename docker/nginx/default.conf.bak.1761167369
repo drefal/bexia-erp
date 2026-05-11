@@ -1,0 +1,28 @@
+server {
+    listen 80 default_server;
+    server_name _;
+
+    # carpeta pública de Laravel
+    root /var/www/html/public;
+    index index.php index.html;
+
+    # reescritura típica de Laravel
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    # PHP-FPM (contenedor bexia_app)
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_pass bexia_app:9000;
+        fastcgi_read_timeout 120;
+    }
+
+    # assets (opcional)
+    location ~* \.(?:jpg|jpeg|png|gif|svg|ico|css|js|woff2?|ttf|map)$ {
+        try_files $uri /index.php?$query_string;
+        access_log off;
+        expires 30d;
+    }
+}

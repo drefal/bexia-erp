@@ -1,0 +1,755 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\SaleDelivery;
+use App\Models\SaleOrder;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+class SaleDeliveryController extends Controller
+{
+    public function show(SaleOrder $saleOrder)
+    {
+        if (! $this->userCanUpdateSales()) {
+            abort(403);
+        }
+
+        if (! in_array((string) $saleOrder->status, ['confirmed', 'partially_delivered'], true)) {
+            return redirect()->back()->with('error', 'Solo las órdenes confirmadas o parcialmente entregadas pueden crear entregas.');
+        }
+
+        return view('filament.sales-orders.delivery-standalone', [
+            'saleOrder' => $saleOrder,
+            'saleOrderId' => $saleOrder->id,
+        ]);
+    }
+
+    public function storeFull(Request $request, SaleOrder $saleOrder): RedirectResponse
+    {
+        return $this->createDelivery($request, $saleOrder, 'complete');
+    }
+
+    public function storePartial(Request $request, SaleOrder $saleOrder): RedirectResponse
+    {
+        return $this->createDelivery($request, $saleOrder, 'auto');
+    }
+
+    public function showDelivery(SaleDelivery $saleDelivery)
+    {
+        if (! $this->userCanUpdateSales()) {
+            abort(403);
+        }
+
+        return view('filament.sales-deliveries.show', [
+            'delivery' => $saleDelivery,
+        ]);
+    }
+
+    public function printDelivery(SaleDelivery $saleDelivery)
+    {
+        if (! $this->userCanUpdateSales()) {
+            abort(403);
+        }
+
+        return view('filament.sales-deliveries.print', [
+            'delivery' => $saleDelivery,
+        ]);
+    }
+
+    public function validateDelivery(Request $request, SaleDelivery $saleDelivery): RedirectResponse
+    {
+        if (! $this->userCanUpdateSales()) {
+            abort(403);
+        }
+
+        if ((string) $saleDelivery->status !== 'draft') {
+            return back()->with('error', 'Solo se pueden validar entregas en borrador.');
+        }
+
+        if (! empty($saleDelivery->stock_movement_id)) {
+            return back()->with('error', 'Esta entrega ya tiene movimiento de inventario.');
+        }
+
+        if (! Schema::hasTable('stock_quants') || ! Schema::hasTable('stock_movements') || ! Schema::hasTable('stock_movement_lines')) {
+            return back()->with('error', 'Faltan tablas de inventario para validar la entrega.');
+        }
+
+        $lines = DB::table('sale_delivery_lines')
+            ->where('sale_delivery_id', $saleDelivery->id)
+            ->orderBy('id')
+            ->get();
+
+        if ($lines->isEmpty()) {
+            return back()->with('error', 'La entrega no tiene líneas.');
+        }
+
+        $order = DB::table('sales_orders')
+            ->where('id', $saleDelivery->sales_order_id)
+            ->first();
+
+        if (! $order) {
+            return back()->with('error', 'No se encontró la orden de venta relacionada.');
+        }
+
+        try {
+            $movementId = DB::transaction(function () use ($saleDelivery, $lines, $order): int {
+                $now = now();
+
+                $lockedQuants = [];
+
+                foreach ($lines as $line) {
+                    $qty = $this->decimal($line->quantity ?? 0);
+
+                    if ($qty <= 0) {
+                        throw new \RuntimeException('La línea ' . ($line->product_label ?? '') . ' no tiene cantidad válida.');
+                    }
+
+                    $quant = $this->lockQuantForDeliveryLine($saleDelivery, $line);
+
+                    if (! $quant) {
+                        throw new \RuntimeException('No hay existencia para ' . ($line->product_label ?? 'producto') . $this->variantSuffix($line) . '.');
+                    }
+
+                    /*
+                     * En borrador la cantidad debe estar reservada.
+                     * Para validar, revisamos la existencia física total.
+                     */
+                    $physical = $this->decimal($quant->quantity ?? 0);
+
+                    if ($physical < $qty) {
+                        throw new \RuntimeException(
+                            'Existencia insuficiente para '
+                            . ($line->product_label ?? 'producto')
+                            . $this->variantSuffix($line)
+                            . '. Existencia: '
+                            . number_format($physical, 2)
+                            . ', requerido: '
+                            . number_format($qty, 2)
+                            . '.'
+                        );
+                    }
+
+                    $lockedQuants[(int) $line->id] = $quant;
+                }
+
+                $movementData = $this->filterTableColumns('stock_movements', [
+                    'company_id' => $saleDelivery->company_id,
+                    'warehouse_id' => $saleDelivery->warehouse_id,
+                    'stock_operation_type_id' => $this->stockOperationTypeId((int) $saleDelivery->company_id),
+                    'source_location_id' => $saleDelivery->source_location_id,
+                    'destination_location_id' => $saleDelivery->destination_location_id,
+                    'reference' => $saleDelivery->number,
+                    'movement_at' => $now,
+                    'status' => 'done',
+                    'origin_document' => 'sale_delivery:' . $saleDelivery->id,
+                    'contact_id' => $order->customer_contact_id ?? null,
+                    'notes' => 'Salida por entrega de venta ' . ($saleDelivery->number ?: ('#' . $saleDelivery->id)),
+                    'created_by' => auth()->id(),
+                    'confirmed_by' => auth()->id(),
+                    'confirmed_at' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+
+                $movementId = DB::table('stock_movements')->insertGetId($movementData);
+                \App\Support\Inventory\StockMovementNormalizer::normalizeMovement((int) $movementId);
+
+                foreach ($lines as $line) {
+                    $qty = $this->decimal($line->quantity ?? 0);
+                    $quant = $lockedQuants[(int) $line->id];
+
+                    $movementLineData = $this->filterTableColumns('stock_movement_lines', [
+                        'stock_movement_id' => $movementId,
+                        'product_id' => $line->product_id,
+                        'product_variant_id' => $line->product_variant_id,
+                        'lot_id' => null,
+                        'requested_quantity' => $qty,
+                        'done_quantity' => $qty,
+                        'unit_cost' => $line->unit_cost ?? 0,
+                        'notes' => $line->product_label,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+
+                    $movementLineId = DB::table('stock_movement_lines')->insertGetId($movementLineData);
+
+                    /*
+                     * Validar entrega:
+                     * - quantity baja porque sale inventario.
+                     * - reserved_quantity baja porque deja de estar reservado.
+                     */
+                    $newQuantity = max(0, $this->decimal($quant->quantity ?? 0) - $qty);
+                    $newReserved = max(0, $this->decimal($quant->reserved_quantity ?? 0) - $qty);
+
+                    DB::table('stock_quants')
+                        ->where('id', $quant->id)
+                        ->update($this->filterTableColumns('stock_quants', [
+                            'quantity' => $newQuantity,
+                            'reserved_quantity' => $newReserved,
+                            'updated_at' => $now,
+                        ]));
+
+                    DB::table('sale_delivery_lines')
+                        ->where('id', $line->id)
+                        ->update($this->filterTableColumns('sale_delivery_lines', [
+                            'stock_movement_line_id' => $movementLineId,
+                            'updated_at' => $now,
+                        ]));
+                }
+
+                DB::table('sale_deliveries')
+                    ->where('id', $saleDelivery->id)
+                    ->update($this->filterTableColumns('sale_deliveries', [
+                        'status' => 'done',
+                        'delivered_at' => $now,
+                        'stock_movement_id' => $movementId,
+                        'updated_at' => $now,
+                    ]));
+
+                $this->refreshSalesOrderDeliveryStatus((int) $saleDelivery->sales_order_id);
+
+                return $movementId;
+            });
+
+            return back()->with('success', 'Entrega validada. Se generó el movimiento de salida #' . $movementId . '.');
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function cancel(Request $request, SaleDelivery $saleDelivery): RedirectResponse
+    {
+        if (! $this->userCanUpdateSales()) {
+            abort(403);
+        }
+
+        if ((string) $saleDelivery->status !== 'draft') {
+            return back()->with('error', 'Solo se pueden cancelar entregas en borrador.');
+        }
+
+        if (! empty($saleDelivery->stock_movement_id)) {
+            return back()->with('error', 'Esta entrega ya tiene movimiento de inventario ligado.');
+        }
+
+        try {
+            DB::transaction(function () use ($saleDelivery): void {
+                $this->releaseDeliveryReservation($saleDelivery);
+
+                DB::table('sale_deliveries')
+                    ->where('id', $saleDelivery->id)
+                    ->update($this->filterTableColumns('sale_deliveries', [
+                        'status' => 'cancelled',
+                        'cancelled_by_user_id' => auth()->id(),
+                        'cancelled_at' => now(),
+                        'updated_at' => now(),
+                    ]));
+            });
+
+            return back()->with('success', 'Entrega cancelada y reserva liberada.');
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    protected function createDelivery(Request $request, SaleOrder $saleOrder, string $mode): RedirectResponse
+    {
+        if (! $this->userCanUpdateSales()) {
+            abort(403);
+        }
+
+        if (! Schema::hasTable('sale_deliveries') || ! Schema::hasTable('sale_delivery_lines')) {
+            return back()->with('error', 'Faltan las tablas de entregas. Ejecuta migraciones.');
+        }
+
+        if (! in_array((string) $saleOrder->status, ['confirmed', 'partially_delivered'], true)) {
+            return back()->with('error', 'Solo puedes crear entregas para órdenes confirmadas.');
+        }
+
+        $pendingLines = collect($this->pendingLines($saleOrder));
+        $rows = [];
+
+        if ($mode === 'complete') {
+            foreach ($pendingLines as $line) {
+                if ($line['_pending'] > 0) {
+                    $rows[] = ['line' => $line, 'quantity' => $line['_pending']];
+                }
+            }
+        } else {
+            $input = (array) $request->input('line_quantities', []);
+
+            foreach ($pendingLines as $line) {
+                $qty = $this->decimal($input[$line['id']] ?? 0);
+
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                if ($qty > $line['_pending']) {
+                    return back()
+                        ->withInput()
+                        ->with('error', 'La cantidad de ' . $line['product_label'] . ' excede lo pendiente.');
+                }
+
+                $rows[] = ['line' => $line, 'quantity' => $qty];
+            }
+        }
+
+        if (count($rows) === 0) {
+            return back()->withInput()->with('error', 'Captura al menos una cantidad para entregar.');
+        }
+
+        $deliveryType = $this->detectDeliveryType($pendingLines, $rows);
+        $hasPendingAfterDelivery = $deliveryType === 'partial';
+
+        try {
+            $deliveryId = DB::transaction(function () use ($saleOrder, $deliveryType, $rows, $request): int {
+                $now = now();
+
+                /*
+                 * Primero validar que haya disponible no reservado.
+                 */
+                foreach ($rows as $row) {
+                    $this->assertCanReserve($saleOrder, $row['line'], $row['quantity']);
+                }
+
+                $deliveryId = DB::table('sale_deliveries')->insertGetId($this->filterTableColumns('sale_deliveries', [
+                    'company_id' => $saleOrder->company_id,
+                    'sales_order_id' => $saleOrder->id,
+                    'number' => $this->nextNumber((int) $saleOrder->company_id),
+                    'status' => 'draft',
+                    'delivery_type' => $deliveryType,
+                    'planned_at' => $now,
+                    'warehouse_id' => $saleOrder->warehouse_id,
+                    'source_location_id' => $saleOrder->location_id,
+                    'destination_location_id' => $this->customerLocationId((int) $saleOrder->company_id),
+                    'created_by_user_id' => auth()->id(),
+                    'notes' => $request->input('notes'),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]));
+
+                $insert = [];
+
+                foreach ($rows as $row) {
+                    $line = $row['line'];
+
+                    $insert[] = $this->filterTableColumns('sale_delivery_lines', [
+                        'sale_delivery_id' => $deliveryId,
+                        'sales_order_id' => $saleOrder->id,
+                        'sales_order_line_id' => $line['id'],
+                        'company_id' => $saleOrder->company_id,
+                        'product_id' => $line['product_id'],
+                        'product_variant_id' => $line['product_variant_id'],
+                        'product_label' => $line['product_label'],
+                        'variant_label' => $line['variant_label'],
+                        'ordered_quantity' => $line['_ordered'],
+                        'quantity' => $row['quantity'],
+                        'unit_cost' => $line['estimated_unit_cost_without_tax'] ?? 0,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                }
+
+                DB::table('sale_delivery_lines')->insert($insert);
+
+                /*
+                 * Al crear entrega en borrador, reservar inventario.
+                 */
+                $delivery = SaleDelivery::query()->findOrFail($deliveryId);
+                $this->reserveDelivery($delivery);
+
+                return $deliveryId;
+            });
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        if ($hasPendingAfterDelivery) {
+            return back()
+                ->with('success', 'Entrega parcial creada en borrador #' . $deliveryId . '. Inventario reservado.')
+                ->with('warning', 'Quedará una entrega pendiente relacionada a esta venta.');
+        }
+
+        return back()->with('success', 'Entrega completa creada en borrador #' . $deliveryId . '. Inventario reservado.');
+    }
+
+    protected function reserveDelivery(SaleDelivery $saleDelivery): void
+    {
+        $lines = DB::table('sale_delivery_lines')
+            ->where('sale_delivery_id', $saleDelivery->id)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($lines as $line) {
+            $qty = $this->decimal($line->quantity ?? 0);
+            $quant = $this->lockQuantForDeliveryLine($saleDelivery, $line);
+
+            if (! $quant) {
+                throw new \RuntimeException('No hay existencia para reservar ' . ($line->product_label ?? 'producto') . $this->variantSuffix($line) . '.');
+            }
+
+            $available = $this->decimal($quant->quantity ?? 0) - $this->decimal($quant->reserved_quantity ?? 0);
+
+            if ($available < $qty) {
+                throw new \RuntimeException(
+                    'Existencia disponible insuficiente para reservar '
+                    . ($line->product_label ?? 'producto')
+                    . $this->variantSuffix($line)
+                    . '. Disponible: '
+                    . number_format($available, 2)
+                    . ', requerido: '
+                    . number_format($qty, 2)
+                    . '.'
+                );
+            }
+
+            DB::table('stock_quants')
+                ->where('id', $quant->id)
+                ->update($this->filterTableColumns('stock_quants', [
+                    'reserved_quantity' => $this->decimal($quant->reserved_quantity ?? 0) + $qty,
+                    'updated_at' => now(),
+                ]));
+        }
+    }
+
+    protected function releaseDeliveryReservation(SaleDelivery $saleDelivery): void
+    {
+        $lines = DB::table('sale_delivery_lines')
+            ->where('sale_delivery_id', $saleDelivery->id)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($lines as $line) {
+            $qty = $this->decimal($line->quantity ?? 0);
+            $quant = $this->lockQuantForDeliveryLine($saleDelivery, $line);
+
+            if (! $quant) {
+                continue;
+            }
+
+            DB::table('stock_quants')
+                ->where('id', $quant->id)
+                ->update($this->filterTableColumns('stock_quants', [
+                    'reserved_quantity' => max(0, $this->decimal($quant->reserved_quantity ?? 0) - $qty),
+                    'updated_at' => now(),
+                ]));
+        }
+    }
+
+    protected function assertCanReserve(SaleOrder $saleOrder, array $line, float $qty): void
+    {
+        $query = DB::table('stock_quants')
+            ->where('company_id', $saleOrder->company_id)
+            ->where('warehouse_id', $saleOrder->warehouse_id)
+            ->where('location_id', $saleOrder->location_id)
+            ->where('product_id', $line['product_id']);
+
+        if (! empty($line['product_variant_id'])) {
+            $query->where('product_variant_id', $line['product_variant_id']);
+        } else {
+            $query->whereNull('product_variant_id');
+        }
+
+        $quant = $query->lockForUpdate()->first();
+
+        if (! $quant) {
+            throw new \RuntimeException('No hay existencia para ' . ($line['product_label'] ?? 'producto') . '.');
+        }
+
+        $available = $this->decimal($quant->quantity ?? 0) - $this->decimal($quant->reserved_quantity ?? 0);
+
+        if ($available < $qty) {
+            throw new \RuntimeException(
+                'Existencia disponible insuficiente para '
+                . ($line['product_label'] ?? 'producto')
+                . '. Disponible: '
+                . number_format($available, 2)
+                . ', requerido: '
+                . number_format($qty, 2)
+                . '.'
+            );
+        }
+    }
+
+    protected function detectDeliveryType($pendingLines, array $rows): string
+    {
+        $quantitiesByLineId = collect($rows)
+            ->mapWithKeys(fn (array $row): array => [(int) $row['line']['id'] => $this->decimal($row['quantity'])]);
+
+        foreach ($pendingLines as $line) {
+            $pending = $this->decimal($line['_pending']);
+            $qty = $this->decimal($quantitiesByLineId[(int) $line['id']] ?? 0);
+
+            if ($pending > 0 && abs($qty - $pending) > 0.000001) {
+                return 'partial';
+            }
+        }
+
+        return 'complete';
+    }
+
+    protected function pendingLines(SaleOrder $saleOrder): array
+    {
+        $totals = $this->reservedDeliveryTotals($saleOrder->id);
+
+        return DB::table('sales_order_lines')
+            ->where('sales_order_id', $saleOrder->id)
+            ->orderBy('id')
+            ->get()
+            ->map(function ($line) use ($totals): array {
+                $ordered = $this->decimal($line->quantity ?? 0);
+                $delivered = $this->decimal($line->delivered_quantity ?? 0);
+                $reserved = $this->decimal($totals[$line->id] ?? 0);
+                $covered = max($delivered, $reserved);
+
+                return [
+                    'id' => (int) $line->id,
+                    'product_id' => $line->product_id,
+                    'product_variant_id' => $line->product_variant_id,
+                    'product_label' => $line->product_label ?: 'Producto',
+                    'variant_label' => $line->variant_label,
+                    'estimated_unit_cost_without_tax' => $line->estimated_unit_cost_without_tax ?? 0,
+                    '_ordered' => $ordered,
+                    '_delivered' => $delivered,
+                    '_reserved' => $reserved,
+                    '_covered' => $covered,
+                    '_pending' => max(0, $ordered - $covered),
+                ];
+            })
+            ->all();
+    }
+
+    protected function reservedDeliveryTotals(int $saleOrderId): array
+    {
+        if (! Schema::hasTable('sale_deliveries') || ! Schema::hasTable('sale_delivery_lines')) {
+            return [];
+        }
+
+        return DB::table('sale_delivery_lines as l')
+            ->join('sale_deliveries as d', 'd.id', '=', 'l.sale_delivery_id')
+            ->where('d.sales_order_id', $saleOrderId)
+            ->where('d.status', '!=', 'cancelled')
+            ->groupBy('l.sales_order_line_id')
+            ->selectRaw('l.sales_order_line_id, SUM(l.quantity) as total_quantity')
+            ->pluck('total_quantity', 'sales_order_line_id')
+            ->map(fn ($value) => (float) $value)
+            ->all();
+    }
+
+    protected function doneDeliveryTotals(int $saleOrderId): array
+    {
+        if (! Schema::hasTable('sale_deliveries') || ! Schema::hasTable('sale_delivery_lines')) {
+            return [];
+        }
+
+        return DB::table('sale_delivery_lines as l')
+            ->join('sale_deliveries as d', 'd.id', '=', 'l.sale_delivery_id')
+            ->where('d.sales_order_id', $saleOrderId)
+            ->where('d.status', 'done')
+            ->groupBy('l.sales_order_line_id')
+            ->selectRaw('l.sales_order_line_id, SUM(l.quantity) as total_quantity')
+            ->pluck('total_quantity', 'sales_order_line_id')
+            ->map(fn ($value) => (float) $value)
+            ->all();
+    }
+
+    protected function refreshSalesOrderDeliveryStatus(int $saleOrderId): void
+    {
+        $order = DB::table('sales_orders')->where('id', $saleOrderId)->first();
+
+        if (! $order) {
+            return;
+        }
+
+        $totals = $this->doneDeliveryTotals($saleOrderId);
+
+        $lines = DB::table('sales_order_lines')
+            ->where('sales_order_id', $saleOrderId)
+            ->orderBy('id')
+            ->get();
+
+        $anyDelivered = false;
+        $allDelivered = $lines->isNotEmpty();
+        $deliveredTotal = 0.0;
+
+        foreach ($lines as $line) {
+            $ordered = $this->decimal($line->quantity ?? 0);
+            $delivered = min($ordered, $this->decimal($totals[$line->id] ?? 0));
+            $deliveredTotal += $delivered;
+
+            if ($delivered > 0) {
+                $anyDelivered = true;
+            }
+
+            if ($ordered > 0 && $delivered + 0.000001 < $ordered) {
+                $allDelivered = false;
+            }
+
+            $lineStatus = 'pending';
+
+            if ($ordered > 0 && $delivered + 0.000001 >= $ordered) {
+                $lineStatus = 'delivered';
+            } elseif ($delivered > 0) {
+                $lineStatus = 'partial';
+            }
+
+            DB::table('sales_order_lines')
+                ->where('id', $line->id)
+                ->update($this->filterTableColumns('sales_order_lines', [
+                    'delivered_quantity' => $delivered,
+                    'delivery_status' => $lineStatus,
+                    'updated_at' => now(),
+                ]));
+        }
+
+        $orderStatus = (string) ($order->status ?? '');
+
+        if (in_array($orderStatus, ['confirmed', 'partially_delivered', 'delivered'], true)) {
+            $newStatus = $allDelivered && $anyDelivered
+                ? 'delivered'
+                : ($anyDelivered ? 'partially_delivered' : 'confirmed');
+
+            DB::table('sales_orders')
+                ->where('id', $saleOrderId)
+                ->update($this->filterTableColumns('sales_orders', [
+                    'status' => $newStatus,
+                    'delivered_total_quantity' => $deliveredTotal,
+                    'updated_at' => now(),
+                ]));
+        }
+    }
+
+    protected function lockQuantForDeliveryLine(SaleDelivery $saleDelivery, object $line): ?object
+    {
+        $query = DB::table('stock_quants')
+            ->where('company_id', $saleDelivery->company_id)
+            ->where('warehouse_id', $saleDelivery->warehouse_id)
+            ->where('location_id', $saleDelivery->source_location_id)
+            ->where('product_id', $line->product_id);
+
+        if (! empty($line->product_variant_id)) {
+            $query->where('product_variant_id', $line->product_variant_id);
+        } else {
+            $query->whereNull('product_variant_id');
+        }
+
+        return $query->lockForUpdate()->first();
+    }
+
+    protected function stockOperationTypeId(int $companyId): ?int
+    {
+        if (! Schema::hasTable('stock_operation_types')) {
+            return null;
+        }
+
+        $columns = Schema::getColumnListing('stock_operation_types');
+        $query = DB::table('stock_operation_types');
+
+        if (in_array('company_id', $columns, true)) {
+            $query->where(function ($q) use ($companyId) {
+                $q->where('company_id', $companyId)->orWhereNull('company_id');
+            });
+        }
+
+        $id = $query->orderBy('id')->value('id');
+
+        return $id ? (int) $id : null;
+    }
+
+    protected function nextNumber(int $companyId): string
+    {
+        $prefix = 'ENT-VTA-' . now()->format('Ymd') . '-';
+
+        $last = DB::table('sale_deliveries')
+            ->where('company_id', $companyId)
+            ->where('number', 'like', $prefix . '%')
+            ->orderByDesc('number')
+            ->value('number');
+
+        $next = 1;
+
+        if (is_string($last) && str_starts_with($last, $prefix)) {
+            $next = ((int) substr($last, strlen($prefix))) + 1;
+        }
+
+        return $prefix . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function customerLocationId(int $companyId): ?int
+    {
+        if (! Schema::hasTable('stock_locations')) {
+            return null;
+        }
+
+        return DB::table('stock_locations')
+            ->where('code', 'CLIENTES')
+            ->where(function ($query) use ($companyId) {
+                $query->where('company_id', $companyId)->orWhereNull('company_id');
+            })
+            ->orderByRaw('CASE WHEN company_id = ? THEN 0 ELSE 1 END', [$companyId])
+            ->value('id');
+    }
+
+    protected function filterTableColumns(string $table, array $data): array
+    {
+        if (! Schema::hasTable($table)) {
+            return $data;
+        }
+
+        $columns = Schema::getColumnListing($table);
+
+        return array_filter(
+            $data,
+            fn ($value, $key): bool => in_array($key, $columns, true),
+            ARRAY_FILTER_USE_BOTH
+        );
+    }
+
+    protected function decimal(mixed $value): float
+    {
+        if (is_string($value)) {
+            $value = str_replace(',', '.', $value);
+        }
+
+        return round((float) $value, 6);
+    }
+
+    protected function variantSuffix(object $line): string
+    {
+        return ! empty($line->variant_label)
+            ? ' / ' . $line->variant_label
+            : '';
+    }
+
+    protected function userCanUpdateSales(): bool
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
+            return true;
+        }
+
+        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
+            return true;
+        }
+
+        return method_exists($user, 'can') && (
+            $user->can('sales.update')
+            || $user->can('inventory.update')
+            || $user->can('inventory.view')
+        );
+    }
+}

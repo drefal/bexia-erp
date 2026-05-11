@@ -1,0 +1,71 @@
+/*
+ * Bexia ERP - Ajustes compactos para controles Filament
+ * Aplica a toggles/switches globales.
+ */
+
+.fi-fo-toggle button[role="switch"] {
+    width: 2rem !important;
+    height: 1.05rem !important;
+    min-width: 2rem !important;
+}
+
+.fi-fo-toggle button[role="switch"] span {
+    width: 0.82rem !important;
+    height: 0.82rem !important;
+}
+
+.fi-fo-toggle button[role="switch"][aria-checked="true"] span {
+    transform: translateX(0.9rem) !important;
+}
+
+/* Reducir espacio visual alrededor de toggles en formularios */
+.fi-fo-toggle {
+    gap: 0.35rem !important;
+}
+
+/* Labels junto a toggles un poco más compactos */
+.fi-fo-field-wrp:has(.fi-fo-toggle) .fi-fo-field-wrp-label span {
+    font-size: 0.86rem !important;
+}
+
+/* En formularios, reducir separación vertical de campos tipo switch */
+.fi-fo-field-wrp:has(.fi-fo-toggle) {
+    row-gap: 0.25rem !important;
+}
+
+/* bexia_global_full_width_workspace_v1 */
+/* Ampliar área de trabajo global para Bexia ERP */
+
+.fi-main {
+    max-width: none !important;
+}
+
+.fi-page {
+    max-width: none !important;
+}
+
+.fi-section,
+.fi-ta,
+.fi-ta-ctn {
+    width: 100% !important;
+}
+
+/* Listados/tablas: aprovechar mejor el espacio disponible */
+.fi-ta table {
+    width: 100% !important;
+}
+
+/* Formularios y páginas: menos espacio lateral desperdiciado en pantallas grandes */
+@media (min-width: 1280px) {
+    .fi-main {
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
+}
+
+@media (min-width: 1536px) {
+    .fi-main {
+        padding-left: 2.5rem !important;
+        padding-right: 2.5rem !important;
+    }
+}

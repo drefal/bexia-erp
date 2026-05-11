@@ -1,0 +1,348 @@
+@page{
+margin:8px 10px;
+size:A4 landscape;
+}
+
+:root{
+--red:#b00020;
+--red2:#8a0018;
+--line:#d9d9d9;
+--black:#666;
+}
+
+body{
+font-family:DejaVu Sans,sans-serif;
+font-size:8.4px;
+color:#111;
+}
+
+.header{
+border-bottom:1px solid var(--red);
+padding-bottom:4px;
+margin-bottom:4px;
+}
+
+.title{
+font-size:12px;
+font-weight:800;
+margin:0;
+color:var(--red2);
+letter-spacing:.2px;
+}
+
+.meta{
+margin-top:2px;
+font-size:8px;
+color:#333;
+}
+
+.badge{
+display:inline-block;
+padding:1px 5px;
+border:0.7px solid #d0d0d0;
+border-radius:999px;
+font-weight:700;
+background:#fff;
+}
+
+.badge.red{
+border-color:var(--red);
+color:var(--red2);
+}
+
+.section-title{
+margin:4px 0 2px;
+font-size:9.4px;
+font-weight:800;
+color:#fff;
+background:var(--red);
+padding:3px 5px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+table-layout:fixed;
+}
+
+th,td{
+border:0.7px solid var(--line);
+padding:3px 4px;
+vertical-align:middle;
+word-wrap:break-word;
+}
+
+th{
+background:#f3f3f3;
+font-weight:800;
+text-align:left;
+}
+
+.right{
+text-align:right;
+}
+
+.center{
+text-align:center;
+}
+
+.top-general-wrap{
+width:100%;
+margin:0 0 4px 0;
+border-collapse:separate;
+border-spacing:0;
+}
+
+.top-general-wrap td{
+border:none;
+padding:0;
+}
+
+.info-wrap{
+width:100%;
+margin-bottom:4px;
+border-collapse:separate;
+border-spacing:0;
+}
+
+.info-wrap > tbody > tr > td{
+width:50%;
+border:none;
+vertical-align:top;
+padding:0;
+}
+
+.info-wrap .pad-r{
+padding-right:0;
+border-right:1px solid var(--black);
+}
+
+.info-wrap .pad-l{
+padding-left:0;
+}
+
+.box-table{
+border:1px solid var(--black);
+margin:0;
+}
+
+.box-table .section-title{
+margin:0;
+}
+
+.kv{
+width:100%;
+table-layout:fixed;
+}
+
+.kv th{
+width:38%;
+background:#f3f3f3;
+font-weight:800;
+text-align:left;
+}
+
+.kv td{
+width:62%;
+background:#fff;
+text-align:center;
+}
+
+.kv.single th{
+width:16%;
+}
+
+.kv.single td{
+width:84%;
+text-align:left;
+}
+
+.items-wrap{
+page-break-inside:auto;
+break-inside:auto;
+margin-top:1px;
+}
+
+.items{
+border:1px solid var(--black);
+page-break-inside:auto;
+break-inside:auto;
+}
+
+.items th.head{
+background:var(--red) !important;
+color:#fff !important;
+font-weight:800;
+text-align:center;
+}
+
+.items td{
+text-align:center;
+}
+
+.items tfoot th,
+.items tfoot td{
+background:var(--red) !important;
+color:#fff !important;
+font-weight:800;
+}
+
+.img-cell{
+text-align:center;
+vertical-align:middle;
+}
+
+.img{
+display:block;
+margin:0 auto;
+width:132px;
+max-height:72px;
+height:auto;
+}
+
+.img-empty{
+color:#999;
+font-size:8px;
+}
+
+thead{
+display:table-header-group;
+}
+
+tr{
+page-break-inside:auto;
+}
+
+.watermark{
+position:fixed;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+width:520px;
+opacity:0.16;
+z-index:-1;
+}
+
+/* IMPORTANTE: ya NO forzar pagina nueva en firmas */
+.signatures{
+margin-top:14px;
+page-break-before:auto;
+break-before:auto;
+page-break-inside:avoid;
+}
+
+.sig-table{
+width:100%;
+margin:10px auto 0 auto;
+border-collapse:separate;
+border-spacing:6px 0;
+table-layout:fixed;
+}
+
+.sig-table td{
+border:none;
+padding:0 4px;
+vertical-align:bottom;
+text-align:center;
+}
+
+.sig-line{
+border-top:1px solid var(--red);
+height:10px;
+margin-top:14px;
+}
+
+.sig-name{
+margin-top:2px;
+font-weight:800;
+font-size:8px;
+min-height:10px;
+}
+
+.sig-email{
+margin-top:1px;
+font-size:7.4px;
+color:#444;
+word-break:break-word;
+min-height:12px;
+}
+
+.sig-role{
+margin-top:2px;
+background:var(--red);
+color:#fff;
+font-size:7.4px;
+text-transform:uppercase;
+letter-spacing:.25px;
+padding:1px 0;
+font-weight:800;
+}
+
+
+/* ===== Ajustes header con informacion general a la derecha ===== */
+.header-layout{
+width:100%;
+border-collapse:separate;
+border-spacing:0;
+table-layout:fixed;
+}
+
+.header-layout td{
+border:none;
+vertical-align:top;
+padding:0;
+}
+
+.header-left{
+width:68%;
+padding-right:8px;
+}
+
+.header-right{
+width:32%;
+}
+
+.meta-line{
+margin-top:2px;
+font-size:8px;
+color:#333;
+}
+
+.meta-label{
+font-weight:700;
+}
+
+.meta-sep{
+margin:0 4px;
+color:#888;
+}
+
+.header-general{
+width:100%;
+border:1px solid var(--black);
+border-collapse:collapse;
+table-layout:fixed;
+}
+
+.header-general th,
+.header-general td{
+border:0.7px solid var(--line);
+padding:3px 4px;
+}
+
+.header-general th{
+width:28%;
+background:#f3f3f3;
+font-weight:800;
+text-align:left;
+}
+
+.header-general td{
+background:#fff;
+text-align:left;
+}
+
+/* ocultar el bloque viejo si por alguna razon sigue existiendo */
+.top-general-wrap{
+display:none;
+}
