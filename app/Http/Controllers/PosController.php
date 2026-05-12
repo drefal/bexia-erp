@@ -4065,6 +4065,7 @@ return response()->json([
         ]);
     }
 
+    // V5_53_0C_pos_cash_change_dev
     public function payOrder(\Illuminate\Http\Request $request, int $order)
     {
         if (! auth()->check()) {
@@ -4119,14 +4120,16 @@ return response()->json([
             $total = round((float) $requestedTotal, 2);
 
             $normalized = [];
-            $sum = 0.0;
+            $tenderedSum = 0.0;
+            $appliedSum = 0.0;
+            $cashIndexes = [];
 
             foreach ($payments as $payment) {
-                $amount = round((float) ($payment['amount'] ?? 0), 2);
+                $tenderedAmount = round((float) ($payment['amount'] ?? 0), 2);
                 $paymentFormId = $payment['payment_form_id'] ?? null;
                 $paymentLabel = trim((string) ($payment['payment_label'] ?? ''));
 
-                if ($amount <= 0) {
+                if ($tenderedAmount <= 0) {
                     return [
                         'ok' => false,
                         'status' => 422,
@@ -4176,27 +4179,87 @@ return response()->json([
                     $paymentLabel = 'Pago';
                 }
 
-                $sum += $amount;
+                $paymentFormCode = $paymentForm->code ?? null;
+                $labelForCash = strtolower($paymentLabel . ' ' . (string) $paymentFormCode);
+                $isCash = isset($paymentForm->is_cash)
+                    ? (bool) $paymentForm->is_cash
+                    : (str_contains($labelForCash, 'efectivo') || str_contains($labelForCash, 'cash') || trim((string) $paymentFormCode) === '01');
+
+                $rowIndex = count($normalized);
 
                 $normalized[] = [
                     'payment_form_id' => $paymentFormId,
                     'payment_label' => $paymentLabel,
-                    'amount' => $amount,
-                    'payment_form_code' => $paymentForm->code ?? null,
-                    'is_cash' => isset($paymentForm->is_cash) ? (bool) $paymentForm->is_cash : null,
+                    'amount' => $tenderedAmount,
+                    'tendered_amount' => $tenderedAmount,
+                    'cash_received' => $isCash ? $tenderedAmount : null,
+                    'change_amount' => 0.0,
+                    'payment_form_code' => $paymentFormCode,
+                    'is_cash' => $isCash,
                     'is_credit' => isset($paymentForm->is_credit) ? (bool) $paymentForm->is_credit : null,
                 ];
+
+                $tenderedSum += $tenderedAmount;
+
+                if ($isCash) {
+                    $cashIndexes[] = $rowIndex;
+                }
             }
 
-            $sum = round($sum, 2);
+            $tenderedSum = round($tenderedSum, 2);
 
-            if (abs($sum - $total) > 0.01) {
+            if ($tenderedSum + 0.01 < $total) {
                 return [
                     'ok' => false,
                     'status' => 422,
-                    'message' => 'La suma de pagos debe ser igual al total del ticket. Total: $' . number_format($total, 2) . ' / Pagos: $' . number_format($sum, 2),
+                    'message' => 'El pago recibido es menor al total del ticket. Total: $' . number_format($total, 2) . ' / Recibido: $' . number_format($tenderedSum, 2),
                 ];
             }
+
+            $overage = round($tenderedSum - $total, 2);
+
+            if ($overage > 0.01 && empty($cashIndexes)) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Solo el pago en efectivo puede ser mayor al total para calcular cambio. Total: $' . number_format($total, 2) . ' / Recibido: $' . number_format($tenderedSum, 2),
+                ];
+            }
+
+            if ($overage > 0.01) {
+                $cashIndex = end($cashIndexes);
+                $cashReceived = round((float) ($normalized[$cashIndex]['tendered_amount'] ?? 0), 2);
+                $cashApplied = round($cashReceived - $overage, 2);
+
+                if ($cashApplied <= 0) {
+                    return [
+                        'ok' => false,
+                        'status' => 422,
+                        'message' => 'El excedente de efectivo es mayor al pago efectivo recibido. Revisa los importes.',
+                    ];
+                }
+
+                $normalized[$cashIndex]['amount'] = $cashApplied;
+                $normalized[$cashIndex]['cash_received'] = $cashReceived;
+                $normalized[$cashIndex]['change_amount'] = $overage;
+            }
+
+            foreach ($normalized as $payment) {
+                $appliedSum += (float) ($payment['amount'] ?? 0);
+            }
+
+            $appliedSum = round($appliedSum, 2);
+
+            if (abs($appliedSum - $total) > 0.01) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'La suma aplicada debe ser igual al total del ticket. Total: $' . number_format($total, 2) . ' / Aplicado: $' . number_format($appliedSum, 2),
+                ];
+            }
+
+            $cashReceivedTotal = round(array_sum(array_map(fn ($payment) => (float) ($payment['cash_received'] ?? 0), $normalized)), 2);
+            $changeTotal = round(array_sum(array_map(fn ($payment) => (float) ($payment['change_amount'] ?? 0), $normalized)), 2);
 
             \Illuminate\Support\Facades\DB::table('pos_order_payments')
                 ->where('pos_order_id', $orderRow->id)
@@ -4216,6 +4279,10 @@ return response()->json([
                         'payment_form_code' => $payment['payment_form_code'],
                         'is_cash' => $payment['is_cash'],
                         'is_credit' => $payment['is_credit'],
+                        'tendered_amount' => $payment['tendered_amount'] ?? $payment['amount'],
+                        'cash_received' => $payment['cash_received'] ?? null,
+                        'change_amount' => $payment['change_amount'] ?? 0,
+                        'amount_applied_to_sale' => $payment['amount'],
                     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -4262,6 +4329,10 @@ return response()->json([
             $metadata['paid'] = true;
             $metadata['payment_count'] = count($normalized);
             $metadata['paid_by_user_id'] = auth()->id();
+            $metadata['payment_tendered_total'] = $tenderedSum;
+            $metadata['payment_applied_total'] = $appliedSum;
+            $metadata['cash_received_total'] = $cashReceivedTotal;
+            $metadata['change_amount_total'] = $changeTotal;
 
             $v5498cOrderUpdate = [
                 'status' => 'paid',

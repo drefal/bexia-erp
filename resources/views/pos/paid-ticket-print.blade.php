@@ -398,7 +398,7 @@
             </tr>
             <tr>
                 <td colspan="2" class="small">
-                    Aplicado por: {{ $discountUser !== '' ? $discountUser : 'Usuario' }}
+                    COBRADO por: {{ $discountUser !== '' ? $discountUser : 'Usuario' }}
                     @if($discountType === 'percent')
                         ({{ rtrim(rtrim(number_format($discountValue, 2), '0'), '.') }}%)
                     @endif
@@ -416,9 +416,22 @@
     <div class="bold">Formas de pago</div>
     <table>
         @foreach($payments as $payment)
+            @php
+                $v5530c5PaymentMetadata = [];
+                $v5530c5RawMetadata = $payment->metadata ?? null;
+
+                if (is_string($v5530c5RawMetadata) && trim($v5530c5RawMetadata) !== '') {
+                    $v5530c5DecodedMetadata = json_decode($v5530c5RawMetadata, true);
+                    $v5530c5PaymentMetadata = is_array($v5530c5DecodedMetadata) ? $v5530c5DecodedMetadata : [];
+                } elseif (is_array($v5530c5RawMetadata)) {
+                    $v5530c5PaymentMetadata = $v5530c5RawMetadata;
+                }
+
+                $v5530c5TenderedAmount = (float) ($v5530c5PaymentMetadata['tendered_amount'] ?? $v5530c5PaymentMetadata['cash_received'] ?? $payment->amount ?? 0);
+            @endphp
             <tr>
                 <td>{{ $payment->payment_label ?? 'Pago' }}</td>
-                <td class="right">${{ number_format((float) ($payment->amount ?? 0), 2) }}</td>
+                <td class="right">${{ number_format($v5530c5TenderedAmount, 2) }}</td>
             </tr>
         @endforeach
     </table>
@@ -426,7 +439,64 @@
     <div class="line"></div>
 
     
-    @if($v5510aHasRefund ?? false)
+    
+{{-- V5_53_0C5_ticket_cash_change_inline --}}
+@php
+    $v5530c5TicketCashReceived = 0.0;
+    $v5530c5TicketChange = 0.0;
+    $v5530c5TicketApplied = 0.0;
+
+    foreach (($payments ?? []) as $v5530c5Payment) {
+        $v5530c5PaymentArray = is_array($v5530c5Payment) ? $v5530c5Payment : (array) $v5530c5Payment;
+        $v5530c5Raw = $v5530c5PaymentArray['metadata'] ?? null;
+        $v5530c5Meta = [];
+
+        if (is_string($v5530c5Raw) && trim($v5530c5Raw) !== '') {
+            $v5530c5Decoded = json_decode($v5530c5Raw, true);
+            $v5530c5Meta = is_array($v5530c5Decoded) ? $v5530c5Decoded : [];
+        } elseif (is_array($v5530c5Raw)) {
+            $v5530c5Meta = $v5530c5Raw;
+        }
+
+        $v5530c5Amount = (float) ($v5530c5PaymentArray['amount'] ?? 0);
+        $v5530c5TicketCashReceived += (float) ($v5530c5Meta['cash_received'] ?? 0);
+        $v5530c5TicketChange += (float) ($v5530c5Meta['change_amount'] ?? 0);
+        $v5530c5TicketApplied += (float) ($v5530c5Meta['amount_applied_to_sale'] ?? $v5530c5Amount);
+    }
+
+    if ($v5530c5TicketCashReceived <= 0 && isset($ticketMetadata['cash_received_total'])) {
+        $v5530c5TicketCashReceived = (float) $ticketMetadata['cash_received_total'];
+    }
+
+    if ($v5530c5TicketChange <= 0 && isset($ticketMetadata['change_amount_total'])) {
+        $v5530c5TicketChange = (float) $ticketMetadata['change_amount_total'];
+    }
+
+    if ($v5530c5TicketApplied <= 0 && isset($ticketMetadata['payment_applied_total'])) {
+        $v5530c5TicketApplied = (float) $ticketMetadata['payment_applied_total'];
+    }
+@endphp
+
+@if ($v5530c5TicketCashReceived > 0 || $v5530c5TicketChange > 0)
+    <table>
+        <tr>
+            <td class="bold">RECIBIDO</td>
+            <td class="right bold">${{ number_format($v5530c5TicketCashReceived, 2) }}</td>
+        </tr>
+        <tr>
+            <td class="bold">COBRADO</td>
+            <td class="right bold">${{ number_format($v5530c5TicketApplied, 2) }}</td>
+        </tr>
+        <tr>
+            <td class="bold">CAMBIO</td>
+            <td class="right bold">${{ number_format($v5530c5TicketChange, 2) }}</td>
+        </tr>
+    </table>
+
+    <div class=\"line\"></div>
+@endif
+
+@if($v5510aHasRefund ?? false)
         <div class="line"></div>
 
         <div class="refund-status-box">
@@ -492,5 +562,7 @@
             }, 350);
         });
     </script>
+
+
 </body>
 </html>

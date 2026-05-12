@@ -5015,10 +5015,17 @@ async function createPendingTicket() {
             const amount = Number(input.value || 0);
 
             if (amount > 0) {
+                const label = selected ? (selected.dataset.label || selected.textContent || 'Pago') : 'Pago';
+                const isCash = String(label).toLowerCase().includes('efectivo')
+                    || String(label).toLowerCase().includes('cash');
+
                 payments.push({
                     payment_form_id: select.value || null,
-                    payment_label: selected ? (selected.dataset.label || selected.textContent || 'Pago') : 'Pago',
+                    payment_label: label,
                     amount: amount,
+                    tendered_amount: amount,
+                    cash_received: isCash ? amount : null,
+                    is_cash_frontend: isCash,
                 });
             }
         });
@@ -5093,8 +5100,25 @@ async function createPendingTicket() {
                     return;
                 }
 
-                if (Math.abs(Number(sum.toFixed(2)) - Number(total.toFixed(2))) > 0.01) {
-                    showPosNotice('La suma de pagos debe ser igual al total. Total: ' + money(total) + ' / Pagos: ' + money(sum), 'warning');
+                // V5_53_0C5: efectivo puede ser mayor al total para calcular cambio.
+                const v5530c5Total = Number(total.toFixed(2));
+                const v5530c5Paid = Number(sum.toFixed(2));
+                const v5530c5Over = Number((v5530c5Paid - v5530c5Total).toFixed(2));
+                const v5530c5HasCash = payments.some(function (payment) {
+                    const label = String(payment.payment_label || '').toLowerCase();
+
+                    return payment.is_cash_frontend === true
+                        || label.includes('efectivo')
+                        || label.includes('cash');
+                });
+
+                if (v5530c5Paid + 0.01 < v5530c5Total) {
+                    showPosNotice('El pago recibido es menor al total. Total: ' + money(v5530c5Total) + ' / Recibido: ' + money(v5530c5Paid), 'warning');
+                    return;
+                }
+
+                if (v5530c5Over > 0.01 && !v5530c5HasCash) {
+                    showPosNotice('Solo el pago en efectivo puede ser mayor al total para calcular cambio.', 'warning');
                     return;
                 }
 
@@ -5450,10 +5474,17 @@ async function createPendingTicket() {
                     return null;
                 }
 
+                const label = option ? (option.dataset.label || option.textContent || 'Pago') : 'Pago';
+                const isCash = String(label).toLowerCase().includes('efectivo')
+                    || String(label).toLowerCase().includes('cash');
+
                 return {
                     payment_form_id: select.value || null,
-                    payment_label: option ? (option.dataset.label || option.textContent || 'Pago') : 'Pago',
+                    payment_label: label,
                     amount: Number(amount.toFixed(2)),
+                    tendered_amount: Number(amount.toFixed(2)),
+                    cash_received: isCash ? Number(amount.toFixed(2)) : null,
+                    is_cash_frontend: isCash,
                 };
             }).filter(Boolean);
         }
@@ -5741,8 +5772,23 @@ async function createPendingTicket() {
                 return;
             }
 
-            if (Math.abs(total - paid) > 0.01) {
-                warn('La suma de pagos debe ser igual al total. Total: ' + money(total) + ' / Pagos: ' + money(paid));
+            // V5_53_0C5: efectivo puede ser mayor al total para calcular cambio.
+            const v5530c5Over = Number((paid - total).toFixed(2));
+            const v5530c5HasCash = payments.some(function (payment) {
+                const label = String(payment.payment_label || '').toLowerCase();
+
+                return payment.is_cash_frontend === true
+                    || label.includes('efectivo')
+                    || label.includes('cash');
+            });
+
+            if (paid + 0.01 < total) {
+                warn('El pago recibido es menor al total. Total: ' + money(total) + ' / Recibido: ' + money(paid));
+                return;
+            }
+
+            if (v5530c5Over > 0.01 && !v5530c5HasCash) {
+                warn('Solo el pago en efectivo puede ser mayor al total para calcular cambio.');
                 return;
             }
 
@@ -7422,9 +7468,19 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return rows.map(function (method) {
+            const label = method.label || method.name || method.description || method.code || 'Pago';
+            const code = String(method.code || method.payment_form_code || '').trim();
+            const isCash = Boolean(method.is_cash)
+                || code === '01'
+                || String(label).toLowerCase().includes('efectivo')
+                || String(label).toLowerCase().includes('cash');
+
             return {
                 id: method.id || method.payment_form_id || '',
-                label: method.label || method.name || method.description || method.code || 'Pago',
+                label: label,
+                code: code,
+                is_cash: isCash,
+                is_credit: Boolean(method.is_credit),
             };
         });
     }
@@ -7452,25 +7508,110 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 0);
     }
 
+    // V5_53_0C_pos_cash_change_dev
+    function v5530cIsCashOption(option) {
+        if (!option) {
+            return false;
+        }
+
+        const label = String(option.dataset.label || option.textContent || '').toLowerCase();
+        const code = String(option.dataset.code || '').trim();
+
+        return option.dataset.isCash === '1'
+            || code === '01'
+            || label.includes('efectivo')
+            || label.includes('cash');
+    }
+
+    function v5530cIsCashRow(row) {
+        const select = row ? row.querySelector('[data-v5481i-method="1"]') : null;
+
+        if (!select) {
+            return false;
+        }
+
+        return v5530cIsCashOption(select.options[select.selectedIndex]);
+    }
+
+    function v5530cPaymentAnalysis(total) {
+        const rows = paymentRows();
+        let tendered = 0;
+        let cashTendered = 0;
+        let hasCash = false;
+        let nonCashTendered = 0;
+
+        rows.forEach(function (row) {
+            const input = row.querySelector('[data-v5481i-amount="1"]');
+            const value = Number(input ? input.value : 0);
+            const amount = Number.isFinite(value) ? value : 0;
+
+            if (amount <= 0) {
+                return;
+            }
+
+            tendered += amount;
+
+            if (v5530cIsCashRow(row)) {
+                hasCash = true;
+                cashTendered += amount;
+            } else {
+                nonCashTendered += amount;
+            }
+        });
+
+        tendered = Number(tendered.toFixed(2));
+        cashTendered = Number(cashTendered.toFixed(2));
+        nonCashTendered = Number(nonCashTendered.toFixed(2));
+
+        const diff = Number((Number(total || 0) - tendered).toFixed(2));
+        const over = Number((tendered - Number(total || 0)).toFixed(2));
+        const change = hasCash && over > 0 ? over : 0;
+        const applied = change > 0 ? Number((tendered - change).toFixed(2)) : tendered;
+
+        return {
+            total: Number(Number(total || 0).toFixed(2)),
+            tendered: tendered,
+            applied: applied,
+            diff: diff,
+            over: over,
+            change: Number(change.toFixed(2)),
+            hasCash: hasCash,
+            cashTendered: cashTendered,
+            nonCashTendered: nonCashTendered,
+            isCovered: tendered + 0.01 >= Number(total || 0),
+            isExact: Math.abs(diff) <= 0.01 && tendered > 0,
+        };
+    }
+
     function updateSummary() {
         const summary = document.getElementById('v5481i-payment-summary');
         const button = confirmButton();
 
-        const total = Number(currentTotal().toFixed(2));
-        const paid = Number(paidTotal().toFixed(2));
-        const diff = Number((total - paid).toFixed(2));
-        const exact = Math.abs(diff) <= 0.01 && paid > 0;
+        const analysis = v5530cPaymentAnalysis(currentTotal());
+        const okColor = '#166534';
+        const warnColor = '#b91c1c';
 
         if (summary) {
+            let statusLine = '';
+
+            if (analysis.change > 0) {
+                statusLine =
+                    '<div style="display:flex;justify-content:space-between;gap:12px;color:' + okColor + ';"><span>Cambio a entregar</span><strong>' + money(analysis.change) + '</strong></div>';
+            } else {
+                statusLine =
+                    '<div style="display:flex;justify-content:space-between;gap:12px;color:' + (analysis.isCovered ? okColor : warnColor) + ';"><span>Saldo</span><strong>' + money(Math.max(0, analysis.diff)) + '</strong></div>';
+            }
+
             summary.innerHTML =
-                '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Total</span><strong>' + money(total) + '</strong></div>' +
-                '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Pagado</span><strong>' + money(paid) + '</strong></div>' +
-                '<div style="display:flex;justify-content:space-between;gap:12px;color:' + (exact ? '#166534' : '#b91c1c') + ';"><span>' + (diff >= 0 ? 'Saldo' : 'Diferencia') + '</span><strong>' + money(Math.abs(diff)) + '</strong></div>';
+                '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Total</span><strong>' + money(analysis.total) + '</strong></div>' +
+                '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Recibido</span><strong>' + money(analysis.tendered) + '</strong></div>' +
+                '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Aplicado a venta</span><strong>' + money(analysis.applied) + '</strong></div>' +
+                statusLine;
         }
 
         /*
          * No lo dejamos disabled porque algunos navegadores/handlers no disparan click
-         * sobre botones deshabilitados. La validación se hace al registrar.
+         * sobre botones deshabilitados. La validación final se hace al registrar.
          */
         if (button) {
             button.disabled = false;
@@ -7493,6 +7634,8 @@ document.addEventListener('DOMContentLoaded', function () {
             option.value = method.id || '';
             option.textContent = method.label || 'Pago';
             option.dataset.label = method.label || 'Pago';
+                option.dataset.code = method.code || '';
+                option.dataset.isCash = method.is_cash ? '1' : '0';
             select.appendChild(option);
         });
 
@@ -7677,6 +7820,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const option = select.options[select.selectedIndex];
             const amount = Number(input.value || 0);
+            const isCash = v5530cIsCashOption(option);
 
             if (!Number.isFinite(amount) || amount <= 0) {
                 return null;
@@ -7686,6 +7830,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 payment_form_id: select.value || null,
                 payment_label: option ? (option.dataset.label || option.textContent || 'Pago') : 'Pago',
                 amount: Number(amount.toFixed(2)),
+                tendered_amount: Number(amount.toFixed(2)),
+                cash_received: isCash ? Number(amount.toFixed(2)) : null,
+                is_cash_frontend: isCash,
             };
         }).filter(Boolean);
     }
@@ -7723,8 +7870,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return sum + Number(payment.amount || 0);
         }, 0).toFixed(2));
 
-        if (Math.abs(total - paid) > 0.01) {
-            warn('La suma de pagos debe ser igual al total. Total: ' + money(total) + ' / Pagos: ' + money(paid));
+        // V5_53_0D3: permitir excedente; el backend valida si aplica como cambio en efectivo.
+        if (paid + 0.01 < total) {
+            warn('El pago recibido es menor al total. Total: ' + money(total) + ' / Recibido: ' + money(paid));
             return;
         }
 
