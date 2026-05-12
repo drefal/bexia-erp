@@ -4,8 +4,9 @@ namespace App\Filament\Resources\InvoiceResource\Pages;
 
 use App\Filament\Resources\InvoiceResource;
 use Filament\Actions;
-use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 
@@ -29,14 +30,14 @@ class ViewInvoice extends ViewRecord
                         ->default(fn () => app(\App\Support\Billing\InvoiceCfdiEmailService::class)->defaultEmail($this->record)),
                     Textarea::make('extra_emails')
                         ->label('Correos adicionales')
-                        ->helperText('Opcional. Puedes escribir varios correos separados por coma, punto y coma, espacio o salto de línea.')
+                        ->helperText('Opcional. Puedes escribir varios correos separados por coma, punto y coma, espacio o salto de linea.')
                         ->rows(3)
                         ->placeholder('correo1@dominio.com, correo2@dominio.com'),
                     Textarea::make('message')
                         ->label('Mensaje')
                         ->rows(5)
                         ->default(fn () => implode("\n", [
-                            'Buen día.',
+                            'Buen dia.',
                             '',
                             'Adjuntamos la factura CFDI '.$this->record->cfdi_series.' '.$this->record->cfdi_folio.'.',
                             '',
@@ -50,7 +51,6 @@ class ViewInvoice extends ViewRecord
                 ->modalSubmitActionLabel('Enviar correo')
                 ->action(function (array $data): void {
                     $emails = trim((string) ($data['email'] ?? ''));
-
                     $extraEmails = trim((string) ($data['extra_emails'] ?? ''));
 
                     if ($extraEmails !== '') {
@@ -76,12 +76,12 @@ class ViewInvoice extends ViewRecord
                 ->visible(fn (): bool => $this->isStamped())
                 ->requiresConfirmation()
                 ->modalHeading('Enviar CFDI por WhatsApp')
-                ->modalDescription('El envío por WhatsApp todavía no está desarrollado. Este botón queda preparado para el siguiente módulo.')
+                ->modalDescription('El envio por WhatsApp todavia no esta desarrollado. Este boton queda preparado para el siguiente modulo.')
                 ->modalSubmitActionLabel('Entendido')
                 ->action(function (): void {
                     Notification::make()
                         ->title('WhatsApp pendiente')
-                        ->body('El envío automático por WhatsApp todavía no está desarrollado. Próximo paso: conectar el proveedor de WhatsApp y adjuntar PDF/XML.')
+                        ->body('El envio automatico por WhatsApp todavia no esta desarrollado.')
                         ->warning()
                         ->send();
                 }),
@@ -115,16 +115,67 @@ class ViewInvoice extends ViewRecord
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
                 ->visible(fn (): bool => $this->isStamped())
-                ->requiresConfirmation()
+                ->form([
+                    Select::make('reason_code')
+                        ->label('Motivo de cancelación SAT')
+                        ->options(fn (): array => app(\App\Support\Billing\InvoiceCfdiCancelService::class)->reasonOptions())
+                        ->required()
+                        ->validationMessages([
+                            'required' => 'Selecciona el motivo de cancelación SAT.',
+                        ])
+                        ->live()
+                        ->afterStateUpdated(function ($state, callable $set): void {
+                            if ((string) $state !== '01') {
+                                $set('replacement_uuid', null);
+                            }
+                        }),
+
+                    TextInput::make('replacement_uuid')
+                        ->label('UUID sustituto')
+                        ->helperText('Obligatorio únicamente cuando el motivo es 01.')
+                        ->maxLength(36)
+                        ->placeholder('XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX')
+                        ->visible(fn (\Filament\Forms\Get $get): bool => (string) $get('reason_code') === '01')
+                        ->required(fn (\Filament\Forms\Get $get): bool => (string) $get('reason_code') === '01')
+                        ->regex('/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/')
+                        ->validationMessages([
+                            'required' => 'El motivo 01 requiere UUID sustituto.',
+                            'regex' => 'El UUID sustituto no tiene formato válido.',
+                        ]),
+
+                    Textarea::make('internal_comment')
+                        ->label('Comentario de cancelación')
+                        ->helperText('Obligatorio. Explica por qué se prepara la cancelación.')
+                        ->rows(4)
+                        ->required()
+                        ->minLength(8)
+                        ->placeholder('Ejemplo: Error en datos fiscales del cliente; se emitirá CFDI sustituto.')
+                        ->validationMessages([
+                            'required' => 'El comentario de cancelación es obligatorio.',
+                            'min' => 'El comentario debe tener al menos 8 caracteres.',
+                        ]),
+                ])
                 ->modalHeading('Cancelar CFDI')
-                ->modalDescription('La factura ya está timbrada. La cancelación fiscal SAT requiere motivo de cancelación y, en algunos casos, UUID de sustitución. Este botón queda preparado; el flujo real de cancelación se implementa en el siguiente paso.')
-                ->modalSubmitActionLabel('Entendido')
-                ->action(function (): void {
+                ->modalDescription('Esta acción registra la solicitud de cancelación en Bexia. Todavía NO cancela ante SAT/PAC; la cancelación fiscal real se enviará en el siguiente paso.')
+                ->modalSubmitActionLabel('Registrar solicitud')
+                ->modalCancelActionLabel('Salir')
+                ->action(function (array $data): void {
+                    $result = app(\App\Support\Billing\InvoiceCfdiCancelService::class)
+                        ->prepareCancellation($this->record, auth()->user(), $data);
+
+                    if (! ($result['success'] ?? false)) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'reason_code' => $result['message'] ?? 'No se pudo preparar la cancelación.',
+                        ]);
+                    }
+
                     Notification::make()
-                        ->title('Cancelación CFDI pendiente')
-                        ->body('El botón ya aparece para facturas timbradas. Falta implementar el flujo fiscal real con motivo SAT y llamada al PAC.')
-                        ->warning()
+                        ->title('Cancelación preparada')
+                        ->body($result['message'] ?? 'Cancelación preparada. Pendiente de envío real al PAC/SAT.')
+                        ->success()
                         ->send();
+
+                    $this->record->refresh();
                 }),
 
             Actions\Action::make('stamp_cfdi_from_app')
@@ -134,8 +185,8 @@ class ViewInvoice extends ViewRecord
                 ->visible(fn (): bool => $this->canStamp())
                 ->requiresConfirmation()
                 ->modalHeading('Timbrar CFDI')
-                ->modalDescription('Esto emitirá un CFDI real ante el PAC/SAT. Revisa que cliente, totales, serie y folio sean correctos.')
-                ->modalSubmitActionLabel('Sí, timbrar CFDI')
+                ->modalDescription('Esto emitira un CFDI real ante el PAC/SAT. Revisa que cliente, totales, serie y folio sean correctos.')
+                ->modalSubmitActionLabel('Si, timbrar CFDI')
                 ->action(function (): void {
                     $this->record->refresh();
 
@@ -146,7 +197,7 @@ class ViewInvoice extends ViewRecord
                         if (! ($folio['success'] ?? false)) {
                             Notification::make()
                                 ->title('No se pudo asignar folio')
-                                ->body($folio['message'] ?? 'Revisa la serie de facturación.')
+                                ->body($folio['message'] ?? 'Revisa la serie de facturacion.')
                                 ->danger()
                                 ->send();
 
@@ -162,7 +213,7 @@ class ViewInvoice extends ViewRecord
                     if (! ($xml['success'] ?? false)) {
                         Notification::make()
                             ->title('No se pudo generar XML')
-                            ->body($xml['message'] ?? 'Revisa la auditoría CFDI.')
+                            ->body($xml['message'] ?? 'Revisa la auditoria CFDI.')
                             ->danger()
                             ->send();
 
@@ -200,6 +251,7 @@ class ViewInvoice extends ViewRecord
     {
         return in_array((string) ($this->record->cfdi_status ?? ''), [
             'stamped',
+            'cancel_requested',
             'cancelled',
             'cancelled_internal',
         ], true);
