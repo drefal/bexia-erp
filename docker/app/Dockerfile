@@ -29,3 +29,17 @@ RUN set -eux; \
 
 WORKDIR /var/www/html
 CMD ["php-fpm"]
+
+# BEXIA_V5523O1B_XSL
+# Requerido para CFDI: cadena original SAT con XSLTProcessor / ext-xsl.
+RUN if command -v apt-get >/dev/null 2>&1; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends libxslt1-dev \
+        && docker-php-ext-install xsl \
+        && rm -rf /var/lib/apt/lists/*; \
+    elif command -v apk >/dev/null 2>&1; then \
+        apk add --no-cache libxslt-dev \
+        && docker-php-ext-install xsl; \
+    else \
+        echo "No apt-get/apk available to install xsl" && exit 1; \
+    fi

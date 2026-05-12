@@ -261,6 +261,13 @@ class InvoiceResource extends Resource
                     ->sortable(),
 
 
+
+                Tables\Columns\TextColumn::make('cfdi_number_display')
+                    ->label('Folio CFDI')
+                    ->placeholder('Sin folio')
+                    ->searchable()
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('cfdi_status')
                     ->label('Estado CFDI')
                     ->badge()
@@ -335,6 +342,80 @@ class InvoiceResource extends Resource
                     ]),
             ])
             ->actions([
+
+                Tables\Actions\Action::make('stamp_cfdi_row')
+                    ->label('Timbrar')
+                    ->icon('heroicon-o-bolt')
+                    ->color('success')
+                    ->visible(fn ($record): bool => in_array((string) ($record->cfdi_status ?? ''), ['ready_to_stamp', 'stamp_error'], true)
+                        && ! in_array((string) ($record->status ?? ''), ['cancelled'], true))
+                    ->requiresConfirmation()
+                    ->modalHeading('Timbrar CFDI con SW')
+                    ->modalDescription('Se enviará el XML firmado al PAC SW. En DEV se bloqueará si la empresa está configurada contra ambiente producción.')
+                    ->action(function ($record): void {
+                        static::recalculateInvoice($record);
+                        $record->refresh();
+
+                        $result = app(\App\Support\Billing\InvoiceCfdiStampService::class)
+                            ->stamp($record, auth()->user());
+
+                        \Filament\Notifications\Notification::make()
+                            ->title($result['success'] ? 'CFDI timbrado' : 'No se pudo timbrar')
+                            ->body($result['message'])
+                            ->color($result['success'] ? 'success' : 'danger')
+                            ->send();
+
+                        $record->refresh();
+                    }),
+
+
+                Tables\Actions\Action::make('generate_cfdi_xml_row')
+                    ->label('Generar XML')
+                    ->icon('heroicon-o-code-bracket-square')
+                    ->color('warning')
+                    ->visible(fn ($record): bool => ! in_array((string) ($record->cfdi_status ?? ''), ['stamped', 'cancelled', 'cancelled_internal'], true))
+                    ->requiresConfirmation()
+                    ->modalHeading('Generar XML CFDI firmado')
+                    ->modalDescription('Se generará el XML CFDI 4.0 con cadena original y sello real. Todavía no se timbra ni se envía a SW.')
+                    ->action(function ($record): void {
+                        static::recalculateInvoice($record);
+                        $record->refresh();
+
+                        $result = app(\App\Support\Billing\InvoiceCfdiXmlBuilder::class)
+                            ->generateSignedXml($record, auth()->user());
+
+                        \Filament\Notifications\Notification::make()
+                            ->title($result['success'] ? 'XML CFDI firmado' : 'No se pudo generar XML')
+                            ->body($result['message'])
+                            ->color($result['success'] ? 'success' : 'danger')
+                            ->send();
+
+                        $record->refresh();
+                    }),
+
+
+                Tables\Actions\Action::make('assign_cfdi_folio_row')
+                    ->label('Asignar folio CFDI')
+                    ->icon('heroicon-o-numbered-list')
+                    ->color('gray')
+                    ->visible(fn ($record): bool => ! in_array((string) ($record->cfdi_status ?? ''), ['stamped', 'cancelled'], true)
+                        && (blank($record->cfdi_series ?? null) || blank($record->cfdi_folio ?? null)))
+                    ->requiresConfirmation()
+                    ->modalHeading('Asignar folio CFDI')
+                    ->modalDescription('Se reservará el siguiente folio de la serie configurada para esta empresa/sucursal/PDV.')
+                    ->action(function ($record): void {
+                        $result = app(\App\Support\Billing\BillingSeriesResolver::class)
+                            ->assignFiscalFolio($record, auth()->user());
+
+                        \Filament\Notifications\Notification::make()
+                            ->title($result['success'] ? 'Folio asignado' : 'No se pudo asignar folio')
+                            ->body($result['message'])
+                            ->color($result['success'] ? 'success' : 'danger')
+                            ->send();
+
+                        $record->refresh();
+                    }),
+
 
                 Tables\Actions\Action::make('validate_cfdi_row')
                     ->label('Validar CFDI')

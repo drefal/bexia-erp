@@ -126,6 +126,81 @@ class InvoiceCfdiValidator
             $errors[] = 'La factura no tiene Uso CFDI.';
         }
 
+        // BEXIA_V5523O5_VALIDATE_SAT_CATALOGS
+        $existsInSatCatalog = function (string $table, string $code): bool {
+            $code = trim($code);
+
+            if ($code === '' || ! Schema::hasTable($table)) {
+                return true;
+            }
+
+            $columns = Schema::getColumnListing($table);
+
+            foreach (['code', 'key', 'value'] as $column) {
+                if (in_array($column, $columns, true)) {
+                    return DB::table($table)->where($column, $code)->exists();
+                }
+            }
+
+            return true;
+        };
+
+        $relationExistsInSatCatalog = function (string $taxRegimeCode, string $cfdiUseCode): bool {
+            $taxRegimeCode = trim($taxRegimeCode);
+            $cfdiUseCode = trim($cfdiUseCode);
+
+            if ($taxRegimeCode === '' || $cfdiUseCode === '' || ! Schema::hasTable('sat_cfdi_use_tax_regime')) {
+                return true;
+            }
+
+            $columns = Schema::getColumnListing('sat_cfdi_use_tax_regime');
+
+            $regimeColumn = null;
+            foreach (['tax_regime_code', 'sat_tax_regime_code', 'regime_code', 'fiscal_regime_code'] as $candidate) {
+                if (in_array($candidate, $columns, true)) {
+                    $regimeColumn = $candidate;
+                    break;
+                }
+            }
+
+            $useColumn = null;
+            foreach (['cfdi_use_code', 'sat_cfdi_use_code', 'use_code'] as $candidate) {
+                if (in_array($candidate, $columns, true)) {
+                    $useColumn = $candidate;
+                    break;
+                }
+            }
+
+            if (! $regimeColumn || ! $useColumn) {
+                return true;
+            }
+
+            return DB::table('sat_cfdi_use_tax_regime')
+                ->where($regimeColumn, $taxRegimeCode)
+                ->where($useColumn, $cfdiUseCode)
+                ->exists();
+        };
+
+        $companyTaxRegimeCode = trim((string) ($company->tax_regime ?? ''));
+        $customerTaxRegimeCode = trim((string) ($invoice->customer_tax_regime_code ?? ''));
+        $customerCfdiUseCode = trim((string) ($invoice->customer_cfdi_use_code ?? ''));
+
+        if (! $existsInSatCatalog('sat_tax_regimes', $companyTaxRegimeCode)) {
+            $errors[] = 'El régimen fiscal de la empresa emisora no existe en el catálogo SAT configurado.';
+        }
+
+        if (! $existsInSatCatalog('sat_tax_regimes', $customerTaxRegimeCode)) {
+            $errors[] = 'El régimen fiscal del receptor no existe en el catálogo SAT configurado.';
+        }
+
+        if (! $existsInSatCatalog('sat_cfdi_uses', $customerCfdiUseCode)) {
+            $errors[] = 'El Uso CFDI del receptor no existe en el catálogo SAT configurado.';
+        }
+
+        if (! $relationExistsInSatCatalog($customerTaxRegimeCode, $customerCfdiUseCode)) {
+            $errors[] = 'El Uso CFDI seleccionado no es válido para el régimen fiscal del receptor según Configuración facturación.';
+        }
+
         // BEXIA_V5523L_WHATSAPP_WARNING
         if (blank($invoice->customer_whatsapp_phone ?? null)) {
             $warnings[] = 'El cliente no tiene WhatsApp/teléfono para envío automático de factura.';

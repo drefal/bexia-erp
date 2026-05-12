@@ -3,6 +3,7 @@
 namespace App\Support\Billing;
 
 use App\Models\Company;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -12,30 +13,45 @@ class SwPacClient
 {
     public function testAuthentication(Company $company): array
     {
+        $auth = $this->authenticate($company, persist: true);
+
+        if (! $auth['success']) {
+            return $auth;
+        }
+
+        return $this->persistResult($company, true, 'Conexión correcta con SW. Token recibido.');
+    }
+
+    public function authenticate(Company $company, bool $persist = false): array
+    {
         $username = trim((string) ($company->billing_pac_username ?? ''));
         $passwordEncrypted = (string) ($company->billing_pac_password ?? '');
         $testEnv = (bool) ($company->billing_pac_test_env ?? true);
 
         if ($username === '' || $passwordEncrypted === '') {
-            return $this->persistResult($company, false, 'Faltan usuario y/o contraseña del PAC.');
+            return $persist
+                ? $this->persistResult($company, false, 'Faltan usuario y/o contraseña del PAC.')
+                : $this->fail('Faltan usuario y/o contraseña del PAC.');
         }
 
         try {
             $password = Crypt::decryptString($passwordEncrypted);
         } catch (Throwable $e) {
-            return $this->persistResult($company, false, 'La contraseña del PAC no se pudo desencriptar. Captúrala de nuevo.');
+            return $persist
+                ? $this->persistResult($company, false, 'La contraseña del PAC no se pudo desencriptar. Captúrala de nuevo.')
+                : $this->fail('La contraseña del PAC no se pudo desencriptar. Captúrala de nuevo.');
         }
 
         if (trim($password) === '') {
-            return $this->persistResult($company, false, 'La contraseña del PAC está vacía.');
+            return $persist
+                ? $this->persistResult($company, false, 'La contraseña del PAC está vacía.')
+                : $this->fail('La contraseña del PAC está vacía.');
         }
 
-        $loginUrl = $testEnv
-            ? 'https://services.test.sw.com.mx/security/authenticate'
-            : 'https://services.sw.com.mx/security/authenticate';
+        $loginUrl = $this->endpoints($testEnv)['login_url'];
 
         try {
-            $response = Http::timeout(20)
+            $response = Http::timeout(25)
                 ->withHeaders([
                     'user' => $username,
                     'password' => $password,
@@ -48,40 +64,164 @@ class SwPacClient
             $json = $response->json();
 
             if (! $response->successful()) {
-                $message = $this->safeMessage(
-                    data_get($json, 'messageDetail')
-                    ?: data_get($json, 'message')
-                    ?: ('HTTP ' . $response->status())
-                );
+                $message = $this->responseMessage($response, $json);
 
-                return $this->persistResult($company, false, $message);
+                return $persist
+                    ? $this->persistResult($company, false, $message)
+                    : $this->fail($message, ['http_status' => $response->status(), 'response' => $this->safeResponse($json)]);
             }
 
             $token = data_get($json, 'data.token');
 
             if (! $token) {
-                return $this->persistResult($company, false, 'SW respondió correctamente, pero no regresó data.token.');
+                $message = 'SW respondió correctamente, pero no regresó data.token.';
+
+                return $persist
+                    ? $this->persistResult($company, false, $message)
+                    : $this->fail($message, ['http_status' => $response->status(), 'response' => $this->safeResponse($json)]);
             }
 
-            return $this->persistResult($company, true, 'Conexión correcta con SW. Token recibido.');
+            return [
+                'success' => true,
+                'status' => 'success',
+                'message' => 'Token SW recibido.',
+                'token' => $token,
+                'environment' => $testEnv ? 'test' : 'production',
+                'base_url' => $this->endpoints($testEnv)['base_url'],
+            ];
         } catch (Throwable $e) {
-            return $this->persistResult($company, false, $this->safeMessage($e->getMessage()));
+            $message = $this->safeMessage($e->getMessage());
+
+            return $persist
+                ? $this->persistResult($company, false, $message)
+                : $this->fail($message);
+        }
+    }
+
+    public function stampSignedXml(Company $company, string $xml): array
+    {
+        $testEnv = (bool) ($company->billing_pac_test_env ?? true);
+
+        $guard = $this->guardEnvironment($testEnv);
+
+        if (! $guard['success']) {
+            return $guard;
+        }
+
+        if (trim($xml) === '') {
+            return $this->fail('No hay XML CFDI para timbrar.');
+        }
+
+        if (! str_contains($xml, '<cfdi:Comprobante') && ! str_contains($xml, '<Comprobante')) {
+            return $this->fail('El contenido no parece ser un XML CFDI válido.');
+        }
+
+        $auth = $this->authenticate($company);
+
+        if (! $auth['success']) {
+            return $auth;
+        }
+
+        $endpoint = $this->endpoints($testEnv)['stamp_multipart_url'];
+
+        try {
+            $response = Http::timeout(60)
+                ->withToken((string) $auth['token'])
+                ->attach('xml', $xml, 'cfdi.xml', [
+                    'Content-Type' => 'text/xml',
+                ])
+                ->post($endpoint);
+
+            $json = $response->json();
+
+            if (! $response->successful()) {
+                return $this->fail($this->responseMessage($response, $json), [
+                    'http_status' => $response->status(),
+                    'endpoint' => $endpoint,
+                    'response' => $this->safeResponse($json),
+                    'request_id' => $this->requestId($response, $json),
+                ]);
+            }
+
+            $stampedXml = $this->extractStampedXml($json, (string) $response->body());
+            $uuid = $this->extractUuid($json, $stampedXml);
+
+            if ($stampedXml === '') {
+                return $this->fail('SW respondió correctamente, pero no se encontró XML timbrado en la respuesta.', [
+                    'http_status' => $response->status(),
+                    'endpoint' => $endpoint,
+                    'response' => $this->safeResponse($json),
+                    'request_id' => $this->requestId($response, $json),
+                ]);
+            }
+
+            if ($uuid === '') {
+                return $this->fail('SW respondió XML timbrado, pero no se pudo leer UUID del TimbreFiscalDigital.', [
+                    'http_status' => $response->status(),
+                    'endpoint' => $endpoint,
+                    'response' => $this->safeResponse($json),
+                    'request_id' => $this->requestId($response, $json),
+                ]);
+            }
+
+            return [
+                'success' => true,
+                'status' => 'success',
+                'message' => 'CFDI timbrado correctamente por SW.',
+                'uuid' => $uuid,
+                'xml' => $stampedXml,
+                'http_status' => $response->status(),
+                'endpoint' => $endpoint,
+                'environment' => $testEnv ? 'test' : 'production',
+                'request_id' => $this->requestId($response, $json),
+                'response_meta' => $this->safeResponse($json),
+            ];
+        } catch (Throwable $e) {
+            return $this->fail($this->safeMessage($e->getMessage()), [
+                'endpoint' => $endpoint,
+                'environment' => $testEnv ? 'test' : 'production',
+            ]);
         }
     }
 
     public function endpoints(bool $testEnv): array
     {
-        return $testEnv
-            ? [
-                'login_url' => 'https://services.test.sw.com.mx/security/authenticate',
-                'sign_url' => 'https://services.test.sw.com.mx/cfdi33/stamp/v3/b64',
-                'cancel_url' => 'https://services.test.sw.com.mx/cfdi33/cancel/csd',
-            ]
-            : [
-                'login_url' => 'https://services.sw.com.mx/security/authenticate',
-                'sign_url' => 'https://services.sw.com.mx/cfdi33/stamp/v3/b64',
-                'cancel_url' => 'https://services.sw.com.mx/cfdi33/cancel/csd',
-            ];
+        $base = $testEnv
+            ? 'https://services.test.sw.com.mx'
+            : 'https://services.sw.com.mx';
+
+        return [
+            'base_url' => $base,
+            'login_url' => $base . '/security/authenticate',
+            'stamp_multipart_url' => $base . '/cfdi33/stamp/v4',
+            'stamp_multipart_url_v3' => $base . '/cfdi33/stamp/v3',
+            'stamp_json_b64_url' => $base . '/cfdi33/stamp/json/v4/b64',
+            'issue_json_b64_url' => $base . '/cfdi33/issue/json/v4/b64',
+            'cancel_url' => $base . '/cfdi33/cancel/csd',
+        ];
+    }
+
+    private function guardEnvironment(bool $testEnv): array
+    {
+        $appUrl = strtolower((string) config('app.url'));
+        $appEnv = strtolower((string) config('app.env'));
+        $isDevRuntime = str_contains($appUrl, 'dev.bexiaerp.com')
+            || str_contains($appUrl, 'staging')
+            || str_contains($appEnv, 'local')
+            || str_contains($appEnv, 'dev')
+            || str_contains($appEnv, 'testing');
+
+        if ($isDevRuntime && ! $testEnv) {
+            return $this->fail(
+                'Bloqueado por seguridad: DEV no puede timbrar contra SW producción. Activa ambiente de pruebas en la empresa o prueba el timbrado desde producción después del merge.'
+            );
+        }
+
+        return [
+            'success' => true,
+            'status' => 'ok',
+            'message' => 'Ambiente permitido.',
+        ];
     }
 
     private function persistResult(Company $company, bool $success, string $message): array
@@ -103,6 +243,148 @@ class SwPacClient
             'status' => $status,
             'message' => $message,
         ];
+    }
+
+    private function fail(string $message, array $meta = []): array
+    {
+        return [
+            'success' => false,
+            'status' => 'error',
+            'message' => $this->safeMessage($message),
+            'meta' => $meta,
+        ];
+    }
+
+    private function responseMessage(Response $response, mixed $json): string
+    {
+        return $this->safeMessage(
+            (string) (
+                data_get($json, 'messageDetail')
+                ?: data_get($json, 'message')
+                ?: data_get($json, 'messageDetail.0')
+                ?: data_get($json, 'error')
+                ?: ('HTTP ' . $response->status())
+            )
+        );
+    }
+
+    private function requestId(Response $response, mixed $json): ?string
+    {
+        return data_get($json, 'data.requestId')
+            ?: data_get($json, 'requestId')
+            ?: data_get($json, 'request_id')
+            ?: $response->header('x-request-id')
+            ?: $response->header('x-correlation-id');
+    }
+
+    private function extractStampedXml(mixed $json, string $rawBody): string
+    {
+        foreach ([
+            'data.cfdi',
+            'data.xml',
+            'data.content',
+            'data',
+            'xml',
+            'cfdi',
+        ] as $path) {
+            $value = data_get($json, $path);
+
+            if (is_string($value) && trim($value) !== '') {
+                $xml = $this->normalizeXmlPayload($value);
+
+                if ($xml !== '') {
+                    return $xml;
+                }
+            }
+        }
+
+        return $this->normalizeXmlPayload($rawBody);
+    }
+
+    private function normalizeXmlPayload(string $value): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        if (str_contains($value, '<cfdi:Comprobante') || str_contains($value, '<Comprobante')) {
+            return $value;
+        }
+
+        $decoded = base64_decode($value, true);
+
+        if (is_string($decoded)) {
+            $decoded = trim($decoded);
+
+            if (str_contains($decoded, '<cfdi:Comprobante') || str_contains($decoded, '<Comprobante')) {
+                return $decoded;
+            }
+        }
+
+        return '';
+    }
+
+    private function extractUuid(mixed $json, string $xml): string
+    {
+        foreach ([
+            'data.uuid',
+            'data.UUID',
+            'data.tfd.uuid',
+            'data.tfd.UUID',
+            'uuid',
+            'UUID',
+        ] as $path) {
+            $value = data_get($json, $path);
+
+            if (is_string($value) && trim($value) !== '') {
+                return strtoupper(trim($value));
+            }
+        }
+
+        if ($xml !== '') {
+            $dom = new \DOMDocument();
+
+            libxml_use_internal_errors(true);
+            $loaded = $dom->loadXML($xml);
+            libxml_clear_errors();
+
+            if ($loaded) {
+                $xpath = new \DOMXPath($dom);
+                $xpath->registerNamespace('tfd', 'http://www.sat.gob.mx/TimbreFiscalDigital');
+
+                $node = $xpath->query('//tfd:TimbreFiscalDigital')->item(0);
+
+                if ($node instanceof \DOMElement) {
+                    return strtoupper((string) $node->getAttribute('UUID'));
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function safeResponse(mixed $json): array|string|null
+    {
+        if (! is_array($json)) {
+            return is_string($json) ? $this->safeMessage($json) : null;
+        }
+
+        $encoded = json_encode($json, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        if (! is_string($encoded)) {
+            return null;
+        }
+
+        $encoded = preg_replace('/("token"\s*:\s*")[^"]+(")/i', '$1***$2', $encoded) ?: $encoded;
+        $encoded = preg_replace('/("password"\s*:\s*")[^"]+(")/i', '$1***$2', $encoded) ?: $encoded;
+        $encoded = preg_replace('/("sello"\s*:\s*")[^"]+(")/i', '$1***$2', $encoded) ?: $encoded;
+        $encoded = preg_replace('/("certificado"\s*:\s*")[^"]+(")/i', '$1***$2', $encoded) ?: $encoded;
+
+        $decoded = json_decode($encoded, true);
+
+        return is_array($decoded) ? $decoded : mb_substr($encoded, 0, 2000);
     }
 
     private function safeMessage(string $message): string
