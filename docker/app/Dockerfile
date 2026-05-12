@@ -43,3 +43,7 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
     else \
         echo "No apt-get/apk available to install xsl" && exit 1; \
     fi
+
+# BEXIA_V5523P8_COMPOSER
+# Composer requerido para deploy dentro del contenedor.
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
