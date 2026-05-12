@@ -4,7 +4,8 @@
     <meta charset="utf-8">
     <title>Factura {{ $invoice->cfdi_series ?? '' }} {{ $invoice->cfdi_folio ?? '' }}</title>
     <style>
-        @page { margin: 18px 20px 16px 20px; }
+        /* BEXIA_V5523Q3_PDF_VISUAL_TUNE */
+        @page { margin: 16px 18px 14px 18px; }
 
         body {
             font-family: DejaVu Sans, sans-serif;
@@ -54,8 +55,8 @@
         }
 
         .logo-col img {
-            max-width: 145px;
-            max-height: 72px;
+            max-width: 135px;
+            max-height: 58px;
         }
 
         .company-col {
@@ -72,9 +73,9 @@
         }
 
         .company-title {
-            font-size: 17px;
+            font-size: 15.8px;
             font-weight: 800;
-            letter-spacing: .4px;
+            letter-spacing: .35px;
             margin-bottom: 2px;
         }
 
@@ -235,54 +236,189 @@
 
         .qr-col {
             float: left;
-            width: 31%;
+            width: 27%;
         }
 
         .qr-col img {
-            width: 190px;
-            height: 190px;
+            width: 158px;
+            height: 158px;
             border: 0;
         }
 
         .qr-placeholder {
-            width: 190px;
-            height: 190px;
+            width: 158px;
+            height: 158px;
             border: 1px solid #ccc;
             text-align: center;
-            font-size: 9px;
+            font-size: 8.5px;
             color: #666;
-            padding-top: 82px;
+            padding-top: 68px;
             box-sizing: border-box;
         }
 
         .fiscal-col {
             float: right;
-            width: 67%;
+            width: 71%;
         }
 
         .band {
-            background: #666;
+            background: #5f5f5f;
             color: #fff;
             font-weight: 800;
-            padding: 3px 5px;
-            margin-top: 3px;
+            padding: 2.5px 5px;
+            margin-top: 2px;
             border-radius: 2px;
-            font-size: 8px;
+            font-size: 7.5px;
         }
 
         .seal {
-            font-size: 6.8px;
-            line-height: 1.08;
+            font-size: 5.75px;
+            line-height: 1.06;
             word-break: break-all;
-            max-height: 42px;
-            overflow: hidden;
+            margin-bottom: 1px;
         }
 
         .info-extra {
-            font-size: 6.8px;
-            line-height: 1.1;
+            font-size: 5.85px;
+            line-height: 1.08;
             word-break: break-word;
         }
+    
+        /* BEXIA_V5523Q6_HEADER_LOGO_PRO_START */
+        /*
+         * Ajuste visual Q6:
+         * - Logo más grande.
+         * - Cabecera más balanceada.
+         * - Emisor más legible.
+         * - Sucursal compacta.
+         */
+        .brand-header {
+            padding-bottom: 10px !important;
+            margin-bottom: 8px !important;
+            min-height: 92px !important;
+            border-bottom: 2px solid #1f2937 !important;
+        }
+
+        .logo-col {
+            float: left !important;
+            width: 36% !important;
+            text-align: left !important;
+            min-height: 92px !important;
+            padding-top: 0 !important;
+        }
+
+        .logo-col img {
+            max-width: 285px !important;
+            max-height: 112px !important;
+            width: auto !important;
+            height: auto !important;
+            display: block !important;
+            margin: 0 !important;
+        }
+
+        .company-col {
+            float: left !important;
+            width: 40% !important;
+            text-align: center !important;
+            padding-top: 8px !important;
+        }
+
+        .branch-col {
+            float: right !important;
+            width: 22% !important;
+            padding-top: 23px !important;
+            font-size: 8.5px !important;
+            text-align: left !important;
+        }
+
+        .company-title {
+            font-size: 17.4px !important;
+            font-weight: 800 !important;
+            letter-spacing: .35px !important;
+            margin-bottom: 3px !important;
+            line-height: 1.08 !important;
+        }
+
+        .company-sub {
+            font-size: 8.4px !important;
+            font-weight: 700 !important;
+            line-height: 1.1 !important;
+        }
+
+        .company-address {
+            margin-top: 3px !important;
+            font-size: 7.8px !important;
+            line-height: 1.05 !important;
+            white-space: pre-line !important;
+            text-align: center !important;
+            display: block !important;
+            min-width: 0 !important;
+        }
+
+        .branch-title {
+            font-size: 9px !important;
+            font-weight: 800 !important;
+            margin-bottom: 2px !important;
+        }
+
+        .header-row {
+            margin-top: 4px !important;
+            margin-bottom: 8px !important;
+        }
+
+        .client-block {
+            width: 47% !important;
+        }
+
+        .meta-block {
+            width: 49.5% !important;
+        }
+
+        .meta-table {
+            font-size: 8.2px !important;
+        }
+
+        .meta-table td {
+            padding: 2.5px 4px !important;
+        }
+
+        table.lines {
+            margin-top: 6px !important;
+        }
+
+        .amount-words {
+            margin-top: 8px !important;
+        }
+
+        .qr-col img {
+            width: 165px !important;
+            height: 165px !important;
+        }
+
+        .qr-placeholder {
+            width: 165px !important;
+            height: 165px !important;
+            padding-top: 70px !important;
+        }
+        /* BEXIA_V5523Q6_HEADER_LOGO_PRO_END */
+
+    
+        /* BEXIA_V5523Q7B_MINIMAL_SEAL_OVERFLOW_START */
+        /*
+         * Fix mínimo:
+         * mantiene la tipografía actual y solo evita que sellos/cadena se salgan a la derecha.
+         */
+        .seal,
+        .info-extra {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+            white-space: normal !important;
+            word-break: normal !important;
+            overflow-wrap: break-word !important;
+        }
+        /* BEXIA_V5523Q7B_MINIMAL_SEAL_OVERFLOW_END */
+
     </style>
 </head>
 <body>
@@ -311,7 +447,7 @@
 
     <div class="branch-col">
         <div class="branch-title">SUCURSAL</div>
-        <div>{{ $branchLabel ?: '-' }}</div>
+        <div>{{ $branchLabel ?: 'Matriz' }}</div>
     </div>
 </div>
 
@@ -423,6 +559,21 @@
     <div class="legend">Este documento es una representación impresa de un CFDI.</div>
 </div>
 
+@php
+    // BEXIA_V5523Q7B_SOFT_WRAP_FISCAL_TEXT
+    // Solo agrega espacios visuales para que Dompdf pueda envolver sellos largos.
+    // No modifica XML, sello, UUID ni timbrado.
+    $bexiaSoftWrapFiscalText = function ($value, int $chunk = 150): string {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        return trim(chunk_split($value, $chunk, ' '));
+    };
+@endphp
+
 <div class="fiscal-wrap clearfix">
     <div class="qr-col">
         @if ($qrDataUri)
@@ -440,13 +591,13 @@
 
     <div class="fiscal-col">
         <div class="band">Sello digital del emisor</div>
-        <div class="seal mono">{{ $xmlInfo['sello_cfdi'] ?? '' }}</div>
+        <div class="seal mono">{{ $bexiaSoftWrapFiscalText($xmlInfo['sello_cfdi'] ?? '', 150) }}</div>
 
         <div class="band">Sello digital del SAT</div>
-        <div class="seal mono">{{ $xmlInfo['sello_sat'] ?? '' }}</div>
+        <div class="seal mono">{{ $bexiaSoftWrapFiscalText($xmlInfo['sello_sat'] ?? '', 150) }}</div>
 
         <div class="band">Cadena original del complemento del certificado digital del SAT</div>
-        <div class="seal mono">{{ $xmlInfo['cadena_sat'] ?? '' }}</div>
+        <div class="seal mono">{{ $bexiaSoftWrapFiscalText($xmlInfo['cadena_sat'] ?? '', 165) }}</div>
 
         <div class="band">Información Extra</div>
         <div class="info-extra mono">

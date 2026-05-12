@@ -352,13 +352,33 @@ class InvoicePdfBuilder
 
     private function branchLabel(Invoice $invoice, object $company): string
     {
-        $source = trim((string) ($invoice->source_number ?? $invoice->source_type ?? ''));
+        // BEXIA_V5523Q3_BRANCH_LABEL
+        // La sucursal no debe mostrar origen/reintento. Solo sucursal real o ciudad.
+        $branchId = (int) ($invoice->branch_id ?? 0);
 
-        if ($source !== '') {
-            return $source;
+        if ($branchId > 0 && Schema::hasTable('branches')) {
+            $branch = DB::table('branches')->where('id', $branchId)->first();
+
+            if ($branch) {
+                foreach (['name', 'display_name', 'commercial_name', 'city'] as $field) {
+                    $value = trim((string) ($branch->{$field} ?? ''));
+
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
         }
 
-        return trim((string) ($company->city ?? ''));
+        foreach (['branch_name', 'city', 'municipality'] as $field) {
+            $value = trim((string) ($company->{$field} ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     private function companyAddress(object $company): string
@@ -569,23 +589,34 @@ class InvoicePdfBuilder
 
     private function qrDataUri(Invoice $invoice, array $xmlInfo, float $total): string
     {
+        // BEXIA_V5523Q3P4_QR_SAT_SAFE_CLASSES
         $url = $this->satQrUrl($invoice, $xmlInfo, $total);
 
         if ($url === '') {
             return '';
         }
 
-        if (! class_exists(\BaconQrCode\Writer::class)) {
+        $writerClass = 'BaconQrCode\\Writer';
+        $imageRendererClass = 'BaconQrCode\\Renderer\\ImageRenderer';
+        $rendererStyleClass = 'BaconQrCode\\Renderer\\RendererStyle\\RendererStyle';
+        $svgBackendClass = 'BaconQrCode\\Renderer\\Image\\SvgImageBackEnd';
+
+        if (
+            ! class_exists($writerClass)
+            || ! class_exists($imageRendererClass)
+            || ! class_exists($rendererStyleClass)
+            || ! class_exists($svgBackendClass)
+        ) {
             return '';
         }
 
         try {
-            $renderer = new \BaconQrCode\Renderer\ImageRenderer(
-                new \BaconQrCode\Renderer\RendererStyle\RendererStyle(220),
-                new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
+            $renderer = new $imageRendererClass(
+                new $rendererStyleClass(210, 1),
+                new $svgBackendClass()
             );
 
-            $writer = new \BaconQrCode\Writer($renderer);
+            $writer = new $writerClass($renderer);
             $svg = $writer->writeString($url);
 
             return 'data:image/svg+xml;base64,'.base64_encode($svg);

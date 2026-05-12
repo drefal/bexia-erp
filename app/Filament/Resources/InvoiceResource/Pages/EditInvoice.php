@@ -202,6 +202,30 @@ class EditInvoice extends EditRecord
                     $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
                 }),
 
+            Actions\Action::make('download_cfdi_xml')
+                ->label('Descargar XML')
+                ->icon('heroicon-o-code-bracket-square')
+                ->color('success')
+                ->visible(fn (): bool => (string) ($this->record->cfdi_status ?? '') === 'stamped' && filled($this->record->cfdi_xml_path ?? null))
+                ->url(fn (): string => route('billing.invoices.download', ['invoice' => $this->record, 'type' => 'xml']))
+                ->openUrlInNewTab(),
+
+            Actions\Action::make('download_cfdi_pdf')
+                ->label('Descargar PDF')
+                ->icon('heroicon-o-document-arrow-down')
+                ->color('gray')
+                ->visible(fn (): bool => (string) ($this->record->cfdi_status ?? '') === 'stamped')
+                ->url(fn (): string => route('billing.invoices.download', ['invoice' => $this->record, 'type' => 'pdf']))
+                ->openUrlInNewTab(),
+
+            Actions\Action::make('download_cfdi_zip')
+                ->label('Descargar ZIP')
+                ->icon('heroicon-o-archive-box-arrow-down')
+                ->color('warning')
+                ->visible(fn (): bool => (string) ($this->record->cfdi_status ?? '') === 'stamped' && filled($this->record->cfdi_xml_path ?? null))
+                ->url(fn (): string => route('billing.invoices.download', ['invoice' => $this->record, 'type' => 'zip']))
+                ->openUrlInNewTab(),
+
             Actions\Action::make('generate_invoice_pdf')
                 ->label('Generar PDF')
                 ->icon('heroicon-o-document-arrow-down')

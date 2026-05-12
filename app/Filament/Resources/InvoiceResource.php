@@ -46,7 +46,12 @@ class InvoiceResource extends Resource
 
     public static function canEdit(Model $record): bool
     {
-        return ! in_array((string) ($record->status ?? ''), ['cancelled'], true);
+        // BEXIA_V5523R4_NO_EDIT_STAMPED
+        return ! in_array((string) ($record->cfdi_status ?? ''), [
+            'stamped',
+            'cancelled',
+            'cancelled_internal',
+        ], true);
     }
 
     public static function getEloquentQuery(): Builder

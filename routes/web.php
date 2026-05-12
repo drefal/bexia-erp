@@ -323,3 +323,8 @@ Route::get('/pos/sessions/{session}/close', [\App\Http\Controllers\PosController
 // Route::post('/pos/audit-price-list-change', [PosController::class, 'auditPriceListChange'])
 //     ->middleware(['web', 'auth'])
 //     ->name('pos.audit-price-list-change');
+
+Route::middleware(['auth'])->get(
+    '/billing/invoices/{invoice}/download/{type}',
+    \App\Http\Controllers\BillingInvoiceDownloadController::class
+)->name('billing.invoices.download');
