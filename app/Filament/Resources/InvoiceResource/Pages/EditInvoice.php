@@ -202,6 +202,27 @@ class EditInvoice extends EditRecord
                     $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
                 }),
 
+            Actions\Action::make('generate_invoice_pdf')
+                ->label('Generar PDF')
+                ->icon('heroicon-o-document-arrow-down')
+                ->color('gray')
+                ->action(function (): void {
+                    $this->record->refresh();
+
+                    $result = app(\App\Support\Billing\InvoicePdfBuilder::class)
+                        ->generate($this->record, auth()->user());
+
+                    \Filament\Notifications\Notification::make()
+                        ->title($result['success'] ? 'PDF generado' : 'No se pudo generar PDF')
+                        ->body($result['message'])
+                        ->color($result['success'] ? 'success' : 'danger')
+                        ->send();
+
+                    $this->record->refresh();
+
+                    $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
+                }),
+
             Actions\Action::make('stamp_cfdi')
                 ->label('Timbrar CFDI')
                 ->icon('heroicon-o-bolt')
