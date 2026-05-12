@@ -114,7 +114,7 @@ class ViewInvoice extends ViewRecord
                 ->label('Cancelar CFDI')
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
-                ->visible(fn (): bool => $this->isStamped())
+                ->visible(fn (): bool => $this->isStamped() && ! $this->hasCancelRequestPrepared())
                 ->form([
                     Select::make('reason_code')
                         ->label('Motivo de cancelación SAT')
@@ -176,6 +176,31 @@ class ViewInvoice extends ViewRecord
                         ->send();
 
                     $this->record->refresh();
+                }),
+
+            Actions\Action::make('send_cfdi_cancel_to_pac')
+                ->label('Enviar cancelación al SAT/PAC')
+                ->icon('heroicon-o-paper-airplane')
+                ->color('danger')
+                ->visible(fn (): bool => $this->canSendCancelToPac())
+                ->requiresConfirmation()
+                ->modalHeading('Enviar cancelación al SAT/PAC')
+                ->modalDescription('Esta acción sí enviará la solicitud real de cancelación al PAC/SAT. Revisa que el motivo SAT, UUID sustituto si aplica y comentario sean correctos.')
+                ->modalSubmitActionLabel('Sí, enviar cancelación')
+                ->modalCancelActionLabel('Salir')
+                ->action(function (): void {
+                    $result = app(\App\Support\Billing\InvoiceCfdiCancelService::class)
+                        ->sendCancellationToPac($this->record, auth()->user());
+
+                    Notification::make()
+                        ->title(($result['success'] ?? false) ? 'Cancelación enviada' : 'No se pudo enviar cancelación')
+                        ->body($result['message'] ?? '')
+                        ->color(($result['success'] ?? false) ? 'success' : 'danger')
+                        ->send();
+
+                    $this->record->refresh();
+
+                    $this->redirect(InvoiceResource::getUrl('view', ['record' => $this->record]));
                 }),
 
             Actions\Action::make('stamp_cfdi_from_app')
@@ -254,6 +279,24 @@ class ViewInvoice extends ViewRecord
             'cancel_requested',
             'cancelled',
             'cancelled_internal',
+        ], true);
+    }
+
+
+    private function canSendCancelToPac(): bool
+    {
+        return $this->isStamped()
+            && (string) ($this->record->cfdi_cancel_status ?? '') === 'ready_to_cancel';
+    }
+
+    private function hasCancelRequestPrepared(): bool
+    {
+        return in_array((string) ($this->record->cfdi_cancel_status ?? ''), [
+            'ready_to_cancel',
+            'sending_to_pac',
+            'cancel_requested',
+            'cancelled',
+            'cancel_error',
         ], true);
     }
 

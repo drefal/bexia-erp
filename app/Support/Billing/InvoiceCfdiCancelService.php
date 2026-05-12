@@ -3,9 +3,11 @@
 namespace App\Support\Billing;
 
 use App\Models\Invoice;
+use App\Models\Company;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class InvoiceCfdiCancelService
@@ -153,6 +155,203 @@ class InvoiceCfdiCancelService
             'message' => $message,
         ];
     }
+
+
+    public function sendCancellationToPac(Invoice $invoice, mixed $user): array
+    {
+        $invoice->refresh();
+
+        if ((string) ($invoice->cfdi_status ?? '') !== 'stamped') {
+            return [
+                'success' => false,
+                'message' => 'Solo se puede enviar cancelación fiscal de facturas timbradas.',
+            ];
+        }
+
+        if ((string) ($invoice->cfdi_cancel_status ?? '') !== 'ready_to_cancel') {
+            return [
+                'success' => false,
+                'message' => 'Primero registra la solicitud de cancelación.',
+            ];
+        }
+
+        $uuid = strtoupper(trim((string) ($invoice->cfdi_uuid ?? '')));
+        $reasonCode = str_pad(trim((string) ($invoice->cfdi_cancel_reason_code ?? '')), 2, '0', STR_PAD_LEFT);
+        $replacementUuid = strtoupper(trim((string) ($invoice->cfdi_cancel_replacement_uuid ?? '')));
+
+        if ($uuid === '') {
+            return [
+                'success' => false,
+                'message' => 'La factura no tiene UUID CFDI.',
+            ];
+        }
+
+        $reason = $this->findReason($reasonCode);
+
+        if (! $reason) {
+            return [
+                'success' => false,
+                'message' => 'Motivo de cancelación SAT inválido o inactivo.',
+            ];
+        }
+
+        if ((bool) ($reason->requires_replacement_uuid ?? false) && $replacementUuid === '') {
+            return [
+                'success' => false,
+                'message' => 'El motivo 01 requiere UUID sustituto antes de enviar al PAC/SAT.',
+            ];
+        }
+
+        $company = Company::query()->find((int) $invoice->company_id);
+
+        if (! $company) {
+            return [
+                'success' => false,
+                'message' => 'La factura no tiene empresa válida.',
+            ];
+        }
+
+        DB::table('invoices')
+            ->where('id', (int) $invoice->id)
+            ->update([
+                'cfdi_cancel_status' => 'sending_to_pac',
+                'cfdi_cancel_status_message' => 'Enviando cancelación al PAC/SAT.',
+                'cfdi_cancel_requested_at' => now(),
+                'pac_error_message' => null,
+                'updated_at' => now(),
+            ]);
+
+        $invoice->refresh();
+
+        $result = app(SwPacClient::class)->cancelCfdi(
+            $company,
+            $uuid,
+            $reasonCode,
+            $replacementUuid !== '' ? $replacementUuid : null
+        );
+
+        if (! ($result['success'] ?? false)) {
+            return $this->cancelError(
+                $invoice->refresh(),
+                $user,
+                (string) ($result['message'] ?? 'No se pudo cancelar con SW.'),
+                $result
+            );
+        }
+
+        $isCancelled = (string) ($result['status'] ?? '') === 'cancelled';
+        $basePath = 'invoices/cfdi/company_'.$invoice->company_id.'/invoice_'.$invoice->id;
+        $ackPath = $basePath.'/cancelacion_sw_'.now()->format('Ymd_His').'.json';
+
+        Storage::disk('local')->put($ackPath, json_encode([
+            'invoice_id' => (int) $invoice->id,
+            'uuid' => $uuid,
+            'reason_code' => $reasonCode,
+            'replacement_uuid' => $replacementUuid !== '' ? $replacementUuid : null,
+            'result' => $result,
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        $message = (string) ($result['message'] ?? (
+            $isCancelled
+                ? 'CFDI cancelado correctamente con SW.'
+                : 'Solicitud de cancelación enviada a SW.'
+        ));
+
+        $updates = [
+            'cfdi_cancel_status' => $isCancelled ? 'cancelled' : 'cancel_requested',
+            'cfdi_cancel_status_message' => $message,
+            'cfdi_cancel_ack_path' => $ackPath,
+            'cfdi_cancel_requested_at' => now(),
+            'pac_provider' => 'sw',
+            'pac_environment' => (string) ($result['environment'] ?? ''),
+            'pac_request_id' => $result['request_id'] ?? null,
+            'pac_error_message' => null,
+            'updated_at' => now(),
+        ];
+
+        if ($isCancelled) {
+            $updates['cfdi_status'] = 'cancelled';
+            $updates['cfdi_cancelled_at'] = now();
+            $updates['status'] = 'cancelled';
+        } else {
+            $updates['cfdi_status'] = 'cancel_requested';
+        }
+
+        DB::table('invoices')
+            ->where('id', (int) $invoice->id)
+            ->update($updates);
+
+        $invoice->refresh();
+
+        $this->audit($invoice, $user, [
+            'action' => 'send_cfdi_cancel',
+            'status' => $updates['cfdi_cancel_status'],
+            'message' => $message,
+            'request_meta' => [
+                'invoice_id' => (int) $invoice->id,
+                'invoice_number' => (string) ($invoice->number ?? ''),
+                'uuid' => $uuid,
+                'reason_code' => $reasonCode,
+                'replacement_uuid' => $replacementUuid !== '' ? $replacementUuid : null,
+            ],
+            'response_meta' => [
+                'ack_path' => $ackPath,
+                'cancel_code' => $result['cancel_code'] ?? null,
+                'http_status' => $result['http_status'] ?? null,
+                'endpoint' => $result['endpoint'] ?? null,
+                'environment' => $result['environment'] ?? null,
+                'response' => $result['response_meta'] ?? null,
+            ],
+        ]);
+
+        return [
+            'success' => true,
+            'status' => $updates['cfdi_cancel_status'],
+            'message' => $message,
+            'ack_path' => $ackPath,
+        ];
+    }
+
+    private function cancelError(Invoice $invoice, mixed $user, string $message, array $meta = []): array
+    {
+        $safeMessage = mb_substr(trim($message), 0, 1000);
+
+        DB::table('invoices')
+            ->where('id', (int) $invoice->id)
+            ->update([
+                'cfdi_cancel_status' => 'cancel_error',
+                'cfdi_cancel_status_message' => $safeMessage,
+                'pac_error_message' => $safeMessage,
+                'updated_at' => now(),
+            ]);
+
+        $invoice->refresh();
+
+        $this->audit($invoice, $user, [
+            'action' => 'send_cfdi_cancel',
+            'status' => 'cancel_error',
+            'message' => $safeMessage,
+            'request_meta' => [
+                'invoice_id' => (int) $invoice->id,
+                'invoice_number' => (string) ($invoice->number ?? ''),
+                'uuid' => (string) ($invoice->cfdi_uuid ?? ''),
+                'reason_code' => (string) ($invoice->cfdi_cancel_reason_code ?? ''),
+                'replacement_uuid' => (string) ($invoice->cfdi_cancel_replacement_uuid ?? ''),
+            ],
+            'response_meta' => [
+                'error' => $safeMessage,
+                'meta' => $meta['meta'] ?? $meta,
+            ],
+        ]);
+
+        return [
+            'success' => false,
+            'status' => 'cancel_error',
+            'message' => $safeMessage,
+            'meta' => $meta,
+        ];
+    }
+
 
     private function findReason(string $code): ?object
     {

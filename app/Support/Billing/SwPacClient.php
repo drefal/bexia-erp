@@ -7,6 +7,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class SwPacClient
@@ -183,6 +184,240 @@ class SwPacClient
             ]);
         }
     }
+
+
+    public function cancelCfdi(Company $company, string $uuid, string $reasonCode, ?string $replacementUuid = null): array
+    {
+        $testEnv = (bool) ($company->billing_pac_test_env ?? true);
+
+        $guard = $this->guardEnvironment($testEnv);
+
+        if (! $guard['success']) {
+            return $guard;
+        }
+
+        $uuid = strtoupper(trim($uuid));
+        $reasonCode = str_pad(trim($reasonCode), 2, '0', STR_PAD_LEFT);
+        $replacementUuid = $replacementUuid !== null ? strtoupper(trim($replacementUuid)) : null;
+
+        if (! $this->isUuid($uuid)) {
+            return $this->fail('UUID CFDI inválido para cancelación.');
+        }
+
+        if (! in_array($reasonCode, ['01', '02', '03', '04'], true)) {
+            return $this->fail('Motivo SAT de cancelación inválido.');
+        }
+
+        if ($reasonCode === '01' && ! $this->isUuid((string) $replacementUuid)) {
+            return $this->fail('El motivo 01 requiere folioSustitucion UUID válido.');
+        }
+
+        if ($reasonCode !== '01') {
+            $replacementUuid = null;
+        }
+
+        $auth = $this->authenticate($company);
+
+        if (! $auth['success']) {
+            return $auth;
+        }
+
+        $csd = $this->csdCancellationPayload($company);
+
+        if (! $csd['success']) {
+            return $csd;
+        }
+
+        $rfc = strtoupper(trim((string) ($company->tax_id ?? $company->rfc ?? $company->billing_csd_rfc ?? '')));
+
+        if ($rfc === '') {
+            return $this->fail('La empresa no tiene RFC para cancelar CFDI.');
+        }
+
+        $endpoint = $this->endpoints($testEnv)['cancel_url'];
+
+        $payload = [
+            'rfc' => $rfc,
+            'b64Cer' => $csd['b64Cer'],
+            'b64Key' => $csd['b64Key'],
+            'password' => $csd['password'],
+            'uuid' => $uuid,
+            'motivo' => $reasonCode,
+        ];
+
+        if ($replacementUuid) {
+            $payload['folioSustitucion'] = $replacementUuid;
+        }
+
+        try {
+            $response = Http::timeout(60)
+                ->withToken((string) $auth['token'])
+                ->acceptJson()
+                ->asJson()
+                ->post($endpoint, $payload);
+
+            $json = $response->json();
+
+            if (! $response->successful()) {
+                return $this->fail($this->responseMessage($response, $json), [
+                    'http_status' => $response->status(),
+                    'endpoint' => $endpoint,
+                    'environment' => $testEnv ? 'test' : 'production',
+                    'response' => $this->safeResponse($json),
+                    'request_id' => $this->requestId($response, $json),
+                ]);
+            }
+
+            $swStatus = strtolower((string) data_get($json, 'status', ''));
+            $cancelCode = $this->extractCancelCode($json, $uuid);
+
+            if ($swStatus !== 'success') {
+                return $this->fail($this->responseMessage($response, $json), [
+                    'http_status' => $response->status(),
+                    'endpoint' => $endpoint,
+                    'environment' => $testEnv ? 'test' : 'production',
+                    'cancel_code' => $cancelCode,
+                    'response' => $this->safeResponse($json),
+                    'request_id' => $this->requestId($response, $json),
+                ]);
+            }
+
+            $finalStatus = in_array((string) $cancelCode, ['201', '202'], true)
+                ? 'cancelled'
+                : 'cancel_requested';
+
+            $message = $finalStatus === 'cancelled'
+                ? 'CFDI cancelado correctamente con SW.'
+                : 'Solicitud de cancelación enviada a SW. Revisa estatus de cancelación.';
+
+            return [
+                'success' => true,
+                'status' => $finalStatus,
+                'message' => $message,
+                'uuid' => $uuid,
+                'reason_code' => $reasonCode,
+                'replacement_uuid' => $replacementUuid,
+                'cancel_code' => $cancelCode,
+                'http_status' => $response->status(),
+                'endpoint' => $endpoint,
+                'environment' => $testEnv ? 'test' : 'production',
+                'request_id' => $this->requestId($response, $json),
+                'response_meta' => $this->safeResponse($json),
+            ];
+        } catch (Throwable $e) {
+            return $this->fail($this->safeMessage($e->getMessage()), [
+                'endpoint' => $endpoint,
+                'environment' => $testEnv ? 'test' : 'production',
+            ]);
+        }
+    }
+
+    private function csdCancellationPayload(Company $company): array
+    {
+        $cerPath = trim((string) ($company->billing_csd_certificate_path ?? ''));
+        $keyPath = trim((string) ($company->billing_csd_key_path ?? ''));
+
+        if ($cerPath === '' || $keyPath === '') {
+            return $this->fail('Faltan archivos CSD .cer y/o .key para cancelar.');
+        }
+
+        $cerFullPath = Storage::disk('local')->path($cerPath);
+        $keyFullPath = Storage::disk('local')->path($keyPath);
+
+        if (! is_file($cerFullPath)) {
+            return $this->fail('No existe el archivo .cer del CSD.');
+        }
+
+        if (! is_file($keyFullPath)) {
+            return $this->fail('No existe el archivo .key del CSD.');
+        }
+
+        $password = $this->csdPassword($company);
+
+        if ($password === '') {
+            return $this->fail('Falta contraseña del CSD para cancelar.');
+        }
+
+        $cerBinary = file_get_contents($cerFullPath);
+        $keyBinary = file_get_contents($keyFullPath);
+
+        if ($cerBinary === false || $cerBinary === '') {
+            return $this->fail('No se pudo leer el archivo .cer del CSD.');
+        }
+
+        if ($keyBinary === false || $keyBinary === '') {
+            return $this->fail('No se pudo leer el archivo .key del CSD.');
+        }
+
+        return [
+            'success' => true,
+            'status' => 'success',
+            'message' => 'CSD listo para cancelación.',
+            'b64Cer' => base64_encode($cerBinary),
+            'b64Key' => base64_encode($keyBinary),
+            'password' => $password,
+        ];
+    }
+
+    private function csdPassword(Company $company): string
+    {
+        foreach ([
+            'billing_csd_key_password',
+            'billing_csd_password',
+            'csd_key_password',
+            'csd_password',
+        ] as $field) {
+            $value = (string) ($company->{$field} ?? '');
+
+            if (trim($value) === '') {
+                continue;
+            }
+
+            try {
+                return trim(Crypt::decryptString($value));
+            } catch (Throwable $e) {
+                return trim($value);
+            }
+        }
+
+        return '';
+    }
+
+    private function extractCancelCode(mixed $json, string $uuid): ?string
+    {
+        $uuid = strtoupper(trim($uuid));
+
+        foreach ([
+            'data.uuid.'.$uuid,
+            'data.uuid.'.strtolower($uuid),
+            'data.uuid',
+            'uuid.'.$uuid,
+            'uuid.'.strtolower($uuid),
+            'uuid',
+            'data.codigo',
+            'data.code',
+            'codigo',
+            'code',
+        ] as $path) {
+            $value = data_get($json, $path);
+
+            if (is_array($value)) {
+                $value = reset($value);
+            }
+
+            if (is_scalar($value) && trim((string) $value) !== '') {
+                return trim((string) $value);
+            }
+        }
+
+        return null;
+    }
+
+    private function isUuid(string $value): bool
+    {
+        return (bool) preg_match('/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i', trim($value));
+    }
+
 
     public function endpoints(bool $testEnv): array
     {
