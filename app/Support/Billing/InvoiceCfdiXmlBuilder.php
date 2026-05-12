@@ -428,6 +428,32 @@ class InvoiceCfdiXmlBuilder
                 $lineTax = round((float) $line->tax_amount, 2);
             }
 
+            // BEXIA_V5523P13_INFER_TAX_FROM_LINE_TOTAL
+            // Algunas líneas históricas tienen subtotal sin IVA y total con IVA,
+            // pero tax_rate/tax_amount vacíos. Para CFDI, inferimos el traslado.
+            if ($lineTax <= 0 && isset($line->total) && is_numeric($line->total)) {
+                $lineTotal = round((float) $line->total, 2);
+                $inferredTax = round($lineTotal - $lineSubtotal, 2);
+
+                if ($inferredTax > 0) {
+                    $lineTax = $inferredTax;
+
+                    // BEXIA_V5523P14_NORMALIZE_INFERRED_TAX_RATE
+                    // Evita tasas como 0.159794 por redondeos históricos.
+                    $inferredRate = $lineSubtotal > 0
+                        ? round($lineTax / $lineSubtotal, 6)
+                        : 0.0;
+
+                    if (abs($inferredRate - 0.16) <= 0.005) {
+                        $taxRate = 0.16;
+                    } elseif (abs($inferredRate - 0.08) <= 0.005) {
+                        $taxRate = 0.08;
+                    } else {
+                        $taxRate = $inferredRate;
+                    }
+                }
+            }
+
             $taxObject = trim((string) ($line->sat_tax_object_code ?? ''));
 
             /*
