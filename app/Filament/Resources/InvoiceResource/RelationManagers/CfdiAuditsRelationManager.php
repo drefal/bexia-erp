@@ -4,7 +4,9 @@ namespace App\Filament\Resources\InvoiceResource\RelationManagers;
 
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 
 class CfdiAuditsRelationManager extends RelationManager
@@ -13,77 +15,166 @@ class CfdiAuditsRelationManager extends RelationManager
 
     protected static ?string $title = 'Auditoría CFDI';
 
-    protected static ?string $modelLabel = 'evento CFDI';
+    protected static ?string $modelLabel = 'auditoría CFDI';
 
     protected static ?string $pluralModelLabel = 'auditoría CFDI';
+
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        /*
+         * BEXIA_V5523V4_CFDI_AUDIT_TAB_ADMIN_ONLY
+         * La auditoría CFDI muestra movimientos fiscales sensibles.
+         * Solo administradores o usuarios con permiso explícito pueden verla.
+         */
+        return self::canViewCfdiAuditTab();
+    }
 
     public function table(Table $table): Table
     {
         return $table
+            ->defaultSort('created_at', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('created_at')
+                TextColumn::make('created_at')
                     ->label('Fecha')
                     ->dateTime('d/m/Y H:i:s')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('action')
+                TextColumn::make('action')
                     ->label('Acción')
                     ->badge()
-                    ->formatStateUsing(fn ($state): string => match ((string) $state) {
-                        'validate' => 'Validación',
-                        'stamp' => 'Timbrado',
-                        'cancel' => 'Cancelación',
-                        default => (string) $state,
-                    }),
+                    ->formatStateUsing(fn (?string $state): string => self::cfdiAuditActionLabel($state))
+                    ->searchable(),
 
-                Tables\Columns\TextColumn::make('status')
+                TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
-                    ->color(fn ($state): string => match ((string) $state) {
-                        'success' => 'success',
-                        'error' => 'danger',
-                        'warning' => 'warning',
-                        default => 'gray',
-                    }),
+                    ->color(fn (?string $state): string => self::cfdiAuditStatusColor($state))
+                    ->formatStateUsing(fn (?string $state): string => self::cfdiAuditStatusLabel($state)),
 
-                Tables\Columns\TextColumn::make('pac_provider')
+                TextColumn::make('pac')
                     ->label('PAC')
-                    ->placeholder('—'),
+                    ->formatStateUsing(fn ($state): string => filled($state) ? strtoupper((string) $state) : '-'),
 
-                Tables\Columns\TextColumn::make('pac_environment')
+                TextColumn::make('environment')
                     ->label('Ambiente')
-                    ->placeholder('—'),
+                    ->formatStateUsing(fn ($state): string => self::cfdiAuditEnvironmentLabel($state)),
 
-                Tables\Columns\TextColumn::make('message')
+                TextColumn::make('message')
                     ->label('Mensaje')
-                    ->limit(80)
-                    ->wrap(),
+                    ->wrap()
+                    ->limit(160),
             ])
             ->actions([
-                Tables\Actions\Action::make('details')
+                Tables\Actions\Action::make('detail')
                     ->label('Detalle')
                     ->icon('heroicon-o-eye')
+                    ->color('gray')
                     ->modalHeading('Detalle de auditoría CFDI')
-                    ->modalWidth('5xl')
-                    ->modalContent(function ($record): HtmlString {
-                        $request = json_encode($record->request_meta ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                        $response = json_encode($record->response_meta ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
-                        $html = '<div style="display:grid; gap:16px;">';
-                        $html .= '<div><strong>Mensaje</strong><br>' . e((string) ($record->message ?? '')) . '</div>';
-                        $html .= '<div><strong>Request seguro</strong><pre style="white-space:pre-wrap; font-size:12px;">' . e($request ?: '{}') . '</pre></div>';
-                        $html .= '<div><strong>Response seguro</strong><pre style="white-space:pre-wrap; font-size:12px;">' . e($response ?: '{}') . '</pre></div>';
-                        $html .= '</div>';
-
-                        return new HtmlString($html);
-                    }),
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Cerrar')
+                    ->modalContent(fn ($record): HtmlString => self::cfdiAuditDetailHtml($record)),
             ])
-            ->defaultSort('created_at', 'desc')
-            ->paginated(10);
+            ->paginated([10, 25, 50]);
     }
 
-    public function isReadOnly(): bool
+    private static function canViewCfdiAuditTab(): bool
     {
-        return true;
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        $isAdmin = method_exists($user, 'hasAnyRole')
+            ? $user->hasAnyRole([
+                'Super Administrador',
+                'Administrador',
+                'Admin',
+                'admin',
+                'super_admin',
+            ])
+            : false;
+
+        return $isAdmin
+            || $user->can('settings.access')
+            || $user->can('invoicing.audit');
+    }
+
+    private static function cfdiAuditActionLabel(?string $state): string
+    {
+        return match ((string) $state) {
+            'validate' => 'Validación CFDI',
+            'assign_folio' => 'Asignación de folio',
+            'generate_signed_xml' => 'Generación de XML firmado',
+            'stamp' => 'Timbrado CFDI',
+            'generate_pdf' => 'Generación de PDF',
+            'send_cfdi_email' => 'Envío por correo',
+            'send_cfdi_email_resend' => 'Reenvío por correo',
+            'download_cfdi_pdf' => 'Descarga PDF',
+            'download_cfdi_xml' => 'Descarga XML',
+            'download_cfdi_zip' => 'Descarga ZIP',
+            'prepare_cfdi_cancel' => 'Preparación de cancelación',
+            'send_cfdi_cancel' => 'Envío de cancelación PAC/SAT',
+            default => filled($state) ? (string) $state : 'Sin acción',
+        };
+    }
+
+    private static function cfdiAuditStatusLabel(?string $state): string
+    {
+        return match ((string) $state) {
+            'success' => 'Correcto',
+            'error' => 'Error',
+            'ready_to_cancel' => 'Listo para cancelar',
+            'cancelled', 'canceled' => 'Cancelado',
+            'pending' => 'Pendiente',
+            'accepted' => 'Aceptado',
+            'rejected' => 'Rechazado',
+            default => filled($state) ? (string) $state : 'Sin estado',
+        };
+    }
+
+    private static function cfdiAuditStatusColor(?string $state): string
+    {
+        return match ((string) $state) {
+            'success', 'accepted' => 'success',
+            'cancelled', 'canceled' => 'danger',
+            'ready_to_cancel', 'pending' => 'warning',
+            'error', 'rejected' => 'danger',
+            default => 'gray',
+        };
+    }
+
+    private static function cfdiAuditEnvironmentLabel($state): string
+    {
+        return match ((string) $state) {
+            'production' => 'Producción',
+            'test', 'testing', 'sandbox' => 'Pruebas',
+            default => filled($state) ? (string) $state : '-',
+        };
+    }
+
+    private static function cfdiAuditDetailHtml($record): HtmlString
+    {
+        $items = [
+            'Fecha' => optional($record->created_at)->format('d/m/Y H:i:s') ?: (string) ($record->created_at ?? ''),
+            'Acción' => self::cfdiAuditActionLabel($record->action ?? null),
+            'Estado' => self::cfdiAuditStatusLabel($record->status ?? null),
+            'PAC' => filled($record->pac ?? null) ? strtoupper((string) $record->pac) : '-',
+            'Ambiente' => self::cfdiAuditEnvironmentLabel($record->environment ?? null),
+            'Mensaje' => (string) ($record->message ?? ''),
+        ];
+
+        $html = '<div class="space-y-3 text-sm">';
+
+        foreach ($items as $label => $value) {
+            $html .= '<div>';
+            $html .= '<div class="font-semibold">'.e($label).'</div>';
+            $html .= '<div class="text-gray-700 dark:text-gray-300">'.nl2br(e($value)).'</div>';
+            $html .= '</div>';
+        }
+
+        $html .= '</div>';
+
+        return new HtmlString($html);
     }
 }
