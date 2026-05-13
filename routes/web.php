@@ -328,3 +328,15 @@ Route::middleware(['auth'])->get(
     '/billing/invoices/{invoice}/download/{type}',
     \App\Http\Controllers\BillingInvoiceDownloadController::class
 )->name('billing.invoices.download');
+
+
+/*
+|--------------------------------------------------------------------------
+| BEXIA_V5524B9_TREASURY_MOVEMENT_PRINT_ROUTE
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->get(
+    '/treasury/movements/{movement}/print',
+    \App\Http\Controllers\TreasuryMovementPrintController::class
+)->name('treasury.movements.print');
+

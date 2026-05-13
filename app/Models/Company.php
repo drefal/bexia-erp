@@ -180,4 +180,20 @@ class Company extends Model implements HasAvatar
         return $this->hasMany(\App\Models\Invoice::class);
     }
 
+    public function banks(): HasMany
+    {
+        return $this->hasMany(Bank::class);
+    }
+
+    public function treasuryAccounts(): HasMany
+    {
+        return $this->hasMany(TreasuryAccount::class);
+    }
+
+    public function treasuryMovements(): HasMany
+    {
+        return $this->hasMany(TreasuryMovement::class);
+    }
+
+
 }
