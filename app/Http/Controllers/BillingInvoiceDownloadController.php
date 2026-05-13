@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Billing\InvoiceCfdiValidator;
+
 use App\Models\Invoice;
 use App\Support\Billing\InvoicePdfBuilder;
 use Illuminate\Http\Request;
@@ -13,6 +15,10 @@ class BillingInvoiceDownloadController extends Controller
 {
     public function __invoke(Request $request, Invoice $invoice, string $type): BinaryFileResponse
     {
+
+        // BEXIA_V5523V1_AUDIT_CFDI_DOWNLOAD_CALL
+        $this->auditCfdiDownload($invoice, (string) ($type ?? ''));
+
 
         // BEXIA_V5523T7_DOWNLOAD_CURRENT_CFDI_PDF_CALL
         if ((string) ($type ?? '') === 'pdf') {
@@ -185,6 +191,40 @@ class BillingInvoiceDownloadController extends Controller
                 'Pragma' => 'no-cache',
                 'Expires' => '0',
             ]);
+    }
+
+
+
+    private function auditCfdiDownload(Invoice $invoice, string $type): void
+    {
+        /*
+         * BEXIA_V5523V1_AUDIT_CFDI_DOWNLOAD
+         * Registra descarga histórica de XML/PDF/ZIP CFDI.
+         */
+        $type = strtolower(trim($type));
+
+        if (! in_array($type, ['xml', 'pdf', 'zip'], true)) {
+            return;
+        }
+
+        try {
+            if (! class_exists(InvoiceCfdiValidator::class)) {
+                return;
+            }
+
+            app(InvoiceCfdiValidator::class)->audit($invoice->refresh(), auth()->user(), [
+                'action' => 'download_cfdi_'.$type,
+                'status' => 'success',
+                'message' => match ($type) {
+                    'xml' => 'XML CFDI descargado.',
+                    'pdf' => 'PDF CFDI descargado.',
+                    'zip' => 'ZIP CFDI descargado.',
+                    default => 'Archivo CFDI descargado.',
+                },
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
 
