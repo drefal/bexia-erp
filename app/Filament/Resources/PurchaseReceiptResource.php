@@ -29,34 +29,7 @@ protected static ?string $modelLabel = 'recepción de compra';
 
     protected static bool $isScopedToTenant = false;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::canViewAny();
-    }
-
-    public static function canViewAny(): bool
-    {
-        $user = Filament::auth()->user();
-
-        if (! $user) {
-            return false;
-        }
-
-        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-            return true;
-        }
-
-        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-            return true;
-        }
-
-        return method_exists($user, 'can') && (
-            $user->can('purchases.view')
-            || $user->can('inventory.view')
-        );
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return false;
     }
@@ -72,6 +45,26 @@ protected static ?string $modelLabel = 'recepción de compra';
         }
 
         return $query;
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('purchases.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('purchases.view')
+            );
     }
 
     public static function table(Table $table): Table

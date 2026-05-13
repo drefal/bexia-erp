@@ -53,17 +53,7 @@ class UserResource extends Resource
             : (bool) ($record->is_system_admin ?? false);
     }
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->check() && auth()->user()->can('users.view');
-    }
-
-    public static function canViewAny(): bool
-    {
-        return auth()->check() && auth()->user()->can('users.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return auth()->check() && auth()->user()->can('users.create');
     }
@@ -133,6 +123,26 @@ class UserResource extends Resource
         }
 
         return $query;
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('users.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('users.view')
+            );
     }
 
     public static function form(Form $form): Form

@@ -161,4 +161,24 @@ class PendingAccountingPostings extends Page
             return null;
         }
     }
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
+    }
+
 }

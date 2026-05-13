@@ -46,30 +46,7 @@ class PosAuditLogResource extends Resource
         return false;
     }
 
-    public static function canViewAny(): bool
-    {
-        $user = auth()->user();
-
-        if (! $user) {
-            return false;
-        }
-
-        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-            return true;
-        }
-
-        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-            return true;
-        }
-
-        return method_exists($user, 'can') && (
-            $user->can('pos.audit.view')
-            || $user->can('pos.refund.view')
-            || $user->can('pos.session.close')
-        );
-    }
-
-    public static function canView($record): bool
+public static function canView($record): bool
     {
         return static::canViewAny();
     }
@@ -96,7 +73,7 @@ class PosAuditLogResource extends Resource
         return $query;
     }
 
-    public static function form(Form $form): Form
+public static function form(Form $form): Form
     {
         return $form
             ->schema([
@@ -182,6 +159,26 @@ class PosAuditLogResource extends Resource
                             ->disabled(),
                     ]),
             ]);
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
     }
 
     public static function table(Table $table): Table

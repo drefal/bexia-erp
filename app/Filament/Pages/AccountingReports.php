@@ -166,4 +166,24 @@ class AccountingReports extends Page
             return null;
         }
     }
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('accounting.view')
+            );
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('accounting.view')
+            );
+    }
+
 }

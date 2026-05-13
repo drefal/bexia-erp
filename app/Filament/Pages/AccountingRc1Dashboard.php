@@ -405,4 +405,24 @@ class AccountingRc1Dashboard extends Page
             return false;
         }
     }
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('accounting.view')
+            );
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('accounting.view')
+            );
+    }
+
 }

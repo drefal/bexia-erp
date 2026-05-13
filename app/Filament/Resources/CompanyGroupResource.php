@@ -22,17 +22,7 @@ class CompanyGroupResource extends Resource
     protected static ?string $tenantOwnershipRelationshipName = null;
     protected static ?int $navigationSort = 20;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->check() && auth()->user()->isSystemAdmin();
-    }
-
-    public static function canViewAny(): bool
-    {
-        return auth()->check() && auth()->user()->isSystemAdmin();
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return auth()->check() && auth()->user()->isSystemAdmin();
     }
@@ -45,6 +35,26 @@ class CompanyGroupResource extends Resource
     public static function getNavigationLabel(): string
     {
         return 'Grupos de empresas';
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
     }
 
     public static function form(Form $form): Form

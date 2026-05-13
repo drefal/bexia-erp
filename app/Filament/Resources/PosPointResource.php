@@ -32,34 +32,7 @@ class PosPointResource extends Resource
 
     protected static bool $isScopedToTenant = false;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::canViewAny();
-    }
-
-    public static function canViewAny(): bool
-    {
-        $user = Filament::auth()->user();
-
-        if (! $user) {
-            return false;
-        }
-
-        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-            return true;
-        }
-
-        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-            return true;
-        }
-
-        return method_exists($user, 'can') && (
-            $user->can('sales.view')
-            || $user->can('inventory.view')
-        );
-    }
-
-    public static function getEloquentQuery(): Builder
+public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
 
@@ -70,6 +43,26 @@ class PosPointResource extends Resource
         }
 
         return $query;
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
     }
 
     public static function form(Form $form): Form

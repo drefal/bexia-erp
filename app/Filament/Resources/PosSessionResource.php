@@ -29,17 +29,7 @@ class PosSessionResource extends Resource
 
     protected static bool $isScopedToTenant = false;
 
-public static function shouldRegisterNavigation(): bool
-{
-    return auth()->user()?->can('pos.view') ?? false;
-}
-
-public static function canViewAny(): bool
-{
-    return auth()->user()?->can('pos.view') ?? false;
-}
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return false;
     }
@@ -98,6 +88,26 @@ public static function canViewAny(): bool
                 DB::raw(Schema::hasTable('users') ? 'u.name as user_name' : 'NULL as user_name'),
                 DB::raw(Schema::hasTable('contacts') ? 'c.name as customer_name' : 'NULL as customer_name'),
             ]);
+    }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
     }
 
     public static function table(Table $table): Table

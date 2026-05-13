@@ -33,17 +33,7 @@ class BillingSeriesResource extends Resource
 
     protected static ?int $navigationSort = 10;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::canManage();
-    }
-
-    public static function canViewAny(): bool
-    {
-        return static::canManage();
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return static::canManage();
     }
@@ -74,6 +64,26 @@ class BillingSeriesResource extends Resource
         }
 
         return $query->orderBy('company_id')->orderBy('document_type')->orderBy('id');
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
     }
 
     public static function form(Form $form): Form

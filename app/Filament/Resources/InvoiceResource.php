@@ -38,21 +38,6 @@ class InvoiceResource extends Resource
     protected static ?string $pluralModelLabel = 'facturas';
 
     protected static ?int $navigationSort = 1;
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->check() && auth()->user()->can('invoices.view');
-    }
-
-    public static function canViewAny(): bool
-    {
-        return auth()->check() && auth()->user()->can('invoices.view');
-    }
-
-    public static function canCreate(): bool
-    {
-        return auth()->check() && auth()->user()->can('invoices.create');
-    }
-
 public static function canEdit(Model $record): bool
     {
         // BEXIA_V5523R4_NO_EDIT_STAMPED
@@ -81,6 +66,36 @@ public static function canEdit(Model $record): bool
         }
 
         return $query;
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
+
+    public static function canCreate(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.create')
+            );
     }
 
     public static function form(Form $form): Form

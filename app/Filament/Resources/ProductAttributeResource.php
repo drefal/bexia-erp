@@ -56,12 +56,7 @@ class ProductAttributeResource extends Resource
         return static::canManage('inventory.view');
     }
 
-    public static function canViewAny(): bool
-    {
-        return static::canManage('inventory.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return static::canManage('inventory.create');
     }
@@ -88,7 +83,7 @@ class ProductAttributeResource extends Resource
         return $query;
     }
 
-    public static function form(Form $form): Form
+public static function form(Form $form): Form
     {
         return $form
             ->schema([
@@ -146,6 +141,26 @@ class ProductAttributeResource extends Resource
                     ->columns(12),
             ])
             ->columns(12);
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
     }
 
     public static function table(Table $table): Table

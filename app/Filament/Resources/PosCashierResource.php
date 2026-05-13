@@ -32,12 +32,7 @@ class PosCashierResource extends Resource
 
     protected static bool $isScopedToTenant = false;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return false;
-    }
-
-    public static function getEloquentQuery(): Builder
+public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
 
@@ -48,6 +43,26 @@ class PosCashierResource extends Resource
         }
 
         return $query;
+    }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
     }
 
     public static function form(Form $form): Form

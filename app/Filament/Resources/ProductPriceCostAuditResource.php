@@ -42,6 +42,26 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
         return $query;
     }
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -159,17 +179,7 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
         return false;
     }
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::userCanView();
-    }
-
-    public static function canViewAny(): bool
-    {
-        return static::userCanView();
-    }
-
-    protected static function userCanView(): bool
+protected static function userCanView(): bool
     {
         $user = auth()->user();
 

@@ -40,17 +40,7 @@ class EmployeeResource extends Resource
     protected static ?int $navigationSort = 20;
     protected static ?string $tenantOwnershipRelationshipName = null;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::canViewAny();
-    }
-
-    public static function canViewAny(): bool
-    {
-        return auth()->check() && auth()->user()->can('company.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return auth()->check() && auth()->user()->can('company.update');
     }
@@ -92,6 +82,26 @@ class EmployeeResource extends Resource
         return parent::getEloquentQuery()
             ->with(['user', 'manager', 'coach', 'branch'])
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('contacts.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('contacts.view')
+            );
     }
 
     public static function form(Form $form): Form

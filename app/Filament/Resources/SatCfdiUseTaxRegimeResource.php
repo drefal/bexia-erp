@@ -33,17 +33,7 @@ class SatCfdiUseTaxRegimeResource extends Resource
 
     protected static ?int $navigationSort = 20;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::canManage();
-    }
-
-    public static function canViewAny(): bool
-    {
-        return static::canManage();
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return static::canManage();
     }
@@ -71,6 +61,26 @@ class SatCfdiUseTaxRegimeResource extends Resource
             ->with(['taxRegime', 'cfdiUse'])
             ->orderBy('tax_regime_code')
             ->orderBy('cfdi_use_code');
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
     }
 
     public static function form(Form $form): Form

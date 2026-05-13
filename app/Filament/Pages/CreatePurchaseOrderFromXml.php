@@ -26,17 +26,7 @@ protected static ?string $slug = 'purchase-orders/from-xml';
     return auth()->user()?->can('purchases.create') ?? false;
 }
 
-public static function shouldRegisterNavigation(): bool
-{
-    return static::canUsePurchaseXmlPage();
-}
-
-public static function canAccess(): bool
-{
-    return static::canUsePurchaseXmlPage();
-}
-
-    public array $warehouses = [];
+public array $warehouses = [];
 
     public array $receivingLocations = [];
 
@@ -226,4 +216,24 @@ public static function canAccess(): bool
 
         return $parts ? implode(' - ', $parts) : ('ID ' . ($row->id ?? ''));
     }
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('purchases.view')
+            );
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('purchases.view')
+            );
+    }
+
 }

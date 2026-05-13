@@ -33,22 +33,12 @@ class BillingPacConfigurationResource extends Resource
 
     protected static ?int $navigationSort = 95;
 
-    public static function shouldRegisterNavigation(): bool
+public static function canAccess(): bool
     {
         return false;
     }
 
-    public static function canAccess(): bool
-    {
-        return false;
-    }
-
-    public static function canViewAny(): bool
-    {
-        return false;
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return false;
     }
@@ -72,6 +62,26 @@ class BillingPacConfigurationResource extends Resource
         }
 
         return $query->orderBy('id');
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
     }
 
     public static function form(Form $form): Form

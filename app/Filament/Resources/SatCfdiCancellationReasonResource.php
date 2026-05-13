@@ -26,6 +26,26 @@ class SatCfdiCancellationReasonResource extends Resource
 
     protected static ?int $navigationSort = 60;
 
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
+    }
+
     public static function form(Form $form): Form
     {
         return $form

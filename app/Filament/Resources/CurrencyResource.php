@@ -32,12 +32,7 @@ class CurrencyResource extends Resource
 
     protected static bool $isScopedToTenant = false;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return PaymentFormResource::canViewAny();
-    }
-
-    public static function getEloquentQuery(): Builder
+public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
         $companyId = static::currentCompanyId();
@@ -49,6 +44,26 @@ class CurrencyResource extends Resource
         }
 
         return $query;
+    }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
     }
 
     public static function form(Form $form): Form

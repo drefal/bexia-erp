@@ -48,6 +48,26 @@ class ApprovalWorkflowResource extends Resource
         return $query;
     }
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -273,12 +293,7 @@ class ApprovalWorkflowResource extends Resource
         ];
     }
 
-    public static function canViewAny(): bool
-    {
-        return static::userCanView();
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return static::userCanManage();
     }
@@ -293,12 +308,7 @@ class ApprovalWorkflowResource extends Resource
         return static::userCanManage();
     }
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::userCanView();
-    }
-
-    public static function documentTypeOptions(): array
+public static function documentTypeOptions(): array
     {
         return [
             'purchase_request' => 'Solicitud de compra',

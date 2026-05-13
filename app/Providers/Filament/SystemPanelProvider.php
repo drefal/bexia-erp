@@ -57,6 +57,8 @@ class SystemPanelProvider extends PanelProvider
                 \App\Http\Middleware\SetLocale::class,
             ])
             ->authMiddleware([
+
+                \App\Http\Middleware\SetPermissionTeamFromUserCompany::class,
                 Authenticate::class,
             ]);
     }

@@ -28,12 +28,7 @@ use Illuminate\Support\Facades\Schema;
 class ProductResource extends Resource
 {
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->check();
-    }
-
-    protected static ?string $model = Product::class;
+protected static ?string $model = Product::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-cube';
     protected static ?string $navigationGroup = 'Productos';
@@ -74,12 +69,7 @@ protected static ?string $modelLabel = 'producto';
         return static::canManage('inventory.view');
     }
 
-    public static function canViewAny(): bool
-    {
-        return static::canManage('inventory.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return static::canManage('inventory.create');
     }
@@ -644,6 +634,26 @@ protected static ?string $modelLabel = 'producto';
         }
 
         return trim((string) $row->code . ' - ' . (string) ($row->name ?: $row->description));
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
     }
 
     public static function form(Form $form): Form

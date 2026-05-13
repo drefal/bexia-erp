@@ -19,16 +19,7 @@ use Illuminate\Support\HtmlString;
 
 class ContactResource extends Resource
 {
-    public static function shouldRegisterNavigation(): bool
-{
-    return auth()->user()?->can('contacts.view') ?? false;
-}
-
-public static function canViewAny(): bool
-{
-    return auth()->user()?->can('contacts.view') ?? false;
-}
-    protected static ?string $model = Contact::class;
+protected static ?string $model = Contact::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
     protected static ?string $navigationGroup = 'Contactos';
@@ -1163,6 +1154,26 @@ public static function canViewAny(): bool
             ->filter(fn ($label) => filled($label))
             ->sort()
             ->all();
+    }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('contacts.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('contacts.view')
+            );
     }
 
     public static function form(Form $form): Form

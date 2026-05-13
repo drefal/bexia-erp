@@ -297,33 +297,7 @@ private function applyCatalogOptionsToSchema(array $schema): array
         return false;
     }
 
-public static function shouldRegisterNavigation(): bool
-{
-    $user = Filament::auth()->user();
-
-    if (! $user) {
-        return false;
-    }
-
-    if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-        return true;
-    }
-
-    if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-        return true;
-    }
-
-    return $user->can('salidas.ver')
-        || $user->can('salidas.view')
-        || $user->can('salidas.access');
-}
-
-public static function canAccess(): bool
-{
-    return static::shouldRegisterNavigation();
-}
-    
-    public function mount(): void
+public function mount(): void
     {
         $user = Filament::auth()->user();
         $tenant = Filament::getTenant();
@@ -1376,4 +1350,28 @@ public function deleteSubmission(int $submissionId): void
 
     $this->dispatch('$refresh');
 }
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('salidas.ver')
+                || $user?->can('salidas.ver_todas')
+                || $user?->can('salidas.configurar')
+            );
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('salidas.ver')
+                || $user?->can('salidas.ver_todas')
+                || $user?->can('salidas.configurar')
+            );
+    }
+
 }

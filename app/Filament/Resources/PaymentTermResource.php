@@ -15,17 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 class PaymentTermResource extends Resource
 {
 
-public static function shouldRegisterNavigation(): bool
-{
-    return auth()->user()?->can('payment_terms.view') ?? false;
-}
-
-public static function canViewAny(): bool
-{
-    return auth()->user()?->can('payment_terms.view') ?? false;
-}
-
-    protected static ?string $model = PaymentTerm::class;
+protected static ?string $model = PaymentTerm::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-clock';
 
@@ -62,6 +52,26 @@ public static function canViewAny(): bool
         }
 
         return $query;
+    }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
     }
 
     public static function form(Form $form): Form

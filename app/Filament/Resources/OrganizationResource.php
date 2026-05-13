@@ -20,19 +20,29 @@ class OrganizationResource extends Resource
     protected static ?string $tenantOwnershipRelationshipName = null;
     protected static ?int $navigationSort = 10;
 
+public static function getNavigationLabel(): string
+    {
+        return 'Clientes Bexia';
+    }
+
     public static function shouldRegisterNavigation(): bool
     {
-        return auth()->check() && auth()->user()->isSystemAdmin();
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
     }
 
     public static function canViewAny(): bool
     {
-        return auth()->check() && auth()->user()->isSystemAdmin();
-    }
+        $user = auth()->user();
 
-    public static function getNavigationLabel(): string
-    {
-        return 'Clientes Bexia';
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
     }
 
     public static function form(Form $form): Form

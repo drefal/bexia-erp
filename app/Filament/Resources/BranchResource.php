@@ -23,17 +23,7 @@ class BranchResource extends Resource
     protected static ?int $navigationSort = 40;
     protected static ?string $tenantOwnershipRelationshipName = null;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->check() && auth()->user()->can('company.view');
-    }
-
-    public static function canViewAny(): bool
-    {
-        return auth()->check() && auth()->user()->can('company.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return auth()->check() && auth()->user()->can('company.update');
     }
@@ -74,6 +64,26 @@ class BranchResource extends Resource
 
         return parent::getEloquentQuery()
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
     }
 
     public static function form(Form $form): Form

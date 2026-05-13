@@ -51,12 +51,7 @@ protected static ?string $tenantOwnershipRelationshipName = 'company';
         return static::canManageCatalogs();
     }
 
-    public static function canViewAny(): bool
-    {
-        return static::canManageCatalogs();
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return static::canManageCatalogs();
     }
@@ -83,7 +78,7 @@ protected static ?string $tenantOwnershipRelationshipName = 'company';
         return $query;
     }
 
-    public static function form(Form $form): Form
+public static function form(Form $form): Form
     {
         return $form
             ->schema([
@@ -141,6 +136,30 @@ protected static ?string $tenantOwnershipRelationshipName = 'company';
                     ->columns(12),
             ])
             ->columns(12);
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('salidas.ver')
+                || $user?->can('salidas.ver_todas')
+                || $user?->can('salidas.configurar')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('salidas.ver')
+                || $user?->can('salidas.ver_todas')
+                || $user?->can('salidas.configurar')
+            );
     }
 
     public static function table(Table $table): Table

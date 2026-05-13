@@ -38,17 +38,7 @@ class CompanyResource extends Resource
 
     protected static ?int $navigationSort = 30;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->check() && auth()->user()->can('company.view');
-    }
-
-    public static function canViewAny(): bool
-    {
-        return auth()->check() && auth()->user()->can('company.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         $user = auth()->user();
 
@@ -156,6 +146,26 @@ class CompanyResource extends Resource
         }
 
         return $query->whereRaw('1 = 0');
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('settings.access')
+            );
     }
 
     public static function form(Form $form): Form

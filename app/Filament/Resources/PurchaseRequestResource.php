@@ -316,6 +316,26 @@ public static function form(Form $form): Form
             ]);
     }
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('purchases.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('purchases.view')
+            );
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -474,18 +494,7 @@ public static function form(Form $form): Form
         return false;
     }
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return false;
-    }
-
-    public static function canViewAny(): bool
-    {
-        return static::userCanView();
-    }
-
-
-    public static function normalizePurchaseRequestLineData(array $data): array
+public static function normalizePurchaseRequestLineData(array $data): array
     {
         $quantity = (float) ($data['requested_quantity'] ?? 0);
         $unitWithoutTax = (float) ($data['unit_cost_without_tax'] ?? 0);

@@ -31,17 +31,7 @@ class RolBorradorResource extends Resource
 
     protected static ?int $navigationSort = 11;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->check() && auth()->user()->can('rol.view');
-    }
-
-    public static function canViewAny(): bool
-    {
-        return auth()->check() && auth()->user()->can('rol.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return auth()->check() && auth()->user()->can('rol.manage');
     }
@@ -84,6 +74,26 @@ class RolBorradorResource extends Resource
             ->withCount('permissions')
             ->where('name', 'Administrador')
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('rol.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('rol.view')
+            );
     }
 
     public static function form(Form $form): Form

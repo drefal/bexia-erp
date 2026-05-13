@@ -12,12 +12,7 @@ use Filament\Tables\Table;
 
 class PurchaseOrderResource extends Resource
 {
-    public static function shouldRegisterNavigation(): bool
-    {
-        return false;
-    }
-
-    protected static ?string $model = PurchaseOrder::class;
+protected static ?string $model = PurchaseOrder::class;
 
     protected static ?string $tenantOwnershipRelationshipName = 'company';
 
@@ -40,6 +35,26 @@ public static function canCreate(): bool
     protected static function isConfirmable(?PurchaseOrder $record): bool
     {
         return $record && in_array((string) ($record->status ?? ''), ['draft', 'review'], true);
+    }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('purchases.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('purchases.view')
+            );
     }
 
     public static function form(Form $form): Form

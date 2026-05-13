@@ -26,16 +26,6 @@ class SatUnitResource extends Resource
 
     protected static ?int $navigationSort = 30;
 
-public static function shouldRegisterNavigation(): bool
-{
-    return auth()->user()?->can('sat_units.view') ?? false;
-}
-
-public static function canViewAny(): bool
-{
-    return auth()->user()?->can('sat_units.view') ?? false;
-}
-
 public static function canCreate(): bool
 {
     return auth()->user()?->can('sat_units.create') ?? false;
@@ -50,6 +40,26 @@ public static function canDelete($record): bool
 {
     return auth()->user()?->can('sat_units.delete') ?? false;
 }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('invoicing.view')
+            );
+    }
 
     public static function form(Form $form): Form
     {

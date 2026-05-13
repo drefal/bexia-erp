@@ -19,25 +19,24 @@ class PointOfSale extends Page
 
     protected static string $view = 'filament.pages.point-of-sale';
 
-    public static function shouldRegisterNavigation(): bool
+public static function shouldRegisterNavigation(): bool
     {
-        $user = Filament::auth()->user();
+        $user = auth()->user();
 
-        if (! $user) {
-            return false;
-        }
-
-        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-            return true;
-        }
-
-        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-            return true;
-        }
-
-        return method_exists($user, 'can') && (
-            $user->can('sales.view')
-            || $user->can('inventory.view')
-        );
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
     }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
+    }
+
 }

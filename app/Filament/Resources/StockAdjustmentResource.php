@@ -52,6 +52,26 @@ class StockAdjustmentResource extends Resource
         return $query;
     }
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -930,17 +950,7 @@ class StockAdjustmentResource extends Resource
         return null;
     }
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::userCanPermission('inventory.view');
-    }
-
-    public static function canViewAny(): bool
-    {
-        return static::userCanPermission('inventory.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return static::userCanPermission('inventory.adjust_stock');
     }

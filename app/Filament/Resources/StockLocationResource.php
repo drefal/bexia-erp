@@ -28,16 +28,6 @@ class StockLocationResource extends Resource
 protected static ?int $navigationSort = 30;
 protected static bool $isScopedToTenant = false;
 
-public static function shouldRegisterNavigation(): bool
-{
-    return auth()->user()?->can('inventory.view') ?? false;
-}
-
-public static function canViewAny(): bool
-{
-    return auth()->user()?->can('inventory.view') ?? false;
-}
-
 public static function getEloquentQuery(): Builder    {
         $query = StockLocation::query()
             ->with(['warehouse', 'type', 'parent']);
@@ -51,6 +41,26 @@ public static function getEloquentQuery(): Builder    {
         }
 
         return $query;
+    }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
     }
 
     public static function form(Form $form): Form

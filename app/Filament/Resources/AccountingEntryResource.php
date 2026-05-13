@@ -107,6 +107,26 @@ class AccountingEntryResource extends Resource
         ][$source] ?? ($source ?: 'Sin origen');
     }
 
+public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('accounting.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('accounting.view')
+            );
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([]);

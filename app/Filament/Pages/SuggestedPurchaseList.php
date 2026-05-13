@@ -58,6 +58,26 @@ class SuggestedPurchaseList extends Page
         $this->locationId = null;
     }
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -1058,17 +1078,7 @@ class SuggestedPurchaseList extends Page
         return null;
     }
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::userCanView();
-    }
-
-    public static function canAccess(): bool
-    {
-        return static::userCanView();
-    }
-
-    protected static function userCanView(): bool
+protected static function userCanView(): bool
     {
         $user = auth()->user();
 

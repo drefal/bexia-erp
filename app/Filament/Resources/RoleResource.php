@@ -25,17 +25,7 @@ class RoleResource extends Resource
     protected static ?string $navigationGroup = 'Seguridad';
     protected static ?int $navigationSort = 10;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->check() && auth()->user()->can('roles.view');
-    }
-
-    public static function canViewAny(): bool
-    {
-        return auth()->check() && auth()->user()->can('roles.view');
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return auth()->check() && auth()->user()->can('roles.manage');
     }
@@ -77,6 +67,26 @@ class RoleResource extends Resource
         return parent::getEloquentQuery()
             ->withCount('permissions')
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('rol.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('rol.view')
+            );
     }
 
     public static function form(Form $form): Form

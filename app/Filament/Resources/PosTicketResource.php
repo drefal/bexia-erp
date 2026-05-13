@@ -32,36 +32,7 @@ class PosTicketResource extends Resource
 
     protected static bool $isScopedToTenant = false;
 
-    public static function shouldRegisterNavigation(): bool
-    {
-        return static::canViewAny();
-    }
-
-    public static function canViewAny(): bool
-    {
-        $user = Filament::auth()->user() ?: auth()->user();
-
-        if (! $user) {
-            return false;
-        }
-
-        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-            return true;
-        }
-
-        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-            return true;
-        }
-
-        return method_exists($user, 'can') && (
-            $user->can('sales.view')
-            || $user->can('sales.create')
-            || $user->can('sales.update')
-            || $user->can('inventory.view')
-        );
-    }
-
-    public static function canCreate(): bool
+public static function canCreate(): bool
     {
         return false;
     }
@@ -87,6 +58,26 @@ class PosTicketResource extends Resource
         }
 
         return $query;
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('pos.menu.view')
+            );
     }
 
     public static function table(Table $table): Table
