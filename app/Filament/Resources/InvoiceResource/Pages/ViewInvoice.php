@@ -28,7 +28,7 @@ class ViewInvoice extends ViewRecord
                 ->modalCancelActionLabel('Cerrar')
                 ->modalWidth('7xl')
                 ->visible(function (): bool {
-                    // BEXIA_V5523V2_CFDI_AUDIT_ADMIN_ONLY
+                    // BEXIA_V5523V3_CFDI_AUDIT_VISIBLE_CANCELLED
                     $user = auth()->user();
 
                     if (! $user) {
@@ -36,11 +36,37 @@ class ViewInvoice extends ViewRecord
                     }
 
                     $isAdmin = method_exists($user, 'hasAnyRole')
-                        ? $user->hasAnyRole(['Super Administrador', 'Administrador', 'Admin', 'admin', 'super_admin'])
+                        ? $user->hasAnyRole([
+                            'Super Administrador',
+                            'Administrador',
+                            'Admin',
+                            'admin',
+                            'super_admin',
+                        ])
                         : false;
 
-                    return $isAdmin
-                        && (filled($this->record->cfdi_uuid) || filled($this->record->cfdi_status));
+                    $canAudit = $isAdmin
+                        || $user->can('settings.access')
+                        || $user->can('invoicing.audit');
+
+                    if (! $canAudit) {
+                        return false;
+                    }
+
+                    $invoice = $this->record?->refresh();
+
+                    if (! $invoice) {
+                        return false;
+                    }
+
+                    if (filled($invoice->cfdi_uuid) || filled($invoice->cfdi_status)) {
+                        return true;
+                    }
+
+                    return \Illuminate\Support\Facades\Schema::hasTable('invoice_cfdi_audits')
+                        && \Illuminate\Support\Facades\DB::table('invoice_cfdi_audits')
+                            ->where('invoice_id', $invoice->id)
+                            ->exists();
                 })
                 ->modalContent(function () {
                     $invoice = $this->record->refresh();
