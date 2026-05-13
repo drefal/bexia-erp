@@ -13,6 +13,12 @@ class BillingInvoiceDownloadController extends Controller
 {
     public function __invoke(Request $request, Invoice $invoice, string $type): BinaryFileResponse
     {
+
+        // BEXIA_V5523T7_DOWNLOAD_CURRENT_CFDI_PDF_CALL
+        if ((string) ($type ?? '') === 'pdf') {
+            return $this->downloadCurrentPdfFile($invoice);
+        }
+
         abort_unless(auth()->check(), 403);
 
         $type = strtolower(trim($type));
@@ -45,12 +51,31 @@ class BillingInvoiceDownloadController extends Controller
     {
         $this->ensureStamped($invoice);
 
-        $path = $this->ensurePdf($invoice);
+        /*
+         * BEXIA_V5523T8_DOWNLOAD_PDF_CURRENT_PATH
+         * Usar exclusivamente el PDF vigente de invoices.cfdi_pdf_path.
+         * Ese es el mismo archivo que ya usa correctamente el correo.
+         */
+        $invoice->refresh();
+
+        $path = trim((string) ($invoice->cfdi_pdf_path ?? ''));
+
+        abort_if($path === '', 404, 'La factura no tiene PDF CFDI generado.');
+        abort_if(! Storage::disk('local')->exists($path), 404, 'No existe el PDF CFDI.');
+
+        $fullPath = Storage::disk('local')->path($path);
+
+        abort_if(! is_readable($fullPath), 500, 'El PDF CFDI existe pero no es legible por la aplicación.');
 
         return response()->download(
-            Storage::disk('local')->path($path),
+            $fullPath,
             $this->baseFilename($invoice).'.pdf',
-            ['Content-Type' => 'application/pdf']
+            [
+                'Content-Type' => 'application/pdf',
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+            ]
         );
     }
 
@@ -125,4 +150,42 @@ class BillingInvoiceDownloadController extends Controller
 
         return 'cfdi_'.$series.'_'.$folio.'_'.$uuid;
     }
+
+    private function downloadCurrentPdfFile(Invoice $invoice): BinaryFileResponse
+    {
+        /*
+         * BEXIA_V5523T7_DOWNLOAD_CURRENT_CFDI_PDF
+         * La descarga PDF debe usar el PDF vigente guardado en invoices.cfdi_pdf_path.
+         * Este archivo ya es el mismo que usa el correo CFDI.
+         */
+        $invoice->refresh();
+
+        $path = (string) ($invoice->cfdi_pdf_path ?? '');
+
+        if ($path === '') {
+            abort(404, 'La factura no tiene PDF CFDI generado.');
+        }
+
+        if (! Storage::disk('local')->exists($path)) {
+            abort(404, 'El PDF CFDI no existe en almacenamiento.');
+        }
+
+        $fullPath = Storage::disk('local')->path($path);
+
+        if (! is_readable($fullPath)) {
+            abort(500, 'El PDF CFDI existe pero no es legible por la aplicación.');
+        }
+
+        $filename = $this->baseFilename($invoice).'.pdf';
+
+        return response()
+            ->download($fullPath, $filename, [
+                'Content-Type' => 'application/pdf',
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                'Pragma' => 'no-cache',
+                'Expires' => '0',
+            ]);
+    }
+
+
 }

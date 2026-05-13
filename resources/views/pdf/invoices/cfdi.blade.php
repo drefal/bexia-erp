@@ -422,6 +422,495 @@
     </style>
 </head>
 <body>
+
+@php
+    /*
+     * BEXIA_V5523T2_PDF_BRANCH_FROM_BILLING_SERIES
+     * Sucursal PDF:
+     * invoices.billing_series_id -> billing_series.branch_id -> branches.id
+     * Si no encuentra sucursal, usa empresa.
+     */
+
+    $__pdfInvoice = $invoice ?? ($record ?? null);
+
+    $__pdfRegimenFiscalMapT2 = [
+        '601' => 'General de Ley Personas Morales',
+        '603' => 'Personas Morales con Fines no Lucrativos',
+        '605' => 'Sueldos y Salarios e Ingresos Asimilados a Salarios',
+        '606' => 'Arrendamiento',
+        '607' => 'Régimen de Enajenación o Adquisición de Bienes',
+        '608' => 'Demás ingresos',
+        '610' => 'Residentes en el Extranjero sin Establecimiento Permanente en México',
+        '611' => 'Ingresos por Dividendos (socios y accionistas)',
+        '612' => 'Personas Físicas con Actividades Empresariales y Profesionales',
+        '614' => 'Ingresos por intereses',
+        '615' => 'Régimen de los ingresos por obtención de premios',
+        '616' => 'Sin obligaciones fiscales',
+        '620' => 'Sociedades Cooperativas de Producción que optan por diferir sus ingresos',
+        '621' => 'Incorporación Fiscal',
+        '622' => 'Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras',
+        '623' => 'Opcional para Grupos de Sociedades',
+        '624' => 'Coordinados',
+        '625' => 'Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas',
+        '626' => 'Régimen Simplificado de Confianza',
+    ];
+
+    $__pdfFormatRegimenT2 = function ($code) use ($__pdfRegimenFiscalMapT2): string {
+        $code = trim((string) $code);
+
+        if ($code === '') {
+            return '';
+        }
+
+        return $code.' - '.($__pdfRegimenFiscalMapT2[$code] ?? 'Régimen fiscal SAT');
+    };
+
+    $__pdfRowNameT2 = function (string $table, int $id): string {
+        if ($id <= 0 || ! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return '';
+        }
+
+        $row = \Illuminate\Support\Facades\DB::table($table)->where('id', $id)->first();
+
+        if (! $row) {
+            return '';
+        }
+
+        foreach ([
+            'commercial_name',
+            'display_name',
+            'name',
+            'branch_name',
+            'sucursal_name',
+            'store_name',
+            'location_name',
+            'warehouse_name',
+            'description',
+            'city',
+        ] as $field) {
+            $value = trim((string) ($row->{$field} ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    };
+
+    $__pdfCompanyNameT2 = function () use ($__pdfInvoice, $__pdfRowNameT2): string {
+        $companyId = (int) data_get($__pdfInvoice, 'company_id');
+
+        if ($companyId > 0) {
+            $name = $__pdfRowNameT2('companies', $companyId);
+
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        foreach ([
+            'issuer_name',
+            'issuer_fiscal_name',
+            'company_name',
+            'company_fiscal_name',
+        ] as $field) {
+            $value = trim((string) data_get($__pdfInvoice, $field));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    };
+
+    $__pdfBranchNameT2 = '';
+
+    /*
+     * 1) Ruta comprobada en PROD:
+     * invoice.billing_series_id=2 -> billing_series.branch_id=1 -> branches.id=1
+     */
+    $billingSeriesIdT2 = (int) data_get($__pdfInvoice, 'billing_series_id');
+
+    if ($billingSeriesIdT2 > 0 && \Illuminate\Support\Facades\Schema::hasTable('billing_series')) {
+        $seriesT2 = \Illuminate\Support\Facades\DB::table('billing_series')->where('id', $billingSeriesIdT2)->first();
+
+        if ($seriesT2) {
+            $branchIdT2 = (int) ($seriesT2->branch_id ?? 0);
+
+            if ($branchIdT2 > 0) {
+                $__pdfBranchNameT2 = $__pdfRowNameT2('branches', $branchIdT2);
+            }
+
+            if ($__pdfBranchNameT2 === '') {
+                foreach (['branch_name', 'sucursal_name', 'store_name', 'location_name', 'warehouse_name'] as $field) {
+                    $value = trim((string) ($seriesT2->{$field} ?? ''));
+
+                    if ($value !== '') {
+                        $__pdfBranchNameT2 = $value;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+     * 2) Fallbacks directos de invoice.
+     */
+    if ($__pdfBranchNameT2 === '') {
+        foreach ([
+            'branch_id' => 'branches',
+            'sucursal_id' => 'branches',
+            'warehouse_id' => 'warehouses',
+        ] as $field => $table) {
+            $id = (int) data_get($__pdfInvoice, $field);
+
+            if ($id > 0) {
+                $__pdfBranchNameT2 = $__pdfRowNameT2($table, $id);
+
+                if ($__pdfBranchNameT2 !== '') {
+                    break;
+                }
+            }
+        }
+    }
+
+    /*
+     * 3) Nunca usar "Matriz" como fallback final si no es sucursal real.
+     */
+    if ($__pdfBranchNameT2 === '' || mb_strtolower($__pdfBranchNameT2) === 'matriz') {
+        $__pdfBranchNameT2 = $__pdfCompanyNameT2();
+    }
+
+    $__pdfIssuerRegimenCodeT2 = trim((string) (
+        data_get($__pdfInvoice, 'issuer_fiscal_regime')
+        ?: data_get($__pdfInvoice, 'company_fiscal_regime')
+        ?: data_get($__pdfInvoice, 'fiscal_regime')
+        ?: data_get($__pdfInvoice, 'regimen_fiscal')
+        ?: data_get($issuer ?? [], 'fiscal_regime')
+        ?: data_get($issuer ?? [], 'regimen_fiscal')
+        ?: data_get($company ?? [], 'fiscal_regime')
+        ?: data_get($company ?? [], 'regimen_fiscal')
+        ?: '626'
+    ));
+
+    $__pdfIssuerRegimenLabelT2 = $__pdfFormatRegimenT2($__pdfIssuerRegimenCodeT2);
+
+    // BEXIA_V5523T3_BRANCH_DASH_FALLBACK
+    if (trim((string) $__pdfBranchNameT2) === '' || trim((string) $__pdfBranchNameT2) === '-') {
+        $__pdfBranchNameT2 = $__pdfCompanyNameT2();
+    }
+
+@endphp
+
+
+
+@php
+    /*
+     * BEXIA_V5523T1_PDF_BRANCH_AND_FISCAL_REGIME
+     * PDF CFDI:
+     * - Sucursal real si existe.
+     * - Si no hay sucursal, usar empresa.
+     * - Régimen fiscal como código - nombre.
+     */
+
+    $__pdfInvoice = $invoice ?? ($record ?? null);
+
+    $__pdfRegimenFiscalMap = [
+        '601' => 'General de Ley Personas Morales',
+        '603' => 'Personas Morales con Fines no Lucrativos',
+        '605' => 'Sueldos y Salarios e Ingresos Asimilados a Salarios',
+        '606' => 'Arrendamiento',
+        '607' => 'Régimen de Enajenación o Adquisición de Bienes',
+        '608' => 'Demás ingresos',
+        '610' => 'Residentes en el Extranjero sin Establecimiento Permanente en México',
+        '611' => 'Ingresos por Dividendos (socios y accionistas)',
+        '612' => 'Personas Físicas con Actividades Empresariales y Profesionales',
+        '614' => 'Ingresos por intereses',
+        '615' => 'Régimen de los ingresos por obtención de premios',
+        '616' => 'Sin obligaciones fiscales',
+        '620' => 'Sociedades Cooperativas de Producción que optan por diferir sus ingresos',
+        '621' => 'Incorporación Fiscal',
+        '622' => 'Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras',
+        '623' => 'Opcional para Grupos de Sociedades',
+        '624' => 'Coordinados',
+        '625' => 'Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas',
+        '626' => 'Régimen Simplificado de Confianza',
+    ];
+
+    $__pdfFormatRegimenFiscal = function ($code) use ($__pdfRegimenFiscalMap): string {
+        $code = trim((string) $code);
+
+        if ($code === '') {
+            return '';
+        }
+
+        return $code.' - '.($__pdfRegimenFiscalMap[$code] ?? 'Régimen fiscal SAT');
+    };
+
+    $__pdfCompanyName = function () use ($__pdfInvoice): string {
+        $companyId = (int) data_get($__pdfInvoice, 'company_id');
+
+        if ($companyId > 0 && \Illuminate\Support\Facades\Schema::hasTable('companies')) {
+            $company = \Illuminate\Support\Facades\DB::table('companies')->where('id', $companyId)->first();
+
+            if ($company) {
+                foreach ([
+                    'commercial_name',
+                    'display_name',
+                    'name',
+                    'business_name',
+                    'legal_name',
+                    'fiscal_name',
+                ] as $field) {
+                    $value = trim((string) ($company->{$field} ?? ''));
+
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
+        }
+
+        foreach ([
+            'issuer.name',
+            'issuer.fiscal_name',
+            'issuer.legal_name',
+            'company.name',
+            'company.commercial_name',
+            'company.display_name',
+        ] as $key) {
+            $value = trim((string) data_get(get_defined_vars(), $key));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    };
+
+    $__pdfRowName = function (string $table, int $id): string {
+        if ($id <= 0 || ! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return '';
+        }
+
+        $row = \Illuminate\Support\Facades\DB::table($table)->where('id', $id)->first();
+
+        if (! $row) {
+            return '';
+        }
+
+        foreach ([
+            'commercial_name',
+            'display_name',
+            'name',
+            'branch_name',
+            'sucursal_name',
+            'store_name',
+            'location_name',
+            'warehouse_name',
+            'description',
+            'city',
+        ] as $field) {
+            $value = trim((string) ($row->{$field} ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    };
+
+    $__pdfBranchFromRow = function (string $table, int $id, bool $allowOwnName = true) use (&$__pdfBranchFromRow, $__pdfRowName): string {
+        if ($id <= 0 || ! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return '';
+        }
+
+        $row = \Illuminate\Support\Facades\DB::table($table)->where('id', $id)->first();
+
+        if (! $row) {
+            return '';
+        }
+
+        foreach ([
+            'branch_id' => ['branches', 'company_branches', 'branch_offices'],
+            'company_branch_id' => ['company_branches', 'branches', 'branch_offices'],
+            'sucursal_id' => ['branches', 'company_branches', 'branch_offices'],
+            'store_id' => ['stores', 'branches', 'company_branches'],
+            'location_id' => ['locations', 'branches', 'company_branches'],
+            'warehouse_id' => ['warehouses', 'branches', 'company_branches'],
+        ] as $field => $tables) {
+            $linkedId = (int) ($row->{$field} ?? 0);
+
+            if ($linkedId <= 0) {
+                continue;
+            }
+
+            foreach ($tables as $linkedTable) {
+                $name = $__pdfRowName($linkedTable, $linkedId);
+
+                if ($name !== '') {
+                    return $name;
+                }
+            }
+        }
+
+        if (! $allowOwnName) {
+            return '';
+        }
+
+        return $__pdfRowName($table, $id);
+    };
+
+    $__pdfBranchName = '';
+
+    foreach ([
+        'branch_name',
+        'sucursal_name',
+        'store_name',
+        'location_name',
+        'warehouse_name',
+    ] as $field) {
+        $value = trim((string) data_get($__pdfInvoice, $field));
+
+        if ($value !== '') {
+            $__pdfBranchName = $value;
+            break;
+        }
+    }
+
+    if ($__pdfBranchName === '') {
+        $directLookupMap = [
+            'branch_id' => ['branches', 'company_branches', 'branch_offices'],
+            'company_branch_id' => ['company_branches', 'branches', 'branch_offices'],
+            'sucursal_id' => ['branches', 'company_branches', 'branch_offices'],
+            'store_id' => ['stores', 'branches', 'company_branches'],
+            'location_id' => ['locations', 'branches', 'company_branches'],
+            'warehouse_id' => ['warehouses', 'branches', 'company_branches'],
+        ];
+
+        foreach ($directLookupMap as $field => $tables) {
+            $id = (int) data_get($__pdfInvoice, $field);
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            foreach ($tables as $table) {
+                $__pdfBranchName = $__pdfBranchFromRow($table, $id, true);
+
+                if ($__pdfBranchName !== '') {
+                    break 2;
+                }
+            }
+        }
+    }
+
+    if ($__pdfBranchName === '') {
+        $posLookupMap = [
+            'point_of_sale_id' => ['points_of_sale', 'sale_points', 'pos_points', 'pos_terminals', 'cash_registers', 'pos_registers'],
+            'sale_point_id' => ['sale_points', 'points_of_sale', 'pos_points', 'pos_terminals', 'cash_registers', 'pos_registers'],
+            'pos_id' => ['pos_points', 'points_of_sale', 'sale_points', 'pos_terminals'],
+            'pos_terminal_id' => ['pos_terminals', 'points_of_sale', 'sale_points'],
+            'cash_register_id' => ['cash_registers', 'pos_registers', 'points_of_sale', 'sale_points'],
+        ];
+
+        foreach ($posLookupMap as $field => $tables) {
+            $id = (int) data_get($__pdfInvoice, $field);
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            foreach ($tables as $table) {
+                $__pdfBranchName = $__pdfBranchFromRow($table, $id, false);
+
+                if ($__pdfBranchName !== '') {
+                    break 2;
+                }
+            }
+        }
+    }
+
+    /*
+     * Si viene de serie CFDI, solo usar la serie para llegar a sucursal/PDV.
+     * No usar billing_series.name porque puede ser "Facturación Prueba DEV".
+     */
+    if ($__pdfBranchName === '') {
+        $billingSeriesId = (int) data_get($__pdfInvoice, 'billing_series_id');
+
+        if ($billingSeriesId > 0 && \Illuminate\Support\Facades\Schema::hasTable('billing_series')) {
+            $series = \Illuminate\Support\Facades\DB::table('billing_series')->where('id', $billingSeriesId)->first();
+
+            if ($series) {
+                foreach ([
+                    'branch_name',
+                    'sucursal_name',
+                    'store_name',
+                    'location_name',
+                    'warehouse_name',
+                ] as $field) {
+                    $value = trim((string) ($series->{$field} ?? ''));
+
+                    if ($value !== '') {
+                        $__pdfBranchName = $value;
+                        break;
+                    }
+                }
+
+                if ($__pdfBranchName === '') {
+                    foreach ([
+                        'branch_id' => ['branches', 'company_branches', 'branch_offices'],
+                        'company_branch_id' => ['company_branches', 'branches', 'branch_offices'],
+                        'sucursal_id' => ['branches', 'company_branches', 'branch_offices'],
+                        'store_id' => ['stores', 'branches', 'company_branches'],
+                        'warehouse_id' => ['warehouses', 'branches', 'company_branches'],
+                        'point_of_sale_id' => ['points_of_sale', 'sale_points', 'pos_points', 'pos_terminals', 'cash_registers', 'pos_registers'],
+                        'sale_point_id' => ['sale_points', 'points_of_sale', 'pos_points', 'pos_terminals', 'cash_registers', 'pos_registers'],
+                        'pos_id' => ['pos_points', 'points_of_sale', 'sale_points', 'pos_terminals'],
+                        'pos_terminal_id' => ['pos_terminals', 'points_of_sale', 'sale_points'],
+                        'cash_register_id' => ['cash_registers', 'pos_registers', 'points_of_sale', 'sale_points'],
+                    ] as $field => $tables) {
+                        $id = (int) ($series->{$field} ?? 0);
+
+                        if ($id <= 0) {
+                            continue;
+                        }
+
+                        foreach ($tables as $table) {
+                            $__pdfBranchName = $__pdfBranchFromRow($table, $id, str_contains($field, 'branch') || str_contains($field, 'sucursal') || str_contains($field, 'store') || str_contains($field, 'warehouse'));
+
+                            if ($__pdfBranchName !== '') {
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if ($__pdfBranchName === '' || mb_strtolower($__pdfBranchName) === 'matriz') {
+        $__pdfBranchName = $__pdfCompanyName();
+    }
+
+    $__pdfIssuerRegimenCode = trim((string) (
+        data_get($issuer ?? [], 'fiscal_regime')
+        ?: data_get($issuer ?? [], 'regimen_fiscal')
+        ?: data_get($company ?? [], 'fiscal_regime')
+        ?: data_get($company ?? [], 'regimen_fiscal')
+        ?: data_get($__pdfInvoice, 'issuer_fiscal_regime')
+        ?: data_get($__pdfInvoice, 'company_fiscal_regime')
+    ));
+
+    $__pdfRegimenFiscalEmisor = $__pdfFormatRegimenFiscal($__pdfIssuerRegimenCode);
+@endphp
+
+
 @if (! $isStamped)
     <div class="preliminar">NO TIMBRADO</div>
 @endif
@@ -440,14 +929,14 @@
         <div class="company-sub">
             R.F.C.: {{ $company->tax_id ?? '' }}
             &nbsp; • &nbsp;
-            Régimen Fiscal: {{ $company->tax_regime ?? '' }}
+            Régimen Fiscal: {{ $__pdfIssuerRegimenLabelT2 }}
         </div>
         <div class="company-address">{{ $companyAddress }}</div>
     </div>
 
     <div class="branch-col">
         <div class="branch-title">SUCURSAL</div>
-        <div>{{ $branchLabel ?: 'Matriz' }}</div>
+        <div>{{ $__pdfBranchNameT2 }}</div>
     </div>
 </div>
 
@@ -604,7 +1093,7 @@
             Certificado del emisor: {{ $xmlInfo['issuer_certificate'] ?? '' }}
             | Certificado SAT: {{ $xmlInfo['sat_certificate'] ?? '' }}
             | Lugar de expedición: {{ $xmlInfo['expedition_place'] ?? ($company->fiscal_postal_code ?? $company->postal_code ?? '') }}
-            | Régimen Fiscal: {{ $xmlInfo['issuer_regime'] ?? ($company->tax_regime ?? '') }}
+            | Régimen Fiscal: {{ $__pdfIssuerRegimenLabelT2 ?: ($xmlInfo['issuer_regime'] ?? ($company->tax_regime ?? '')) }}
             | Fecha de Emisión: {{ $xmlInfo['emission_date'] ?? '' }}
             | Fecha de Certificación: {{ $xmlInfo['stamp_date'] ?? '' }}
             | Folio fiscal (UUID): {{ $invoice->cfdi_uuid ?: ($xmlInfo['uuid'] ?? '') }}

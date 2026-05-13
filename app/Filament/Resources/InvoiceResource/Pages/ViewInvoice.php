@@ -85,12 +85,13 @@ class ViewInvoice extends ViewRecord
                 ->url(fn (): string => route('billing.invoices.download', ['invoice' => $this->record, 'type' => 'xml']))
                 ->openUrlInNewTab(),
 
+            /* BEXIA_V5523T8_DOWNLOAD_PDF_CACHE_BUST */
             Actions\Action::make('download_cfdi_pdf')
                 ->label('Descargar PDF')
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('gray')
                 ->visible(fn (): bool => $this->isStamped())
-                ->url(fn (): string => route('billing.invoices.download', ['invoice' => $this->record, 'type' => 'pdf']))
+                ->url(fn (): string => route('billing.invoices.download', ['invoice' => $this->record, 'type' => 'pdf']).'?v='.now()->timestamp)
                 ->openUrlInNewTab(),
 
             Actions\Action::make('download_cfdi_zip')
