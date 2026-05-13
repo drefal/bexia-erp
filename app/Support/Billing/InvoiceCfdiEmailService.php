@@ -135,21 +135,12 @@ class InvoiceCfdiEmailService
 
         $base = $this->baseFilename($invoice);
         $displayFolio = $this->displayFolio($invoice);
-        $subject = 'Factura '.$displayFolio.' - CFDI '.$invoice->cfdi_uuid;
+        $subject = $this->defaultSubject($invoice);
 
         $body = trim((string) ($message ?: ''));
 
         if ($body === '') {
-            $body = implode("\n", [
-                'Buen día.',
-                '',
-                'Adjuntamos la factura CFDI '.$displayFolio.'.',
-                '',
-                'UUID: '.$invoice->cfdi_uuid,
-                'Total: $'.number_format((float) ($invoice->total ?? 0), 2),
-                '',
-                'Saludos.',
-            ]);
+            $body = $this->defaultMessage($invoice);
         }
 
         $html = '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#111827;">'
@@ -271,6 +262,309 @@ class InvoiceCfdiEmailService
 
         return trim((string) ($invoice->cfdi_pdf_path ?? ''));
     }
+
+
+    public function defaultSubject(Invoice $invoice): string
+    {
+        return 'Factura de '.$this->companyDisplayName($invoice);
+    }
+
+    public function defaultMessage(Invoice $invoice): string
+    {
+        $date = $this->invoiceDateLabel($invoice);
+        $place = $this->branchDisplayName($invoice);
+
+        if ($place === '') {
+            $place = $this->companyDisplayName($invoice);
+        }
+
+        $purchaseLine = 'Adjuntamos la factura de tu compra';
+
+        if ($date !== '') {
+            $purchaseLine .= ' del día '.$date;
+        }
+
+        if ($place !== '') {
+            $purchaseLine .= ' en '.$place;
+        }
+
+        $purchaseLine .= '.';
+
+        return implode("\n", [
+            'Buen día.',
+            '',
+            $purchaseLine,
+            '',
+            'UUID: '.(string) ($invoice->cfdi_uuid ?? ''),
+            'Total: $'.number_format((float) ($invoice->total ?? 0), 2),
+            '',
+            'Saludos.',
+        ]);
+    }
+
+    private function companyDisplayName(Invoice $invoice): string
+    {
+        $companyId = (int) ($invoice->company_id ?? 0);
+
+        if ($companyId > 0 && Schema::hasTable('companies')) {
+            $company = DB::table('companies')->where('id', $companyId)->first();
+
+            if ($company) {
+                foreach ([
+                    'commercial_name',
+                    'display_name',
+                    'name',
+                    'business_name',
+                    'legal_name',
+                ] as $field) {
+                    $value = trim((string) ($company->{$field} ?? ''));
+
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
+        }
+
+        return 'BexiaERP';
+    }
+
+    private function branchDisplayName(Invoice $invoice): string
+    {
+        /*
+         * BEXIA_V5523R9B2D_BRANCH_THEN_COMPANY_EMAIL
+         * Solo devuelve sucursal real.
+         * No usa billing_series.name porque eso puede ser "Facturación Prueba DEV".
+         * Si no encuentra sucursal, defaultMessage usará empresa.
+         */
+
+        foreach ([
+            'branch_name',
+            'sucursal_name',
+            'store_name',
+            'location_name',
+            'warehouse_name',
+        ] as $field) {
+            $value = trim((string) ($invoice->{$field} ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        $lookups = [];
+
+        $directLookupMap = [
+            'branch_id' => ['branches', 'company_branches', 'branch_offices'],
+            'company_branch_id' => ['company_branches', 'branches', 'branch_offices'],
+            'sucursal_id' => ['branches', 'company_branches', 'branch_offices'],
+            'store_id' => ['stores', 'branches', 'company_branches'],
+            'location_id' => ['locations', 'branches', 'company_branches'],
+            'warehouse_id' => ['warehouses', 'branches', 'company_branches'],
+        ];
+
+        foreach ($directLookupMap as $field => $tables) {
+            $id = (int) ($invoice->{$field} ?? 0);
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            foreach ($tables as $table) {
+                $lookups[] = [$table, $id, true];
+            }
+        }
+
+        /*
+         * PDV/caja: solo se usa para llegar a sucursal.
+         * No usamos el nombre propio del PDV como sucursal.
+         */
+        $posLookupMap = [
+            'point_of_sale_id' => ['points_of_sale', 'sale_points', 'pos_points', 'pos_terminals', 'cash_registers', 'pos_registers'],
+            'sale_point_id' => ['sale_points', 'points_of_sale', 'pos_points', 'pos_terminals', 'cash_registers', 'pos_registers'],
+            'pos_id' => ['pos_points', 'points_of_sale', 'sale_points', 'pos_terminals'],
+            'pos_terminal_id' => ['pos_terminals', 'points_of_sale', 'sale_points'],
+            'cash_register_id' => ['cash_registers', 'pos_registers', 'points_of_sale', 'sale_points'],
+        ];
+
+        foreach ($posLookupMap as $field => $tables) {
+            $id = (int) ($invoice->{$field} ?? 0);
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            foreach ($tables as $table) {
+                $lookups[] = [$table, $id, false];
+            }
+        }
+
+        /*
+         * Facturación: billing_series solo debe apuntar a sucursal/PDV.
+         * No se usa billing_series.name/display_name.
+         */
+        $billingSeriesId = (int) ($invoice->billing_series_id ?? 0);
+
+        if ($billingSeriesId > 0 && Schema::hasTable('billing_series')) {
+            $series = DB::table('billing_series')->where('id', $billingSeriesId)->first();
+
+            if ($series) {
+                foreach ([
+                    'branch_name',
+                    'sucursal_name',
+                    'store_name',
+                    'location_name',
+                    'warehouse_name',
+                ] as $field) {
+                    $value = trim((string) ($series->{$field} ?? ''));
+
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+
+                foreach ($directLookupMap as $field => $tables) {
+                    $id = (int) ($series->{$field} ?? 0);
+
+                    if ($id <= 0) {
+                        continue;
+                    }
+
+                    foreach ($tables as $table) {
+                        $lookups[] = [$table, $id, true];
+                    }
+                }
+
+                foreach ($posLookupMap as $field => $tables) {
+                    $id = (int) ($series->{$field} ?? 0);
+
+                    if ($id <= 0) {
+                        continue;
+                    }
+
+                    foreach ($tables as $table) {
+                        $lookups[] = [$table, $id, false];
+                    }
+                }
+            }
+        }
+
+        foreach ($lookups as [$table, $id, $allowOwnName]) {
+            $name = $this->lookupBranchDisplayName($table, $id, $allowOwnName);
+
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        return '';
+    }
+
+    private function lookupBranchDisplayName(string $table, int $id, bool $allowOwnName = true): string
+    {
+        if ($id <= 0 || ! Schema::hasTable($table)) {
+            return '';
+        }
+
+        $row = DB::table($table)->where('id', $id)->first();
+
+        if (! $row) {
+            return '';
+        }
+
+        foreach ([
+            'branch_id' => ['branches', 'company_branches', 'branch_offices'],
+            'company_branch_id' => ['company_branches', 'branches', 'branch_offices'],
+            'sucursal_id' => ['branches', 'company_branches', 'branch_offices'],
+            'store_id' => ['stores', 'branches', 'company_branches'],
+            'location_id' => ['locations', 'branches', 'company_branches'],
+            'warehouse_id' => ['warehouses', 'branches', 'company_branches'],
+        ] as $field => $tables) {
+            $linkedId = (int) ($row->{$field} ?? 0);
+
+            if ($linkedId <= 0) {
+                continue;
+            }
+
+            foreach ($tables as $linkedTable) {
+                $linkedName = $this->lookupRowDisplayName($linkedTable, $linkedId);
+
+                if ($linkedName !== '') {
+                    return $linkedName;
+                }
+            }
+        }
+
+        if (! $allowOwnName) {
+            return '';
+        }
+
+        return $this->rowDisplayName($row);
+    }
+
+    private function lookupRowDisplayName(string $table, int $id): string
+    {
+        if ($id <= 0 || ! Schema::hasTable($table)) {
+            return '';
+        }
+
+        $row = DB::table($table)->where('id', $id)->first();
+
+        if (! $row) {
+            return '';
+        }
+
+        return $this->rowDisplayName($row);
+    }
+
+    private function rowDisplayName(object $row): string
+    {
+        foreach ([
+            'commercial_name',
+            'display_name',
+            'name',
+            'branch_name',
+            'sucursal_name',
+            'store_name',
+            'warehouse_name',
+            'location_name',
+            'description',
+            'city',
+        ] as $field) {
+            $value = trim((string) ($row->{$field} ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    private function invoiceDateLabel(Invoice $invoice): string
+    {
+        foreach ([
+            'date',
+            'invoice_date',
+            'issued_at',
+            'created_at',
+        ] as $field) {
+            $value = $invoice->{$field} ?? null;
+
+            if (! $value) {
+                continue;
+            }
+
+            try {
+                return \Carbon\Carbon::parse($value)->format('d/m/Y');
+            } catch (Throwable $e) {
+                continue;
+            }
+        }
+
+        return '';
+    }
+
 
     private function baseFilename(Invoice $invoice): string
     {

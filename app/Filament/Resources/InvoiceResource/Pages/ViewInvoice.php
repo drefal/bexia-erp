@@ -36,16 +36,7 @@ class ViewInvoice extends ViewRecord
                     Textarea::make('message')
                         ->label('Mensaje')
                         ->rows(5)
-                        ->default(fn () => implode("\n", [
-                            'Buen dia.',
-                            '',
-                            'Adjuntamos la factura CFDI '.$this->record->cfdi_series.' '.$this->record->cfdi_folio.'.',
-                            '',
-                            'UUID: '.$this->record->cfdi_uuid,
-                            'Total: $'.number_format((float) ($this->record->total ?? 0), 2),
-                            '',
-                            'Saludos.',
-                        ])),
+                        ->default(fn () => app(\App\Support\Billing\InvoiceCfdiEmailService::class)->defaultMessage($this->record)),
                 ])
                 ->modalHeading('Enviar CFDI por correo')
                 ->modalSubmitActionLabel('Enviar correo')
