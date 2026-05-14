@@ -159,6 +159,58 @@
     }
 </style>
 
+
+<style id="v5527a-pos-product-images-style">
+    /*
+     * BEXIA_V5527A_POS_PRODUCT_IMAGES
+     * Mostrar imagen real del producto en PDV cuando exista image_path/image_url.
+     */
+    .product .pimg {
+        height: 58px;
+        border-radius: 10px;
+        background: #f8fafc;
+        overflow: hidden;
+        margin-bottom: 4px;
+    }
+
+    .product .pimg img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+
+    .product .pimg .v5527a-product-placeholder {
+        width: 100%;
+        height: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 27px;
+    }
+
+    .product .pimg img + .v5527a-product-placeholder {
+        display: none;
+    }
+
+    .product .pimg.v5527a-img-error .v5527a-product-placeholder {
+        display: inline-flex;
+    }
+
+    .thumb.v5527a-cart-thumb {
+        overflow: hidden;
+        background: #f8fafc;
+    }
+
+    .thumb.v5527a-cart-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+</style>
+
+
 </head>
 <body>
 @php
@@ -434,6 +486,48 @@
             ->values();
     }
 
+
+    /*
+     * BEXIA_V5527A_POS_PRODUCT_IMAGE_URL_HELPER
+     */
+    $v5527aProductImageUrl = function ($product): ?string {
+        $raw = trim((string) (
+            data_get($product, 'image_url')
+            ?: data_get($product, 'image_path')
+            ?: data_get($product, 'photo_path')
+            ?: data_get($product, 'thumbnail_path')
+            ?: ''
+        ));
+
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^https?:\/\//i', $raw)) {
+            return $raw;
+        }
+
+        $path = ltrim($raw, '/');
+
+        if (str_starts_with($path, 'storage/')) {
+            return '/'.$path;
+        }
+
+        foreach ([
+            'public/',
+            'app/public/',
+            'storage/app/public/',
+        ] as $prefix) {
+            if (str_starts_with($path, $prefix)) {
+                $path = substr($path, strlen($prefix));
+                break;
+            }
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('public')->url($path);
+    };
+
+
     // V5.51.5E - Productos visibles por categoría.
     $v5515eVisibleProductIds = $v5336Products
         ->map(fn ($product) => (string) data_get($product, 'id', ''))
@@ -491,6 +585,10 @@
                                 $product['description'] ?? '',
                             ])));
 
+                            $v5527aImageUrl = is_callable($v5527aProductImageUrl ?? null)
+                                ? $v5527aProductImageUrl($product)
+                                : null;
+
                             $v5345TaxRate = (float) (
                                 $product['tax_rate']
                                 ?? $product['iva_rate']
@@ -544,8 +642,16 @@
                             data-product-tax-rate="{{ $v5345TaxRate }}"
                             data-product-type="{{ e($v5451ProductType) }}"
                             data-product-is-service="{{ $v5451IsService ? '1' : '0' }}"
+                            data-product-image-url="{{ e($v5527aImageUrl ?? '') }}"
                         >
-                            <div class="pimg">🛍️</div>
+                            <div class="pimg">
+                                @if(!empty($v5527aImageUrl))
+                                    <img src="{{ $v5527aImageUrl }}" alt="{{ e($product['name'] ?? 'Producto') }}" loading="lazy" onerror="this.closest('.pimg').classList.add('v5527a-img-error'); this.remove();">
+                                    <span class="v5527a-product-placeholder">🛍️</span>
+                                @else
+                                    <span class="v5527a-product-placeholder">🛍️</span>
+                                @endif
+                            </div>
 
                             <div class="pname">{{ $product['name'] }}</div>
 
@@ -667,9 +773,17 @@
                                 data-product-tax-rate="{{ $v5345TaxRate }}"
                                 data-product-type="{{ e($v5451ProductType) }}"
                                 data-product-is-service="{{ $v5451IsService ? '1' : '0' }}"
+                            data-product-image-url="{{ e($v5527aImageUrl ?? '') }}"
                                 style="display:none;"
                             >
-                                <div class="pimg">🛍️</div>
+                                <div class="pimg">
+                                    @if(!empty($v5527aImageUrl))
+                                        <img src="{{ $v5527aImageUrl }}" alt="{{ e($product['name'] ?? 'Producto') }}" loading="lazy" onerror="this.closest('.pimg').classList.add('v5527a-img-error'); this.remove();">
+                                        <span class="v5527a-product-placeholder">🛍️</span>
+                                    @else
+                                        <span class="v5527a-product-placeholder">🛍️</span>
+                                    @endif
+                                </div>
                                 <div class="pname">{{ $product['name'] }}</div>
 
                                 @if(!empty($productReference))
@@ -2216,8 +2330,20 @@ document.addEventListener('DOMContentLoaded', function () {
             line.dataset.key = key;
 
             const thumb = document.createElement('div');
-            thumb.className = 'thumb';
-            thumb.textContent = '🛍️';
+            thumb.className = 'thumb v5527a-cart-thumb';
+
+            if (item.imageUrl) {
+                const img = document.createElement('img');
+                img.src = item.imageUrl;
+                img.alt = item.name || 'Producto';
+                img.loading = 'lazy';
+                img.onerror = function () {
+                    thumb.textContent = '🛍️';
+                };
+                thumb.appendChild(img);
+            } else {
+                thumb.textContent = '🛍️';
+            }
 
             const info = document.createElement('div');
 
@@ -2332,6 +2458,7 @@ document.addEventListener('DOMContentLoaded', function () {
             taxRate: toNumber(card.dataset.productTaxRate, 0.16),
             type: card.dataset.productType || 'stockable',
             isService: card.dataset.productIsService === '1' || card.dataset.productType === 'service',
+            imageUrl: card.dataset.productImageUrl || '',
         };
 
         if (!product.price || product.price < 0) {
