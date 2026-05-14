@@ -691,6 +691,13 @@ class PosGlobalInvoiceService
             'customer_postal_code' => $this->contactValue($contact, ['fiscal_postal_code', 'fiscal_zip', 'postal_code', 'zip_code'], (string) ($company->fiscal_postal_code ?? $company->postal_code ?? '')),
             'customer_email' => $this->contactValue($contact, ['email', 'billing_email', 'invoice_email'], ''),
             'customer_whatsapp_phone' => $this->contactValue($contact, ['whatsapp', 'whatsapp_phone', 'mobile', 'mobile_phone', 'phone'], ''),
+            /*
+             * BEXIA_V5526T_GLOBAL_PAYMENT_DEFAULTS_ON_SNAPSHOT
+             * El snapshot del contacto no debe dejar vacíos los datos de pago CFDI.
+             */
+            'payment_form_code' => '01',
+            'payment_method_code' => 'PUE',
+            'payment_terms' => 'Pago inmediato',
             'updated_at' => now(),
         ];
 

@@ -22,6 +22,7 @@ class EditInvoice extends EditRecord
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $data = $this->mergeGlobalInvoiceMetadataBeforeSave($data);
+        $data = $this->ensureGlobalInvoicePaymentDefaultsBeforeSave($data);
 
         $oldContactId = (int) ($this->record->contact_id ?? 0);
         $newContactId = (int) ($data['contact_id'] ?? 0);
@@ -150,6 +151,33 @@ class EditInvoice extends EditRecord
 
         return (bool) ($metadata['is_global_invoice'] ?? false)
             || (string) ($metadata['source'] ?? '') === 'pos_global_invoice';
+    }
+
+
+
+    private function ensureGlobalInvoicePaymentDefaultsBeforeSave(array $data): array
+    {
+        /*
+         * BEXIA_V5526T_GLOBAL_PAYMENT_DEFAULTS_ON_SAVE
+         * Una factura global PDV no debe quedar sin forma/metodo/condiciones de pago.
+         */
+        if (! $this->isGlobalInvoiceForPaymentDefaults()) {
+            return $data;
+        }
+
+        if (trim((string) ($data['payment_form_code'] ?? '')) === '') {
+            $data['payment_form_code'] = trim((string) ($this->record->payment_form_code ?? '')) ?: '01';
+        }
+
+        if (trim((string) ($data['payment_method_code'] ?? '')) === '') {
+            $data['payment_method_code'] = trim((string) ($this->record->payment_method_code ?? '')) ?: 'PUE';
+        }
+
+        if (trim((string) ($data['payment_terms'] ?? '')) === '') {
+            $data['payment_terms'] = trim((string) ($this->record->payment_terms ?? '')) ?: 'Pago inmediato';
+        }
+
+        return $data;
     }
 
 
