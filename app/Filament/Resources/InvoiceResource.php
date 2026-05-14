@@ -209,7 +209,7 @@ public static function canEdit(Model $record): bool
                      * Datos de pago CFDI visibles en Cabecera, antes de Información fiscal del cliente.
                      */
                     Forms\Components\Select::make('payment_form_code')
-                        ->label('Forma de pago SAT')
+                        ->label('Forma de pago')
                         ->options(static::paymentFormCodeOptions())
                         ->searchable()
                         ->disabled(fn (?Invoice $record): bool => static::isCfdiPaymentFieldsLocked($record))
@@ -528,12 +528,11 @@ public static function canEdit(Model $record): bool
     public static function paymentFormCodeOptions(): array
     {
         /*
-         * BEXIA_V5525J3_INVOICE_PAYMENT_FORMS_FROM_CONFIG
-         * En factura mostramos solo formas de pago internas activas,
-         * mapeadas a su clave SAT.
+         * BEXIA_V5525J6_INVOICE_PAYMENT_FORMS_FROM_COMPLETE_CATALOG
+         * La factura muestra el catálogo completo configurado en payment_forms.
          */
         if (! Schema::hasTable('payment_forms')) {
-            return [];
+            return static::satPaymentFormOptionsFallback();
         }
 
         $companyId = static::tenantCompanyId();
@@ -543,13 +542,15 @@ public static function canEdit(Model $record): bool
 
         if (Schema::hasColumn('payment_forms', 'company_id') && $companyId > 0) {
             $query->where(function ($query) use ($companyId): void {
-                $query->where('company_id', $companyId)->orWhereNull('company_id');
+                $query
+                    ->where('company_id', $companyId)
+                    ->orWhereNull('company_id');
             });
         }
 
-        return $query
+        $options = $query
             ->orderBy('sort_order')
-            ->orderBy('name')
+            ->orderBy('code')
             ->get()
             ->mapWithKeys(function ($form): array {
                 $satCode = trim((string) (($form->sat_payment_form_code ?? '') ?: ($form->code ?? '')));
@@ -558,21 +559,46 @@ public static function canEdit(Model $record): bool
                     return [];
                 }
 
-                $internalCode = trim((string) ($form->code ?? ''));
                 $name = trim((string) ($form->name ?? ''));
 
-                $label = trim(($internalCode !== '' ? "{$internalCode} - " : '').$name);
-
-                if ($label === '') {
-                    $label = $satCode;
-                }
-
                 return [
-                    $satCode => "{$label} / SAT {$satCode}",
+                    $satCode => "{$satCode} - {$name}",
                 ];
             })
             ->all();
+
+        return $options ?: static::satPaymentFormOptionsFallback();
     }
+
+
+    public static function satPaymentFormOptionsFallback(): array
+    {
+        return [
+            '01' => '01 - Efectivo',
+            '02' => '02 - Cheque nominativo',
+            '03' => '03 - Transferencia electrónica de fondos',
+            '04' => '04 - Tarjeta de crédito',
+            '05' => '05 - Monedero electrónico',
+            '06' => '06 - Dinero electrónico',
+            '08' => '08 - Vales de despensa',
+            '12' => '12 - Dación en pago',
+            '13' => '13 - Pago por subrogación',
+            '14' => '14 - Pago por consignación',
+            '15' => '15 - Condonación',
+            '17' => '17 - Compensación',
+            '23' => '23 - Novación',
+            '24' => '24 - Confusión',
+            '25' => '25 - Remisión de deuda',
+            '26' => '26 - Prescripción o caducidad',
+            '27' => '27 - A satisfacción del acreedor',
+            '28' => '28 - Tarjeta de débito',
+            '29' => '29 - Tarjeta de servicios',
+            '30' => '30 - Aplicación de anticipos',
+            '31' => '31 - Intermediario pagos',
+            '99' => '99 - Por definir',
+        ];
+    }
+
 
     public static function paymentMethodCodeOptions(): array
     {
