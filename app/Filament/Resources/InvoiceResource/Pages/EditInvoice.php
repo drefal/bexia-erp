@@ -21,6 +21,8 @@ class EditInvoice extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $data = $this->mergeGlobalInvoiceMetadataBeforeSave($data);
+
         $oldContactId = (int) ($this->record->contact_id ?? 0);
         $newContactId = (int) ($data['contact_id'] ?? 0);
 
@@ -88,6 +90,60 @@ class EditInvoice extends EditRecord
                 ->send();
         }
     }
+
+
+    private function mergeGlobalInvoiceMetadataBeforeSave(array $data): array
+    {
+        /*
+         * BEXIA_V5526O_SAVE_GLOBAL_INVOICE_INFORMATION_FIELDS
+         * Los campos visuales no son columnas; se guardan dentro de metadata.global_invoice.
+         */
+        $periodicity = trim((string) ($data['global_invoice_periodicity'] ?? ''));
+        $month = trim((string) ($data['global_invoice_month'] ?? ''));
+        $year = trim((string) ($data['global_invoice_year'] ?? ''));
+
+        unset(
+            $data['global_invoice_periodicity'],
+            $data['global_invoice_month'],
+            $data['global_invoice_year'],
+        );
+
+        $isGlobal = (string) ($this->record->source_type ?? $data['source_type'] ?? '') === 'pos_global_invoice';
+
+        if (! $isGlobal) {
+            return $data;
+        }
+
+        $metadata = $this->record->metadata ?? [];
+
+        if (is_string($metadata) && trim($metadata) !== '') {
+            $decoded = json_decode($metadata, true);
+            $metadata = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($metadata)) {
+            $metadata = [];
+        }
+
+        $global = $metadata['global_invoice'] ?? [];
+
+        if (! is_array($global)) {
+            $global = [];
+        }
+
+        $global['periodicity'] = $periodicity !== '' ? $periodicity : (string) ($global['periodicity'] ?? '01');
+        $global['month'] = $month !== '' ? str_pad((string) ((int) $month), 2, '0', STR_PAD_LEFT) : (string) ($global['month'] ?? now()->format('m'));
+        $global['year'] = $year !== '' ? $year : (string) ($global['year'] ?? now()->format('Y'));
+
+        $metadata['source'] = 'pos_global_invoice';
+        $metadata['is_global_invoice'] = true;
+        $metadata['global_invoice'] = $global;
+
+        $data['metadata'] = $metadata;
+
+        return $data;
+    }
+
 
     protected function getHeaderActions(): array
     {

@@ -239,6 +239,59 @@ public static function canEdit(Model $record): bool
                         ->helperText('Catálogo interno. Para tickets PDV se usará Pago inmediato.')
                         ->columnSpan(3),
 
+
+                    /*
+                     * BEXIA_V5526O_GLOBAL_INVOICE_INFORMATION_FIELDS
+                     * Solo para facturas globales PDV. Estos valores alimentan
+                     * el nodo cfdi:InformacionGlobal en el XML.
+                     */
+                    Forms\Components\Section::make('Información global CFDI')
+                        ->description('Solo aplica para facturas globales PDV. Se usa en el nodo InformacionGlobal del CFDI.')
+                        ->columns(3)
+                        ->visible(fn (?Invoice $record): bool => static::isGlobalInvoiceRecord($record))
+                        ->columnSpanFull()
+                        ->schema([
+                            Forms\Components\Select::make('global_invoice_periodicity')
+                                ->label('Periodicidad')
+                                ->options(static::globalInvoicePeriodicityOptions())
+                                ->default('01')
+                                ->afterStateHydrated(function (Forms\Components\Select $component, ?Invoice $record): void {
+                                    $component->state(static::globalInvoiceMetadataValue($record, 'periodicity', '01'));
+                                })
+                                ->disabled(fn (?Invoice $record): bool => static::isLocked($record))
+                                ->dehydrated(true)
+                                ->required()
+                                ->helperText('Ejemplo: 01 Diario, 04 Mensual.')
+                                ->columnSpan(1),
+
+                            Forms\Components\Select::make('global_invoice_month')
+                                ->label('Mes / bimestre')
+                                ->options(static::globalInvoiceMonthOptions())
+                                ->default(now()->format('m'))
+                                ->afterStateHydrated(function (Forms\Components\Select $component, ?Invoice $record): void {
+                                    $component->state(static::globalInvoiceMetadataValue($record, 'month', now()->format('m')));
+                                })
+                                ->disabled(fn (?Invoice $record): bool => static::isLocked($record))
+                                ->dehydrated(true)
+                                ->required()
+                                ->helperText('Para periodicidad bimestral usa 13 a 18.')
+                                ->columnSpan(1),
+
+                            Forms\Components\TextInput::make('global_invoice_year')
+                                ->label('Año')
+                                ->default(now()->format('Y'))
+                                ->afterStateHydrated(function (Forms\Components\TextInput $component, ?Invoice $record): void {
+                                    $component->state(static::globalInvoiceMetadataValue($record, 'year', now()->format('Y')));
+                                })
+                                ->numeric()
+                                ->minLength(4)
+                                ->maxLength(4)
+                                ->disabled(fn (?Invoice $record): bool => static::isLocked($record))
+                                ->dehydrated(true)
+                                ->required()
+                                ->columnSpan(1),
+                        ]),
+
                     Forms\Components\Section::make('Informacion fiscal del cliente')
                         ->description('Solo lectura. Si algun dato esta incorrecto, corrigelo en Contactos y vuelve a seleccionar el cliente.')
                         ->columns(1)
@@ -667,6 +720,94 @@ public static function canEdit(Model $record): bool
             'cancelled',
             'cancelled_internal',
         ], true);
+    }
+
+
+
+    public static function isGlobalInvoiceRecord(?Invoice $record): bool
+    {
+        if (! $record) {
+            return false;
+        }
+
+        if ((string) ($record->source_type ?? '') === 'pos_global_invoice') {
+            return true;
+        }
+
+        $metadata = static::invoiceMetadataArray($record);
+
+        return (bool) ($metadata['is_global_invoice'] ?? false)
+            || (string) ($metadata['source'] ?? '') === 'pos_global_invoice';
+    }
+
+    public static function globalInvoiceMetadataValue(?Invoice $record, string $key, string $default = ''): string
+    {
+        $metadata = static::invoiceMetadataArray($record);
+        $global = $metadata['global_invoice'] ?? [];
+
+        if (! is_array($global)) {
+            $global = [];
+        }
+
+        $value = trim((string) ($global[$key] ?? $default));
+
+        if ($key === 'month' && $value !== '') {
+            $value = str_pad((string) ((int) $value), 2, '0', STR_PAD_LEFT);
+        }
+
+        return $value !== '' ? $value : $default;
+    }
+
+    public static function invoiceMetadataArray(?Invoice $record): array
+    {
+        $metadata = $record?->metadata ?? null;
+
+        if (is_array($metadata)) {
+            return $metadata;
+        }
+
+        if (is_string($metadata) && trim($metadata) !== '') {
+            $decoded = json_decode($metadata, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
+    public static function globalInvoicePeriodicityOptions(): array
+    {
+        return [
+            '01' => '01 - Diario',
+            '02' => '02 - Semanal',
+            '03' => '03 - Quincenal',
+            '04' => '04 - Mensual',
+            '05' => '05 - Bimestral',
+        ];
+    }
+
+    public static function globalInvoiceMonthOptions(): array
+    {
+        return [
+            '01' => '01 - Enero',
+            '02' => '02 - Febrero',
+            '03' => '03 - Marzo',
+            '04' => '04 - Abril',
+            '05' => '05 - Mayo',
+            '06' => '06 - Junio',
+            '07' => '07 - Julio',
+            '08' => '08 - Agosto',
+            '09' => '09 - Septiembre',
+            '10' => '10 - Octubre',
+            '11' => '11 - Noviembre',
+            '12' => '12 - Diciembre',
+            '13' => '13 - Enero-Febrero',
+            '14' => '14 - Marzo-Abril',
+            '15' => '15 - Mayo-Junio',
+            '16' => '16 - Julio-Agosto',
+            '17' => '17 - Septiembre-Octubre',
+            '18' => '18 - Noviembre-Diciembre',
+        ];
     }
 
 
