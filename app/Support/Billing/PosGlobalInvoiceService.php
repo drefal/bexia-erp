@@ -122,10 +122,11 @@ class PosGlobalInvoiceService
             $year = (string) ($data['year'] ?? now()->format('Y'));
 
             $company = DB::table('companies')->where('id', $companyId)->first();
+            $publicGeneralContact = $this->ensurePublicGeneralContact($companyId, $company);
 
             $invoiceId = DB::table('invoices')->insertGetId([
                 'company_id' => $companyId,
-                'contact_id' => null,
+                'contact_id' => (int) ($publicGeneralContact->id ?? 0),
                 'number' => $this->nextNumber($companyId),
                 'status' => 'draft',
                 'source_type' => 'pos_global_invoice',
@@ -143,12 +144,12 @@ class PosGlobalInvoiceService
                 'issuer_tax_id' => (string) ($company->tax_id ?? ''),
                 'issuer_tax_regime' => (string) ($company->tax_regime ?? ''),
                 'issuer_postal_code' => (string) ($company->fiscal_postal_code ?? $company->postal_code ?? ''),
-                'customer_name' => 'Público en general',
-                'customer_fiscal_name' => 'Público en general',
+                'customer_name' => 'PUBLICO EN GENERAL',
+                'customer_fiscal_name' => 'PUBLICO EN GENERAL',
                 'customer_rfc' => 'XAXX010101000',
                 'customer_tax_regime_code' => '616',
                 'customer_cfdi_use_code' => 'S01',
-                'customer_postal_code' => (string) ($company->fiscal_postal_code ?? $company->postal_code ?? ''),
+                'customer_postal_code' => $this->contactValue($publicGeneralContact, ['fiscal_postal_code', 'postal_code', 'zip_code'], (string) ($company->fiscal_postal_code ?? $company->postal_code ?? '')),
                 'payment_form_code' => $paymentFormCode,
                 'payment_method_code' => 'PUE',
                 'payment_terms' => 'Pago inmediato',
@@ -433,6 +434,130 @@ class PosGlobalInvoiceService
         }
 
         return [];
+    }
+
+
+
+    private function ensurePublicGeneralContact(int $companyId, ?object $company = null): object
+    {
+        /*
+         * BEXIA_V5526G_PUBLIC_GENERAL_CONTACT_FOR_GLOBAL_INVOICE
+         * La factura global debe nacer ligada al contacto Público en General.
+         */
+        if (! Schema::hasTable('contacts')) {
+            return (object) [
+                'id' => null,
+                'name' => 'PUBLICO EN GENERAL',
+                'fiscal_name' => 'PUBLICO EN GENERAL',
+                'rfc' => 'XAXX010101000',
+                'tax_id' => 'XAXX010101000',
+                'fiscal_postal_code' => (string) ($company->fiscal_postal_code ?? $company->postal_code ?? ''),
+            ];
+        }
+
+        $query = DB::table('contacts');
+
+        if (Schema::hasColumn('contacts', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        $contact = (clone $query)
+            ->where(function ($query): void {
+                foreach (['rfc', 'tax_id', 'fiscal_tax_id'] as $column) {
+                    if (Schema::hasColumn('contacts', $column)) {
+                        $query->orWhere($column, 'XAXX010101000');
+                    }
+                }
+            })
+            ->first();
+
+        if (! $contact) {
+            $contact = (clone $query)
+                ->where(function ($query): void {
+                    foreach (['name', 'business_name', 'fiscal_name', 'legal_name'] as $column) {
+                        if (Schema::hasColumn('contacts', $column)) {
+                            $query->orWhereRaw('LOWER(COALESCE('.$column.', \'\')) LIKE ?', ['%publico en general%'])
+                                ->orWhereRaw('LOWER(COALESCE('.$column.', \'\')) LIKE ?', ['%público en general%']);
+                        }
+                    }
+                })
+                ->first();
+        }
+
+        $data = $this->publicGeneralContactData($companyId, $company);
+
+        if ($contact) {
+            DB::table('contacts')
+                ->where('id', (int) $contact->id)
+                ->update($this->filterColumns('contacts', $data + [
+                    'updated_at' => now(),
+                ]));
+
+            return DB::table('contacts')->where('id', (int) $contact->id)->first();
+        }
+
+        $insert = $this->filterColumns('contacts', $data + [
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $id = DB::table('contacts')->insertGetId($insert);
+
+        return DB::table('contacts')->where('id', (int) $id)->first();
+    }
+
+    private function publicGeneralContactData(int $companyId, ?object $company = null): array
+    {
+        $postalCode = (string) ($company->fiscal_postal_code ?? $company->postal_code ?? '');
+
+        return [
+            'company_id' => $companyId,
+            'type' => 'customer',
+            'name' => 'PUBLICO EN GENERAL',
+            'display_name' => 'PUBLICO EN GENERAL',
+            'business_name' => 'PUBLICO EN GENERAL',
+            'legal_name' => 'PUBLICO EN GENERAL',
+            'fiscal_name' => 'PUBLICO EN GENERAL',
+            'rfc' => 'XAXX010101000',
+            'tax_id' => 'XAXX010101000',
+            'fiscal_tax_id' => 'XAXX010101000',
+            'tax_regime_code' => '616',
+            'fiscal_regime_code' => '616',
+            'customer_tax_regime_code' => '616',
+            'cfdi_use_code' => 'S01',
+            'customer_cfdi_use_code' => 'S01',
+            'fiscal_postal_code' => $postalCode,
+            'postal_code' => $postalCode,
+            'zip_code' => $postalCode,
+            'email' => null,
+            'phone' => null,
+            'whatsapp' => null,
+            'is_active' => true,
+        ];
+    }
+
+    private function contactValue(?object $contact, array $fields, string $default = ''): string
+    {
+        if (! $contact) {
+            return $default;
+        }
+
+        foreach ($fields as $field) {
+            $value = trim((string) ($contact->{$field} ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return $default;
+    }
+
+    private function filterColumns(string $table, array $data): array
+    {
+        return collect($data)
+            ->filter(fn ($value, $key) => Schema::hasColumn($table, $key))
+            ->all();
     }
 
 

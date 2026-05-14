@@ -269,7 +269,15 @@ class InvoiceCfdiXmlBuilder
 
         $receptor = $doc->createElement('cfdi:Receptor');
         $receptor->setAttribute('Rfc', strtoupper(trim((string) ($invoice->customer_rfc ?? ''))));
-        $receptor->setAttribute('Nombre', $this->satText((string) ($invoice->customer_fiscal_name ?? $invoice->customer_name ?? '')));
+        /*
+         * BEXIA_V5526F_PUBLICO_GENERAL_SIN_ACENTO
+         * Para RFC genérico nacional, usar nombre canónico sin acentos.
+         */
+        $receptorName = strtoupper(trim((string) ($invoice->customer_rfc ?? ''))) === 'XAXX010101000'
+            ? 'PUBLICO EN GENERAL'
+            : $this->satText((string) ($invoice->customer_fiscal_name ?? $invoice->customer_name ?? ''));
+
+        $receptor->setAttribute('Nombre', $receptorName);
         $receptor->setAttribute('DomicilioFiscalReceptor', $this->onlyDigits((string) ($invoice->customer_postal_code ?? '')));
         $receptor->setAttribute('RegimenFiscalReceptor', trim((string) ($invoice->customer_tax_regime_code ?? '')));
         $receptor->setAttribute('UsoCFDI', trim((string) ($invoice->customer_cfdi_use_code ?? '')));
