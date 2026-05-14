@@ -115,6 +115,7 @@ class CfdiAuditsRelationManager extends RelationManager
             'download_cfdi_zip' => 'Descarga ZIP',
             'prepare_cfdi_cancel' => 'Preparación de cancelación',
             'send_cfdi_cancel' => 'Envío de cancelación PAC/SAT',
+            'query_cfdi_cancel_status' => 'Consulta de cancelación',
             default => filled($state) ? (string) $state : 'Sin acción',
         };
     }
@@ -125,6 +126,9 @@ class CfdiAuditsRelationManager extends RelationManager
             'success' => 'Correcto',
             'error' => 'Error',
             'ready_to_cancel' => 'Listo para cancelar',
+            'sending_to_pac' => 'Enviando al PAC/SAT',
+            'cancel_requested' => 'Cancelación solicitada',
+            'cancel_error' => 'Error de cancelación',
             'cancelled', 'canceled' => 'Cancelado',
             'pending' => 'Pendiente',
             'accepted' => 'Aceptado',
@@ -138,7 +142,7 @@ class CfdiAuditsRelationManager extends RelationManager
         return match ((string) $state) {
             'success', 'accepted' => 'success',
             'cancelled', 'canceled' => 'danger',
-            'ready_to_cancel', 'pending' => 'warning',
+            'cancel_requested', 'ready_to_cancel', 'sending_to_pac', 'pending' => 'warning',
             'error', 'rejected' => 'danger',
             default => 'gray',
         };
@@ -171,6 +175,27 @@ class CfdiAuditsRelationManager extends RelationManager
             $html .= '<div class="font-semibold">'.e($label).'</div>';
             $html .= '<div class="text-gray-700 dark:text-gray-300">'.nl2br(e($value)).'</div>';
             $html .= '</div>';
+        }
+
+        /*
+         * BEXIA_V5526V_SHOW_AUDIT_META_DETAIL
+         */
+        foreach ([
+            'Datos enviados' => $record->request_meta ?? null,
+            'Respuesta recibida' => $record->response_meta ?? null,
+        ] as $label => $jsonValue) {
+            $decoded = is_string($jsonValue) && trim($jsonValue) !== ''
+                ? json_decode($jsonValue, true)
+                : null;
+
+            if (is_array($decoded) && $decoded !== []) {
+                $pretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+                $html .= '<div>';
+                $html .= '<div class="font-semibold">'.e($label).'</div>';
+                $html .= '<pre class="text-xs whitespace-pre-wrap rounded-lg bg-gray-100 dark:bg-gray-900 p-3 overflow-auto">'.e((string) $pretty).'</pre>';
+                $html .= '</div>';
+            }
         }
 
         $html .= '</div>';

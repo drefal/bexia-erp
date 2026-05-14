@@ -282,6 +282,32 @@ class ViewInvoice extends ViewRecord
                     $this->redirect(InvoiceResource::getUrl('view', ['record' => $this->record]));
                 }),
 
+
+            Actions\Action::make('query_cfdi_cancel_status')
+                ->label('Consultar cancelación')
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
+                ->visible(fn (): bool => $this->canRefreshCancelStatus())
+                ->requiresConfirmation()
+                ->modalHeading('Consultar cancelación SAT')
+                ->modalDescription('Consulta el estatus oficial del CFDI ante SAT. Si SAT confirma la cancelación, Bexia actualizará la factura a Cancelado CFDI.')
+                ->modalSubmitActionLabel('Consultar ahora')
+                ->modalCancelActionLabel('Salir')
+                ->action(function (): void {
+                    $result = app(\App\Support\Billing\InvoiceCfdiCancelService::class)
+                        ->refreshCancellationStatus($this->record, auth()->user());
+
+                    Notification::make()
+                        ->title(($result['success'] ?? false) ? 'Consulta realizada' : 'No se pudo consultar')
+                        ->body($result['message'] ?? '')
+                        ->color(($result['success'] ?? false) ? 'success' : 'danger')
+                        ->send();
+
+                    $this->record->refresh();
+
+                    $this->redirect(InvoiceResource::getUrl('view', ['record' => $this->record]));
+                }),
+
             Actions\Action::make('stamp_cfdi_from_app')
                 ->label('Timbrar CFDI')
                 ->icon('heroicon-o-bolt')
@@ -378,6 +404,20 @@ class ViewInvoice extends ViewRecord
             'cancel_error',
         ], true);
     }
+
+
+    private function canRefreshCancelStatus(): bool
+    {
+        /*
+         * BEXIA_V5526V_QUERY_CFDI_CANCEL_STATUS_BUTTON
+         */
+        return filled($this->record->cfdi_uuid ?? null)
+            && in_array((string) ($this->record->cfdi_cancel_status ?? ''), [
+                'cancel_requested',
+                'cancel_error',
+            ], true);
+    }
+
 
     private function canStamp(): bool
     {

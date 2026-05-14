@@ -5,6 +5,7 @@ namespace App\Support\Billing;
 use App\Models\Invoice;
 use App\Models\Company;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -312,6 +313,295 @@ class InvoiceCfdiCancelService
         ];
     }
 
+
+    public function refreshCancellationStatus(Invoice $invoice, mixed $user): array
+    {
+        /*
+         * BEXIA_V5526V_REFRESH_CFDI_CANCEL_STATUS_SAT
+         * Consulta el estatus oficial del CFDI en SAT y actualiza Bexia.
+         */
+        $invoice->refresh();
+
+        if (blank($invoice->cfdi_uuid ?? null)) {
+            return [
+                'success' => false,
+                'status' => 'error',
+                'message' => 'La factura no tiene UUID CFDI.',
+            ];
+        }
+
+        if (! in_array((string) ($invoice->cfdi_cancel_status ?? ''), ['cancel_requested', 'cancel_error'], true)) {
+            return [
+                'success' => false,
+                'status' => 'error',
+                'message' => 'La factura no tiene una cancelación pendiente de consulta.',
+            ];
+        }
+
+        $company = Company::query()->find((int) $invoice->company_id);
+
+        if (! $company) {
+            return [
+                'success' => false,
+                'status' => 'error',
+                'message' => 'La factura no tiene empresa válida.',
+            ];
+        }
+
+        $query = $this->querySatCfdiStatus($company, $invoice);
+
+        if (! ($query['success'] ?? false)) {
+            $message = (string) ($query['message'] ?? 'No se pudo consultar el estatus SAT.');
+
+            $this->audit($invoice, $user, [
+                'action' => 'query_cfdi_cancel_status',
+                'status' => 'error',
+                'pac_provider' => 'sat',
+                'message' => $message,
+                'request_meta' => $query['request_meta'] ?? [],
+                'response_meta' => $query['response_meta'] ?? [],
+            ]);
+
+            return [
+                'success' => false,
+                'status' => 'error',
+                'message' => $message,
+            ];
+        }
+
+        $estado = (string) ($query['estado'] ?? '');
+        $estatusCancelacion = (string) ($query['estatus_cancelacion'] ?? '');
+        $isCancelled = mb_strtolower($estado) === 'cancelado';
+
+        $message = $isCancelled
+            ? 'CFDI cancelado confirmado por SAT: '.($estatusCancelacion ?: $estado)
+            : 'Consulta SAT realizada. Estado: '.($estado ?: 'N/D').'. Cancelación: '.($estatusCancelacion ?: 'N/D');
+
+        DB::transaction(function () use ($invoice, $query, $message, $isCancelled): void {
+            $now = now();
+
+            $updates = [
+                'cfdi_cancel_status_message' => $message,
+                'pac_error_message' => null,
+                'updated_at' => $now,
+            ];
+
+            if ($isCancelled) {
+                $updates['status'] = 'cancelled';
+                $updates['cfdi_status'] = 'cancelled';
+                $updates['cfdi_cancel_status'] = 'cancelled';
+                $updates['cfdi_cancelled_at'] = $now;
+            } else {
+                $updates['cfdi_status'] = 'cancel_requested';
+                $updates['cfdi_cancel_status'] = 'cancel_requested';
+            }
+
+            foreach (array_keys($updates) as $column) {
+                if (! Schema::hasColumn('invoices', $column)) {
+                    unset($updates[$column]);
+                }
+            }
+
+            DB::table('invoices')
+                ->where('id', (int) $invoice->id)
+                ->update($updates);
+
+            if ($isCancelled && (string) ($invoice->source_type ?? '') === 'pos_global_invoice') {
+                $this->releaseGlobalInvoiceTicketsAfterCfdiCancellation($invoice, $now);
+            }
+        });
+
+        $invoice->refresh();
+
+        $this->audit($invoice, $user, [
+            'action' => 'query_cfdi_cancel_status',
+            'status' => $isCancelled ? 'cancelled' : 'cancel_requested',
+            'pac_provider' => 'sat',
+            'message' => $message,
+            'request_meta' => $query['request_meta'] ?? [],
+            'response_meta' => $query['response_meta'] ?? [],
+        ]);
+
+        return [
+            'success' => true,
+            'status' => $isCancelled ? 'cancelled' : 'cancel_requested',
+            'message' => $message,
+        ];
+    }
+
+    private function querySatCfdiStatus(Company $company, Invoice $invoice): array
+    {
+        $uuid = strtoupper(trim((string) ($invoice->cfdi_uuid ?? '')));
+        $rfcEmisor = strtoupper(trim((string) ($company->tax_id ?? $company->rfc ?? $company->billing_csd_rfc ?? '')));
+        $rfcReceptor = strtoupper(trim((string) ($invoice->customer_rfc ?? '')));
+        $total = number_format((float) ($invoice->total ?? 0), 6, '.', '');
+
+        if ($uuid === '' || $rfcEmisor === '' || $rfcReceptor === '' || (float) $invoice->total <= 0) {
+            return [
+                'success' => false,
+                'message' => 'Faltan datos para consultar el estatus SAT.',
+                'request_meta' => compact('uuid', 'rfcEmisor', 'rfcReceptor', 'total'),
+                'response_meta' => [],
+            ];
+        }
+
+        $expresion = "?re={$rfcEmisor}&rr={$rfcReceptor}&tt={$total}&id={$uuid}";
+        $endpoint = 'https://consultaqr.facturaelectronica.sat.gob.mx/ConsultaCFDIService.svc';
+
+        $body = '<?xml version="1.0" encoding="utf-8"?>'
+            . '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">'
+            . '<s:Body>'
+            . '<Consulta xmlns="http://tempuri.org/">'
+            . '<expresionImpresa><![CDATA['.$expresion.']]></expresionImpresa>'
+            . '</Consulta>'
+            . '</s:Body>'
+            . '</s:Envelope>';
+
+        try {
+            $response = Http::timeout(40)
+                ->withHeaders([
+                    'Content-Type' => 'text/xml; charset=utf-8',
+                    'SOAPAction' => 'http://tempuri.org/IConsultaCFDIService/Consulta',
+                ])
+                ->withBody($body, 'text/xml')
+                ->post($endpoint);
+
+            $xml = (string) $response->body();
+
+            $codigo = $this->readSatStatusTag($xml, 'CodigoEstatus');
+            $estado = $this->readSatStatusTag($xml, 'Estado');
+            $esCancelable = $this->readSatStatusTag($xml, 'EsCancelable');
+            $estatusCancelacion = $this->readSatStatusTag($xml, 'EstatusCancelacion');
+            $validacionEfos = $this->readSatStatusTag($xml, 'ValidacionEFOS');
+
+            if (! $response->successful() || $estado === '') {
+                return [
+                    'success' => false,
+                    'message' => 'SAT no devolvió un estatus válido.',
+                    'request_meta' => [
+                        'endpoint' => $endpoint,
+                        'expresion' => $expresion,
+                        'uuid' => $uuid,
+                    ],
+                    'response_meta' => [
+                        'http_status' => $response->status(),
+                        'body' => mb_substr($xml, 0, 4000),
+                    ],
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Consulta SAT realizada correctamente.',
+                'codigo_estatus' => $codigo,
+                'estado' => $estado,
+                'es_cancelable' => $esCancelable,
+                'estatus_cancelacion' => $estatusCancelacion,
+                'validacion_efos' => $validacionEfos,
+                'request_meta' => [
+                    'endpoint' => $endpoint,
+                    'expresion' => $expresion,
+                    'uuid' => $uuid,
+                    'rfc_emisor' => $rfcEmisor,
+                    'rfc_receptor' => $rfcReceptor,
+                    'total' => $total,
+                ],
+                'response_meta' => [
+                    'http_status' => $response->status(),
+                    'codigo_estatus' => $codigo,
+                    'estado' => $estado,
+                    'es_cancelable' => $esCancelable,
+                    'estatus_cancelacion' => $estatusCancelacion,
+                    'validacion_efos' => $validacionEfos,
+                ],
+            ];
+        } catch (Throwable $e) {
+            return [
+                'success' => false,
+                'message' => 'Error consultando SAT: '.$e->getMessage(),
+                'request_meta' => [
+                    'endpoint' => $endpoint,
+                    'expresion' => $expresion,
+                    'uuid' => $uuid,
+                ],
+                'response_meta' => [
+                    'error' => $e->getMessage(),
+                ],
+            ];
+        }
+    }
+
+    private function readSatStatusTag(string $xml, string $tag): string
+    {
+        if (preg_match('/<a:'.$tag.'>(.*?)<\/a:'.$tag.'>/s', $xml, $m)
+            || preg_match('/<'.$tag.'>(.*?)<\/'.$tag.'>/s', $xml, $m)) {
+            return html_entity_decode(trim((string) $m[1]));
+        }
+
+        return '';
+    }
+
+    private function releaseGlobalInvoiceTicketsAfterCfdiCancellation(Invoice $invoice, mixed $cancelledAt): void
+    {
+        if (! Schema::hasTable('global_invoice_tickets') || ! Schema::hasTable('pos_orders')) {
+            return;
+        }
+
+        DB::table('global_invoice_tickets')
+            ->where('invoice_id', (int) $invoice->id)
+            ->update([
+                'status' => 'cancelled',
+                'updated_at' => now(),
+            ]);
+
+        $ticketIds = DB::table('global_invoice_tickets')
+            ->where('invoice_id', (int) $invoice->id)
+            ->pluck('pos_order_id');
+
+        foreach ($ticketIds as $ticketId) {
+            $ticket = DB::table('pos_orders')->where('id', (int) $ticketId)->first();
+
+            if (! $ticket) {
+                continue;
+            }
+
+            $updates = [
+                'updated_at' => now(),
+            ];
+
+            if (Schema::hasColumn('pos_orders', 'global_invoice_id')) {
+                $updates['global_invoice_id'] = null;
+            }
+
+            if (Schema::hasColumn('pos_orders', 'global_invoiced_at')) {
+                $updates['global_invoiced_at'] = null;
+            }
+
+            if (Schema::hasColumn('pos_orders', 'metadata')) {
+                $metadata = json_decode((string) ($ticket->metadata ?? ''), true);
+                $metadata = is_array($metadata) ? $metadata : [];
+
+                $metadata['billing_status'] = 'global_invoice_cancelled';
+                $metadata['last_cancelled_global_invoice_id'] = (int) $invoice->id;
+                $metadata['last_cancelled_global_invoice_uuid'] = (string) ($invoice->cfdi_uuid ?? '');
+                $metadata['last_cancelled_global_invoice_at'] = (string) $cancelledAt;
+
+                unset(
+                    $metadata['global_invoice_id'],
+                    $metadata['global_invoice_created_at'],
+                    $metadata['global_invoice_stamped_at']
+                );
+
+                $updates['metadata'] = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+
+            DB::table('pos_orders')
+                ->where('id', (int) $ticketId)
+                ->update($updates);
+        }
+    }
+
+
     private function cancelError(Invoice $invoice, mixed $user, string $message, array $meta = []): array
     {
         $safeMessage = mb_substr(trim($message), 0, 1000);
@@ -396,8 +686,8 @@ class InvoiceCfdiCancelService
                 $validator->audit($invoice, $user, [
                     'action' => $payload['action'] ?? 'prepare_cfdi_cancel',
                     'status' => $payload['status'] ?? 'ready_to_cancel',
-                    'pac_provider' => (string) ($invoice->pac_provider ?? 'sw'),
-                    'pac_environment' => (string) ($invoice->pac_environment ?? ''),
+                    'pac_provider' => (string) ($payload['pac_provider'] ?? $invoice->pac_provider ?? 'sw'),
+                    'pac_environment' => (string) ($payload['pac_environment'] ?? $invoice->pac_environment ?? ''),
                     'message' => $payload['message'] ?? '',
                     'request_meta' => $payload['request_meta'] ?? [],
                     'response_meta' => $payload['response_meta'] ?? [],

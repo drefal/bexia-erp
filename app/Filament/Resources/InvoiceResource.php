@@ -333,6 +333,25 @@ public static function canEdit(Model $record): bool
                                 ->content(fn (?Invoice $record): string => filled($record?->cfdi_xml_path ?? null) ? 'Disponible para descarga' : 'N/D')
                                 ->columnSpan(6),
 
+
+                            Forms\Components\Placeholder::make('cfdi_cancel_status_display')
+                                ->label('Estado cancelación')
+                                ->content(fn (?Invoice $record): string => static::cfdiCancelStatusLabel($record))
+                                ->visible(fn (?Invoice $record): bool => filled($record?->cfdi_cancel_status ?? null))
+                                ->columnSpan(3),
+
+                            Forms\Components\Placeholder::make('cfdi_cancel_message_display')
+                                ->label('Mensaje cancelación')
+                                ->content(fn (?Invoice $record): string => (string) ($record?->cfdi_cancel_status_message ?: 'N/D'))
+                                ->visible(fn (?Invoice $record): bool => filled($record?->cfdi_cancel_status_message ?? null))
+                                ->columnSpan(6),
+
+                            Forms\Components\Placeholder::make('cfdi_cancel_ack_display')
+                                ->label('Acuse cancelación')
+                                ->content(fn (?Invoice $record): string => filled($record?->cfdi_cancel_ack_path ?? null) ? 'Disponible' : 'N/D')
+                                ->visible(fn (?Invoice $record): bool => filled($record?->cfdi_cancel_ack_path ?? null))
+                                ->columnSpan(3),
+
                             Forms\Components\Placeholder::make('pac_error_display')
                                 ->label('Último mensaje PAC')
                                 ->content(fn (?Invoice $record): string => static::compactCfdiPacMessage($record))
@@ -824,6 +843,23 @@ public static function canEdit(Model $record): bool
             'production' => 'Producción',
         ][$environment] ?? $environment;
     }
+
+
+    public static function cfdiCancelStatusLabel(?Invoice $record): string
+    {
+        $status = (string) ($record?->cfdi_cancel_status ?? '');
+
+        return [
+            '' => 'N/D',
+            'ready_to_cancel' => 'Listo para cancelar',
+            'sending_to_pac' => 'Enviando al PAC/SAT',
+            'cancel_requested' => 'Cancelación solicitada',
+            'cancelled' => 'Cancelado',
+            'canceled' => 'Cancelado',
+            'cancel_error' => 'Error de cancelación',
+        ][$status] ?? $status;
+    }
+
 
     public static function compactCfdiPacMessage(?Invoice $record): string
     {
