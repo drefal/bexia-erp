@@ -1,8 +1,12 @@
 <?php
 
+/* BEXIA_V5526E_GLOBAL_INVOICE_NO_INTERNAL_ISSUE */
+
 /* BEXIA_V5525K2_HIDE_TECHNICAL_CFDI_ACTIONS */
 
 namespace App\Filament\Resources\InvoiceResource\Pages;
+
+use App\Support\Billing\PosGlobalInvoiceService;
 
 use App\Filament\Resources\InvoiceResource;
 use Filament\Actions;
@@ -24,6 +28,42 @@ class ViewInvoice extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            /*
+             * BEXIA_V5526D_CANCEL_GLOBAL_DRAFT_ACTION
+             */
+            Actions\Action::make('cancel_global_invoice_draft')
+                ->label('Cancelar factura global')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading('Cancelar factura global en borrador')
+                ->modalDescription('Esto cancelará internamente la factura global en borrador y liberará los tickets para que vuelvan a estar disponibles. No aplica a CFDI timbrados.')
+                ->modalSubmitActionLabel('Sí, cancelar y liberar tickets')
+                ->modalCancelActionLabel('Salir')
+                ->visible(fn (): bool => app(PosGlobalInvoiceService::class)->canCancelDraftGlobalInvoice($this->record))
+                ->action(function (): void {
+                    try {
+                        app(PosGlobalInvoiceService::class)
+                            ->cancelDraftGlobalInvoice($this->record, auth()->id());
+
+                        $this->record->refresh();
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('Factura global cancelada')
+                            ->body('Los tickets fueron liberados correctamente.')
+                            ->success()
+                            ->send();
+                    } catch (\Throwable $e) {
+                        report($e);
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('No se pudo cancelar la factura global')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
+
 
             Actions\Action::make('send_cfdi_email')
                 ->label('Enviar por correo')

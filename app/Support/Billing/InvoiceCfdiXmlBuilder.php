@@ -245,6 +245,22 @@ class InvoiceCfdiXmlBuilder
 
         $doc->appendChild($comprobante);
 
+        /*
+         * BEXIA_V5526C_CFDI_INFORMACION_GLOBAL_NODE
+         * CFDI 4.0 factura global para publico en general.
+         * Debe ir antes de Emisor/Receptor.
+         */
+        if ($this->isGlobalInvoice($invoice)) {
+            [$periodicidad, $meses, $anio] = $this->globalInvoiceData($invoice);
+
+            $informacionGlobal = $doc->createElement('cfdi:InformacionGlobal');
+            $informacionGlobal->setAttribute('Periodicidad', $periodicidad);
+            $informacionGlobal->setAttribute('Meses', $meses);
+            $informacionGlobal->setAttribute('Año', $anio);
+
+            $comprobante->appendChild($informacionGlobal);
+        }
+
         $emisor = $doc->createElement('cfdi:Emisor');
         $emisor->setAttribute('Rfc', strtoupper(trim((string) ($company->tax_id ?? ''))));
         $emisor->setAttribute('Nombre', $this->satText((string) (($company->business_name ?? '') ?: ($company->name ?? ''))));
@@ -321,6 +337,65 @@ class InvoiceCfdiXmlBuilder
 
         return $doc;
     }
+
+
+    private function isGlobalInvoice(Invoice $invoice): bool
+    {
+        if ((string) ($invoice->source_type ?? '') === 'pos_global_invoice') {
+            return true;
+        }
+
+        $metadata = $this->metadataArray($invoice->metadata ?? null);
+
+        return (bool) ($metadata['is_global_invoice'] ?? false)
+            || (string) ($metadata['source'] ?? '') === 'pos_global_invoice';
+    }
+
+    private function globalInvoiceData(Invoice $invoice): array
+    {
+        $metadata = $this->metadataArray($invoice->metadata ?? null);
+        $global = $metadata['global_invoice'] ?? [];
+
+        if (! is_array($global)) {
+            $global = [];
+        }
+
+        $periodicidad = trim((string) ($global['periodicity'] ?? '01'));
+        $meses = trim((string) ($global['month'] ?? now()->format('m')));
+        $anio = trim((string) ($global['year'] ?? now()->format('Y')));
+
+        if ($periodicidad === '') {
+            $periodicidad = '01';
+        }
+
+        if ($meses === '') {
+            $meses = now()->format('m');
+        }
+
+        $meses = str_pad((string) ((int) $meses), 2, '0', STR_PAD_LEFT);
+
+        if ($anio === '') {
+            $anio = now()->format('Y');
+        }
+
+        return [$periodicidad, $meses, $anio];
+    }
+
+    private function metadataArray($metadata): array
+    {
+        if (is_array($metadata)) {
+            return $metadata;
+        }
+
+        if (is_string($metadata) && trim($metadata) !== '') {
+            $decoded = json_decode($metadata, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
 
     private function credential(object $company): Credential
     {

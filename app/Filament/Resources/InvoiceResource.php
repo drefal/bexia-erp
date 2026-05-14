@@ -1,5 +1,7 @@
 <?php
 
+/* BEXIA_V5526E_GLOBAL_INVOICE_NO_INTERNAL_ISSUE */
+
 /* BEXIA_V5525K2_HIDE_TECHNICAL_CFDI_ACTIONS */
 
 namespace App\Filament\Resources;
@@ -332,16 +334,17 @@ public static function canEdit(Model $record): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('cfdi_status')
+                    ->formatStateUsing(fn (?string $state): string => static::invoiceCfdiStatusLabel($state))
                     ->label('Estado CFDI')
                     ->badge()
-                    ->formatStateUsing(fn ($state): string => static::cfdiStatusLabel($state))
+                    
                     ->color(fn ($state): string => static::cfdiStatusColor($state))
                     ->placeholder('Pendiente')
                     ->sortable(),
-
                 Tables\Columns\TextColumn::make('source_type')
+                    ->formatStateUsing(fn (?string $state): string => static::invoiceSourceTypeLabel($state))
                     ->label('Origen')
-                    ->formatStateUsing(fn ($state): string => static::sourceLabel($state))
+                    
                     ->badge()
                     ->color(fn ($state): string => match ((string) $state) {
                         'manual' => 'gray',
@@ -350,7 +353,6 @@ public static function canEdit(Model $record): bool
                         default => 'gray',
                     })
                     ->sortable(),
-
                 Tables\Columns\TextColumn::make('source_number')
                     ->label('Referencia')
                     ->searchable()
@@ -445,7 +447,7 @@ public static function canEdit(Model $record): bool
                     ->label('Facturar')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->visible(fn (Invoice $record): bool => (string) $record->status === 'draft')
+                    ->visible(fn (Invoice $record): bool => (string) ($record->source_type ?? '') !== 'pos_global_invoice' && (string) ($record->status ?? '') === 'draft')
                     ->requiresConfirmation()
                     ->modalHeading('Marcar factura como facturada')
                     ->modalDescription('La factura quedará bloqueada para edición. No timbra CFDI todavía.')
@@ -522,6 +524,48 @@ public static function canEdit(Model $record): bool
                 (string) $term->name => $term->name . ((int) ($term->days ?? 0) > 0 ? ' (' . (int) $term->days . ' días)' : ''),
             ])
             ->all();
+    }
+
+
+
+    public static function invoiceCfdiStatusLabel(?string $state): string
+    {
+        /*
+         * BEXIA_V5526D2_INVOICE_LIST_READABLE_CFDI_STATUS
+         */
+        return match ((string) $state) {
+            '' => 'Pendiente',
+            'pending' => 'Pendiente',
+            'validation_error' => 'Error de validación',
+            'ready_to_stamp' => 'Lista para timbrar',
+            'stamped' => 'Timbrado',
+            'ready_to_cancel' => 'Lista para cancelar',
+            'cancel_requested' => 'Cancelación solicitada',
+            'cancelled', 'canceled' => 'Cancelado',
+            'cancelled_internal', 'canceled_internal' => 'Cancelado interno',
+            default => \Illuminate\Support\Str::of((string) $state)
+                ->replace('_', ' ')
+                ->title()
+                ->toString(),
+        };
+    }
+
+    public static function invoiceSourceTypeLabel(?string $state): string
+    {
+        /*
+         * BEXIA_V5526D2_INVOICE_LIST_READABLE_SOURCE_TYPE
+         */
+        return match ((string) $state) {
+            '', 'manual' => 'Manual',
+            'pos_order' => 'Ticket PDV',
+            'pos_global_invoice', 'pos_global' => 'Factura global PDV',
+            'sale', 'sales_order' => 'Venta',
+            'quote', 'quotation' => 'Cotización',
+            default => \Illuminate\Support\Str::of((string) $state)
+                ->replace('_', ' ')
+                ->title()
+                ->toString(),
+        };
     }
 
 
