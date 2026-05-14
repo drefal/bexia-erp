@@ -233,11 +233,12 @@ class EditInvoice extends EditRecord
                     $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
                 }),
 
+            /* BEXIA_V5526M_HIDE_INTERNAL_ISSUE_FOR_GLOBAL_INVOICE */
             Actions\Action::make('issue_invoice')
                 ->label('Facturar')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->visible(fn (): bool => (string) $this->record->status === 'draft')
+                ->visible(fn (): bool => (string) ($this->record->source_type ?? '') !== 'pos_global_invoice' && (string) ($this->record->status ?? '') === 'draft')
                 ->requiresConfirmation()
                 ->modalHeading('Marcar factura como facturada')
                 ->modalDescription('La factura quedará bloqueada para edición interna. Todavía no timbra CFDI.')
@@ -250,6 +251,19 @@ class EditInvoice extends EditRecord
             Actions\ViewAction::make(),
         ];
     }
+
+
+    protected function getCancelFormAction(): \Filament\Actions\Action
+    {
+        /*
+         * BEXIA_V5526M_RENAME_EDIT_CANCEL_ACTION
+         * Este botón no cancela la factura; solo sale del formulario sin guardar.
+         */
+        return parent::getCancelFormAction()
+            ->label('Salir sin guardar')
+            ->color('gray');
+    }
+
 
     public function getTitle(): string
     {

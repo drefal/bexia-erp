@@ -381,9 +381,38 @@ class ViewInvoice extends ViewRecord
 
     private function canStamp(): bool
     {
-        return in_array((string) ($this->record->cfdi_status ?? ''), [
+        /*
+         * BEXIA_V5526N_SHOW_STAMP_FOR_DRAFT_INVOICES
+         * El botón Timbrar CFDI debe aparecer también para facturas en borrador
+         * sin UUID. La acción ya asigna folio, genera XML y luego timbra.
+         */
+        if (filled($this->record->cfdi_uuid ?? null)) {
+            return false;
+        }
+
+        if ((string) ($this->record->status ?? '') === 'cancelled') {
+            return false;
+        }
+
+        if (in_array((string) ($this->record->cfdi_status ?? ''), [
+            'stamped',
+            'cancel_requested',
+            'cancelled',
+            'cancelled_internal',
+        ], true)) {
+            return false;
+        }
+
+        if (in_array((string) ($this->record->cfdi_status ?? ''), [
             'ready_to_stamp',
             'stamp_error',
-        ], true) && blank($this->record->cfdi_uuid ?? null);
+        ], true)) {
+            return true;
+        }
+
+        return in_array((string) ($this->record->status ?? ''), [
+            'draft',
+            'issued',
+        ], true) && blank($this->record->cfdi_status ?? null);
     }
 }
