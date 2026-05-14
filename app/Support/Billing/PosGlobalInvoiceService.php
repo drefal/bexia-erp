@@ -169,6 +169,8 @@ class PosGlobalInvoiceService
                 'updated_at' => now(),
             ]);
 
+            $this->syncPublicGeneralInvoiceSnapshot($invoiceId, $publicGeneralContact, $company);
+
             foreach ($tickets as $ticket) {
                 $taxRate = ((float) $ticket['subtotal']) > 0
                     ? round(((float) $ticket['tax_total'] / (float) $ticket['subtotal']) * 100, 6)
@@ -604,6 +606,23 @@ class PosGlobalInvoiceService
         $data = $this->publicGeneralContactData($companyId, $company);
 
         if ($contact) {
+            /*
+             * BEXIA_V5526S_PRESERVE_PUBLIC_GENERAL_CONTACT_CHANNELS
+             * No borrar correo/teléfono/WhatsApp existentes del contacto Público en General.
+             * ensurePublicGeneralContact solo debe asegurar datos fiscales base.
+             */
+            foreach ([
+                'email',
+                'phone',
+                'whatsapp',
+                'mobile',
+                'mobile_phone',
+                'telephone',
+                'phone_number',
+            ] as $communicationField) {
+                unset($data[$communicationField]);
+            }
+
             DB::table('contacts')
                 ->where('id', (int) $contact->id)
                 ->update($this->filterColumns('contacts', $data + [
@@ -652,6 +671,34 @@ class PosGlobalInvoiceService
             'is_active' => true,
         ];
     }
+
+
+    private function syncPublicGeneralInvoiceSnapshot(int $invoiceId, ?object $contact, ?object $company = null): void
+    {
+        /*
+         * BEXIA_V5526S_SYNC_PUBLIC_GENERAL_INVOICE_SNAPSHOT
+         * La factura global debe nacer con datos del contacto Público en General,
+         * incluyendo correo/WhatsApp si existen en Contactos.
+         * El XML seguirá usando receptor canónico PUBLICO EN GENERAL.
+         */
+        $updates = [
+            'contact_id' => (int) ($contact->id ?? 0),
+            'customer_name' => $this->contactValue($contact, ['display_name', 'name', 'business_name', 'fiscal_name'], 'PUBLICO EN GENERAL'),
+            'customer_fiscal_name' => $this->contactValue($contact, ['fiscal_name', 'legal_name', 'business_name', 'name'], 'PUBLICO EN GENERAL'),
+            'customer_rfc' => strtoupper($this->contactValue($contact, ['rfc', 'tax_id', 'fiscal_tax_id'], 'XAXX010101000')),
+            'customer_tax_regime_code' => $this->contactValue($contact, ['customer_tax_regime_code', 'fiscal_regime_code', 'tax_regime_code', 'tax_regime'], '616'),
+            'customer_cfdi_use_code' => $this->contactValue($contact, ['customer_cfdi_use_code', 'cfdi_use_code', 'sat_cfdi_use_code'], 'S01'),
+            'customer_postal_code' => $this->contactValue($contact, ['fiscal_postal_code', 'fiscal_zip', 'postal_code', 'zip_code'], (string) ($company->fiscal_postal_code ?? $company->postal_code ?? '')),
+            'customer_email' => $this->contactValue($contact, ['email', 'billing_email', 'invoice_email'], ''),
+            'customer_whatsapp_phone' => $this->contactValue($contact, ['whatsapp', 'whatsapp_phone', 'mobile', 'mobile_phone', 'phone'], ''),
+            'updated_at' => now(),
+        ];
+
+        DB::table('invoices')
+            ->where('id', $invoiceId)
+            ->update($this->filterColumns('invoices', $updates));
+    }
+
 
     private function contactValue(?object $contact, array $fields, string $default = ''): string
     {

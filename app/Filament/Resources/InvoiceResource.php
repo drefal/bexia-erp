@@ -294,7 +294,7 @@ public static function canEdit(Model $record): bool
 
 
                     /*
-                     * BEXIA_V5526Q_CFDI_PAC_HEADER_INFO
+                     * BEXIA_V5526Q_CFDI_PAC_HEADER_INFO / BEXIA_V5526S_HIDE_INTERNAL_XML_PATH
                      * Información fiscal devuelta por PAC/SAT visible en cabecera.
                      */
                     Forms\Components\Section::make('Información CFDI / PAC')
@@ -330,7 +330,7 @@ public static function canEdit(Model $record): bool
 
                             Forms\Components\Placeholder::make('cfdi_xml_path_display')
                                 ->label('XML')
-                                ->content(fn (?Invoice $record): string => (string) ($record?->cfdi_xml_path ?: 'N/D'))
+                                ->content(fn (?Invoice $record): string => filled($record?->cfdi_xml_path ?? null) ? 'Disponible para descarga' : 'N/D')
                                 ->columnSpan(6),
 
                             Forms\Components\Placeholder::make('pac_error_display')
