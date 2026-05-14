@@ -61,4 +61,12 @@ class TreasuryMovement extends Model
     }
 
 
+
+    public function invoicePayment(): BelongsTo
+    {
+        return $this->belongsTo(InvoicePayment::class, 'source_id')
+            ->where('source_type', 'invoice_payment');
+    }
+
+
 }

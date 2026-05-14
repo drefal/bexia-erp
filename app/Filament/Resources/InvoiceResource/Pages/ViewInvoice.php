@@ -1,5 +1,7 @@
 <?php
 
+/* BEXIA_V5525K2_HIDE_TECHNICAL_CFDI_ACTIONS */
+
 namespace App\Filament\Resources\InvoiceResource\Pages;
 
 use App\Filament\Resources\InvoiceResource;
@@ -10,6 +12,11 @@ use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 
+/*
+ * BEXIA_V5525K_HIDE_TECHNICAL_CFDI_ACTIONS
+ * Acciones técnicas CFDI ocultas de la UI operativa.
+ * El flujo operativo debe ser Timbrar CFDI, que internamente valida, asigna folio, genera XML y timbra.
+ */
 class ViewInvoice extends ViewRecord
 {
     protected static string $resource = InvoiceResource::class;

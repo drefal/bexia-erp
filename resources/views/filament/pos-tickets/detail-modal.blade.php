@@ -1,5 +1,9 @@
 <div class="space-y-5">
     @php
+    // BEXIA_V5525H2_PDV_DETAIL_REMOVE_REQUEST_BILLING
+
+    // BEXIA_V5525H_PDV_BILLING_DETAIL_LABELS
+
         $status = (string) ($order->status ?? '');
         $inventoryStatus = (string) ($metadata['inventory_status'] ?? 'pending');
         $billingStatus = (string) ($metadata['billing_status'] ?? 'pending');
@@ -78,14 +82,11 @@
                     @if($billingStatus !== 'requested' && $billingStatus !== 'invoiced')
                         <form method="POST" action="{{ route('pos.tickets.billing.request', ['order' => $order->id]) }}" target="_blank">
                             @csrf
-                            <button type="submit" class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-bold text-white">
-                                Enviar a facturación
-                            </button>
                         </form>
                     @endif
 
                     <a href="{{ $invoicePortalUrl }}" target="_blank" class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold">
-                        Portal facturación
+                        Abrir portal de facturación
                     </a>
                 @endif
             </div>

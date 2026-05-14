@@ -18,6 +18,11 @@ class ViewPosTicket extends ViewRecord
         return 'Ticket ' . ($this->record->number ?: ('#' . $this->record->id));
     }
 
+    /*
+     * BEXIA_V5525H2_PDV_REMOVE_REQUEST_BILLING
+     * Se elimina Solicitar factura / Enviar a facturación.
+     * El ticket PDV solo ofrece portal, crear factura desde ticket o ver factura existente.
+     */
     protected function getHeaderActions(): array
     {
         return [
@@ -143,13 +148,41 @@ class ViewPosTicket extends ViewRecord
                 ->visible(fn (): bool => PosTicketResource::stockMovementUrl($this->record) !== '#')
                 ->url(fn (): string => PosTicketResource::stockMovementUrl($this->record)),
 
+            /*
+             * BEXIA_V5525H_PDV_BILLING_BUTTONS_ORDER
+             * Flujo claro:
+             * 1) Solicitar factura: solo marca el ticket como solicitado.
+             * 2) Abrir portal de facturación: liga para captura/consulta del cliente.
+             * 3) Crear factura desde ticket: crea la factura interna desde el ticket.
+             * 4) Ver factura: aparece cuando ya existe factura.
+             */
+
+            Actions\Action::make('invoice_portal')
+                ->label('Abrir portal de facturación')
+                ->icon('heroicon-o-globe-alt')
+                ->color('info')
+                ->visible(function (): bool {
+                    $status = (string) ($this->record->status ?? '');
+
+                    $hasInvoice = \Illuminate\Support\Facades\DB::table('invoices')
+                        ->where('source_type', 'pos_order')
+                        ->where('source_id', (int) $this->record->id)
+                        ->exists();
+
+                    return $status === 'paid' && ! $hasInvoice;
+                })
+                ->url(fn (): string => PosTicketResource::invoicePortalUrl($this->record))
+                ->openUrlInNewTab(),
+
             Actions\Action::make('generate_internal_invoice')
-                ->label('Generar factura interna')
+                ->label('Crear factura desde ticket')
                 ->icon('heroicon-o-document-plus')
                 ->color('success')
                 ->requiresConfirmation()
-                ->modalHeading('Generar factura interna')
-                ->modalDescription('Esto creará una factura interna en borrador desde este ticket PDV. No timbra CFDI todavía.')
+                ->modalHeading('Crear factura desde ticket')
+                ->modalDescription('Esto creará una factura interna desde este ticket PDV. No timbra CFDI todavía.')
+                ->modalSubmitActionLabel('Sí, crear factura')
+                ->modalCancelActionLabel('Salir')
                 ->visible(function (): bool {
                     $status = (string) ($this->record->status ?? '');
 
@@ -171,16 +204,33 @@ class ViewPosTicket extends ViewRecord
                             ->where('id', $invoiceId)
                             ->first();
 
+                        /*
+                         * Marcar el ticket como facturado internamente para que el usuario
+                         * ya no vea acciones que no aplican.
+                         */
+                        $metadata = PosTicketResource::metadataArray($this->record);
+                        $metadata['billing_status'] = 'internal_invoice_draft';
+                        $metadata['internal_invoice_id'] = $invoiceId;
+                        $metadata['internal_invoice_created_at'] = now()->toDateTimeString();
+                        $metadata['internal_invoice_created_by_user_id'] = auth()->id();
+
+                        \Illuminate\Support\Facades\DB::table('pos_orders')
+                            ->where('id', (int) $this->record->id)
+                            ->update([
+                                'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE),
+                                'updated_at' => now(),
+                            ]);
+
                         $this->record->refresh();
 
                         \Filament\Notifications\Notification::make()
-                            ->title('Factura interna creada')
+                            ->title('Factura creada desde ticket')
                             ->body('Folio: ' . ($invoice->number ?? ('#' . $invoiceId)))
                             ->success()
                             ->send();
                     } catch (\Throwable $e) {
                         \Filament\Notifications\Notification::make()
-                            ->title('No se pudo crear la factura interna')
+                            ->title('No se pudo crear la factura')
                             ->body($e->getMessage())
                             ->danger()
                             ->send();
@@ -188,7 +238,7 @@ class ViewPosTicket extends ViewRecord
                 }),
 
             Actions\Action::make('view_internal_invoice')
-                ->label('Ver factura interna')
+                ->label('Ver factura')
                 ->icon('heroicon-o-document-text')
                 ->color('gray')
                 ->visible(fn (): bool => \Illuminate\Support\Facades\DB::table('invoices')
@@ -206,47 +256,6 @@ class ViewPosTicket extends ViewRecord
                         : '#';
                 }),
 
-            Actions\Action::make('request_billing')
-                ->label('Enviar a facturación')
-                ->icon('heroicon-o-document-arrow-up')
-                ->color('primary')
-                ->visible(function (): bool {
-                    $status = (string) ($this->record->status ?? '');
-                    $billing = PosTicketResource::billingStatus($this->record);
-
-                    return $status === 'paid' && ! in_array($billing, ['requested', 'invoiced'], true);
-                })
-                ->requiresConfirmation()
-                ->modalHeading('Enviar ticket a facturación')
-                ->modalDescription('Este paso no timbra CFDI todavía. Solo marca el ticket como solicitado para el futuro módulo de facturación.')
-                ->action(function (): void {
-                    $metadata = PosTicketResource::metadataArray($this->record);
-                    $metadata['billing_status'] = 'requested';
-                    $metadata['billing_requested_at'] = now()->toDateTimeString();
-                    $metadata['billing_requested_by_user_id'] = auth()->id();
-
-                    DB::table('pos_orders')
-                        ->where('id', $this->record->id)
-                        ->update([
-                            'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                            'updated_at' => now(),
-                        ]);
-
-                    $this->record->refresh();
-
-                    \Filament\Notifications\Notification::make()
-                        ->title('Ticket enviado a facturación')
-                        ->success()
-                        ->send();
-                }),
-
-            Actions\Action::make('invoice_portal')
-                ->label('Portal facturación')
-                ->icon('heroicon-o-qr-code')
-                ->color('gray')
-                ->visible(fn (): bool => (string) ($this->record->status ?? '') === 'paid')
-                ->url(fn (): string => PosTicketResource::invoicePortalUrl($this->record))
-                ->openUrlInNewTab(),
         ];
     }
 

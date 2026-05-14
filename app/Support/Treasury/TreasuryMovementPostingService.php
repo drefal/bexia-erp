@@ -4,6 +4,7 @@ namespace App\Support\Treasury;
 
 use App\Models\TreasuryAccount;
 use App\Models\TreasuryMovement;
+use App\Support\Billing\InvoicePaymentTreasuryService;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -57,6 +58,9 @@ class TreasuryMovementPostingService
                 'created_by_user_id' => $lockedMovement->created_by_user_id ?: $userId,
             ])->save();
 
+            // BEXIA_V5525C_SYNC_INVOICE_PAYMENT_POSTED
+            $this->syncInvoicePaymentPosted($lockedMovement->refresh());
+
             return $lockedMovement->refresh();
         });
     }
@@ -102,7 +106,32 @@ class TreasuryMovementPostingService
                 'cancelled_at' => now(),
             ])->save();
 
+            // BEXIA_V5525C_SYNC_INVOICE_PAYMENT_CANCELLED
+            $this->syncInvoicePaymentCancelled($lockedMovement->refresh());
+
             return $lockedMovement->refresh();
         });
     }
+
+    private function syncInvoicePaymentPosted(TreasuryMovement $movement): void
+    {
+        if ((string) $movement->source_type !== 'invoice_payment' || empty($movement->source_id)) {
+            return;
+        }
+
+        app(InvoicePaymentTreasuryService::class)
+            ->markPaymentPosted((int) $movement->source_id, $movement);
+    }
+
+    private function syncInvoicePaymentCancelled(TreasuryMovement $movement): void
+    {
+        if ((string) $movement->source_type !== 'invoice_payment' || empty($movement->source_id)) {
+            return;
+        }
+
+        app(InvoicePaymentTreasuryService::class)
+            ->markPaymentCancelled((int) $movement->source_id, $movement);
+    }
+
+
 }

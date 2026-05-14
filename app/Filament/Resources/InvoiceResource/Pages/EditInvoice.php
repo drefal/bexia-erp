@@ -1,5 +1,7 @@
 <?php
 
+/* BEXIA_V5525K2_HIDE_TECHNICAL_CFDI_ACTIONS */
+
 namespace App\Filament\Resources\InvoiceResource\Pages;
 
 use App\Filament\Resources\InvoiceResource;
@@ -178,30 +180,6 @@ class EditInvoice extends EditRecord
                     $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
                 }),
 
-            Actions\Action::make('assign_cfdi_folio')
-                ->label('Asignar folio CFDI')
-                ->icon('heroicon-o-numbered-list')
-                ->color('gray')
-                ->visible(fn (): bool => ! in_array((string) ($this->record->cfdi_status ?? ''), ['stamped', 'cancelled'], true)
-                    && (blank($this->record->cfdi_series ?? null) || blank($this->record->cfdi_folio ?? null)))
-                ->requiresConfirmation()
-                ->modalHeading('Asignar folio CFDI')
-                ->modalDescription('Se reservará el siguiente folio de la serie configurada para esta empresa/sucursal/PDV.')
-                ->action(function (): void {
-                    $result = app(\App\Support\Billing\BillingSeriesResolver::class)
-                        ->assignFiscalFolio($this->record, auth()->user());
-
-                    \Filament\Notifications\Notification::make()
-                        ->title($result['success'] ? 'Folio asignado' : 'No se pudo asignar folio')
-                        ->body($result['message'])
-                        ->color($result['success'] ? 'success' : 'danger')
-                        ->send();
-
-                    $this->record->refresh();
-
-                    $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
-                }),
-
             Actions\Action::make('download_cfdi_xml')
                 ->label('Descargar XML')
                 ->icon('heroicon-o-code-bracket-square')
@@ -226,27 +204,6 @@ class EditInvoice extends EditRecord
                 ->url(fn (): string => route('billing.invoices.download', ['invoice' => $this->record, 'type' => 'zip']))
                 ->openUrlInNewTab(),
 
-            Actions\Action::make('generate_invoice_pdf')
-                ->label('Generar PDF')
-                ->icon('heroicon-o-document-arrow-down')
-                ->color('gray')
-                ->action(function (): void {
-                    $this->record->refresh();
-
-                    $result = app(\App\Support\Billing\InvoicePdfBuilder::class)
-                        ->generate($this->record, auth()->user());
-
-                    \Filament\Notifications\Notification::make()
-                        ->title($result['success'] ? 'PDF generado' : 'No se pudo generar PDF')
-                        ->body($result['message'])
-                        ->color($result['success'] ? 'success' : 'danger')
-                        ->send();
-
-                    $this->record->refresh();
-
-                    $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
-                }),
-
             Actions\Action::make('stamp_cfdi')
                 ->label('Timbrar CFDI')
                 ->icon('heroicon-o-bolt')
@@ -265,54 +222,6 @@ class EditInvoice extends EditRecord
 
                     \Filament\Notifications\Notification::make()
                         ->title($result['success'] ? 'CFDI timbrado' : 'No se pudo timbrar')
-                        ->body($result['message'])
-                        ->color($result['success'] ? 'success' : 'danger')
-                        ->send();
-
-                    $this->record->refresh();
-
-                    $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
-                }),
-
-            Actions\Action::make('generate_cfdi_xml')
-                ->label('Generar XML CFDI')
-                ->icon('heroicon-o-code-bracket-square')
-                ->color('warning')
-                ->visible(fn (): bool => ! in_array((string) ($this->record->cfdi_status ?? ''), ['stamped', 'cancelled', 'cancelled_internal'], true))
-                ->requiresConfirmation()
-                ->modalHeading('Generar XML CFDI firmado')
-                ->modalDescription('Se generará el XML CFDI 4.0 con cadena original y sello real. Todavía no se timbra ni se envía a SW.')
-                ->action(function (): void {
-                    InvoiceResource::recalculateInvoice($this->record);
-                    $this->record->refresh();
-
-                    $result = app(\App\Support\Billing\InvoiceCfdiXmlBuilder::class)
-                        ->generateSignedXml($this->record, auth()->user());
-
-                    \Filament\Notifications\Notification::make()
-                        ->title($result['success'] ? 'XML CFDI firmado' : 'No se pudo generar XML')
-                        ->body($result['message'])
-                        ->color($result['success'] ? 'success' : 'danger')
-                        ->send();
-
-                    $this->record->refresh();
-
-                    $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
-                }),
-
-            Actions\Action::make('validate_cfdi')
-                ->label('Validar CFDI')
-                ->icon('heroicon-o-shield-check')
-                ->color('info')
-                ->visible(fn (): bool => ! in_array((string) ($this->record->cfdi_status ?? ''), ['stamped', 'cancelled'], true))
-                ->action(function (): void {
-                    InvoiceResource::recalculateInvoice($this->record);
-                    $this->record->refresh();
-
-                    $result = app(\App\Support\Billing\InvoiceCfdiValidator::class)->validate($this->record, auth()->user());
-
-                    Notification::make()
-                        ->title($result['success'] ? 'Factura lista para timbrar' : 'Factura con errores CFDI')
                         ->body($result['message'])
                         ->color($result['success'] ? 'success' : 'danger')
                         ->send();

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TreasuryMovementResource\Pages;
 
 use App\Filament\Resources\TreasuryMovementResource;
+use App\Filament\Resources\InvoiceResource;
 use Filament\Actions;
 use Filament\Resources\Pages\ViewRecord;
 
@@ -13,6 +14,19 @@ class ViewTreasuryMovement extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            /*
+             * BEXIA_V5525D_TREASURY_BACK_TO_INVOICE
+             * Si el movimiento nació desde Factura > Pagos, permitir regresar a la factura origen.
+             */
+            Actions\Action::make('back_to_invoice')
+                ->label('Regresar a factura')
+                ->icon('heroicon-o-arrow-left')
+                ->color('gray')
+                ->visible(fn (): bool => filled($this->invoiceIdFromMovement()))
+                ->url(fn (): string => InvoiceResource::getUrl('view', [
+                    'record' => $this->invoiceIdFromMovement(),
+                ])),
+
             /*
              * BEXIA_V5524B11_TREASURY_PRINT_IN_VIEW
              * Imprimir también debe estar disponible dentro del movimiento.
@@ -58,4 +72,25 @@ class ViewTreasuryMovement extends ViewRecord
                 }),
         ];
     }
+
+    private function invoiceIdFromMovement(): ?int
+    {
+        $record = $this->record;
+
+        if (! $record || (string) ($record->source_type ?? '') !== 'invoice_payment') {
+            return null;
+        }
+
+        $payment = $record->invoicePayment ?? null;
+
+        if (! $payment && ! empty($record->source_id)) {
+            $payment = \App\Models\InvoicePayment::query()->find($record->source_id);
+        }
+
+        $invoiceId = $payment?->invoice_id;
+
+        return $invoiceId ? (int) $invoiceId : null;
+    }
+
+
 }

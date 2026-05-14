@@ -57,7 +57,14 @@ class InternalInvoiceBuilder
             $paidTotal = $total;
         }
 
-        return (int) DB::transaction(function () use ($order, $companyId, $company, $contact, $lines, $payments, $subtotal, $taxTotal, $total, $paidTotal, $userId) {
+        /*
+         * BEXIA_V5525J2_POS_CFDI_PAYMENT_DATA
+         * Todo ticket PDV pagado se considera PUE + Pago inmediato.
+         * La forma de pago SAT se toma del pago de mayor importe.
+         */
+        [$cfdiPaymentFormCode, $cfdiPaymentMethodCode, $cfdiPaymentTerms] = $this->resolvePosCfdiPaymentData($payments, $companyId);
+
+        $invoiceId = (int) DB::transaction(function () use ($order, $companyId, $company, $contact, $lines, $payments, $subtotal, $taxTotal, $total, $paidTotal, $userId, $cfdiPaymentFormCode, $cfdiPaymentMethodCode, $cfdiPaymentTerms) {
             $invoiceId = DB::table('invoices')->insertGetId([
                 'company_id' => $companyId,
                 'contact_id' => $contact ? (int) $contact->id : null,
@@ -84,7 +91,9 @@ class InternalInvoiceBuilder
                 'customer_tax_regime_code' => (string) ($contact->sat_tax_regime_code ?? ''),
                 'customer_cfdi_use_code' => (string) ($contact->customer_cfdi_use_code ?? $contact->sat_cfdi_use_code ?? ''),
                 'customer_postal_code' => (string) ($contact->fiscal_zip ?? $contact->postal_code ?? ''),
-                'payment_method_code' => (string) ($contact->customer_payment_method_code ?? $contact->payment_method_code ?? ''),
+                'payment_form_code' => $cfdiPaymentFormCode,
+                'payment_method_code' => $cfdiPaymentMethodCode,
+                'payment_terms' => $cfdiPaymentTerms,
                 'created_by_user_id' => $userId ?: auth()->id(),
                 'metadata' => json_encode([
                     'source' => 'internal_invoice_builder',
@@ -139,6 +148,7 @@ class InternalInvoiceBuilder
                     'source_payment_id' => (int) $payment->id,
                     'payment_form_id' => ! empty($payment->payment_form_id) ? (int) $payment->payment_form_id : null,
                     'payment_label' => (string) ($payment->payment_label ?? ''),
+                    'payment_form_code' => $this->resolvePosPaymentFormCode($payment, $companyId),
                     'amount' => (float) ($payment->amount ?? 0),
                     'status' => (string) ($payment->status ?? 'paid'),
                     'paid_at' => $payment->created_at ?? now(),
@@ -168,6 +178,12 @@ class InternalInvoiceBuilder
 
             return $invoiceId;
         });
+        /*
+         * BEXIA_V5525J4B_RETURN_INVOICE_ID_AFTER_POS_CREATE
+         * createFromPosOrder debe devolver siempre el ID de factura creada/existente.
+         */
+        return (int) $invoiceId;
+
     }
 
 
@@ -336,6 +352,78 @@ class InternalInvoiceBuilder
     }
 
 
+
+    protected function resolvePosCfdiPaymentData($payments, int $companyId): array
+    {
+        $paymentFormCode = '99';
+
+        if ($payments && method_exists($payments, 'filter')) {
+            $payment = $payments
+                ->filter(fn ($payment) => (float) ($payment->amount ?? 0) > 0)
+                ->sortByDesc(fn ($payment) => (float) ($payment->amount ?? 0))
+                ->first();
+
+            if ($payment) {
+                $paymentFormCode = $this->resolvePosPaymentFormCode($payment, $companyId);
+            }
+        }
+
+        return [
+            $paymentFormCode ?: '99',
+            'PUE',
+            $this->immediatePaymentTermName($companyId),
+        ];
+    }
+
+    protected function resolvePosPaymentFormCode(object $payment, int $companyId): string
+    {
+        $paymentFormId = ! empty($payment->payment_form_id) ? (int) $payment->payment_form_id : 0;
+
+        if ($paymentFormId > 0 && Schema::hasTable('payment_forms')) {
+            $form = DB::table('payment_forms')
+                ->where('id', $paymentFormId)
+                ->first();
+
+            if ($form) {
+                foreach (['sat_payment_form_code', 'code'] as $field) {
+                    $value = trim((string) ($form->{$field} ?? ''));
+
+                    if ($value !== '') {
+                        return $value;
+                    }
+                }
+            }
+        }
+
+        $metadata = json_decode((string) ($payment->metadata ?? ''), true);
+        $metadata = is_array($metadata) ? $metadata : [];
+
+        $metadataCode = trim((string) ($metadata['payment_form_code'] ?? ''));
+
+        return $metadataCode !== '' ? $metadataCode : '99';
+    }
+
+    protected function immediatePaymentTermName(int $companyId): string
+    {
+        if (! Schema::hasTable('payment_terms')) {
+            return 'Pago inmediato';
+        }
+
+        $query = DB::table('payment_terms')
+            ->where('code', 'PAGO_INMEDIATO');
+
+        if (Schema::hasColumn('payment_terms', 'company_id')) {
+            $query->where(function ($query) use ($companyId): void {
+                $query->where('company_id', $companyId)->orWhereNull('company_id');
+            });
+        }
+
+        $name = $query
+            ->orderByRaw('company_id nulls last')
+            ->value('name');
+
+        return trim((string) $name) !== '' ? (string) $name : 'Pago inmediato';
+    }
     protected function assertReady(): void
     {
         foreach (['invoices', 'invoice_lines', 'invoice_payments'] as $table) {

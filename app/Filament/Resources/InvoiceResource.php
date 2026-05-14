@@ -1,5 +1,7 @@
 <?php
 
+/* BEXIA_V5525K2_HIDE_TECHNICAL_CFDI_ACTIONS */
+
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\InvoiceResource\Pages;
@@ -19,6 +21,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+/*
+ * BEXIA_V5525K_HIDE_TECHNICAL_CFDI_ACTIONS
+ * Acciones técnicas CFDI ocultas de la UI operativa.
+ * El flujo operativo debe ser Timbrar CFDI, que internamente valida, asigna folio, genera XML y timbra.
+ */
 class InvoiceResource extends Resource
 {
     protected static ?string $model = Invoice::class;
@@ -197,6 +204,39 @@ public static function canEdit(Model $record): bool
                         ->visible(fn (?Invoice $record): bool => static::customerChangedMessage($record) !== '')
                         ->columnSpanFull(),
 
+                    /*
+                     * BEXIA_V5525J_PAYMENT_CFDI_FIELDS
+                     * Datos de pago CFDI visibles en Cabecera, antes de Información fiscal del cliente.
+                     */
+                    Forms\Components\Select::make('payment_form_code')
+                        ->label('Forma de pago SAT')
+                        ->options(static::paymentFormCodeOptions())
+                        ->searchable()
+                        ->disabled(fn (?Invoice $record): bool => static::isCfdiPaymentFieldsLocked($record))
+                        ->dehydrated(true)
+                        ->helperText('Forma en que se recibió el pago. Ejemplo: 01 Efectivo, 03 Transferencia, 04 Tarjeta de crédito.')
+                        ->columnSpan(3),
+
+                    Forms\Components\Select::make('payment_method_code')
+                        ->label('Método de pago SAT')
+                        ->options(static::paymentMethodCodeOptions())
+                        ->searchable()
+                        ->disabled(fn (?Invoice $record): bool => static::isCfdiPaymentFieldsLocked($record))
+                        ->dehydrated(true)
+                        ->helperText('Usa PUE si ya está pagada; PPD si será a crédito/parcialidades.')
+                        ->columnSpan(3),
+
+                    Forms\Components\Select::make('payment_terms')
+                        ->label('Condiciones de pago')
+                        ->options(static::paymentTermsOptions())
+                        ->searchable()
+                        ->preload()
+                        ->placeholder('Selecciona una condición')
+                        ->disabled(fn (?Invoice $record): bool => static::isCfdiPaymentFieldsLocked($record))
+                        ->dehydrated(true)
+                        ->helperText('Catálogo interno. Para tickets PDV se usará Pago inmediato.')
+                        ->columnSpan(3),
+
                     Forms\Components\Section::make('Informacion fiscal del cliente')
                         ->description('Solo lectura. Si algun dato esta incorrecto, corrigelo en Contactos y vuelve a seleccionar el cliente.')
                         ->columns(1)
@@ -235,14 +275,8 @@ public static function canEdit(Model $record): bool
                     Forms\Components\Hidden::make('customer_tax_regime_code')
                         ->dehydrated(true),
 
-                    Forms\Components\Hidden::make('payment_form_code')
-                        ->dehydrated(true),
 
-                    Forms\Components\Hidden::make('payment_method_code')
-                        ->dehydrated(true),
 
-                    Forms\Components\Hidden::make('payment_terms')
-                        ->dehydrated(true),
 
                     Forms\Components\Hidden::make('due_date')
                         ->dehydrated(true),
@@ -352,6 +386,15 @@ public static function canEdit(Model $record): bool
                     ->formatStateUsing(fn ($state): string => '$' . number_format((float) $state, 2))
                     ->sortable(),
 
+                /*
+                 * BEXIA_V5525F_INVOICE_PAYMENT_STATUS_BADGE
+                 */
+                Tables\Columns\TextColumn::make('payment_status_badge')
+                    ->label('Pago')
+                    ->getStateUsing(fn ($record): string => self::paymentStatusLabel($record))
+                    ->badge()
+                    ->color(fn (string $state): string => self::paymentStatusColor($state)),
+
                 Tables\Columns\TextColumn::make('invoice_date')
                     ->label('Fecha')
                     ->date('d/m/Y')
@@ -397,74 +440,6 @@ public static function canEdit(Model $record): bool
                         $record->refresh();
                     }),
 
-
-                Tables\Actions\Action::make('generate_cfdi_xml_row')
-                    ->label('Generar XML')
-                    ->icon('heroicon-o-code-bracket-square')
-                    ->color('warning')
-                    ->visible(fn ($record): bool => ! in_array((string) ($record->cfdi_status ?? ''), ['stamped', 'cancelled', 'cancelled_internal'], true))
-                    ->requiresConfirmation()
-                    ->modalHeading('Generar XML CFDI firmado')
-                    ->modalDescription('Se generará el XML CFDI 4.0 con cadena original y sello real. Todavía no se timbra ni se envía a SW.')
-                    ->action(function ($record): void {
-                        static::recalculateInvoice($record);
-                        $record->refresh();
-
-                        $result = app(\App\Support\Billing\InvoiceCfdiXmlBuilder::class)
-                            ->generateSignedXml($record, auth()->user());
-
-                        \Filament\Notifications\Notification::make()
-                            ->title($result['success'] ? 'XML CFDI firmado' : 'No se pudo generar XML')
-                            ->body($result['message'])
-                            ->color($result['success'] ? 'success' : 'danger')
-                            ->send();
-
-                        $record->refresh();
-                    }),
-
-
-                Tables\Actions\Action::make('assign_cfdi_folio_row')
-                    ->label('Asignar folio CFDI')
-                    ->icon('heroicon-o-numbered-list')
-                    ->color('gray')
-                    ->visible(fn ($record): bool => ! in_array((string) ($record->cfdi_status ?? ''), ['stamped', 'cancelled'], true)
-                        && (blank($record->cfdi_series ?? null) || blank($record->cfdi_folio ?? null)))
-                    ->requiresConfirmation()
-                    ->modalHeading('Asignar folio CFDI')
-                    ->modalDescription('Se reservará el siguiente folio de la serie configurada para esta empresa/sucursal/PDV.')
-                    ->action(function ($record): void {
-                        $result = app(\App\Support\Billing\BillingSeriesResolver::class)
-                            ->assignFiscalFolio($record, auth()->user());
-
-                        \Filament\Notifications\Notification::make()
-                            ->title($result['success'] ? 'Folio asignado' : 'No se pudo asignar folio')
-                            ->body($result['message'])
-                            ->color($result['success'] ? 'success' : 'danger')
-                            ->send();
-
-                        $record->refresh();
-                    }),
-
-
-                Tables\Actions\Action::make('validate_cfdi_row')
-                    ->label('Validar CFDI')
-                    ->icon('heroicon-o-shield-check')
-                    ->color('info')
-                    ->visible(fn ($record): bool => ! in_array((string) ($record->cfdi_status ?? ''), ['stamped', 'cancelled'], true))
-                    ->action(function ($record): void {
-                        static::recalculateInvoice($record);
-                        $record->refresh();
-
-                        $result = app(\App\Support\Billing\InvoiceCfdiValidator::class)->validate($record, auth()->user());
-
-                        \Filament\Notifications\Notification::make()
-                            ->title($result['success'] ? 'Factura lista para timbrar' : 'Factura con errores CFDI')
-                            ->body($result['message'])
-                            ->color($result['success'] ? 'success' : 'danger')
-                            ->send();
-
-                        $record->refresh();
-                    }),
 
                 Tables\Actions\Action::make('issue_invoice')
                     ->label('Facturar')
@@ -517,6 +492,113 @@ public static function canEdit(Model $record): bool
             'edit' => Pages\EditInvoice::route('/{record}/edit'),
         ];
     }
+
+
+
+    public static function paymentTermsOptions(): array
+    {
+        if (! Schema::hasTable('payment_terms')) {
+            return [
+                'Pago inmediato' => 'Pago inmediato',
+            ];
+        }
+
+        $companyId = static::tenantCompanyId();
+
+        $query = DB::table('payment_terms')
+            ->where('is_active', true);
+
+        if (Schema::hasColumn('payment_terms', 'company_id') && $companyId > 0) {
+            $query->where(function ($query) use ($companyId): void {
+                $query->where('company_id', $companyId)->orWhereNull('company_id');
+            });
+        }
+
+        return $query
+            ->orderBy('days')
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn ($term): array => [
+                (string) $term->name => $term->name . ((int) ($term->days ?? 0) > 0 ? ' (' . (int) $term->days . ' días)' : ''),
+            ])
+            ->all();
+    }
+
+
+    public static function paymentFormCodeOptions(): array
+    {
+        /*
+         * BEXIA_V5525J3_INVOICE_PAYMENT_FORMS_FROM_CONFIG
+         * En factura mostramos solo formas de pago internas activas,
+         * mapeadas a su clave SAT.
+         */
+        if (! Schema::hasTable('payment_forms')) {
+            return [];
+        }
+
+        $companyId = static::tenantCompanyId();
+
+        $query = DB::table('payment_forms')
+            ->where('is_active', true);
+
+        if (Schema::hasColumn('payment_forms', 'company_id') && $companyId > 0) {
+            $query->where(function ($query) use ($companyId): void {
+                $query->where('company_id', $companyId)->orWhereNull('company_id');
+            });
+        }
+
+        return $query
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(function ($form): array {
+                $satCode = trim((string) (($form->sat_payment_form_code ?? '') ?: ($form->code ?? '')));
+
+                if ($satCode === '') {
+                    return [];
+                }
+
+                $internalCode = trim((string) ($form->code ?? ''));
+                $name = trim((string) ($form->name ?? ''));
+
+                $label = trim(($internalCode !== '' ? "{$internalCode} - " : '').$name);
+
+                if ($label === '') {
+                    $label = $satCode;
+                }
+
+                return [
+                    $satCode => "{$label} / SAT {$satCode}",
+                ];
+            })
+            ->all();
+    }
+
+    public static function paymentMethodCodeOptions(): array
+    {
+        /*
+         * BEXIA_V5525J_PAYMENT_METHOD_OPTIONS
+         */
+        return [
+            'PUE' => 'PUE - Pago en una sola exhibición',
+            'PPD' => 'PPD - Pago en parcialidades o diferido',
+        ];
+    }
+
+    public static function isCfdiPaymentFieldsLocked(?Invoice $record): bool
+    {
+        if (! $record) {
+            return false;
+        }
+
+        return in_array((string) ($record->cfdi_status ?? ''), [
+            'stamped',
+            'cancel_requested',
+            'cancelled',
+            'cancelled_internal',
+        ], true);
+    }
+
 
     public static function statusOptions(): array
     {
@@ -1451,5 +1533,51 @@ public static function canEdit(Model $record): bool
 
         return '';
     }
+
+
+    public static function paymentStatusLabel($record): string
+    {
+        /*
+         * BEXIA_V5525F_INVOICE_PAYMENT_STATUS_HELPER
+         */
+        $invoiceStatus = mb_strtolower((string) ($record->status ?? ''));
+        $cfdiStatus = mb_strtolower((string) ($record->cfdi_status ?? ''));
+
+        if (
+            in_array($invoiceStatus, ['cancelled', 'canceled', 'cancelado'], true)
+            || in_array($cfdiStatus, ['cancelled', 'canceled', 'cancelado', 'cancelled_internal'], true)
+        ) {
+            return 'Cancelada';
+        }
+
+        $total = round((float) ($record->total ?? 0), 2);
+        $paid = round((float) ($record->paid_total ?? 0), 2);
+
+        $balance = isset($record->balance_total)
+            ? round((float) $record->balance_total, 2)
+            : round(max($total - $paid, 0), 2);
+
+        if ($total > 0 && $balance <= 0.009) {
+            return 'Pagada';
+        }
+
+        if ($paid > 0 && $balance > 0.009) {
+            return 'Parcial';
+        }
+
+        return 'Pendiente';
+    }
+
+    public static function paymentStatusColor(string $state): string
+    {
+        return match ($state) {
+            'Pagada' => 'success',
+            'Parcial' => 'warning',
+            'Cancelada' => 'danger',
+            'Pendiente' => 'gray',
+            default => 'gray',
+        };
+    }
+
 
 }

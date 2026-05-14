@@ -11,6 +11,7 @@ class InvoicePayment extends Model
 
     protected $casts = [
         'paid_at' => 'datetime',
+        'cancelled_at' => 'datetime',
         'metadata' => 'array',
         'amount' => 'decimal:4',
     ];
@@ -23,5 +24,15 @@ class InvoicePayment extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function treasuryMovement(): BelongsTo
+    {
+        return $this->belongsTo(TreasuryMovement::class);
+    }
+
+    public function paymentForm(): BelongsTo
+    {
+        return $this->belongsTo(PaymentForm::class);
     }
 }

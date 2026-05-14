@@ -89,6 +89,34 @@ public static function getEloquentQuery(): Builder
                         ->required()
                         ->maxLength(255),
 
+                    /*
+                     * BEXIA_V5525J2_PAYMENT_FORM_SAT_FIELDS
+                     */
+                    Forms\Components\Select::make('sat_payment_form_code')
+                        ->label('Forma SAT CFDI')
+                        ->options(static::satPaymentFormOptions())
+                        ->searchable()
+                        ->helperText('Clave SAT c_FormaPago que se usará en CFDI.')
+                        ->columnSpan(1),
+
+                    Forms\Components\Select::make('default_payment_method_code')
+                        ->label('Método SAT default')
+                        ->options([
+                            'PUE' => 'PUE - Pago en una sola exhibición',
+                            'PPD' => 'PPD - Pago en parcialidades o diferido',
+                        ])
+                        ->searchable()
+                        ->helperText('Para PDV se forzará PUE al facturar tickets pagados.')
+                        ->columnSpan(1),
+
+                    Forms\Components\Select::make('default_payment_term_id')
+                        ->label('Condición de pago default')
+                        ->options(fn (): array => static::paymentTermOptions())
+                        ->searchable()
+                        ->preload()
+                        ->helperText('Ej. Pago inmediato, Crédito 15 días, Crédito 30 días.')
+                        ->columnSpan(1),
+
                     Forms\Components\TextInput::make('description')
                         ->label('Descripción')
                         ->maxLength(255)
@@ -125,6 +153,9 @@ public static function getEloquentQuery(): Builder
             ->columns([
                 Tables\Columns\TextColumn::make('code')->label('Código')->searchable()->sortable(),
                 Tables\Columns\TextColumn::make('name')->label('Forma de pago')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('sat_payment_form_code')->label('SAT')->sortable(),
+                Tables\Columns\TextColumn::make('default_payment_method_code')->label('Método')->sortable(),
+                Tables\Columns\TextColumn::make('defaultPaymentTerm.name')->label('Condición')->placeholder('—'),
                 Tables\Columns\IconColumn::make('is_cash')->label('Efectivo')->boolean(),
                 Tables\Columns\IconColumn::make('is_credit')->label('Crédito')->boolean(),
                 Tables\Columns\IconColumn::make('requires_reference')->label('Referencia')->boolean(),
@@ -144,6 +175,60 @@ public static function getEloquentQuery(): Builder
             'edit' => Pages\EditPaymentForm::route('/{record}/edit'),
         ];
     }
+
+
+    public static function satPaymentFormOptions(): array
+    {
+        return [
+            '01' => '01 - Efectivo',
+            '02' => '02 - Cheque nominativo',
+            '03' => '03 - Transferencia electrónica de fondos',
+            '04' => '04 - Tarjeta de crédito',
+            '05' => '05 - Monedero electrónico',
+            '06' => '06 - Dinero electrónico',
+            '08' => '08 - Vales de despensa',
+            '12' => '12 - Dación en pago',
+            '13' => '13 - Pago por subrogación',
+            '14' => '14 - Pago por consignación',
+            '15' => '15 - Condonación',
+            '17' => '17 - Compensación',
+            '23' => '23 - Novación',
+            '24' => '24 - Confusión',
+            '25' => '25 - Remisión de deuda',
+            '26' => '26 - Prescripción o caducidad',
+            '27' => '27 - A satisfacción del acreedor',
+            '28' => '28 - Tarjeta de débito',
+            '29' => '29 - Tarjeta de servicios',
+            '30' => '30 - Aplicación de anticipos',
+            '31' => '31 - Intermediario pagos',
+            '99' => '99 - Por definir',
+        ];
+    }
+
+    public static function paymentTermOptions(): array
+    {
+        if (! Schema::hasTable('payment_terms')) {
+            return [];
+        }
+
+        $companyId = static::currentCompanyId();
+
+        $query = DB::table('payment_terms')
+            ->where('is_active', true);
+
+        if (Schema::hasColumn('payment_terms', 'company_id') && $companyId) {
+            $query->where(function ($query) use ($companyId): void {
+                $query->where('company_id', $companyId)->orWhereNull('company_id');
+            });
+        }
+
+        return $query
+            ->orderBy('days')
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
 
     protected static function currentCompanyId(): ?int
     {

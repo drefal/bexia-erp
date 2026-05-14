@@ -1,5 +1,7 @@
 <?php
 
+/* BEXIA_V5525K2_HIDE_TECHNICAL_CFDI_ACTIONS */
+
 namespace App\Filament\Resources\InvoiceResource\Pages;
 
 use App\Filament\Resources\InvoiceResource;
