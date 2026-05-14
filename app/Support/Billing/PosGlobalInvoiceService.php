@@ -346,6 +346,123 @@ class PosGlobalInvoiceService
         });
     }
 
+
+    public function markStampedAfterCfdiStamp(Invoice $invoice, ?int $userId = null): void
+    {
+        /*
+         * BEXIA_V5526R_MARK_GLOBAL_TICKETS_STAMPED
+         * Al timbrar una factura global, los tickets quedan definitivamente
+         * ligados y marcados como facturados globalmente.
+         */
+        if ((string) ($invoice->source_type ?? '') !== 'pos_global_invoice') {
+            return;
+        }
+
+        if (empty($invoice->cfdi_uuid) || (string) ($invoice->cfdi_status ?? '') !== 'stamped') {
+            return;
+        }
+
+        if (! Schema::hasTable('global_invoice_tickets') || ! Schema::hasTable('pos_orders')) {
+            return;
+        }
+
+        DB::transaction(function () use ($invoice, $userId): void {
+            $lockedInvoice = Invoice::query()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $lockedInvoice) {
+                return;
+            }
+
+            if ((string) ($lockedInvoice->source_type ?? '') !== 'pos_global_invoice') {
+                return;
+            }
+
+            if (empty($lockedInvoice->cfdi_uuid) || (string) ($lockedInvoice->cfdi_status ?? '') !== 'stamped') {
+                return;
+            }
+
+            $relations = DB::table('global_invoice_tickets')
+                ->where('invoice_id', (int) $lockedInvoice->id)
+                ->get();
+
+            if ($relations->isEmpty()) {
+                return;
+            }
+
+            DB::table('global_invoice_tickets')
+                ->where('invoice_id', (int) $lockedInvoice->id)
+                ->update([
+                    'status' => 'stamped',
+                    'updated_at' => now(),
+                ]);
+
+            $stampedAt = $lockedInvoice->cfdi_stamped_at ?: now();
+
+            foreach ($relations as $relation) {
+                $ticket = DB::table('pos_orders')
+                    ->where('id', (int) $relation->pos_order_id)
+                    ->first();
+
+                if (! $ticket) {
+                    continue;
+                }
+
+                $updates = [
+                    'updated_at' => now(),
+                ];
+
+                if (Schema::hasColumn('pos_orders', 'global_invoice_id')) {
+                    $updates['global_invoice_id'] = (int) $lockedInvoice->id;
+                }
+
+                if (Schema::hasColumn('pos_orders', 'global_invoiced_at')) {
+                    $updates['global_invoiced_at'] = $stampedAt;
+                }
+
+                if (Schema::hasColumn('pos_orders', 'metadata')) {
+                    $metadata = $this->metadataArray($ticket->metadata ?? null);
+
+                    $metadata['billing_status'] = 'global_invoice_stamped';
+                    $metadata['global_invoice_id'] = (int) $lockedInvoice->id;
+                    $metadata['global_invoice_uuid'] = (string) $lockedInvoice->cfdi_uuid;
+                    $metadata['global_invoice_stamped_at'] = (string) $stampedAt;
+
+                    $updates['metadata'] = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                }
+
+                DB::table('pos_orders')
+                    ->where('id', (int) $relation->pos_order_id)
+                    ->update($updates);
+            }
+
+            if (Schema::hasTable('invoice_cfdi_audits')) {
+                DB::table('invoice_cfdi_audits')->insert([
+                    'invoice_id' => (int) $lockedInvoice->id,
+                    'company_id' => (int) $lockedInvoice->company_id,
+                    'user_id' => $userId ?: auth()->id(),
+                    'action' => 'mark_global_tickets_stamped',
+                    'status' => 'success',
+                    'pac_provider' => (string) ($lockedInvoice->pac_provider ?? ''),
+                    'pac_environment' => (string) ($lockedInvoice->pac_environment ?? ''),
+                    'message' => 'Tickets de factura global marcados como timbrados.',
+                    'request_meta' => json_encode([
+                        'ticket_count' => $relations->count(),
+                        'ticket_ids' => $relations->pluck('pos_order_id')->values()->all(),
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'response_meta' => json_encode([
+                        'cfdi_uuid' => (string) $lockedInvoice->cfdi_uuid,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        });
+    }
+
+
     private function storeGlobalInvoiceTicket(array $ticket, int $companyId, int $invoiceId, string $paymentSummary): void
     {
         if (! Schema::hasTable('global_invoice_tickets')) {

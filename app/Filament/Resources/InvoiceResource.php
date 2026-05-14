@@ -292,6 +292,54 @@ public static function canEdit(Model $record): bool
                                 ->columnSpan(1),
                         ]),
 
+
+                    /*
+                     * BEXIA_V5526Q_CFDI_PAC_HEADER_INFO
+                     * Información fiscal devuelta por PAC/SAT visible en cabecera.
+                     */
+                    Forms\Components\Section::make('Información CFDI / PAC')
+                        ->description('Datos de timbrado, UUID, PAC y último error fiscal.')
+                        ->columns(12)
+                        ->visible(fn (?Invoice $record): bool => static::hasCfdiPacInfo($record))
+                        ->columnSpanFull()
+                        ->schema([
+                            Forms\Components\Placeholder::make('cfdi_status_display')
+                                ->label('Estado CFDI')
+                                ->content(fn (?Invoice $record): string => static::cfdiPacStatusLabel($record))
+                                ->columnSpan(2),
+
+                            Forms\Components\Placeholder::make('cfdi_uuid_display')
+                                ->label('UUID')
+                                ->content(fn (?Invoice $record): string => (string) ($record?->cfdi_uuid ?: 'N/D'))
+                                ->columnSpan(4),
+
+                            Forms\Components\Placeholder::make('cfdi_folio_display')
+                                ->label('Serie / folio')
+                                ->content(fn (?Invoice $record): string => trim((string) (($record?->cfdi_series ?? '') . '/' . ($record?->cfdi_folio ?? '')), '/') ?: 'N/D')
+                                ->columnSpan(2),
+
+                            Forms\Components\Placeholder::make('pac_provider_display')
+                                ->label('PAC')
+                                ->content(fn (?Invoice $record): string => strtoupper((string) ($record?->pac_provider ?: 'N/D')))
+                                ->columnSpan(2),
+
+                            Forms\Components\Placeholder::make('pac_environment_display')
+                                ->label('Ambiente')
+                                ->content(fn (?Invoice $record): string => static::pacEnvironmentLabel($record))
+                                ->columnSpan(2),
+
+                            Forms\Components\Placeholder::make('cfdi_xml_path_display')
+                                ->label('XML')
+                                ->content(fn (?Invoice $record): string => (string) ($record?->cfdi_xml_path ?: 'N/D'))
+                                ->columnSpan(6),
+
+                            Forms\Components\Placeholder::make('pac_error_display')
+                                ->label('Último mensaje PAC')
+                                ->content(fn (?Invoice $record): string => static::compactCfdiPacMessage($record))
+                                ->visible(fn (?Invoice $record): bool => trim((string) ($record?->pac_error_message ?? '')) !== '')
+                                ->columnSpanFull(),
+                        ]),
+
                     Forms\Components\Section::make('Informacion fiscal del cliente')
                         ->description('Solo lectura. Si algun dato esta incorrecto, corrigelo en Contactos y vuelve a seleccionar el cliente.')
                         ->columns(1)
@@ -722,6 +770,73 @@ public static function canEdit(Model $record): bool
         ], true);
     }
 
+
+
+
+    public static function hasCfdiPacInfo(?Invoice $record): bool
+    {
+        if (! $record) {
+            return false;
+        }
+
+        foreach ([
+            'cfdi_status',
+            'cfdi_uuid',
+            'cfdi_series',
+            'cfdi_folio',
+            'cfdi_xml_path',
+            'pac_provider',
+            'pac_environment',
+            'pac_error_message',
+        ] as $field) {
+            if (trim((string) ($record->{$field} ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function cfdiPacStatusLabel(?Invoice $record): string
+    {
+        $status = (string) ($record?->cfdi_status ?? '');
+
+        return [
+            '' => 'Pendiente',
+            'pending' => 'Pendiente',
+            'ready_to_stamp' => 'Listo para timbrar',
+            'stamping' => 'Timbrando',
+            'stamp_error' => 'Error de timbrado',
+            'stamped' => 'Timbrado',
+            'cancel_requested' => 'Cancelación solicitada',
+            'cancelled' => 'Cancelado CFDI',
+            'cancelled_internal' => 'Cancelado interno',
+        ][$status] ?? $status;
+    }
+
+    public static function pacEnvironmentLabel(?Invoice $record): string
+    {
+        $environment = (string) ($record?->pac_environment ?? '');
+
+        return [
+            '' => 'N/D',
+            'test' => 'Pruebas',
+            'production' => 'Producción',
+        ][$environment] ?? $environment;
+    }
+
+    public static function compactCfdiPacMessage(?Invoice $record): string
+    {
+        $message = trim((string) ($record?->pac_error_message ?? ''));
+
+        if ($message === '') {
+            return 'N/D';
+        }
+
+        return mb_strlen($message) > 500
+            ? mb_substr($message, 0, 500).'...'
+            : $message;
+    }
 
 
     public static function isGlobalInvoiceRecord(?Invoice $record): bool

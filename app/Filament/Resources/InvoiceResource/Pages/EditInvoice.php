@@ -43,9 +43,9 @@ class EditInvoice extends EditRecord
                 $data['customer_whatsapp_phone'] = InvoiceResource::contactWhatsappPhone($newContact);
                 $data['customer_tax_regime_code'] = $regime;
                 $data['customer_cfdi_use_code'] = InvoiceResource::validCfdiUseForRegime($regime, $preferredUse);
-                $data['payment_form_code'] = (string) (($newContact->customer_payment_form_code ?? '') ?: ($newContact->payment_form_code ?? ''));
-                $data['payment_method_code'] = (string) (($newContact->customer_payment_method_code ?? '') ?: ($newContact->payment_method_code ?? ''));
-                $data['payment_terms'] = (string) (($newContact->customer_payment_terms_text ?? '') ?: ($newContact->sales_payment_terms ?? ''));
+                $data['payment_form_code'] = $this->paymentValueForCustomerSnapshot($data, $newContact, 'payment_form_code', ['customer_payment_form_code', 'payment_form_code'], '01');
+                $data['payment_method_code'] = $this->paymentValueForCustomerSnapshot($data, $newContact, 'payment_method_code', ['customer_payment_method_code', 'payment_method_code'], 'PUE');
+                $data['payment_terms'] = $this->paymentValueForCustomerSnapshot($data, $newContact, 'payment_terms', ['customer_payment_terms_text', 'sales_payment_terms', 'payment_terms'], 'Pago inmediato');
             }
         }
 
@@ -89,6 +89,67 @@ class EditInvoice extends EditRecord
                 ->warning()
                 ->send();
         }
+    }
+
+
+
+    private function paymentValueForCustomerSnapshot(array $data, object $contact, string $field, array $contactFields, string $globalDefault): string
+    {
+        /*
+         * BEXIA_V5526Q_PRESERVE_PAYMENT_FIELDS_ON_CUSTOMER_REFRESH
+         * Actualizar cliente no debe borrar forma/metodo/condiciones de pago.
+         */
+        $submitted = trim((string) ($data[$field] ?? ''));
+
+        if ($submitted !== '') {
+            return $submitted;
+        }
+
+        return $this->paymentValueFromContactOrCurrent($contact, $field, $contactFields, $globalDefault);
+    }
+
+    private function paymentValueFromContactOrCurrent(object $contact, string $invoiceField, array $contactFields, string $globalDefault): string
+    {
+        foreach ($contactFields as $field) {
+            $value = trim((string) ($contact->{$field} ?? ''));
+
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        $current = trim((string) ($this->record->{$invoiceField} ?? ''));
+
+        if ($current !== '') {
+            return $current;
+        }
+
+        if ($this->isGlobalInvoiceForPaymentDefaults()) {
+            return $globalDefault;
+        }
+
+        return '';
+    }
+
+    private function isGlobalInvoiceForPaymentDefaults(): bool
+    {
+        if ((string) ($this->record->source_type ?? '') === 'pos_global_invoice') {
+            return true;
+        }
+
+        $metadata = $this->record->metadata ?? [];
+
+        if (is_string($metadata) && trim($metadata) !== '') {
+            $decoded = json_decode($metadata, true);
+            $metadata = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($metadata)) {
+            return false;
+        }
+
+        return (bool) ($metadata['is_global_invoice'] ?? false)
+            || (string) ($metadata['source'] ?? '') === 'pos_global_invoice';
     }
 
 
@@ -213,9 +274,9 @@ class EditInvoice extends EditRecord
                         'customer_whatsapp_phone' => InvoiceResource::contactWhatsappPhone($contact),
                         'customer_tax_regime_code' => $regime,
                         'customer_cfdi_use_code' => InvoiceResource::validCfdiUseForRegime($regime, $preferredUse),
-                        'payment_form_code' => (string) (($contact->customer_payment_form_code ?? '') ?: ($contact->payment_form_code ?? '')),
-                        'payment_method_code' => (string) (($contact->customer_payment_method_code ?? '') ?: ($contact->payment_method_code ?? '')),
-                        'payment_terms' => (string) (($contact->customer_payment_terms_text ?? '') ?: ($contact->sales_payment_terms ?? '')),
+                        'payment_form_code' => $this->paymentValueFromContactOrCurrent($contact, 'payment_form_code', ['customer_payment_form_code', 'payment_form_code'], '01'),
+                        'payment_method_code' => $this->paymentValueFromContactOrCurrent($contact, 'payment_method_code', ['customer_payment_method_code', 'payment_method_code'], 'PUE'),
+                        'payment_terms' => $this->paymentValueFromContactOrCurrent($contact, 'payment_terms', ['customer_payment_terms_text', 'sales_payment_terms', 'payment_terms'], 'Pago inmediato'),
                         'metadata' => $metadata,
                     ]);
 

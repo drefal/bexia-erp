@@ -98,6 +98,17 @@ class InvoiceCfdiStampService
 
             $invoice->refresh();
 
+            /*
+             * BEXIA_V5526R_MARK_GLOBAL_TICKETS_AFTER_STAMP
+             */
+            try {
+                app(PosGlobalInvoiceService::class)->markStampedAfterCfdiStamp($invoice, $user?->id);
+            } catch (Throwable $e) {
+                report($e);
+            }
+
+            $invoice->refresh();
+
             $validator->audit($invoice, $user, [
                 'action' => 'stamp',
                 'status' => 'success',
