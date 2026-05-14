@@ -1,5 +1,7 @@
 <?php
 
+/* BEXIA_V5526L_NO_DESTRUCTIVE_CANCEL_ON_EDIT */
+
 /* BEXIA_V5525K2_HIDE_TECHNICAL_CFDI_ACTIONS */
 
 namespace App\Filament\Resources\InvoiceResource\Pages;
@@ -244,26 +246,6 @@ class EditInvoice extends EditRecord
                     $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
                 }),
 
-            /* BEXIA_V5526K_HIDE_INTERNAL_CANCEL_FOR_GLOBAL_INVOICE */
-            Actions\Action::make('cancel_invoice')
-                ->label('Cancelar factura')
-                ->icon('heroicon-o-x-circle')
-                ->color('danger')
-                ->visible(fn (): bool => (string) ($this->record->source_type ?? '') !== 'pos_global_invoice'
-                    && (string) ($this->record->status ?? '') !== 'cancelled'
-                    && ! in_array((string) ($this->record->cfdi_status ?? ''), ['stamped', 'cancel_requested', 'cancelled'], true))
-                ->form([
-                    Forms\Components\Textarea::make('reason')
-                        ->label('Motivo')
-                        ->rows(3),
-                ])
-                ->requiresConfirmation()
-                ->modalHeading('Cancelar factura interna')
-                ->modalDescription('Esta cancelación solo aplica a facturas internas sin timbrar. Para factura global usa Cancelar factura global desde Ver factura. Para CFDI timbrado usa Cancelar CFDI.')
-                ->action(function (array $data): void {
-                    InvoiceResource::cancelInvoice($this->record, (string) ($data['reason'] ?? ''));
-                    $this->redirect(InvoiceResource::getUrl('edit', ['record' => $this->record]));
-                }),
 
             Actions\ViewAction::make(),
         ];

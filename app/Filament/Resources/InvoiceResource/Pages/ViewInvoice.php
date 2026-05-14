@@ -65,6 +65,45 @@ class ViewInvoice extends ViewRecord
                 }),
 
 
+
+            /*
+             * BEXIA_V5526L_INTERNAL_CANCEL_ONLY_ON_VIEW
+             * Las cancelaciones destructivas viven en Ver factura, no en Editar.
+             * No aplica a factura global ni a CFDI timbrado.
+             */
+            Actions\Action::make('cancel_internal_invoice_draft')
+                ->label('Cancelar factura interna')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->visible(fn (): bool => (string) ($this->record->source_type ?? '') !== 'pos_global_invoice'
+                    && (string) ($this->record->status ?? '') !== 'cancelled'
+                    && blank($this->record->cfdi_uuid ?? null)
+                    && ! in_array((string) ($this->record->cfdi_status ?? ''), ['stamped', 'cancel_requested', 'cancelled'], true))
+                ->form([
+                    Textarea::make('reason')
+                        ->label('Motivo')
+                        ->helperText('Cancelación interna. Solo aplica a facturas sin timbrar.')
+                        ->rows(3),
+                ])
+                ->requiresConfirmation()
+                ->modalHeading('Cancelar factura interna')
+                ->modalDescription('Esta acción cancela internamente una factura sin timbrar. Para factura global usa “Cancelar factura global”. Para CFDI timbrado usa “Cancelar CFDI”.')
+                ->modalSubmitActionLabel('Sí, cancelar factura')
+                ->modalCancelActionLabel('Salir')
+                ->action(function (array $data): void {
+                    InvoiceResource::cancelInvoice($this->record, (string) ($data['reason'] ?? ''));
+
+                    Notification::make()
+                        ->title('Factura cancelada')
+                        ->body('La factura fue cancelada internamente.')
+                        ->success()
+                        ->send();
+
+                    $this->record->refresh();
+
+                    $this->redirect(InvoiceResource::getUrl('view', ['record' => $this->record]));
+                }),
+
             Actions\Action::make('send_cfdi_email')
                 ->label('Enviar por correo')
                 ->icon('heroicon-o-envelope')
