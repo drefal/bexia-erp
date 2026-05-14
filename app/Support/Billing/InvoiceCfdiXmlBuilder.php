@@ -505,6 +505,8 @@ class InvoiceCfdiXmlBuilder
                 $taxRate = $taxRate / 100;
             }
 
+            $taxRate = $this->normalizeSatTaxRate($taxRate);
+
             $lineTax = round($lineSubtotal * $taxRate, 2);
 
             if (isset($line->tax_amount) && is_numeric($line->tax_amount)) {
@@ -532,7 +534,7 @@ class InvoiceCfdiXmlBuilder
                     } elseif (abs($inferredRate - 0.08) <= 0.005) {
                         $taxRate = 0.08;
                     } else {
-                        $taxRate = $inferredRate;
+                        $taxRate = $this->normalizeSatTaxRate($inferredRate);
                     }
                 }
             }
@@ -661,6 +663,32 @@ class InvoiceCfdiXmlBuilder
     {
         return number_format(round($value, 6), 6, '.', '');
     }
+
+
+    private function normalizeSatTaxRate(float $value): float
+    {
+        /*
+         * BEXIA_V5526P_NORMALIZE_SAT_TASA_OCUOTA
+         * El PAC/SAT exige TasaOCuota de catálogo exacta.
+         * Evita valores por redondeo como 0.159998.
+         */
+        $value = round($value, 6);
+
+        $catalogRates = [
+            0.160000,
+            0.080000,
+            0.000000,
+        ];
+
+        foreach ($catalogRates as $catalogRate) {
+            if (abs($value - $catalogRate) <= 0.001) {
+                return $catalogRate;
+            }
+        }
+
+        return $value;
+    }
+
 
     private function rate(float $value): string
     {
