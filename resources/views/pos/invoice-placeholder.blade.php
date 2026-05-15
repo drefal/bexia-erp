@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <title>Facturación Bexia</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{-- BEXIA_V5528A2_PUBLIC_PORTAL_BRANDING / BEXIA_V5528A3_PUBLIC_PORTAL_BILLING_LOGO --}}
+    <link rel="icon" href="{{ asset('favicon.ico') }}?v=5528a2" sizes="any">
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}?v=5528a2">
     <style>
         :root {
             color-scheme: light;
@@ -47,23 +50,45 @@
             box-shadow: 0 20px 70px rgba(15, 23, 42, .12);
         }
 
-        .brand {
+                .brand {
             display: flex;
+            flex-direction: column;
             align-items: center;
+            justify-content: center;
+            text-align: center;
             gap: 12px;
-            margin-bottom: 18px;
+            margin-bottom: 22px;
         }
 
-        .logo {
-            width: 44px;
-            height: 44px;
-            border-radius: 14px;
-            background: linear-gradient(135deg, #2563eb, #0f172a);
-            color: white;
+                .logo {
+            width: min(320px, 86vw);
+            min-height: 84px;
+            background: transparent;
+            border: 0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-weight: 900;
+            overflow: visible;
+            box-shadow: none;
+            flex: 0 0 auto;
+        }
+
+                .logo img {
+            max-width: 100%;
+            max-height: 120px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            padding: 0;
+            display: block;
+        }
+
+        .brand-subtitle {
+            color: var(--muted);
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 1.45;
+            margin-top: 2px;
         }
 
         h1 {
@@ -199,11 +224,11 @@
 <body>
     <div class="card">
         <div class="brand">
-            <div class="logo">B</div>
-            <div>
-                <h1>Facturación Bexia</h1>
-                <div class="muted">Valida tu ticket para solicitar factura.</div>
+            {{-- BEXIA_V5528A4_PUBLIC_PORTAL_LOGO_TEXT_BELOW --}}
+            <div class="logo">
+                <img src="{{ asset('logo-facturacion.png') }}?v=5528a5" alt="Bexia Facturación">
             </div>
+            <div class="brand-subtitle">Valida tu ticket para solicitar factura.</div>
         </div>
 
         <p class="muted">
