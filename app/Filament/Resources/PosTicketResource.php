@@ -91,40 +91,6 @@ public static function canCreate(): bool
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
-
-                Tables\Columns\TextColumn::make('billing_state_portal_pos')
-                    ->label('Facturación')
-                    ->badge()
-                    ->state(function ($record): string {
-                        if (\Illuminate\Support\Facades\Schema::hasTable('invoices')
-                            && \Illuminate\Support\Facades\DB::table('invoices')
-                                ->where('source_type', 'pos_order')
-                                ->where('source_id', (int) $record->id)
-                                ->exists()) {
-                            return 'Facturado';
-                        }
-
-                        $metadata = $record->metadata ?? null;
-
-                        if (is_string($metadata)) {
-                            $decoded = json_decode($metadata, true);
-                            $metadata = is_array($decoded) ? $decoded : [];
-                        } elseif (! is_array($metadata)) {
-                            $metadata = [];
-                        }
-
-                        return match ((string) ($metadata['billing_status'] ?? '')) {
-                            'requested' => 'Solicitada',
-                            'internal_invoice_draft' => 'Facturado',
-                            default => 'No facturado',
-                        };
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        'Facturado' => 'success',
-                        'Solicitada' => 'warning',
-                        default => 'gray',
-                    }),
-
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
                     ->state(fn ($record): string => static::v5509dRefundStatusLabel($record))
@@ -151,17 +117,32 @@ public static function canCreate(): bool
                         default => 'gray',
                     }),
 
+
+                /*
+                 * BEXIA_V5527B_POS_TICKET_FISCAL_STATE_COLUMN
+                 * Estado fiscal calculado: evita doble facturación individual/global.
+                 */
+                Tables\Columns\TextColumn::make('fiscal_state_pos_ticket')
+                    ->label('Estado fiscal')
+                    ->badge()
+                    ->state(fn ($record): string => static::fiscalStatus($record))
+                    ->formatStateUsing(fn ($state): string => static::fiscalStatusLabel((string) $state))
+                    ->color(fn ($state): string => static::fiscalStatusColor((string) $state))
+                    ->description(fn ($record): ?string => static::fiscalStatusDescription($record))
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('billing_status')
-                    ->label('Facturación')
+                    ->label('Solicitud portal')
                     ->badge()
                     ->state(fn ($record): string => static::billingStatus($record))
                     ->formatStateUsing(fn ($state): string => static::billingStatusLabel((string) $state))
                     ->color(fn ($state): string => match ((string) $state) {
                         'requested' => 'warning',
-                        'invoiced' => 'success',
+                        'invoiced', 'internal_invoice_draft' => 'success',
                         'not_required' => 'gray',
                         default => 'gray',
-                    }),
+                    })
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('customer_id')
                     ->label('Cliente')
@@ -1539,6 +1520,252 @@ return (int) $refundId;
     {
         return url('/facturar') . '?' . http_build_query(['ticket' => $record->number]);
     }
+
+
+    public static function individualInvoiceForTicket(object $record): ?object
+    {
+        /*
+         * BEXIA_V5527B_POS_TICKET_FISCAL_STATE_HELPERS
+         */
+        if (! Schema::hasTable('invoices')) {
+            return null;
+        }
+
+        return DB::table('invoices')
+            ->where('source_type', 'pos_order')
+            ->where('source_id', (int) ($record->id ?? 0))
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    public static function globalInvoiceLinkForTicket(object $record): ?object
+    {
+        if (Schema::hasTable('global_invoice_tickets')) {
+            $link = DB::table('global_invoice_tickets')
+                ->where('pos_order_id', (int) ($record->id ?? 0))
+                ->orderByDesc('id')
+                ->first();
+
+            if ($link) {
+                return $link;
+            }
+        }
+
+        if (! empty($record->global_invoice_id)) {
+            return (object) [
+                'invoice_id' => (int) $record->global_invoice_id,
+                'pos_order_id' => (int) ($record->id ?? 0),
+                'status' => null,
+            ];
+        }
+
+        return null;
+    }
+
+    public static function globalInvoiceForTicket(object $record): ?object
+    {
+        if (! Schema::hasTable('invoices')) {
+            return null;
+        }
+
+        $link = static::globalInvoiceLinkForTicket($record);
+
+        if ($link && ! empty($link->invoice_id)) {
+            return DB::table('invoices')
+                ->where('id', (int) $link->invoice_id)
+                ->first();
+        }
+
+        return null;
+    }
+
+    public static function fiscalStatus(object $record): string
+    {
+        $metadata = static::metadataArray($record);
+        $status = (string) ($record->status ?? '');
+
+        $individual = static::individualInvoiceForTicket($record);
+
+        if ($individual) {
+            $cfdiStatus = (string) ($individual->cfdi_status ?? '');
+            $invoiceStatus = (string) ($individual->status ?? '');
+
+            if (in_array($cfdiStatus, ['stamped'], true)) {
+                return 'individual_stamped';
+            }
+
+            if (in_array($cfdiStatus, ['cancelled', 'cancel_requested'], true) || $invoiceStatus === 'cancelled') {
+                return 'individual_cancelled';
+            }
+
+            if (in_array($cfdiStatus, ['stamp_error', 'validation_error'], true)) {
+                return 'individual_error';
+            }
+
+            return 'individual_draft';
+        }
+
+        $globalLink = static::globalInvoiceLinkForTicket($record);
+        $globalInvoice = static::globalInvoiceForTicket($record);
+
+        if ($globalLink || $globalInvoice || ! empty($record->global_invoice_id)) {
+            $linkStatus = (string) ($globalLink->status ?? '');
+            $cfdiStatus = (string) ($globalInvoice->cfdi_status ?? '');
+            $invoiceStatus = (string) ($globalInvoice->status ?? '');
+
+            if ($linkStatus === 'cancelled' || in_array($cfdiStatus, ['cancelled', 'cancelled_internal'], true) || $invoiceStatus === 'cancelled') {
+                return 'global_cancelled_released';
+            }
+
+            if ($cfdiStatus === 'stamped' || $linkStatus === 'stamped') {
+                return 'global_stamped';
+            }
+
+            return 'global_draft';
+        }
+
+        if (in_array($status, ['cancelled', 'canceled', 'cancelled_test'], true)) {
+            return 'not_billable_cancelled';
+        }
+
+        if ($status === 'returned'
+            || in_array((string) ($metadata['refund_status'] ?? ''), ['total_refunded', 'partial_refunded'], true)) {
+            return 'not_billable_refunded';
+        }
+
+        if ($status === 'pending_payment') {
+            return 'pending_payment';
+        }
+
+        if ((string) ($metadata['billing_status'] ?? '') === 'requested') {
+            return 'billing_requested';
+        }
+
+        if ($status === 'paid') {
+            return 'not_invoiced';
+        }
+
+        return 'unknown';
+    }
+
+    public static function fiscalStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'not_invoiced' => 'Sin facturar',
+            'billing_requested' => 'Solicitada',
+            'individual_draft' => 'Factura individual borrador',
+            'individual_stamped' => 'Factura individual timbrada',
+            'individual_error' => 'Factura individual con error',
+            'individual_cancelled' => 'Factura individual cancelada',
+            'global_draft' => 'En factura global borrador',
+            'global_stamped' => 'Factura global timbrada',
+            'global_cancelled_released' => 'Liberado por global cancelada',
+            'pending_payment' => 'Pendiente de cobro',
+            'not_billable_cancelled' => 'No facturable: cancelado',
+            'not_billable_refunded' => 'No facturable: devolución',
+            default => $status !== '' ? ucfirst(str_replace('_', ' ', $status)) : 'Sin estado fiscal',
+        };
+    }
+
+    public static function fiscalStatusColor(string $status): string
+    {
+        return match ($status) {
+            'not_invoiced', 'billing_requested' => 'warning',
+            'individual_draft', 'global_draft' => 'info',
+            'individual_stamped', 'global_stamped' => 'success',
+            'global_cancelled_released' => 'gray',
+            'individual_error' => 'danger',
+            'individual_cancelled', 'not_billable_cancelled', 'not_billable_refunded' => 'danger',
+            'pending_payment' => 'gray',
+            default => 'gray',
+        };
+    }
+
+    public static function fiscalStatusDescription(object $record): ?string
+    {
+        $status = static::fiscalStatus($record);
+
+        if (in_array($status, ['individual_draft', 'individual_stamped', 'individual_error', 'individual_cancelled'], true)) {
+            $invoice = static::individualInvoiceForTicket($record);
+
+            return $invoice
+                ? 'Factura: '.((string) ($invoice->number ?? ('#'.$invoice->id)))
+                : null;
+        }
+
+        if (in_array($status, ['global_draft', 'global_stamped', 'global_cancelled_released'], true)) {
+            $invoice = static::globalInvoiceForTicket($record);
+
+            return $invoice
+                ? 'Global: '.((string) ($invoice->number ?? ('#'.$invoice->id)))
+                : null;
+        }
+
+        return null;
+    }
+
+    public static function canCreateIndividualInvoiceFromTicket(object $record): bool
+    {
+        $status = static::fiscalStatus($record);
+
+        return $status === 'not_invoiced'
+            && (string) ($record->status ?? '') === 'paid';
+    }
+
+
+
+    public static function fiscalInvoiceForTicket(object $record): ?object
+    {
+        /*
+         * BEXIA_V5527C_POS_TICKET_REFUND_AND_INVOICE_NAV_HELPERS
+         * Regresa la factura ligada al ticket: primero individual, luego global.
+         */
+        $individual = static::individualInvoiceForTicket($record);
+
+        if ($individual) {
+            return $individual;
+        }
+
+        return static::globalInvoiceForTicket($record);
+    }
+
+    public static function fiscalInvoiceUrl(object $record): string
+    {
+        $invoice = static::fiscalInvoiceForTicket($record);
+
+        if (! $invoice || empty($invoice->id)) {
+            return '#';
+        }
+
+        return \App\Filament\Resources\InvoiceResource::getUrl('view', ['record' => (int) $invoice->id]);
+    }
+
+    public static function canRefundTicket(object $record): bool
+    {
+        if ((string) ($record->status ?? '') !== 'paid') {
+            return false;
+        }
+
+        if (! static::v5506bCanCreateRefund()) {
+            return false;
+        }
+
+        if (static::v5509dHasDoneRefund($record)) {
+            return false;
+        }
+
+        /*
+         * Bloquea devolución si el ticket está facturado o dentro de una factura global activa.
+         * Se permite si no está facturado, si solo está solicitado, o si fue liberado por cancelación.
+         */
+        return in_array(static::fiscalStatus($record), [
+            'not_invoiced',
+            'billing_requested',
+            'global_cancelled_released',
+            'individual_cancelled',
+        ], true);
+    }
+
 
     public static function statusLabel(string $status): string
     {

@@ -53,7 +53,7 @@ class ViewPosTicket extends ViewRecord
                 ->label('Devolución')
                 ->icon('heroicon-o-arrow-uturn-left')
                 ->color('danger')
-                ->visible(fn (): bool => (string) ($this->record->status ?? '') === 'paid' && \App\Filament\Resources\PosTicketResource::v5506bCanCreateRefund() && ! \App\Filament\Resources\PosTicketResource::v5509dHasDoneRefund($this->record))
+                ->visible(fn (): bool => \App\Filament\Resources\PosTicketResource::canRefundTicket($this->record))
                 ->form(function (): array {
                     $lines = \App\Filament\Resources\PosTicketResource::orderLines((int) $this->record->id);
 
@@ -162,14 +162,10 @@ class ViewPosTicket extends ViewRecord
                 ->icon('heroicon-o-globe-alt')
                 ->color('info')
                 ->visible(function (): bool {
-                    $status = (string) ($this->record->status ?? '');
-
-                    $hasInvoice = \Illuminate\Support\Facades\DB::table('invoices')
-                        ->where('source_type', 'pos_order')
-                        ->where('source_id', (int) $this->record->id)
-                        ->exists();
-
-                    return $status === 'paid' && ! $hasInvoice;
+                    /*
+                     * BEXIA_V5527B_BLOCK_PORTAL_WHEN_TICKET_NOT_FISCALLY_ELIGIBLE
+                     */
+                    return PosTicketResource::canCreateIndividualInvoiceFromTicket($this->record);
                 })
                 ->url(fn (): string => PosTicketResource::invoicePortalUrl($this->record))
                 ->openUrlInNewTab(),
@@ -184,19 +180,17 @@ class ViewPosTicket extends ViewRecord
                 ->modalSubmitActionLabel('Sí, crear factura')
                 ->modalCancelActionLabel('Salir')
                 ->visible(function (): bool {
-                    $status = (string) ($this->record->status ?? '');
-
-                    if ($status !== 'paid') {
-                        return false;
-                    }
-
-                    return ! \Illuminate\Support\Facades\DB::table('invoices')
-                        ->where('source_type', 'pos_order')
-                        ->where('source_id', (int) $this->record->id)
-                        ->exists();
+                    /*
+                     * BEXIA_V5527B_BLOCK_INDIVIDUAL_INVOICE_DUPLICATES
+                     */
+                    return PosTicketResource::canCreateIndividualInvoiceFromTicket($this->record);
                 })
                 ->action(function (): void {
                     try {
+                        if (! PosTicketResource::canCreateIndividualInvoiceFromTicket($this->record)) {
+                            throw new \RuntimeException('Este ticket no es elegible para factura individual. Estado fiscal: '.PosTicketResource::fiscalStatusLabel(PosTicketResource::fiscalStatus($this->record)));
+                        }
+
                         $invoiceId = app(\App\Support\InternalInvoiceBuilder::class)
                             ->createFromPosOrder((int) $this->record->id, auth()->id());
 
@@ -237,24 +231,16 @@ class ViewPosTicket extends ViewRecord
                     }
                 }),
 
+            /*
+             * BEXIA_V5527C_GLOBAL_INVOICE_LINK_FROM_POS_TICKET
+             * Ver factura debe abrir factura individual o factura global ligada al ticket.
+             */
             Actions\Action::make('view_internal_invoice')
                 ->label('Ver factura')
                 ->icon('heroicon-o-document-text')
                 ->color('gray')
-                ->visible(fn (): bool => \Illuminate\Support\Facades\DB::table('invoices')
-                    ->where('source_type', 'pos_order')
-                    ->where('source_id', (int) $this->record->id)
-                    ->exists())
-                ->url(function (): string {
-                    $invoiceId = \Illuminate\Support\Facades\DB::table('invoices')
-                        ->where('source_type', 'pos_order')
-                        ->where('source_id', (int) $this->record->id)
-                        ->value('id');
-
-                    return $invoiceId
-                        ? \App\Filament\Resources\InvoiceResource::getUrl('view', ['record' => $invoiceId])
-                        : '#';
-                }),
+                ->visible(fn (): bool => \App\Filament\Resources\PosTicketResource::fiscalInvoiceUrl($this->record) !== '#')
+                ->url(fn (): string => \App\Filament\Resources\PosTicketResource::fiscalInvoiceUrl($this->record)),
 
         ];
     }
