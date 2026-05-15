@@ -3248,6 +3248,38 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
 
 
 
+
+    protected function receiptSellerDisplayName(?object $posRow, object $orderRow, string $employeeName): string
+    {
+        /*
+         * BEXIA_V5527D5_RECEIPT_SELLER_DISPLAY_MODE
+         * Solo cambia el texto del vendedor en ticket impreso.
+         * No afecta pantalla PDV, permisos, sesión, tickets pendientes ni cierre de caja.
+         */
+        $mode = (string) ($posRow->receipt_seller_display_mode ?? 'staff_name');
+
+        $employeeName = trim($employeeName);
+        $posCode = trim((string) ($posRow->code ?? ''));
+        $posName = trim((string) ($posRow->name ?? ''));
+        $sessionNumber = '';
+
+        if (! empty($orderRow->pos_session_id)) {
+            $sessionNumber = (string) \Illuminate\Support\Facades\DB::table('pos_sessions')
+                ->where('id', (int) $orderRow->pos_session_id)
+                ->value('number');
+        }
+
+        $sessionNumber = trim($sessionNumber);
+
+        return match ($mode) {
+            'pos_code' => $posCode !== '' ? $posCode : ($posName !== '' ? $posName : 'Caja PDV'),
+            'session_number' => $sessionNumber !== '' ? $sessionNumber : ('Sesión #' . ($orderRow->pos_session_id ?? '')),
+            'hidden' => '',
+            default => $employeeName !== '' ? $employeeName : 'Sin vendedor asignado',
+        };
+    }
+
+
     public function printPendingTicket(\Illuminate\Http\Request $request, int $order)
     {
         // V5.50.4A - permiso para imprimir tickets pendientes.
@@ -3354,7 +3386,7 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
         return view('pos.pending-ticket-print', [
             'order' => $orderRow,
             'lines' => $lines,
-            'sellerName' => $employeeName !== '' ? $employeeName : 'Sin vendedor asignado',
+            'sellerName' => $this->receiptSellerDisplayName($posRow, $orderRow, $employeeName),
             'customerName' => ($this->v5403CustomerPayloadFromOrder($orderRow)['name'] ?? 'Público en General'),
             'logoUrl' => $logoUrl,
             'printedAt' => now(),
@@ -3456,7 +3488,7 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             'order' => $orderRow,
             'lines' => $lines,
             'payments' => $payments,
-            'sellerName' => $employeeName !== '' ? $employeeName : 'Sin vendedor asignado',
+            'sellerName' => $this->receiptSellerDisplayName($posRow, $orderRow, $employeeName),
             'customerName' => ($this->v5403CustomerPayloadFromOrder($orderRow)['name'] ?? 'Público en General'),
             'logoUrl' => $logoUrl,
             'printedAt' => now(),

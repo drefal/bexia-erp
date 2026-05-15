@@ -168,6 +168,7 @@
 </head>
 <body>
 @php
+    /* BEXIA_V5527D5_RECEIPT_SELLER_DISPLAY_MODE_VIEW */
     // V5.50.8B - Ticket 80mm pagado/devuelto limpio.
     $ticketMetadata = is_array($metadata ?? null) ? $metadata : [];
 
@@ -335,10 +336,12 @@
                 <td class="right">{{ $v5496nPriceListName }}</td>
             </tr>
         @endif
-        <tr>
-            <td>Vendedor:</td>
-            <td class="right">{{ $sellerName }}</td>
-        </tr>
+        @if(trim((string) ($sellerName ?? '')) !== '')
+            <tr>
+                <td>Vendedor:</td>
+                <td class="right">{{ $sellerName }}</td>
+            </tr>
+        @endif
         <tr>
             <td>Estado:</td>
             <td class="right bold">{{ $isReturned ? 'Devuelto' : 'Pagado' }}</td>

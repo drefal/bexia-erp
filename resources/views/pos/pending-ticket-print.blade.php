@@ -130,6 +130,7 @@
 </head>
 <body>
 @php
+    /* BEXIA_V5527D5_RECEIPT_SELLER_DISPLAY_MODE_VIEW */
     $v5496aPriceListName = trim((string) (
         $order->price_list_name
         ?? (json_decode((string) ($order->metadata ?? ''), true)['price_list_name'] ?? '')
@@ -192,10 +193,12 @@
             <td>Cliente:</td>
             <td class="right">{{ $customerName ?? 'Público en General' }}</td>
         </tr>
-        <tr>
-            <td>Vendedor:</td>
-            <td class="right">{{ $sellerName }}</td>
-        </tr>
+        @if(trim((string) ($sellerName ?? '')) !== '')
+            <tr>
+                <td>Vendedor:</td>
+                <td class="right">{{ $sellerName }}</td>
+            </tr>
+        @endif
         <tr>
             <td>Estado:</td>
             <td class="right bold">Pendiente de cobro</td>

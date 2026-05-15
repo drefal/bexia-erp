@@ -337,6 +337,26 @@ Forms\Components\TextInput::make('name')
                                             ->helperText('Genérico para la mayoría de empresas. Papelón usa el corte especial por secciones e impresiones.'),
                                     ]),
 
+                                /*
+                                 * BEXIA_V5527D5C_RECEIPT_PRIVACY_SECTION
+                                 */
+                                Forms\Components\Section::make('Privacidad del ticket')
+                                    ->description('Configura cómo se muestra el vendedor/cajero en los tickets impresos. No afecta la pantalla del PDV.')
+                                    ->columns(2)
+                                    ->schema([
+                                        Forms\Components\Select::make('receipt_seller_display_mode')
+                                            ->label('Mostrar vendedor en ticket como')
+                                            ->options([
+                                                'staff_name' => 'Nombre del vendedor/cajero',
+                                                'pos_code' => 'Código del PDV / caja',
+                                                'session_number' => 'Número de sesión',
+                                                'hidden' => 'No mostrar',
+                                            ])
+                                            ->default('staff_name')
+                                            ->native(false)
+                                            ->helperText('Usa Código del PDV / caja o No mostrar si no quieres exponer nombres de vendedores.'),
+                                    ]),
+
                                 Forms\Components\Section::make('Ticket')
                                     ->columns(2)
                                     ->schema([
