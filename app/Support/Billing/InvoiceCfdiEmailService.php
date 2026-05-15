@@ -14,6 +14,19 @@ class InvoiceCfdiEmailService
 {
     public function defaultEmail(Invoice $invoice): string
     {
+        /*
+         * BEXIA_V5528B5_PORTAL_EMAIL_DEFAULT
+         * Si la factura fue solicitada desde /facturar, el correo capturado por
+         * el cliente vive en metadata.portal_invoice_request.email.
+         * Este correo debe usarse para enviar el CFDI timbrado, sin contaminar
+         * el contacto Público en General.
+         */
+        $portalEmail = $this->portalInvoiceRequestEmail($invoice);
+
+        if ($this->looksLikeEmail($portalEmail)) {
+            return $portalEmail;
+        }
+
         foreach ([
             'customer_email',
             'contact_email',
@@ -604,6 +617,39 @@ class InvoiceCfdiEmailService
 
         return array_values(array_unique($recipients));
     }
+
+
+    private function portalInvoiceRequestEmail(Invoice $invoice): string
+    {
+        /*
+         * BEXIA_V5528B5_PORTAL_EMAIL_HELPER
+         */
+        $metadata = $invoice->metadata ?? [];
+
+        if (is_string($metadata) && trim($metadata) !== '') {
+            $decoded = json_decode($metadata, true);
+            $metadata = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($metadata)) {
+            return '';
+        }
+
+        foreach ([
+            'portal_invoice_request.email',
+            'portal_invoice.email',
+            'portal_email',
+        ] as $path) {
+            $email = strtolower(trim((string) data_get($metadata, $path, '')));
+
+            if ($this->looksLikeEmail($email)) {
+                return $email;
+            }
+        }
+
+        return '';
+    }
+
 
     private function looksLikeEmail(string $value): bool
     {
