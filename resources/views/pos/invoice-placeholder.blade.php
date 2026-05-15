@@ -5,9 +5,9 @@
     <title>Facturación Bexia</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    {{-- BEXIA_V5528B_PUBLIC_INVOICE_PORTAL_DRAFT_INVOICE --}}
-    <link rel="icon" href="{{ asset('favicon.ico') }}?v=5528b" sizes="any">
-    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}?v=5528b">
+    {{-- BEXIA_V5528C14_PUBLIC_INVOICE_PORTAL_CLEAN_VIEW_PROD --}}
+    <link rel="icon" href="{{ asset('favicon.ico') }}?v=5528c14" sizes="any">
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}?v=5528c14">
 
     <style>
         :root {
@@ -23,16 +23,16 @@
             --shadow: 0 22px 70px rgba(15, 23, 42, .13);
 
             --ok-bg: #ecfdf5;
-            --ok-border: #86efac;
-            --ok-text: #14532d;
+            --ok-border: #4ade80;
+            --ok-text: #065f46;
 
             --warn-bg: #fffbeb;
-            --warn-border: #fcd34d;
-            --warn-text: #78350f;
+            --warn-border: #f59e0b;
+            --warn-text: #92400e;
 
-            --error-bg: #fef2f2;
-            --error-border: #fca5a5;
-            --error-text: #7f1d1d;
+            --info-bg: #eff6ff;
+            --info-border: #93c5fd;
+            --info-text: #1e3a8a;
         }
 
         * { box-sizing: border-box; }
@@ -126,7 +126,6 @@
 
         @media (min-width: 720px) {
             .grid.two { grid-template-columns: 1.35fr .85fr; }
-            .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
             .grid.fiscal { grid-template-columns: 1fr 1fr; }
         }
 
@@ -198,23 +197,25 @@
             border: 1px solid var(--border);
         }
 
-        .result.ok,
-        .result.success {
+        .result-success,
+        .result-ok {
             background: var(--ok-bg);
             border-color: var(--ok-border);
             color: var(--ok-text);
         }
 
-        .result.blocked {
+        .result-error,
+        .result-blocked,
+        .result-warning {
             background: var(--warn-bg);
             border-color: var(--warn-border);
             color: var(--warn-text);
         }
 
-        .result.error {
-            background: var(--error-bg);
-            border-color: var(--error-border);
-            color: var(--error-text);
+        .result-info {
+            background: var(--info-bg);
+            border-color: var(--info-border);
+            color: var(--info-text);
         }
 
         .result-title {
@@ -244,6 +245,78 @@
 
         .summary strong { text-align: right; }
 
+        .portal-result-downloads {
+            margin-top: 16px;
+            padding: 16px;
+            border: 1px solid #bfdbfe;
+            border-radius: 20px;
+            background: #eff6ff;
+            color: #1e3a8a;
+        }
+
+        .portal-result-downloads-title {
+            font-weight: 900;
+            margin-bottom: 10px;
+            color: #1e3a8a;
+        }
+
+        .portal-result-downloads-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        @media (min-width: 720px) {
+            .portal-result-downloads-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        .portal-result-download-link {
+            display: block;
+            width: 100%;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 14px;
+            padding: 12px 14px;
+            background: #1f5eff;
+            color: #ffffff;
+            font-weight: 900;
+            box-shadow: 0 10px 22px rgba(31, 94, 255, .18);
+        }
+
+        .portal-result-download-link:hover {
+            background: #1748c7;
+        }
+
+        .portal-actions-clean {
+            margin-top: 14px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .portal-home-link-clean {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 260px;
+            border-radius: 16px;
+            padding: 13px 18px;
+            background: #ffffff;
+            color: #1f5eff;
+            border: 1px solid #bfdbfe;
+            font-weight: 900;
+            text-decoration: none;
+            box-shadow: 0 10px 24px rgba(31, 94, 255, .10);
+        }
+
+        .portal-home-link-clean:hover {
+            background: #eff6ff;
+            border-color: #1f5eff;
+        }
+
         .footer {
             margin-top: 18px;
             color: var(--muted);
@@ -259,49 +332,6 @@
             .brand-logo img { max-height: 110px; }
             .brand-subtitle { font-size: 15px; }
         }
-    
-        /* BEXIA_V5528B8_PORTAL_DOWNLOAD_LINKS_CSS */
-        .download-panel {
-            margin-top: 18px;
-            border: 1px solid #bfdbfe;
-            border-radius: 20px;
-            padding: 18px;
-            background: #eff6ff;
-            color: #1e3a8a;
-        }
-
-        .download-panel-title {
-            font-weight: 900;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-
-        .download-links {
-            display: grid;
-            gap: 10px;
-        }
-
-        @media (min-width: 720px) {
-            .download-links {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-
-        .download-link {
-            display: block;
-            text-align: center;
-            text-decoration: none;
-            border-radius: 14px;
-            padding: 12px 14px;
-            background: #1f5eff;
-            color: #ffffff;
-            font-weight: 900;
-        }
-
-        .download-link:hover {
-            background: #1748c7;
-        }
-
     </style>
 </head>
 <body>
@@ -309,7 +339,7 @@
         <section class="card">
             <header class="brand">
                 <div class="brand-logo">
-                    <img src="{{ asset('logo-facturacion.png') }}?v=5528b" alt="Bexia Facturación">
+                    <img src="{{ asset('logo-facturacion.png') }}?v=5528c14" alt="Bexia Facturación">
                 </div>
 
                 <div class="brand-subtitle">
@@ -318,7 +348,7 @@
             </header>
 
             <p class="intro">
-                Captura el folio y el total exacto de tu ticket. Si el ticket es elegible, podrás capturar tus datos fiscales para crear tu factura en borrador.
+                Captura el folio y el total exacto de tu ticket. Si el ticket es elegible, podrás capturar tus datos fiscales para crear tu factura.
             </p>
 
             <section class="panel">
@@ -364,28 +394,38 @@
 
             @if($result)
                 @php
-                    $class = ($result['ok'] ?? false)
-                        ? (($result['type'] ?? '') === 'success' ? 'success' : 'ok')
-                        : (($result['type'] ?? '') === 'blocked' ? 'blocked' : 'error');
+                    $resultType = $result['type'] ?? 'success';
+
+                    $class = match ($resultType) {
+                        'success' => 'result-success',
+                        'error', 'blocked', 'warning' => 'result-warning',
+                        'info' => 'result-info',
+                        default => (($result['ok'] ?? false) ? 'result-ok' : 'result-warning'),
+                    };
 
                     $showFiscalForm = (bool) (($result['show_fiscal_form'] ?? false) && ! ($result['completed'] ?? false));
+
+                    $orderNumber = $result['order_number'] ?? $result['ticket'] ?? null;
+                    $orderTotal = $result['order_total'] ?? null;
                 @endphp
 
                 <section class="result {{ $class }}">
                     <div class="result-title">{{ $result['title'] ?? 'Resultado' }}</div>
                     <div class="result-message">{{ $result['message'] ?? '' }}</div>
 
-                    @if(! empty($result['order_number']))
+                    @if($orderNumber)
                         <div class="summary">
                             <div>
                                 <span>Ticket</span>
-                                <strong>{{ $result['order_number'] }}</strong>
+                                <strong>{{ $orderNumber }}</strong>
                             </div>
 
-                            <div>
-                                <span>Total</span>
-                                <strong>${{ number_format((float) ($result['order_total'] ?? 0), 2) }}</strong>
-                            </div>
+                            @if($orderTotal !== null)
+                                <div>
+                                    <span>Total</span>
+                                    <strong>${{ number_format((float) $orderTotal, 2) }}</strong>
+                                </div>
+                            @endif
 
                             <div>
                                 <span>Estado fiscal</span>
@@ -408,6 +448,30 @@
                         </div>
                     @endif
                 </section>
+
+                {{-- BEXIA_V5528C14_PORTAL_DOWNLOADS_AFTER_RESULT_PROD --}}
+                @if(! $showFiscalForm && ! empty($result['download_links']))
+                    <section class="portal-result-downloads">
+                        <div class="portal-result-downloads-title">Archivos de tu factura</div>
+
+                        <div class="portal-result-downloads-grid">
+                            @foreach($result['download_links'] as $link)
+                                <a class="portal-result-download-link" href="{{ $link['url'] }}" target="_blank" rel="noopener">
+                                    {{ $link['label'] }}
+                                </a>
+                            @endforeach
+                        </div>
+                    </section>
+                @endif
+
+                {{-- BEXIA_V5528C14_PORTAL_BACK_HOME_AFTER_FINAL_RESULT_PROD --}}
+                @if(! $showFiscalForm && (! empty($result['invoice_id']) || ! empty($result['invoice_number'])))
+                    <div class="portal-actions-clean">
+                        <a class="portal-home-link-clean" href="{{ route('public.invoice-placeholder') }}">
+                            Regresar al inicio de facturación
+                        </a>
+                    </div>
+                @endif
 
                 @if($showFiscalForm)
                     <section class="panel">
@@ -499,27 +563,8 @@
                         </form>
 
                         <div class="hint">
-                            La factura se creará en borrador para revisión. El timbrado automático se activará en una siguiente fase.
-                        
-        {{-- BEXIA_V5528B8_PORTAL_DOWNLOAD_LINKS_VIEW --}}
-        @if($result && ! empty($result['download_links']))
-            <div class="download-panel">
-                <div class="download-panel-title">Archivos de tu factura</div>
-                <p class="muted" style="margin-top: 0;">
-                    Puedes descargar tus archivos aquí. Estas ligas están protegidas y solo funcionan para esta factura.
-                </p>
-
-                <div class="download-links">
-                    @foreach($result['download_links'] as $link)
-                        <a class="download-link" href="{{ $link['url'] }}" target="_blank" rel="noopener">
-                            {{ $link['label'] }}
-                        </a>
-                    @endforeach
-                </div>
-            </div>
-        @endif
-
-</div>
+                            Si los datos fiscales fueron rechazados, corrígelos exactamente como aparecen en tu Constancia de Situación Fiscal y vuelve a solicitar la factura.
+                        </div>
                     </section>
                 @endif
             @endif

@@ -42,7 +42,7 @@ class PublicInvoicePortalController extends Controller
             'ticket' => $ticket,
             'total' => $totalInput,
             'result' => $result,
-            'fiscalData' => $this->emptyFiscalData(),
+            'fiscalData' => $this->fiscalDataForPortalValidationResult($result),
             'taxRegimeOptions' => $this->taxRegimeOptions(),
             'cfdiUseOptions' => $this->cfdiUseOptions(),
         ]);
@@ -105,7 +105,32 @@ class PublicInvoicePortalController extends Controller
         }
 
         try {
-            $invoiceResult = $this->createPortalInvoiceDraft((int) $result['order_id'], $fiscalData);
+            /*
+             * BEXIA_V5528C9B_RETRY_USE_EXISTING_INVOICE_PROD
+             * Si el intento anterior falló por datos fiscales, no crear otra factura:
+             * actualizar la factura existente y volver a timbrar.
+             */
+            $invoiceResult = ! empty($result['retry_invoice_id'])
+                ? $this->prepareExistingPortalInvoiceForRetry((int) $result['order_id'], (int) $result['retry_invoice_id'], $fiscalData)
+                : $this->createPortalInvoiceDraft((int) $result['order_id'], $fiscalData);
+
+            /*
+             * BEXIA_V5528C_PORTAL_AUTO_STAMP_AFTER_REQUEST_PROD
+             * En producción se intenta timbrar inmediatamente desde el portal.
+             * Si el PAC no responde o falla validación, queda como solicitud recibida.
+             */
+            $autoStampResult = $this->attemptPortalAutoStampAfterRequest($invoiceResult, $result, $ticket, $fiscalData);
+
+            if ($autoStampResult !== null) {
+                return view('pos.invoice-placeholder', [
+                    'ticket' => $ticket,
+                    'total' => $totalInput,
+                    'result' => $autoStampResult,
+                    'fiscalData' => $fiscalData,
+                    'taxRegimeOptions' => $this->taxRegimeOptions(),
+                    'cfdiUseOptions' => $this->cfdiUseOptions(),
+                ]);
+            }
 
             return view('pos.invoice-placeholder', [
                 'ticket' => $ticket,
@@ -526,17 +551,137 @@ class PublicInvoicePortalController extends Controller
 
     protected function taxRegimeOptions(): array
     {
+        /*
+         * BEXIA_V5528C_PORTAL_FULL_TAX_REGIME_OPTIONS_PROD
+         */
+        $options = [];
+
+        foreach (['sat_tax_regimes', 'sat_tax_regime', 'tax_regimes'] as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $columns = Schema::getColumnListing($table);
+
+            $codeColumn = collect(['code', 'key', 'sat_code', 'tax_regime_code', 'regime_code'])
+                ->first(fn ($column) => in_array($column, $columns, true));
+
+            $nameColumn = collect(['name', 'description', 'label', 'title'])
+                ->first(fn ($column) => in_array($column, $columns, true));
+
+            if (! $codeColumn) {
+                continue;
+            }
+
+            $query = DB::table($table);
+
+            foreach (['is_active', 'active', 'enabled'] as $activeColumn) {
+                if (in_array($activeColumn, $columns, true)) {
+                    $query->where($activeColumn, true);
+                    break;
+                }
+            }
+
+            foreach ($query->orderBy($codeColumn)->get() as $row) {
+                $code = trim((string) ($row->{$codeColumn} ?? ''));
+
+                if (! preg_match('/^\\d{3}$/', $code)) {
+                    continue;
+                }
+
+                $name = $nameColumn ? trim((string) ($row->{$nameColumn} ?? '')) : '';
+
+                $options[$code] = $code . ($name !== '' ? ' - ' . $name : '');
+            }
+        }
+
+        foreach (['sat_billing_catalog_items', 'sat_catalog_items', 'sat_billing_catalogs'] as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+
+            $columns = Schema::getColumnListing($table);
+
+            $codeColumn = collect(['code', 'key', 'sat_code', 'value', 'item_key'])
+                ->first(fn ($column) => in_array($column, $columns, true));
+
+            $nameColumn = collect(['name', 'description', 'label', 'title'])
+                ->first(fn ($column) => in_array($column, $columns, true));
+
+            if (! $codeColumn) {
+                continue;
+            }
+
+            $catalogColumns = array_values(array_filter(
+                ['catalog', 'catalog_type', 'type', 'catalog_key', 'group', 'category'],
+                fn ($column) => in_array($column, $columns, true)
+            ));
+
+            foreach (DB::table($table)->limit(3000)->get() as $row) {
+                $belongsToTaxRegime = empty($catalogColumns);
+
+                foreach ($catalogColumns as $catalogColumn) {
+                    $catalogValue = mb_strtolower((string) ($row->{$catalogColumn} ?? ''));
+
+                    if (
+                        str_contains($catalogValue, 'regimen')
+                        || str_contains($catalogValue, 'régimen')
+                        || str_contains($catalogValue, 'tax_regime')
+                        || str_contains($catalogValue, 'regime')
+                    ) {
+                        $belongsToTaxRegime = true;
+                        break;
+                    }
+                }
+
+                if (! $belongsToTaxRegime) {
+                    continue;
+                }
+
+                $code = trim((string) ($row->{$codeColumn} ?? ''));
+
+                if (! preg_match('/^\\d{3}$/', $code)) {
+                    continue;
+                }
+
+                $name = $nameColumn ? trim((string) ($row->{$nameColumn} ?? '')) : '';
+
+                $options[$code] = $code . ($name !== '' ? ' - ' . $name : '');
+            }
+        }
+
+        if (! empty($options)) {
+            ksort($options);
+
+            return $options;
+        }
+
         return [
             '601' => '601 - General de Ley Personas Morales',
             '603' => '603 - Personas Morales con Fines no Lucrativos',
-            '605' => '605 - Sueldos y Salarios',
+            '605' => '605 - Sueldos y Salarios e Ingresos Asimilados a Salarios',
             '606' => '606 - Arrendamiento',
+            '607' => '607 - Régimen de Enajenación o Adquisición de Bienes',
+            '608' => '608 - Demás ingresos',
+            '610' => '610 - Residentes en el Extranjero sin Establecimiento Permanente en México',
+            '611' => '611 - Ingresos por Dividendos',
             '612' => '612 - Personas Físicas con Actividades Empresariales y Profesionales',
+            '614' => '614 - Ingresos por intereses',
+            '615' => '615 - Régimen de los ingresos por obtención de premios',
             '616' => '616 - Sin obligaciones fiscales',
+            '620' => '620 - Sociedades Cooperativas de Producción que optan por diferir sus ingresos',
             '621' => '621 - Incorporación Fiscal',
+            '622' => '622 - Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras',
+            '623' => '623 - Opcional para Grupos de Sociedades',
+            '624' => '624 - Coordinados',
+            '625' => '625 - Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas',
             '626' => '626 - Régimen Simplificado de Confianza',
+            '628' => '628 - Hidrocarburos',
+            '629' => '629 - De los Regímenes Fiscales Preferentes',
+            '630' => '630 - Enajenación de acciones en bolsa de valores',
         ];
     }
+
 
     protected function cfdiUseOptions(): array
     {
@@ -609,6 +754,17 @@ class PublicInvoicePortalController extends Controller
                 'download_links' => $this->portalInvoiceDownloadLinks($invoiceId, $token),
                 'completed' => true,
             ]);
+        }
+
+        /*
+         * BEXIA_V5528C7_PORTAL_RECHECK_FISCAL_ERROR_PROD
+         */
+        if ((string) ($invoice->cfdi_status ?? '') === 'stamp_error') {
+            $stampMessage = $this->latestPortalInvoiceCfdiErrorMessage($invoiceId);
+
+            if ($this->isPortalCustomerFiscalDataError($stampMessage)) {
+                return $this->portalInvoiceFiscalDataErrorResult($base, $stampMessage);
+            }
         }
 
         return array_merge($base, [
@@ -687,5 +843,360 @@ class PublicInvoicePortalController extends Controller
         ];
     }
 
+
+    /*
+     * BEXIA_V5528C_PORTAL_AUTO_STAMP_HELPER_PROD
+     */
+    protected function attemptPortalAutoStampAfterRequest(
+        array $invoiceResult,
+        array $validationResult,
+        string $ticket,
+        array $fiscalData
+    ): ?array {
+        $invoiceId = (int) ($invoiceResult['invoice_id'] ?? 0);
+
+        if ($invoiceId <= 0) {
+            return null;
+        }
+
+        $base = [
+            'order_id' => $validationResult['order_id'] ?? null,
+            'order_number' => $validationResult['order_number'] ?? $ticket,
+            'order_total' => $validationResult['order_total'] ?? null,
+            'invoice_id' => $invoiceId,
+            'invoice_number' => $invoiceResult['invoice_number'] ?? null,
+            'email' => $fiscalData['email'] ?? null,
+            'completed' => true,
+        ];
+
+        try {
+            $invoice = \App\Models\Invoice::query()->find($invoiceId);
+
+            if (! $invoice) {
+                return $this->portalInvoiceReceivedFallbackResult($base);
+            }
+
+            try {
+                \App\Filament\Resources\InvoiceResource::recalculateInvoice($invoice);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+
+            $invoice->refresh();
+
+            $stampResult = app(\App\Support\Billing\InvoiceCfdiStampService::class)
+                ->stamp($invoice, null);
+
+            $invoice->refresh();
+
+            if (($stampResult['success'] ?? false) === true && (string) ($invoice->cfdi_status ?? '') === 'stamped') {
+                $token = $this->ensurePortalDownloadTokenForInvoice($invoiceId);
+
+                return array_merge($base, [
+                    'ok' => true,
+                    'type' => 'success',
+                    'title' => 'Factura timbrada correctamente',
+                    'message' => 'Tu factura fue timbrada correctamente. También enviamos los archivos al correo capturado.',
+                    'fiscal_label' => 'CFDI timbrado',
+                    'cfdi_uuid' => (string) ($invoice->cfdi_uuid ?? ''),
+                    'download_links' => $this->portalInvoiceDownloadLinks($invoiceId, $token),
+                ]);
+            }
+
+            /*
+             * BEXIA_V5528C7_PORTAL_FISCAL_ERROR_MESSAGE_PROD
+             * Si el PAC/SAT rechaza por datos fiscales del receptor, se informa
+             * al cliente. Si parece falla temporal/PAC sin respuesta, queda como
+             * solicitud recibida para revisión interna.
+             */
+            $stampMessage = (string) (
+                ($stampResult['message'] ?? '')
+                ?: $this->latestPortalInvoiceCfdiErrorMessage($invoiceId)
+            );
+
+            if ($this->isPortalCustomerFiscalDataError($stampMessage)) {
+                return $this->portalInvoiceFiscalDataErrorResult($base, $stampMessage);
+            }
+
+            return $this->portalInvoiceReceivedFallbackResult($base);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->portalInvoiceReceivedFallbackResult($base);
+        }
+    }
+
+
+    protected function portalInvoiceReceivedFallbackResult(array $base): array
+    {
+        return array_merge($base, [
+            'ok' => true,
+            'type' => 'success',
+            'title' => 'Solicitud de factura recibida',
+            'message' => 'Creamos tu factura en borrador. Si el timbrado no respondió en este momento, el equipo podrá revisarla, timbrarla y enviarla al correo capturado.',
+            'fiscal_label' => 'Factura interna en borrador',
+        ]);
+    }
+
+
+
+    /*
+     * BEXIA_V5528C7_PORTAL_FISCAL_ERROR_HELPERS_PROD
+     */
+        protected function portalInvoiceFiscalDataErrorResult(array $base, string $stampMessage): array
+    {
+        /*
+         * BEXIA_V5528C9B_FISCAL_ERROR_CAN_RETRY_PROD
+         */
+        $safeMessage = trim($stampMessage);
+        $invoiceId = (int) ($base['invoice_id'] ?? 0);
+
+        return array_merge($base, [
+            'ok' => true,
+            'type' => 'error',
+            'title' => 'Corrige tus datos fiscales',
+            'message' => 'El SAT/PAC rechazó el timbrado porque los datos fiscales no coinciden exactamente con la Constancia de Situación Fiscal. Revisa RFC, nombre fiscal, código postal fiscal, régimen fiscal y vuelve a intentarlo.',
+            'fiscal_label' => 'Datos fiscales rechazados',
+            'stamp_error_message' => $safeMessage,
+            'show_fiscal_form' => true,
+            'retry_invoice_id' => $invoiceId,
+            'completed' => false,
+        ]);
+    }
+
+
+    protected function isPortalCustomerFiscalDataError(?string $message): bool
+    {
+        $message = mb_strtolower((string) $message);
+
+        if ($message === '') {
+            return false;
+        }
+
+        $needles = [
+            'cfdi40145',
+            'nombre del receptor',
+            'rfc del receptor',
+            'domicilio fiscal receptor',
+            'regimen fiscal receptor',
+            'régimen fiscal receptor',
+            'uso cfdi',
+            'codigo postal del receptor',
+            'código postal del receptor',
+            'debe pertenecer al nombre asociado',
+            'lista de rfc inscritos no cancelados',
+            'constancia de situación fiscal',
+            'constancia de situacion fiscal',
+        ];
+
+        foreach ($needles as $needle) {
+            if (str_contains($message, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function latestPortalInvoiceCfdiErrorMessage(int $invoiceId): string
+    {
+        if ($invoiceId <= 0 || ! \Illuminate\Support\Facades\Schema::hasTable('invoice_cfdi_audits')) {
+            return '';
+        }
+
+        $row = DB::table('invoice_cfdi_audits')
+            ->where('invoice_id', $invoiceId)
+            ->where(function ($query) {
+                $query->where('status', 'error')
+                    ->orWhere('action', 'stamp');
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        return trim((string) ($row->message ?? ''));
+    }
+
+
+    protected function fiscalDataForPortalValidationResult(array $result): array
+    {
+        /*
+         * BEXIA_V5528C9B_PREFILL_RETRY_FISCAL_DATA_PROD
+         */
+        $invoiceId = (int) ($result['retry_invoice_id'] ?? 0);
+
+        if ($invoiceId <= 0) {
+            return $this->emptyFiscalData();
+        }
+
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+
+        if (! $invoice) {
+            return $this->emptyFiscalData();
+        }
+
+        $metadata = $this->metadataArray($invoice->metadata ?? null);
+        $request = data_get($metadata, 'portal_invoice_request', []);
+
+        if (! is_array($request)) {
+            $request = [];
+        }
+
+        return [
+            'rfc' => (string) (($request['rfc'] ?? '') ?: ($invoice->customer_rfc ?? '')),
+            'fiscal_name' => (string) (($request['fiscal_name'] ?? '') ?: ($invoice->customer_fiscal_name ?? '')),
+            'postal_code' => (string) (($request['postal_code'] ?? '') ?: ($invoice->customer_postal_code ?? '')),
+            'tax_regime_code' => (string) (($request['tax_regime_code'] ?? '') ?: ($invoice->customer_tax_regime_code ?? '')),
+            'cfdi_use_code' => (string) (($request['cfdi_use_code'] ?? '') ?: ($invoice->customer_cfdi_use_code ?? '')),
+            'email' => (string) ($request['email'] ?? ''),
+        ];
+    }
+
+    protected function prepareExistingPortalInvoiceForRetry(int $orderId, int $invoiceId, array $fiscalData): array
+    {
+        /*
+         * BEXIA_V5528C9B_PREPARE_EXISTING_INVOICE_RETRY_PROD
+         */
+        if ($orderId <= 0 || $invoiceId <= 0) {
+            throw new \RuntimeException('No se pudo preparar el reintento de facturación.');
+        }
+
+        return DB::transaction(function () use ($orderId, $invoiceId, $fiscalData): array {
+            $order = DB::table('pos_orders')
+                ->where('id', $orderId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $order) {
+                throw new \RuntimeException('No se encontró el ticket.');
+            }
+
+            $invoice = DB::table('invoices')
+                ->where('id', $invoiceId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $invoice) {
+                throw new \RuntimeException('No se encontró la factura para reintentar.');
+            }
+
+            $orderMetadata = $this->metadataArray($order->metadata ?? null);
+            $linkedInvoiceId = (int) ($orderMetadata['portal_invoice_id'] ?? 0);
+
+            if ($linkedInvoiceId !== $invoiceId) {
+                throw new \RuntimeException('La factura no corresponde al ticket capturado.');
+            }
+
+            $stampMessage = $this->latestPortalInvoiceCfdiErrorMessage($invoiceId);
+
+            if ((string) ($invoice->cfdi_status ?? '') !== 'stamp_error' || ! $this->isPortalCustomerFiscalDataError($stampMessage)) {
+                throw new \RuntimeException('Esta factura no está disponible para corrección desde el portal.');
+            }
+
+            $contactId = $this->createOrUpdateFiscalContact($order, $fiscalData);
+
+            if ($contactId && Schema::hasColumn('pos_orders', 'customer_id')) {
+                DB::table('pos_orders')
+                    ->where('id', $orderId)
+                    ->update([
+                        'customer_id' => $contactId,
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            $this->updateInvoiceFiscalSnapshot($invoiceId, $contactId, $fiscalData);
+            $this->updatePortalRetryMetadata($orderId, $invoiceId, $fiscalData);
+            $this->resetPortalInvoiceStampStateForRetry($invoiceId);
+
+            $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+
+            return [
+                'invoice_id' => (int) $invoiceId,
+                'invoice_number' => (string) ($invoice->number ?? ('#' . $invoiceId)),
+                'retry' => true,
+            ];
+        });
+    }
+
+    protected function updatePortalRetryMetadata(int $orderId, int $invoiceId, array $fiscalData): void
+    {
+        /*
+         * BEXIA_V5528C9B_UPDATE_RETRY_METADATA_PROD
+         */
+        $invoice = DB::table('invoices')->where('id', $invoiceId)->first();
+
+        if ($invoice) {
+            $metadata = $this->metadataArray($invoice->metadata ?? null);
+
+            data_set($metadata, 'portal_invoice_request.rfc', $fiscalData['rfc'] ?? '');
+            data_set($metadata, 'portal_invoice_request.fiscal_name', $fiscalData['fiscal_name'] ?? '');
+            data_set($metadata, 'portal_invoice_request.postal_code', $fiscalData['postal_code'] ?? '');
+            data_set($metadata, 'portal_invoice_request.tax_regime_code', $fiscalData['tax_regime_code'] ?? '');
+            data_set($metadata, 'portal_invoice_request.cfdi_use_code', $fiscalData['cfdi_use_code'] ?? '');
+            data_set($metadata, 'portal_invoice_request.email', $fiscalData['email'] ?? '');
+            data_set($metadata, 'portal_invoice_request.retry_requested_at', now()->toDateTimeString());
+
+            data_forget($metadata, 'portal_invoice_request.auto_email_success');
+            data_forget($metadata, 'portal_invoice_request.auto_email_to');
+            data_forget($metadata, 'portal_invoice_request.auto_email_attempted_at');
+            data_forget($metadata, 'portal_invoice_request.auto_email_message');
+
+            DB::table('invoices')
+                ->where('id', $invoiceId)
+                ->update([
+                    'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'updated_at' => now(),
+                ]);
+        }
+
+        $order = DB::table('pos_orders')->where('id', $orderId)->first();
+
+        if ($order) {
+            $metadata = $this->metadataArray($order->metadata ?? null);
+
+            $metadata['portal_invoice_retry_requested_at'] = now()->toDateTimeString();
+            $metadata['portal_invoice_email'] = $fiscalData['email'] ?? '';
+            $metadata['portal_invoice_rfc'] = $fiscalData['rfc'] ?? '';
+
+            DB::table('pos_orders')
+                ->where('id', $orderId)
+                ->update([
+                    'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'updated_at' => now(),
+                ]);
+        }
+    }
+
+    protected function resetPortalInvoiceStampStateForRetry(int $invoiceId): void
+    {
+        /*
+         * BEXIA_V5528C9B_RESET_STAMP_STATE_RETRY_PROD
+         */
+        if ($invoiceId <= 0 || ! Schema::hasTable('invoices')) {
+            return;
+        }
+
+        $updates = [
+            'updated_at' => now(),
+        ];
+
+        foreach ([
+            'cfdi_status' => null,
+            'cfdi_uuid' => null,
+            'cfdi_pdf_path' => null,
+            'cfdi_xml_path' => null,
+            'cfdi_status_message' => null,
+            'cfdi_error_message' => null,
+            'cfdi_error' => null,
+            'cfdi_last_error' => null,
+        ] as $column => $value) {
+            if (Schema::hasColumn('invoices', $column)) {
+                $updates[$column] = $value;
+            }
+        }
+
+        DB::table('invoices')
+            ->where('id', $invoiceId)
+            ->update($updates);
+    }
 
 }
