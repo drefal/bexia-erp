@@ -301,11 +301,15 @@ Route::post('/pos/sessions/{session}/price-list-changes', [\App\Http\Controllers
 
 
 
-Route::get('/facturar', function (\Illuminate\Http\Request $request) {
-    return view('pos.invoice-placeholder', [
-        'ticket' => (string) $request->query('ticket', ''),
-    ]);
-})->name('public.invoice-placeholder');
+/*
+ * BEXIA_V5528A_PUBLIC_INVOICE_PORTAL_VALIDATE_TICKET
+ * Portal público de autofacturación. Fase 1: validar ticket por folio + total.
+ */
+Route::get('/facturar', [\App\Http\Controllers\PublicInvoicePortalController::class, 'show'])
+    ->name('public.invoice-placeholder');
+
+Route::post('/facturar/validar', [\App\Http\Controllers\PublicInvoicePortalController::class, 'validateTicket'])
+    ->name('public.invoice.validate');
 
 
 Route::get('/pos/sessions/{session}/cash-employees', [\App\Http\Controllers\PosController::class, 'cashMovementEmployees'])->name('pos.sessions.cash-employees');
