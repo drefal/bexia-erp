@@ -311,6 +311,24 @@ Route::get('/facturar', [\App\Http\Controllers\PublicInvoicePortalController::cl
 Route::post('/facturar/validar', [\App\Http\Controllers\PublicInvoicePortalController::class, 'validateTicket'])
     ->name('public.invoice.validate');
 
+Route::post('/facturar/solicitar', [\App\Http\Controllers\PublicInvoicePortalController::class, 'requestInvoice'])
+    ->name('public.invoice.request');
+
+
+/*
+|--------------------------------------------------------------------------
+| Portal público de facturación - descargas CFDI
+|--------------------------------------------------------------------------
+| BEXIA_V5528B8_PUBLIC_CFDI_DOWNLOAD_LINKS
+*/
+Route::middleware(['web'])->get(
+    '/facturar/descargar/{invoice}/{type}/{token}',
+    \App\Http\Controllers\PublicInvoiceDownloadController::class
+)
+    ->where('type', 'pdf|xml|zip')
+    ->name('public.invoice.download');
+
+
 
 Route::get('/pos/sessions/{session}/cash-employees', [\App\Http\Controllers\PosController::class, 'cashMovementEmployees'])->name('pos.sessions.cash-employees');
 Route::post('/pos/sessions/{session}/cash-movements', [\App\Http\Controllers\PosController::class, 'storeCashMovement'])->name('pos.sessions.cash-movements.store');

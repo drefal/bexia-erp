@@ -110,6 +110,21 @@ public static function canEdit(Model $record): bool
     public static function form(Form $form): Form
     {
         return $form->schema([
+
+                Forms\Components\Section::make('Solicitud de autofacturación')
+                    ->description('Datos capturados por el cliente desde el portal público de facturación.')
+                    ->schema([
+                        Forms\Components\Placeholder::make('portal_invoice_request_summary')
+                            ->label('')
+                            ->content(fn (?Invoice $record): \Illuminate\Support\HtmlString => static::portalInvoiceRequestSummaryHtml($record)),
+                    ])
+                    ->visible(fn (?Invoice $record): bool => static::hasPortalInvoiceRequestMetadata($record))
+                    ->columns(1)
+                    ->collapsible(),
+                /*
+                 * BEXIA_V5528B3_PORTAL_INVOICE_REQUEST_SECTION
+                 */
+
             Forms\Components\Section::make('Cabecera')
                 ->description('Selecciona el cliente y el uso CFDI. El regimen fiscal y los datos fiscales se toman desde Contactos.')
                 ->columns(12)
@@ -1939,6 +1954,95 @@ public static function canEdit(Model $record): bool
             'Pendiente' => 'gray',
             default => 'gray',
         };
+    }
+
+
+
+    /*
+     * BEXIA_V5528B3_PORTAL_INVOICE_REQUEST_HELPERS
+     * Muestra datos capturados desde /facturar sin agregar columnas nuevas a invoices.
+     */
+    protected static function portalInvoiceMetadataArray(?Invoice $record): array
+    {
+        if (! $record) {
+            return [];
+        }
+
+        $metadata = $record->metadata ?? [];
+
+        if (is_array($metadata)) {
+            return $metadata;
+        }
+
+        if (is_string($metadata) && trim($metadata) !== '') {
+            $decoded = json_decode($metadata, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
+    protected static function hasPortalInvoiceRequestMetadata(?Invoice $record): bool
+    {
+        $metadata = static::portalInvoiceMetadataArray($record);
+
+        return is_array(data_get($metadata, 'portal_invoice_request'));
+    }
+
+    protected static function portalInvoiceRequestSummaryHtml(?Invoice $record): \Illuminate\Support\HtmlString
+    {
+        $metadata = static::portalInvoiceMetadataArray($record);
+        $request = data_get($metadata, 'portal_invoice_request', []);
+
+        if (! is_array($request) || empty($request)) {
+            return new \Illuminate\Support\HtmlString('');
+        }
+
+        $ticket = (string) (
+            data_get($metadata, 'pos_order_number')
+            ?: data_get($metadata, 'ticket_folio')
+            ?: data_get($metadata, 'ticket_number')
+            ?: ($record?->source_number ?? '')
+        );
+
+        $rows = [
+            'Ticket' => $ticket,
+            'Correo solicitado' => data_get($request, 'email'),
+            'RFC capturado' => data_get($request, 'rfc'),
+            'Nombre fiscal' => data_get($request, 'fiscal_name'),
+            'Código postal' => data_get($request, 'postal_code'),
+            'Régimen fiscal' => data_get($request, 'tax_regime_code'),
+            'Uso CFDI' => data_get($request, 'cfdi_use_code'),
+            'Fecha de solicitud' => data_get($request, 'requested_at') ?: data_get($metadata, 'portal_invoice_requested_at'),
+        ];
+
+        $html = '<div class="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm dark:border-primary-800 dark:bg-primary-950/30">';
+        $html .= '<div class="mb-3 font-semibold text-primary-700 dark:text-primary-300">Solicitud recibida desde el portal público</div>';
+        $html .= '<dl class="space-y-2">';
+
+        foreach ($rows as $label => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $html .= '<div class="grid gap-1 border-b border-primary-100 pb-2 last:border-b-0 last:pb-0 dark:border-primary-800 md:grid-cols-3">';
+            $html .= '<dt class="font-medium text-gray-600 dark:text-gray-300">' . e($label) . '</dt>';
+            $html .= '<dd class="md:col-span-2 font-semibold text-gray-950 dark:text-white">' . e((string) $value) . '</dd>';
+            $html .= '</div>';
+        }
+
+        $html .= '</dl>';
+
+        if (strtoupper((string) data_get($request, 'rfc')) === 'XAXX010101000') {
+            $html .= '<div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">';
+            $html .= 'Público en General protegido: el correo se conserva como correo de envío del portal, no como correo del contacto.';
+            $html .= '</div>';
+        }
+
+        $html .= '</div>';
+
+        return new \Illuminate\Support\HtmlString($html);
     }
 
 

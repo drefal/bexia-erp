@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Throwable;
 
 class InvoiceCfdiStampService
@@ -133,17 +134,202 @@ class InvoiceCfdiStampService
                 ],
             ]);
 
+            /*
+             * BEXIA_V5528B8_AUTO_EMAIL_AFTER_STAMP
+             * Si la factura viene del portal /facturar, enviar automáticamente
+             * PDF/XML/ZIP al correo capturado por el cliente.
+             */
+            $portalEmailResult = $this->sendPortalCfdiEmailAfterStamp($invoice->refresh(), $user);
+
+            $successMessage = 'CFDI timbrado correctamente. UUID: '.$result['uuid'];
+
+            if (($portalEmailResult['success'] ?? false) === true) {
+                $successMessage .= ' También se envió el CFDI al correo del portal: '.($portalEmailResult['email'] ?? '');
+            } elseif (($portalEmailResult['attempted'] ?? false) === true) {
+                $successMessage .= ' No se pudo enviar automáticamente el correo del portal: '.($portalEmailResult['message'] ?? 'Error no especificado.');
+            }
+
             return [
                 'success' => true,
                 'status' => InvoiceCfdiValidator::STATUS_STAMPED,
-                'message' => 'CFDI timbrado correctamente. UUID: '.$result['uuid'],
+                'message' => $successMessage,
                 'uuid' => (string) $result['uuid'],
                 'xml_path' => $stampedXmlPath,
+                'portal_email_result' => $portalEmailResult,
             ];
         } catch (Throwable $e) {
             return $this->stampError($invoice->refresh(), $user, $e->getMessage());
         }
     }
+
+
+    /*
+     * BEXIA_V5528B8_AUTO_EMAIL_HELPERS
+     */
+    private function sendPortalCfdiEmailAfterStamp(Invoice $invoice, ?User $user): array
+    {
+        $invoice->refresh();
+
+        $metadata = $this->metadataArray($invoice->metadata ?? null);
+        $email = strtolower(trim((string) data_get($metadata, 'portal_invoice_request.email', '')));
+
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return [
+                'attempted' => false,
+                'success' => false,
+                'message' => 'La factura no tiene correo de portal válido.',
+            ];
+        }
+
+        if ((bool) data_get($metadata, 'portal_invoice_request.auto_email_success', false)) {
+            return [
+                'attempted' => false,
+                'success' => true,
+                'already_sent' => true,
+                'email' => $email,
+                'message' => 'El correo automático del portal ya había sido enviado.',
+            ];
+        }
+
+        $token = $this->ensurePortalDownloadTokenForInvoice($invoice);
+        $links = $this->portalInvoiceDownloadLinks($invoice, $token);
+
+        $message = app(InvoiceCfdiEmailService::class)->defaultMessage($invoice);
+        $message .= "\n\n";
+        $message .= "También puedes descargar tus archivos desde estas ligas seguras:\n";
+        $message .= "PDF: " . ($links['pdf'] ?? '') . "\n";
+        $message .= "XML: " . ($links['xml'] ?? '') . "\n";
+        $message .= "ZIP: " . ($links['zip'] ?? '') . "\n";
+
+        try {
+            $result = app(InvoiceCfdiEmailService::class)
+                ->send($invoice->refresh(), $email, $message);
+
+            $success = (bool) ($result['success'] ?? false);
+            $resultMessage = (string) ($result['message'] ?? '');
+
+            $this->storePortalEmailResult($invoice->refresh(), [
+                'attempted_at' => now()->toDateTimeString(),
+                'success' => $success,
+                'email' => $email,
+                'message' => $resultMessage,
+                'links' => $links,
+                'user_id' => $user?->id,
+            ]);
+
+            return [
+                'attempted' => true,
+                'success' => $success,
+                'email' => $email,
+                'message' => $resultMessage,
+                'links' => $links,
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            $this->storePortalEmailResult($invoice->refresh(), [
+                'attempted_at' => now()->toDateTimeString(),
+                'success' => false,
+                'email' => $email,
+                'message' => $e->getMessage(),
+                'links' => $links,
+                'user_id' => $user?->id,
+            ]);
+
+            return [
+                'attempted' => true,
+                'success' => false,
+                'email' => $email,
+                'message' => $e->getMessage(),
+                'links' => $links,
+            ];
+        }
+    }
+
+    private function ensurePortalDownloadTokenForInvoice(Invoice $invoice): string
+    {
+        $invoice->refresh();
+
+        $metadata = $this->metadataArray($invoice->metadata ?? null);
+        $token = (string) data_get($metadata, 'portal_invoice_request.download_token', '');
+
+        if ($token === '') {
+            $token = Str::random(64);
+
+            data_set($metadata, 'portal_invoice_request.download_token', $token);
+            $metadata['portal_download_token'] = $token;
+            $metadata['portal_download_token_created_at'] = now()->toDateTimeString();
+
+            DB::table('invoices')
+                ->where('id', (int) $invoice->id)
+                ->update([
+                    'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'updated_at' => now(),
+                ]);
+
+            $invoice->refresh();
+        }
+
+        return $token;
+    }
+
+    private function portalInvoiceDownloadLinks(Invoice $invoice, string $token): array
+    {
+        if ((int) ($invoice->id ?? 0) <= 0 || $token === '') {
+            return [];
+        }
+
+        $links = [];
+
+        foreach (['pdf', 'xml', 'zip'] as $type) {
+            try {
+                $links[$type] = route('public.invoice.download', [
+                    'invoice' => (int) $invoice->id,
+                    'type' => $type,
+                    'token' => $token,
+                ]);
+            } catch (Throwable $e) {
+                $links[$type] = url('/facturar/descargar/'.((int) $invoice->id).'/'.$type.'/'.$token);
+            }
+        }
+
+        return $links;
+    }
+
+    private function storePortalEmailResult(Invoice $invoice, array $result): void
+    {
+        $metadata = $this->metadataArray($invoice->metadata ?? null);
+
+        data_set($metadata, 'portal_invoice_request.auto_email_attempted_at', $result['attempted_at'] ?? now()->toDateTimeString());
+        data_set($metadata, 'portal_invoice_request.auto_email_success', (bool) ($result['success'] ?? false));
+        data_set($metadata, 'portal_invoice_request.auto_email_to', (string) ($result['email'] ?? ''));
+        data_set($metadata, 'portal_invoice_request.auto_email_message', mb_substr((string) ($result['message'] ?? ''), 0, 1000));
+        data_set($metadata, 'portal_invoice_request.auto_email_user_id', $result['user_id'] ?? null);
+        data_set($metadata, 'portal_invoice_request.download_links', $result['links'] ?? []);
+
+        DB::table('invoices')
+            ->where('id', (int) $invoice->id)
+            ->update([
+                'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'updated_at' => now(),
+            ]);
+    }
+
+    private function metadataArray(mixed $metadata): array
+    {
+        if (is_array($metadata)) {
+            return $metadata;
+        }
+
+        if (is_string($metadata) && trim($metadata) !== '') {
+            $decoded = json_decode($metadata, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
 
     private function stampError(Invoice $invoice, ?User $user, string $message, array $meta = []): array
     {

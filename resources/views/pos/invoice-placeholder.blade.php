@@ -5,9 +5,9 @@
     <title>Facturación Bexia</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    {{-- BEXIA_V5528A5_PUBLIC_INVOICE_PORTAL_FINAL_FORMAT --}}
-    <link rel="icon" href="{{ asset('favicon.ico') }}?v=5528a5" sizes="any">
-    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}?v=5528a5">
+    {{-- BEXIA_V5528B_PUBLIC_INVOICE_PORTAL_DRAFT_INVOICE --}}
+    <link rel="icon" href="{{ asset('favicon.ico') }}?v=5528b" sizes="any">
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}?v=5528b">
 
     <style>
         :root {
@@ -35,14 +35,7 @@
             --error-text: #7f1d1d;
         }
 
-        * {
-            box-sizing: border-box;
-        }
-
-        html,
-        body {
-            min-height: 100%;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -57,7 +50,7 @@
 
         .page {
             width: 100%;
-            max-width: 820px;
+            max-width: 850px;
             margin: 0 auto;
         }
 
@@ -73,7 +66,6 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             text-align: center;
             gap: 14px;
             margin-bottom: 28px;
@@ -106,7 +98,7 @@
         }
 
         .intro {
-            max-width: 620px;
+            max-width: 640px;
             margin: 0 auto 24px;
             color: var(--muted);
             font-size: 15px;
@@ -114,11 +106,12 @@
             text-align: center;
         }
 
-        .form-panel {
+        .panel {
             border: 1px solid #eef2f7;
             background: #fbfdff;
             border-radius: 22px;
             padding: 20px;
+            margin-top: 18px;
         }
 
         form {
@@ -132,9 +125,9 @@
         }
 
         @media (min-width: 720px) {
-            .grid {
-                grid-template-columns: 1.35fr .85fr;
-            }
+            .grid.two { grid-template-columns: 1.35fr .85fr; }
+            .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .grid.fiscal { grid-template-columns: 1fr 1fr; }
         }
 
         label {
@@ -147,7 +140,7 @@
             text-transform: uppercase;
         }
 
-        input {
+        input, select {
             width: 100%;
             border: 1px solid var(--input-border);
             border-radius: 15px;
@@ -156,14 +149,9 @@
             color: var(--text);
             font-size: 16px;
             outline: none;
-            transition: border-color .15s ease, box-shadow .15s ease;
         }
 
-        input::placeholder {
-            color: #94a3b8;
-        }
-
-        input:focus {
+        input:focus, select:focus {
             border-color: var(--primary);
             box-shadow: 0 0 0 4px rgba(31, 94, 255, .13);
         }
@@ -175,7 +163,7 @@
 
         button {
             width: 100%;
-            max-width: 300px;
+            max-width: 330px;
             border: 0;
             border-radius: 16px;
             padding: 15px 18px;
@@ -187,9 +175,7 @@
             box-shadow: 0 12px 30px rgba(31, 94, 255, .23);
         }
 
-        button:hover {
-            background: var(--primary-dark);
-        }
+        button:hover { background: var(--primary-dark); }
 
         .hint {
             margin-top: 12px;
@@ -199,6 +185,12 @@
             text-align: center;
         }
 
+        .section-title {
+            margin: 0 0 14px;
+            font-size: 18px;
+            font-weight: 900;
+        }
+
         .result {
             margin-top: 22px;
             border-radius: 20px;
@@ -206,7 +198,8 @@
             border: 1px solid var(--border);
         }
 
-        .result.ok {
+        .result.ok,
+        .result.success {
             background: var(--ok-bg);
             border-color: var(--ok-border);
             color: var(--ok-text);
@@ -249,22 +242,7 @@
             padding-top: 8px;
         }
 
-        .summary span {
-            opacity: .82;
-        }
-
-        .summary strong {
-            text-align: right;
-        }
-
-        .next {
-            margin-top: 16px;
-            padding: 14px;
-            border-radius: 15px;
-            background: rgba(255, 255, 255, .65);
-            border: 1px solid rgba(15, 23, 42, .10);
-            line-height: 1.55;
-        }
+        .summary strong { text-align: right; }
 
         .footer {
             margin-top: 18px;
@@ -275,28 +253,55 @@
         }
 
         @media (max-width: 520px) {
-            body {
-                padding: 18px 10px;
-            }
+            body { padding: 18px 10px; }
+            .card { padding: 22px 16px; border-radius: 24px; }
+            .brand-logo { width: min(300px, 86vw); min-height: 72px; }
+            .brand-logo img { max-height: 110px; }
+            .brand-subtitle { font-size: 15px; }
+        }
+    
+        /* BEXIA_V5528B8_PORTAL_DOWNLOAD_LINKS_CSS */
+        .download-panel {
+            margin-top: 18px;
+            border: 1px solid #bfdbfe;
+            border-radius: 20px;
+            padding: 18px;
+            background: #eff6ff;
+            color: #1e3a8a;
+        }
 
-            .card {
-                padding: 22px 16px;
-                border-radius: 24px;
-            }
+        .download-panel-title {
+            font-weight: 900;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
 
-            .brand-logo {
-                width: min(300px, 86vw);
-                min-height: 72px;
-            }
+        .download-links {
+            display: grid;
+            gap: 10px;
+        }
 
-            .brand-logo img {
-                max-height: 110px;
-            }
-
-            .brand-subtitle {
-                font-size: 15px;
+        @media (min-width: 720px) {
+            .download-links {
+                grid-template-columns: repeat(3, 1fr);
             }
         }
+
+        .download-link {
+            display: block;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 14px;
+            padding: 12px 14px;
+            background: #1f5eff;
+            color: #ffffff;
+            font-weight: 900;
+        }
+
+        .download-link:hover {
+            background: #1748c7;
+        }
+
     </style>
 </head>
 <body>
@@ -304,7 +309,7 @@
         <section class="card">
             <header class="brand">
                 <div class="brand-logo">
-                    <img src="{{ asset('logo-facturacion.png') }}?v=5528a5" alt="Bexia Facturación">
+                    <img src="{{ asset('logo-facturacion.png') }}?v=5528b" alt="Bexia Facturación">
                 </div>
 
                 <div class="brand-subtitle">
@@ -313,14 +318,14 @@
             </header>
 
             <p class="intro">
-                Captura el folio y el total exacto de tu ticket. Esta validación ayuda a proteger tu información y evita facturar tickets incorrectos.
+                Captura el folio y el total exacto de tu ticket. Si el ticket es elegible, podrás capturar tus datos fiscales para crear tu factura en borrador.
             </p>
 
-            <section class="form-panel">
+            <section class="panel">
                 <form method="POST" action="{{ route('public.invoice.validate') }}">
                     @csrf
 
-                    <div class="grid">
+                    <div class="grid two">
                         <div>
                             <label for="ticket">Folio del ticket</label>
                             <input
@@ -360,8 +365,10 @@
             @if($result)
                 @php
                     $class = ($result['ok'] ?? false)
-                        ? 'ok'
+                        ? (($result['type'] ?? '') === 'success' ? 'success' : 'ok')
                         : (($result['type'] ?? '') === 'blocked' ? 'blocked' : 'error');
+
+                    $showFiscalForm = (bool) (($result['show_fiscal_form'] ?? false) && ! ($result['completed'] ?? false));
                 @endphp
 
                 <section class="result {{ $class }}">
@@ -384,16 +391,137 @@
                                 <span>Estado fiscal</span>
                                 <strong>{{ $result['fiscal_label'] ?? '—' }}</strong>
                             </div>
-                        </div>
-                    @endif
 
-                    @if(($result['ok'] ?? false) === true)
-                        <div class="next">
-                            <strong>Siguiente paso:</strong>
-                            captura de datos fiscales del receptor. Esta parte se activará en la siguiente versión del portal.
+                            @if(! empty($result['invoice_number']))
+                                <div>
+                                    <span>Factura</span>
+                                    <strong>{{ $result['invoice_number'] }}</strong>
+                                </div>
+                            @endif
+
+                            @if(! empty($result['email']))
+                                <div>
+                                    <span>Correo</span>
+                                    <strong>{{ $result['email'] }}</strong>
+                                </div>
+                            @endif
                         </div>
                     @endif
                 </section>
+
+                @if($showFiscalForm)
+                    <section class="panel">
+                        <h2 class="section-title">Datos fiscales</h2>
+
+                        <form method="POST" action="{{ route('public.invoice.request') }}">
+                            @csrf
+
+                            <input type="hidden" name="ticket" value="{{ $ticket ?? '' }}">
+                            <input type="hidden" name="total" value="{{ $total ?? '' }}">
+
+                            <div class="grid fiscal">
+                                <div>
+                                    <label for="rfc">RFC</label>
+                                    <input
+                                        id="rfc"
+                                        name="rfc"
+                                        value="{{ old('rfc', $fiscalData['rfc'] ?? '') }}"
+                                        placeholder="Ej. XAXX010101000"
+                                        maxlength="13"
+                                        required
+                                    >
+                                </div>
+
+                                <div>
+                                    <label for="fiscal_name">Razón social / nombre fiscal</label>
+                                    <input
+                                        id="fiscal_name"
+                                        name="fiscal_name"
+                                        value="{{ old('fiscal_name', $fiscalData['fiscal_name'] ?? '') }}"
+                                        placeholder="Nombre fiscal"
+                                        required
+                                    >
+                                </div>
+
+                                <div>
+                                    <label for="postal_code">Código postal fiscal</label>
+                                    <input
+                                        id="postal_code"
+                                        name="postal_code"
+                                        value="{{ old('postal_code', $fiscalData['postal_code'] ?? '') }}"
+                                        placeholder="Ej. 06020"
+                                        maxlength="5"
+                                        inputmode="numeric"
+                                        required
+                                    >
+                                </div>
+
+                                <div>
+                                    <label for="tax_regime_code">Régimen fiscal</label>
+                                    <select id="tax_regime_code" name="tax_regime_code" required>
+                                        <option value="">Selecciona régimen</option>
+                                        @foreach($taxRegimeOptions as $code => $label)
+                                            <option value="{{ $code }}" @selected(old('tax_regime_code', $fiscalData['tax_regime_code'] ?? '') === $code)>
+                                                {{ $label }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label for="cfdi_use_code">Uso CFDI</label>
+                                    <select id="cfdi_use_code" name="cfdi_use_code" required>
+                                        <option value="">Selecciona uso CFDI</option>
+                                        @foreach($cfdiUseOptions as $code => $label)
+                                            <option value="{{ $code }}" @selected(old('cfdi_use_code', $fiscalData['cfdi_use_code'] ?? '') === $code)>
+                                                {{ $label }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label for="email">Correo electrónico</label>
+                                    <input
+                                        id="email"
+                                        name="email"
+                                        value="{{ old('email', $fiscalData['email'] ?? '') }}"
+                                        placeholder="correo@dominio.com"
+                                        type="email"
+                                        required
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="button-row">
+                                <button type="submit">Solicitar factura</button>
+                            </div>
+                        </form>
+
+                        <div class="hint">
+                            La factura se creará en borrador para revisión. El timbrado automático se activará en una siguiente fase.
+                        
+        {{-- BEXIA_V5528B8_PORTAL_DOWNLOAD_LINKS_VIEW --}}
+        @if($result && ! empty($result['download_links']))
+            <div class="download-panel">
+                <div class="download-panel-title">Archivos de tu factura</div>
+                <p class="muted" style="margin-top: 0;">
+                    Puedes descargar tus archivos aquí. Estas ligas están protegidas y solo funcionan para esta factura.
+                </p>
+
+                <div class="download-links">
+                    @foreach($result['download_links'] as $link)
+                        <a class="download-link" href="{{ $link['url'] }}" target="_blank" rel="noopener">
+                            {{ $link['label'] }}
+                        </a>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+
+</div>
+                    </section>
+                @endif
             @endif
 
             <footer class="footer">
