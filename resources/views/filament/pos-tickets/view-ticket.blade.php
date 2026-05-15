@@ -4,7 +4,39 @@
             $status = (string) ($order->status ?? '');
             $inventoryStatus = (string) ($metadata['inventory_status'] ?? 'pending');
             $billingStatus = (string) ($metadata['billing_status'] ?? 'pending');
+
+            /*
+             * BEXIA_V5527F_FISCAL_REFUND_NOTICE
+             */
+            $v5527fFiscalRefundNotice = \App\Filament\Resources\PosTicketResource::fiscalRefundNotice($order);
         @endphp
+
+        @if($v5527fFiscalRefundNotice)
+            @php
+                $v5527fColor = (string) ($v5527fFiscalRefundNotice['color'] ?? 'warning');
+                $v5527fClasses = match ($v5527fColor) {
+                    'danger' => 'border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100',
+                    default => 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100',
+                };
+            @endphp
+
+            <div class="rounded-xl border p-4 text-sm {{ $v5527fClasses }}">
+                <div class="font-black">
+                    {{ $v5527fFiscalRefundNotice['title'] ?? 'Aviso fiscal' }}
+                </div>
+                <div class="mt-1">
+                    {{ $v5527fFiscalRefundNotice['message'] ?? '' }}
+                </div>
+
+                @if(\App\Filament\Resources\PosTicketResource::fiscalInvoiceUrl($order) !== '#')
+                    <div class="mt-3">
+                        <a href="{{ \App\Filament\Resources\PosTicketResource::fiscalInvoiceUrl($order) }}" class="inline-flex items-center rounded-lg bg-white/80 px-3 py-1.5 text-xs font-bold text-gray-950 ring-1 ring-gray-300 hover:bg-white dark:bg-gray-900 dark:text-white dark:ring-gray-700">
+                            Ver factura relacionada
+                        </a>
+                    </div>
+                @endif
+            </div>
+        @endif
 
         <x-filament::section>
             <x-slot name="heading">Cabecera del ticket</x-slot>

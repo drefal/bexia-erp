@@ -1923,6 +1923,58 @@ return (int) $refundId;
     }
 
 
+
+    public static function fiscalRefundNotice(object $record): ?array
+    {
+        /*
+         * BEXIA_V5527F_FISCAL_REFUND_NOTICE
+         * Explica por qué no aparece el botón Devolución cuando el ticket ya está facturado.
+         */
+        if ((string) ($record->status ?? '') !== 'paid') {
+            return null;
+        }
+
+        if (static::canRefundTicket($record)) {
+            return null;
+        }
+
+        $status = static::fiscalStatus($record);
+        $invoice = static::fiscalInvoiceForTicket($record);
+        $invoiceNumber = $invoice
+            ? (string) ($invoice->number ?? ('#' . $invoice->id))
+            : null;
+
+        return match ($status) {
+            'individual_draft' => [
+                'title' => 'Ticket con factura individual en borrador',
+                'message' => 'Este ticket ya tiene una factura individual en borrador' . ($invoiceNumber ? ' (' . $invoiceNumber . ')' : '') . '. Para devolverlo, primero cancela esa factura interna o elimina el vínculo fiscal.',
+                'color' => 'warning',
+            ],
+            'individual_stamped' => [
+                'title' => 'Ticket con CFDI individual timbrado',
+                'message' => 'Este ticket ya está facturado con CFDI individual' . ($invoiceNumber ? ' (' . $invoiceNumber . ')' : '') . '. Para una devolución total, primero cancela el CFDI y confirma la cancelación. Para devolución parcial, corresponde una nota de crédito / CFDI de egreso.',
+                'color' => 'danger',
+            ],
+            'global_draft' => [
+                'title' => 'Ticket incluido en factura global en borrador',
+                'message' => 'Este ticket está incluido en una factura global en borrador' . ($invoiceNumber ? ' (' . $invoiceNumber . ')' : '') . '. Cancela la factura global en borrador para liberar los tickets antes de devolver.',
+                'color' => 'warning',
+            ],
+            'global_stamped' => [
+                'title' => 'Ticket incluido en factura global timbrada',
+                'message' => 'Este ticket está incluido en una factura global timbrada' . ($invoiceNumber ? ' (' . $invoiceNumber . ')' : '') . '. Primero cancela el CFDI global y confirma la cancelación SAT/PAC; al liberarse el ticket podrá procesarse la devolución.',
+                'color' => 'danger',
+            ],
+            'individual_error' => [
+                'title' => 'Factura individual con error',
+                'message' => 'Este ticket tiene una factura individual con error' . ($invoiceNumber ? ' (' . $invoiceNumber . ')' : '') . '. Revisa o cancela la factura antes de registrar devolución.',
+                'color' => 'warning',
+            ],
+            default => null,
+        };
+    }
+
+
     public static function statusLabel(string $status): string
     {
         return match ($status) {
