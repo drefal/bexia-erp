@@ -72,16 +72,18 @@ class ViewPosTicket extends ViewRecord
 
                         \Filament\Forms\Components\Placeholder::make('partial_refund_help')
                             ->label('Cantidades por producto')
-                            ->content('Para devolución parcial, captura la cantidad a devolver. Para devolución total, activa “Devolver todo el ticket”.'),
+                            ->content('Para devolución parcial, captura la cantidad a devolver. Para devolución total, activa “Devolver todo el ticket”. Los servicios se reembolsan financieramente, pero no generan entrada de inventario.'),
                     ];
 
                     foreach ($lines as $line) {
                         $qty = (float) ($line->quantity ?? 0);
                         $price = (float) ($line->unit_price ?? 0);
                         $label = trim((string) ($line->product_name ?? ('Producto #' . ($line->product_id ?? $line->id))));
+                        $behavior = \App\Filament\Resources\PosTicketResource::v5527eProductInventoryBehaviorForProductId((int) ($line->product_id ?? 0));
+                        $inventoryLabel = (string) ($behavior['inventory_label'] ?? 'Inventario');
 
                         $fields[] = \Filament\Forms\Components\TextInput::make('line_' . $line->id)
-                            ->label($label . ' | Vendido: ' . number_format($qty, 2) . ' | Precio: $' . number_format($price, 2))
+                            ->label($label . ' | ' . $inventoryLabel . ' | Vendido: ' . number_format($qty, 2) . ' | Precio: $' . number_format($price, 2))
                             ->numeric()
                             ->default(0)
                             ->minValue(0)
@@ -94,7 +96,7 @@ class ViewPosTicket extends ViewRecord
                 })
                 ->requiresConfirmation()
                 ->modalHeading(fn (): string => 'Devolución - ' . ($this->record->number ?: ('#' . $this->record->id)))
-                ->modalDescription('Puedes devolver todo el ticket o capturar cantidades específicas para una devolución parcial.')
+                ->modalDescription('Puedes devolver todo el ticket o capturar cantidades específicas para una devolución parcial. Productos inventariables podrán regresar a inventario; servicios solo generan devolución financiera.')
                 ->modalSubmitActionLabel('Registrar devolución')
                 ->action(function (array $data): void {
                     $reason = (string) ($data['reason'] ?? '');

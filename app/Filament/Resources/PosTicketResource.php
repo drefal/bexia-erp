@@ -470,6 +470,162 @@ public static function canCreate(): bool
         ];
     }
 
+
+    public static function v5527eProductInventoryBehavior(?object $product, int $productId = 0): array
+    {
+        /*
+         * BEXIA_V5527E_REFUND_SERVICE_NO_INVENTORY
+         * Los servicios sí pueden reembolsarse financieramente, pero nunca regresan a inventario.
+         */
+        $productType = strtolower(trim((string) (
+            $product->product_type
+            ?? $product->type
+            ?? $product->item_type
+            ?? ''
+        )));
+
+        $isService = in_array($productType, ['service', 'servicio', 'services'], true)
+            || (bool) ($product->is_service ?? false);
+
+        $nonInventoryTypes = [
+            'service',
+            'servicio',
+            'services',
+            'non_stockable',
+            'no_stock',
+            'no_inventory',
+            'consumable',
+            'consumible',
+        ];
+
+        $isInventory = $productId > 0
+            && ! $isService
+            && ! in_array($productType, $nonInventoryTypes, true);
+
+        return [
+            'product_type' => $productType !== '' ? $productType : 'stockable',
+            'is_service' => $isService,
+            'is_inventory' => $isInventory,
+            'inventory_label' => $isInventory ? 'Inventariable' : ($isService ? 'Servicio / sin inventario' : 'Sin inventario'),
+        ];
+    }
+
+    public static function v5527eProductInventoryBehaviorForProductId(?int $productId): array
+    {
+        /*
+         * BEXIA_V5527E_PRODUCT_INVENTORY_BEHAVIOR_FOR_PRODUCT_ID
+         */
+        $productId = (int) ($productId ?? 0);
+
+        if ($productId <= 0 || ! \Illuminate\Support\Facades\Schema::hasTable('products')) {
+            return [
+                'product_type' => 'unknown',
+                'is_service' => false,
+                'is_inventory' => false,
+                'inventory_label' => 'Sin producto / sin inventario',
+            ];
+        }
+
+        $product = \Illuminate\Support\Facades\DB::table('products')
+            ->where('id', $productId)
+            ->first();
+
+        return static::v5527eProductInventoryBehavior($product, $productId);
+    }
+
+    public static function v5527eRefundLineMetadata(object $line, array $extra = []): array
+    {
+        /*
+         * BEXIA_V5527E_REFUND_LINE_METADATA
+         */
+        $productId = (int) ($line->product_id ?? 0);
+        $behavior = static::v5527eProductInventoryBehaviorForProductId($productId);
+
+        return array_merge($extra, [
+            'inventory_behavior' => $behavior['is_inventory'] ? 'inventory_return_allowed' : 'financial_only_no_inventory',
+            'inventory_label' => $behavior['inventory_label'],
+            'is_service' => $behavior['is_service'],
+            'is_inventory' => $behavior['is_inventory'],
+            'product_type' => $behavior['product_type'],
+        ]);
+    }
+
+    public static function v5527eRefundInventorySummary(iterable $lines): array
+    {
+        /*
+         * BEXIA_V5527E_REFUND_INVENTORY_SUMMARY
+         */
+        $inventory = 0;
+        $noInventory = 0;
+        $services = 0;
+
+        foreach ($lines as $line) {
+            if (is_array($line) && isset($line['line'])) {
+                $line = $line['line'];
+            }
+
+            if (! is_object($line)) {
+                continue;
+            }
+
+            $productId = (int) ($line->product_id ?? 0);
+            $qty = round((float) ($line->quantity ?? 0), 6);
+
+            if ($qty <= 0) {
+                continue;
+            }
+
+            $behavior = static::v5527eProductInventoryBehaviorForProductId($productId);
+
+            if ($behavior['is_inventory']) {
+                $inventory++;
+            } else {
+                $noInventory++;
+
+                if ($behavior['is_service']) {
+                    $services++;
+                }
+            }
+        }
+
+        $status = $inventory > 0 ? 'pending' : 'skipped_no_stockable_lines';
+
+        return [
+            'inventory_lines' => $inventory,
+            'no_inventory_lines' => $noInventory,
+            'service_lines' => $services,
+            'inventory_return_status' => $status,
+            'inventory_return_message' => $inventory > 0
+                ? 'Hay productos inventariables para regresar a inventario.'
+                : 'La devolución no tiene productos inventariables; solo aplica devolución financiera.',
+        ];
+    }
+
+    public static function v5527eRefundHasInventoryReturnLines(object $refund): bool
+    {
+        /*
+         * BEXIA_V5527E_REFUND_HAS_INVENTORY_RETURN_LINES
+         */
+        if (! \Illuminate\Support\Facades\Schema::hasTable('pos_order_refund_lines')) {
+            return false;
+        }
+
+        $lines = \Illuminate\Support\Facades\DB::table('pos_order_refund_lines')
+            ->where('pos_order_refund_id', (int) $refund->id)
+            ->get();
+
+        foreach ($lines as $line) {
+            $behavior = static::v5527eProductInventoryBehaviorForProductId((int) ($line->product_id ?? 0));
+
+            if ($behavior['is_inventory'] && (float) ($line->quantity ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
     public static function v5506bCreateTotalRefund(object $record, string $reason): int
     {
         // V5.51.5A - Audit intento devolución total.
@@ -617,9 +773,9 @@ public static function canCreate(): bool
                     'subtotal' => $amounts['subtotal'],
                     'tax_total' => $amounts['tax_total'],
                     'total' => $amounts['total'],
-                    'metadata' => static::v5506bJson([
+                    'metadata' => static::v5506bJson(static::v5527eRefundLineMetadata($line, [
                         'source_line_id' => $line->id ?? null,
-                    ]),
+                    ])),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -894,10 +1050,10 @@ return (int) $refundId;
                     'subtotal' => $item['subtotal'],
                     'tax_total' => $item['tax_total'],
                     'total' => $item['total'],
-                    'metadata' => static::v5506bJson([
+                    'metadata' => static::v5506bJson(static::v5527eRefundLineMetadata($line, [
                         'source_line_id' => $line->id ?? null,
                         'partial' => true,
-                    ]),
+                    ])),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
