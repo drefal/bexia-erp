@@ -3480,9 +3480,24 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             }
         }
 
-        $invoiceUrl = url('/facturar') . '?' . http_build_query([
-            'ticket' => (string) $orderRow->number,
-        ]);
+        /*
+         * BEXIA_V5528D2_QR_FACTURACION_TICKET_TOTAL_PROD
+         * El QR del ticket cobrado debe abrir el portal publico de facturacion
+         * con folio y total precargados para facilitar la autofacturacion.
+         */
+        $invoicePortalTotal = null;
+
+        foreach (['total', 'grand_total', 'paid_total', 'amount_total', 'total_amount'] as $totalField) {
+            if (isset($orderRow->{$totalField}) && $orderRow->{$totalField} !== null) {
+                $invoicePortalTotal = number_format((float) $orderRow->{$totalField}, 2, '.', '');
+                break;
+            }
+        }
+
+        $invoiceUrl = route('public.invoice-placeholder') . '?' . http_build_query(array_filter([
+            'ticket' => (string) ($orderRow->number ?? ''),
+            'total' => $invoicePortalTotal,
+        ], fn ($value): bool => $value !== null && $value !== ''));
 
         return view('pos.paid-ticket-print', [
             'order' => $orderRow,
