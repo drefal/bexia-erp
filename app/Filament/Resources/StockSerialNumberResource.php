@@ -43,21 +43,6 @@ class StockSerialNumberResource extends Resource
         return auth()->check() && static::canManage('inventory.menu.view');
     }
 
-    public static function canCreate(): bool
-    {
-        return auth()->check() && static::canManage('inventory.create');
-    }
-
-    public static function canEdit(Model $record): bool
-    {
-        return auth()->check() && static::canManage('inventory.update');
-    }
-
-    public static function canDelete(Model $record): bool
-    {
-        return auth()->check() && static::canManage('inventory.delete');
-    }
-
     public static function getEloquentQuery(): Builder
     {
         $query = StockSerialNumber::query()
@@ -504,4 +489,126 @@ class StockSerialNumberResource extends Resource
 
         return $user->can($permission);
     }
+    public static function canCreate(): bool
+    {
+        return static::canManageTrackingMasterData();
+    }
+
+    public static function canEdit($record): bool
+    {
+        return static::canManageTrackingMasterData();
+    }
+
+    public static function canDelete($record): bool
+    {
+        return static::canManageTrackingMasterData();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::canManageTrackingMasterData();
+    }
+
+    protected static function canManageTrackingMasterData(): bool
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        $allowedRoleKeys = [
+            'superadministrador',
+            'superadmin',
+            'admininventario',
+            'administradordeinventario',
+            'inventoryadmin',
+            'inventoryadministrator',
+        ];
+
+        $allowedPermissionNames = [
+            'inventory.tracking.manage',
+            'inventory.lots.manage',
+            'inventory.serials.manage',
+            'stock.lots.manage',
+            'stock.serials.manage',
+            'inventario.lotes_series.administrar',
+            'inventario.lotes.administrar',
+            'inventario.series.administrar',
+        ];
+
+        try {
+            foreach ($allowedPermissionNames as $permission) {
+                if (method_exists($user, 'can') && $user->can($permission)) {
+                    return true;
+                }
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        try {
+            if (method_exists($user, 'hasRole')) {
+                foreach ([
+                    'Super Administrador',
+                    'Super Admin',
+                    'Admin Inventario',
+                    'Administrador de Inventario',
+                    'Inventory Admin',
+                    'Inventory Administrator',
+                ] as $roleName) {
+                    if ($user->hasRole($roleName)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        $roleNames = [];
+
+        try {
+            if (method_exists($user, 'roles')) {
+                $roleNames = $user->roles()->pluck('name')->all();
+            }
+        } catch (\Throwable $e) {
+            $roleNames = [];
+        }
+
+        foreach ($roleNames as $roleName) {
+            $key = static::trackingPermissionKey((string) $roleName);
+
+            if (in_array($key, $allowedRoleKeys, true)) {
+                return true;
+            }
+        }
+
+        foreach (['role', 'role_name', 'type'] as $field) {
+            $value = (string) ($user->{$field} ?? '');
+
+            if ($value !== '' && in_array(static::trackingPermissionKey($value), $allowedRoleKeys, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected static function trackingPermissionKey(string $value): string
+    {
+        $value = mb_strtolower(trim($value));
+        $value = preg_replace('/[^a-z0-9áéíóúñ]+/u', '', $value) ?: '';
+
+        return strtr($value, [
+            'á' => 'a',
+            'é' => 'e',
+            'í' => 'i',
+            'ó' => 'o',
+            'ú' => 'u',
+            'ñ' => 'n',
+        ]);
+    }
+
+
 }

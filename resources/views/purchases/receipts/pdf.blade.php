@@ -292,7 +292,7 @@
         }
 
         body {
-            font-size: 8.5px;
+            font-size: 7.5px;
             line-height: 1.18;
         }
 
@@ -522,7 +522,7 @@
         }
 
         .folio-box .doc-title {
-            font-size: 8.5px;
+            font-size: 7.5px;
             line-height: 1.1;
             margin: 0 0 3px 0;
             white-space: normal;
@@ -550,6 +550,46 @@
         }
 
     </style>
+
+
+<style>
+    .bexia-pdf-logo-header {
+        width: 100%;
+        min-height: 58px;
+        height: 58px;
+        padding: 0 0 8px 0;
+        margin: 0 0 12px 0;
+        border-bottom: 1px solid #d7dee8;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+    }
+
+    .bexia-pdf-logo-header img {
+        display: block;
+        width: auto;
+        height: auto;
+        max-height: 46px;
+        max-width: 160px;
+        object-fit: contain;
+    }
+
+    .bexia-pdf-series {
+        margin-top: 3px;
+        font-size: 7.5px;
+        line-height: 1.18;
+        font-weight: normal;
+        color: #111827;
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .bexia-pdf-series strong {
+        font-weight: 700;
+    }
+</style>
+
+
 </head>
 <body>
 @if(! empty($pdfFallback))
@@ -566,16 +606,14 @@
                     <div class="brand-wrap">
                         @if($logo)
                             <div class="logo-box">
-                                <img class="logo" src="{{ $logo }}" alt="Logo">
+                                <div class="bexia-pdf-logo-header"><img style="display:block; width:auto; height:auto; max-height:46px; max-width:160px; object-fit:contain;" class="logo" src="{{ $logo }}" alt="Logo"></div>
                             </div>
                         @endif
 
                         <div class="brand-text">
-                            <div class="company-name">{{ $companyName }}</div>
+                            
                             @if($companyRfc)
-                                <div class="company-meta">RFC: {{ $companyRfc }}</div>
                             @endif
-                            <div class="company-meta">Documento generado por Bexia ERP</div>
                         </div>
                     </div>
                 </td>
@@ -645,7 +683,37 @@
                 @foreach($lines as $line)
                     <tr>
                         <td>
-                            <div class="product">{{ $line->product_label ?? 'Producto' }}</div>
+                            <div class="product">{{ $line->product_label ?? 'Producto' }}
+@php
+    $trackingType = (string) ($line->tracking_type ?? 'none');
+    $serialValues = [];
+    $rawSerials = $line->serial_numbers ?? null;
+
+    if (is_string($rawSerials) && trim($rawSerials) !== '') {
+        $decodedSerials = json_decode($rawSerials, true);
+        $serialValues = is_array($decodedSerials) ? $decodedSerials : preg_split('/[\r\n,;]+/', $rawSerials);
+    } elseif (is_array($rawSerials)) {
+        $serialValues = $rawSerials;
+    }
+
+    $serialValues = array_values(array_filter(array_map(fn ($v) => trim((string) $v), $serialValues)));
+@endphp
+
+@if($trackingType === 'lot' && ! empty($line->lot_number))
+    <div style="margin-top:6px; font-size:11px; color:#065f46;">
+        <strong>Lote:</strong> {{ $line->lot_number }}
+        @if(! empty($line->lot_expiration_date))
+            <span> · Cad.: {{ \Illuminate\Support\Carbon::parse($line->lot_expiration_date)->format('d/m/Y') }}</span>
+        @endif
+    </div>
+@endif
+
+@if($trackingType === 'serial' && count($serialValues))
+    <div class="bexia-pdf-series">
+        <strong>Número(s) de serie:</strong> {{ implode(', ', $serialValues) }}
+    </div>
+@endif
+</div>
                         </td>
                         <td class="muted">{{ $line->variant_label ?? '—' }}</td>
                         <td class="muted">{{ $line->purchase_unit_label ?? '—' }}</td>
@@ -698,7 +766,6 @@
     </div>
 
     <div class="footer">
-        {{ $receipt->number ?? '' }} · {{ $companyName }} · Bexia ERP
     </div>
 </div>
 </body>

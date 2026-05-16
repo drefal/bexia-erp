@@ -87,6 +87,7 @@ class PurchaseReceiptInventoryPoster
              */
             if (empty($line->stock_quant_posted_at)) {
                 $this->increaseStockQuant($receipt, $line, $quantity);
+                $this->createSerialNumbersForReceiptLine($receipt, $line, $movementLineId);
             }
 
             $this->markReceiptLinePosted($line, $movementLineId);
@@ -155,7 +156,7 @@ class PurchaseReceiptInventoryPoster
         $this->set($data, $columns, 'stock_movement_id', $movementId);
         $this->set($data, $columns, 'product_id', $line->product_id ?? null);
         $this->set($data, $columns, 'product_variant_id', $line->product_variant_id ?? null);
-        $this->set($data, $columns, 'lot_id', null);
+        $this->set($data, $columns, 'lot_id', ! empty($line->lot_id) ? (int) $line->lot_id : null);
         $this->set($data, $columns, 'requested_quantity', $quantity);
         $this->set($data, $columns, 'done_quantity', $quantity);
         $this->set($data, $columns, 'unit_cost', $line->unit_cost_without_tax ?? 0);
@@ -174,6 +175,7 @@ class PurchaseReceiptInventoryPoster
 
         $this->set($updates, $columns, 'product_id', $line->product_id ?? null);
         $this->set($updates, $columns, 'product_variant_id', $line->product_variant_id ?? null);
+        $this->set($updates, $columns, 'lot_id', ! empty($line->lot_id) ? (int) $line->lot_id : null);
         $this->set($updates, $columns, 'requested_quantity', $quantity);
         $this->set($updates, $columns, 'done_quantity', $quantity);
         $this->set($updates, $columns, 'unit_cost', $line->unit_cost_without_tax ?? 0);
@@ -194,6 +196,7 @@ class PurchaseReceiptInventoryPoster
         $locationId = $this->destinationStockLocationId($receipt);
         $productId = (int) ($line->product_id ?? 0);
         $variantId = (int) ($line->product_variant_id ?? 0);
+        $lotId = (int) ($line->lot_id ?? 0);
         $unitCost = (float) ($line->unit_cost_without_tax ?? 0);
 
         if ($productId <= 0) {
@@ -215,7 +218,9 @@ class PurchaseReceiptInventoryPoster
             : $query->whereNull('product_variant_id');
 
         if (in_array('lot_id', $columns, true)) {
-            $query->whereNull('lot_id');
+            $lotId > 0
+                ? $query->where('lot_id', $lotId)
+                : $query->whereNull('lot_id');
         }
 
         $quant = $query->lockForUpdate()->first();
@@ -228,7 +233,7 @@ class PurchaseReceiptInventoryPoster
             $this->set($data, $columns, 'location_id', $locationId);
             $this->set($data, $columns, 'product_id', $productId);
             $this->set($data, $columns, 'product_variant_id', $variantId ?: null);
-            $this->set($data, $columns, 'lot_id', null);
+            $this->set($data, $columns, 'lot_id', $lotId > 0 ? $lotId : null);
             $this->set($data, $columns, 'quantity', round($quantity, 6));
             $this->set($data, $columns, 'reserved_quantity', 0);
             $this->set($data, $columns, 'average_cost', round($unitCost, 6));
@@ -257,6 +262,118 @@ class PurchaseReceiptInventoryPoster
         DB::table('stock_quants')
             ->where('id', $quant->id)
             ->update($updates);
+    }
+
+    protected function createSerialNumbersForReceiptLine(object $receipt, object $line, int $movementLineId): void
+    {
+        if (! Schema::hasTable('stock_serial_numbers')) {
+            return;
+        }
+
+        if ((string) ($line->tracking_type ?? 'none') !== 'serial') {
+            return;
+        }
+
+        $serials = $this->serialNumbersFromReceiptLine($line);
+
+        if (! $serials) {
+            return;
+        }
+
+        $columns = Schema::getColumnListing('stock_serial_numbers');
+        $companyId = (int) ($receipt->company_id ?? 0);
+        $productId = (int) ($line->product_id ?? 0);
+        $variantId = (int) ($line->product_variant_id ?? 0);
+        $warehouseId = (int) ($receipt->warehouse_id ?? 0);
+        $locationId = $this->destinationStockLocationId($receipt);
+
+        foreach ($serials as $serial) {
+            $query = DB::table('stock_serial_numbers')
+                ->where('company_id', $companyId)
+                ->where('product_id', $productId)
+                ->whereRaw('LOWER(serial_number) = LOWER(?)', [$serial]);
+
+            $variantId > 0
+                ? $query->where('product_variant_id', $variantId)
+                : $query->whereNull('product_variant_id');
+
+            $existing = $query->lockForUpdate()->first();
+
+            $data = [];
+
+            $this->set($data, $columns, 'company_id', $companyId);
+            $this->set($data, $columns, 'product_id', $productId);
+            $this->set($data, $columns, 'product_variant_id', $variantId ?: null);
+            $this->set($data, $columns, 'lot_id', ! empty($line->lot_id) ? (int) $line->lot_id : null);
+            $this->set($data, $columns, 'serial_number', $serial);
+            $this->set($data, $columns, 'current_warehouse_id', $warehouseId ?: null);
+            $this->set($data, $columns, 'current_location_id', $locationId ?: null);
+            $this->set($data, $columns, 'status', 'available');
+            $this->set($data, $columns, 'source_type', 'purchase_receipt');
+            $this->set($data, $columns, 'source_id', $receipt->id);
+            $this->set($data, $columns, 'purchase_order_id', $receipt->purchase_order_id ?? null);
+            $this->set($data, $columns, 'purchase_receipt_id', $receipt->id);
+            $this->set($data, $columns, 'stock_movement_line_id', $movementLineId);
+            $this->set($data, $columns, 'metadata', json_encode([
+                'receipt_number' => $receipt->number ?? null,
+                'receipt_line_id' => $line->id ?? null,
+                'created_from' => 'v5.53.3b4',
+            ]));
+            $this->set($data, $columns, 'updated_at', now());
+
+            if ($existing) {
+                DB::table('stock_serial_numbers')
+                    ->where('id', $existing->id)
+                    ->update($data);
+
+                continue;
+            }
+
+            $this->set($data, $columns, 'created_at', now());
+
+            DB::table('stock_serial_numbers')->insert($data);
+        }
+    }
+
+    protected function serialNumbersFromReceiptLine(object $line): array
+    {
+        $raw = $line->serial_numbers ?? null;
+
+        if (is_array($raw)) {
+            $values = $raw;
+        } elseif (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+
+            if (is_array($decoded)) {
+                $values = $decoded;
+            } else {
+                $values = preg_split('/[\r\n,;]+/', $raw) ?: [];
+            }
+        } else {
+            $values = [];
+        }
+
+        $serials = [];
+        $seen = [];
+
+        foreach ($values as $value) {
+            $serial = trim((string) $value);
+
+            if ($serial === '') {
+                continue;
+            }
+
+            $key = mb_strtolower($serial);
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $serials[] = $serial;
+        }
+
+        return $serials;
     }
 
     protected function updateProductCosts(object $line): void

@@ -22,7 +22,7 @@ class ViewPurchaseOrder extends ViewRecord
                 ->icon('heroicon-o-inbox-arrow-down')
                 ->color('success')
                 ->visible(fn (): bool => $this->canReceivePurchaseOrder())
-                ->url(fn (): string => route('purchases.orders.receipts.edit', ['purchaseOrder' => $this->record->getKey()])),
+                ->url(fn (): string => url('/admin/' . (int) ($this->record->company_id ?? 0) . '/purchase-orders/' . $this->record->getKey() . '/receive')),
 
             Actions\Action::make('map_xml_lines')
                 ->label('Mapear XML')

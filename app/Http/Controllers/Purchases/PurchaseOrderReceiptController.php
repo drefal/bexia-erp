@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Purchases;
 
 use App\Http\Controllers\Controller;
 use App\Models\PurchaseOrder;
+use App\Support\PurchaseReceiptInventoryPoster;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use App\Support\PurchaseReceiptInventoryPoster;
 use RuntimeException;
 
 class PurchaseOrderReceiptController extends Controller
@@ -29,11 +29,7 @@ class PurchaseOrderReceiptController extends Controller
                 ->with('error', 'Esta orden no está lista para recepción o no tiene cantidades pendientes.');
         }
 
-        return view('purchases.receive-purchase-order', [
-            'order' => $order,
-            'lines' => $this->linesForReceipt((int) $order->id),
-            'tenantId' => $this->tenantId($order),
-        ]);
+        return redirect('/admin/' . $this->tenantId($order) . '/purchase-orders/' . $order->id . '/receive');
     }
 
     public function store(Request $request, PurchaseOrder $purchaseOrder)
@@ -55,10 +51,20 @@ class PurchaseOrderReceiptController extends Controller
         }
 
         $quantities = $request->input('quantities', []);
+        $lotNumbers = $request->input('lot_numbers', []);
+        $lotExpirationDates = $request->input('lot_expiration_dates', []);
+        $serialNumbers = $request->input('serial_numbers', []);
         $notes = trim((string) $request->input('notes', ''));
 
         try {
-            $receiptId = $this->createReceipt((int) $order->id, $quantities, $notes);
+            $receiptId = $this->createReceipt(
+                (int) $order->id,
+                $quantities,
+                $lotNumbers,
+                $lotExpirationDates,
+                $serialNumbers,
+                $notes
+            );
 
             return redirect('/admin/' . $this->tenantId($order) . '/purchase-orders/' . $order->id . '/edit')
                 ->with('success', 'Recepción guardada correctamente. Folio recepción #' . $receiptId . '.');
@@ -67,13 +73,27 @@ class PurchaseOrderReceiptController extends Controller
 
             return redirect()
                 ->back()
+                ->withInput()
                 ->with('error', $e->getMessage());
         }
     }
 
-    protected function createReceipt(int $purchaseOrderId, array $quantities, string $notes): int
-    {
-        return DB::transaction(function () use ($purchaseOrderId, $quantities, $notes): int {
+    protected function createReceipt(
+        int $purchaseOrderId,
+        array $quantities,
+        array $lotNumbers,
+        array $lotExpirationDates,
+        array $serialNumbers,
+        string $notes
+    ): int {
+        return DB::transaction(function () use (
+            $purchaseOrderId,
+            $quantities,
+            $lotNumbers,
+            $lotExpirationDates,
+            $serialNumbers,
+            $notes
+        ): int {
             $order = DB::table('purchase_orders')
                 ->where('id', $purchaseOrderId)
                 ->lockForUpdate()
@@ -113,6 +133,43 @@ class PurchaseOrderReceiptController extends Controller
                 $baseFactor = $this->baseFactor($line);
                 $receivedBaseQty = round($receiveQty * $baseFactor, 6);
 
+                $trackingType = $this->trackingTypeForLine($line);
+                $lotNumber = null;
+                $lotExpirationDate = null;
+                $serials = [];
+
+                if ($trackingType === 'lot') {
+                    $lotNumber = trim((string) ($lotNumbers[$lineId] ?? ''));
+
+                    if ($lotNumber === '') {
+                        throw new RuntimeException('Captura el lote para: ' . ($line->product_label ?? 'producto'));
+                    }
+
+                    $lotExpirationDate = $this->normalizeDate($lotExpirationDates[$lineId] ?? null);
+                }
+
+                if ($trackingType === 'serial') {
+                    if (abs($receivedBaseQty - round($receivedBaseQty)) > 0.000001) {
+                        throw new RuntimeException('La cantidad base recibida debe ser entera para productos con número de serie: ' . ($line->product_label ?? 'producto'));
+                    }
+
+                    $expectedSerials = (int) round($receivedBaseQty);
+                    $serials = $this->parseSerialNumbers($serialNumbers[$lineId] ?? '');
+
+                    if ($expectedSerials <= 0) {
+                        throw new RuntimeException('La cantidad recibida para números de serie debe ser mayor a cero: ' . ($line->product_label ?? 'producto'));
+                    }
+
+                    if (count($serials) !== $expectedSerials) {
+                        throw new RuntimeException(
+                            'El producto "' . ($line->product_label ?? 'producto') . '" requiere ' .
+                            $expectedSerials . ' número(s) de serie y capturaste ' . count($serials) . '.'
+                        );
+                    }
+
+                    $this->assertSerialNumbersAvailable($order, $line, $serials);
+                }
+
                 $unitCost = (float) ($line->unit_cost_without_tax ?? 0);
                 $taxRate = (float) ($line->tax_rate ?? 0);
 
@@ -127,6 +184,11 @@ class PurchaseOrderReceiptController extends Controller
                     'line_total_without_tax' => $lineWithoutTax,
                     'line_tax' => $lineTax,
                     'line_total_with_tax' => $lineWithTax,
+                    'tracking_type' => $trackingType,
+                    'lot_number' => $lotNumber,
+                    'lot_expiration_date' => $lotExpirationDate,
+                    'serial_numbers' => $serials,
+                    'lot_id' => null,
                 ];
 
                 $totalWithoutTax += $lineWithoutTax;
@@ -141,6 +203,16 @@ class PurchaseOrderReceiptController extends Controller
             $receiptId = $this->insertReceipt($order, $notes, $totalWithoutTax, $totalTax, $totalWithTax);
 
             foreach ($receiptLines as $receiptLine) {
+                if (($receiptLine['tracking_type'] ?? 'none') === 'lot') {
+                    $receiptLine['lot_id'] = $this->firstOrCreateStockLot(
+                        $order,
+                        $receiptLine['source_line'],
+                        $receiptId,
+                        (string) $receiptLine['lot_number'],
+                        $receiptLine['lot_expiration_date']
+                    );
+                }
+
                 $this->insertReceiptLine($receiptId, $order, $receiptLine);
                 $this->updateOrderLineReceipt($receiptLine['source_line'], $receiptLine['received_quantity'], $receiptLine['received_base_quantity']);
             }
@@ -161,7 +233,7 @@ class PurchaseOrderReceiptController extends Controller
 
         $this->set($data, $columns, 'company_id', $order->company_id ?? null);
         $this->set($data, $columns, 'purchase_order_id', $order->id);
-        $this->set($data, $columns, 'number', $this->nextReceiptNumber((int) ($order->company_id ?? 0)));
+        $this->set($data, $columns, 'number', $this->nextReceiptNumber($order));
         $this->set($data, $columns, 'status', 'received');
         $this->set($data, $columns, 'received_at', now());
         $this->set($data, $columns, 'warehouse_id', $order->warehouse_id ?? null);
@@ -190,6 +262,11 @@ class PurchaseOrderReceiptController extends Controller
         $this->set($data, $columns, 'product_id', $line->product_id ?? null);
         $this->set($data, $columns, 'product_variant_id', $line->product_variant_id ?? null);
         $this->set($data, $columns, 'variant_id', $line->variant_id ?? null);
+        $this->set($data, $columns, 'lot_id', $receiptLine['lot_id'] ?? null);
+        $this->set($data, $columns, 'lot_number', $receiptLine['lot_number'] ?? null);
+        $this->set($data, $columns, 'lot_expiration_date', $receiptLine['lot_expiration_date'] ?? null);
+        $this->set($data, $columns, 'serial_numbers', json_encode($receiptLine['serial_numbers'] ?? []));
+        $this->set($data, $columns, 'tracking_type', $receiptLine['tracking_type'] ?? 'none');
         $this->set($data, $columns, 'product_label', $line->product_label ?? null);
         $this->set($data, $columns, 'variant_label', $line->variant_label ?? null);
         $this->set($data, $columns, 'purchase_unit_label', $line->purchase_unit_label ?? null);
@@ -204,6 +281,148 @@ class PurchaseOrderReceiptController extends Controller
         $this->set($data, $columns, 'updated_at', now());
 
         DB::table('purchase_receipt_lines')->insert($data);
+    }
+
+    protected function firstOrCreateStockLot(object $order, object $line, int $receiptId, string $lotNumber, ?string $expirationDate): int
+    {
+        if (! Schema::hasTable('stock_lots')) {
+            throw new RuntimeException('No existe la tabla de lotes.');
+        }
+
+        $companyId = (int) ($order->company_id ?? 0);
+        $productId = (int) ($line->product_id ?? 0);
+        $variantId = (int) ($line->product_variant_id ?? 0);
+        $columns = Schema::getColumnListing('stock_lots');
+
+        $query = DB::table('stock_lots')
+            ->where('company_id', $companyId)
+            ->where('product_id', $productId)
+            ->whereRaw('LOWER(lot_number) = LOWER(?)', [$lotNumber]);
+
+        $variantId > 0
+            ? $query->where('product_variant_id', $variantId)
+            : $query->whereNull('product_variant_id');
+
+        $existing = $query->lockForUpdate()->first();
+
+        if ($existing) {
+            $updates = [];
+
+            if ($expirationDate && empty($existing->expiration_date)) {
+                $this->set($updates, $columns, 'expiration_date', $expirationDate);
+            }
+
+            if (empty($existing->purchase_receipt_id)) {
+                $this->set($updates, $columns, 'purchase_receipt_id', $receiptId);
+            }
+
+            if (empty($existing->purchase_order_id)) {
+                $this->set($updates, $columns, 'purchase_order_id', $order->id);
+            }
+
+            $this->set($updates, $columns, 'updated_at', now());
+
+            if ($updates) {
+                DB::table('stock_lots')->where('id', $existing->id)->update($updates);
+            }
+
+            return (int) $existing->id;
+        }
+
+        $data = [];
+
+        $this->set($data, $columns, 'company_id', $companyId);
+        $this->set($data, $columns, 'product_id', $productId);
+        $this->set($data, $columns, 'product_variant_id', $variantId ?: null);
+        $this->set($data, $columns, 'lot_number', $lotNumber);
+        $this->set($data, $columns, 'expiration_date', $expirationDate);
+        $this->set($data, $columns, 'supplier_contact_id', $order->supplier_contact_id ?? null);
+        $this->set($data, $columns, 'purchase_order_id', $order->id);
+        $this->set($data, $columns, 'purchase_receipt_id', $receiptId);
+        $this->set($data, $columns, 'status', 'available');
+        $this->set($data, $columns, 'metadata', json_encode([
+            'source' => 'purchase_receipt',
+            'created_from' => 'v5.53.3a',
+        ]));
+        $this->set($data, $columns, 'created_at', now());
+        $this->set($data, $columns, 'updated_at', now());
+
+        return DB::table('stock_lots')->insertGetId($data);
+    }
+
+    protected function assertSerialNumbersAvailable(object $order, object $line, array $serials): void
+    {
+        if (! Schema::hasTable('stock_serial_numbers')) {
+            throw new RuntimeException('No existe la tabla de números de serie.');
+        }
+
+        $companyId = (int) ($order->company_id ?? 0);
+        $productId = (int) ($line->product_id ?? 0);
+        $variantId = (int) ($line->product_variant_id ?? 0);
+
+        foreach ($serials as $serial) {
+            $query = DB::table('stock_serial_numbers')
+                ->where('company_id', $companyId)
+                ->where('product_id', $productId)
+                ->whereRaw('LOWER(serial_number) = LOWER(?)', [$serial]);
+
+            $variantId > 0
+                ? $query->where('product_variant_id', $variantId)
+                : $query->whereNull('product_variant_id');
+
+            if ($query->exists()) {
+                throw new RuntimeException('El número de serie ya existe para este producto: ' . $serial);
+            }
+        }
+    }
+
+    protected function parseSerialNumbers(mixed $value): array
+    {
+        if (is_array($value)) {
+            $raw = implode("\n", $value);
+        } else {
+            $raw = (string) $value;
+        }
+
+        $raw = str_replace([',', ';', "\t"], "\n", $raw);
+        $lines = preg_split('/\R+/', $raw) ?: [];
+
+        $serials = [];
+        $seen = [];
+
+        foreach ($lines as $line) {
+            $serial = trim((string) $line);
+
+            if ($serial === '') {
+                continue;
+            }
+
+            $key = mb_strtolower($serial);
+
+            if (isset($seen[$key])) {
+                throw new RuntimeException('El número de serie está repetido en la captura: ' . $serial);
+            }
+
+            $seen[$key] = true;
+            $serials[] = $serial;
+        }
+
+        return $serials;
+    }
+
+    protected function normalizeDate(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            throw new RuntimeException('La fecha de caducidad debe tener formato AAAA-MM-DD.');
+        }
+
+        return $value;
     }
 
     protected function updateOrderLineReceipt(object $line, float $receiveQty, float $receiveBaseQty): void
@@ -281,13 +500,47 @@ class PurchaseOrderReceiptController extends Controller
                 $ordered = (float) ($line->ordered_quantity ?? 0);
                 $received = (float) ($line->received_quantity ?? 0);
                 $pending = max($ordered - $received, 0);
+                $tracking = $this->trackingTypeForLine($line);
 
                 $line->ordered_for_view = $ordered;
                 $line->received_for_view = $received;
                 $line->pending_for_view = $pending;
+                $line->tracking_for_view = $tracking;
+                $line->tracking_label_for_view = match ($tracking) {
+                    'lot' => 'Lote',
+                    'serial' => 'Número de serie',
+                    default => 'Sin seguimiento',
+                };
 
                 return $line;
             });
+    }
+
+    protected function trackingTypeForLine(object $line): string
+    {
+        if (! Schema::hasTable('products') || ! Schema::hasColumn('products', 'tracking')) {
+            return 'none';
+        }
+
+        $ids = [];
+
+        foreach (['product_variant_id', 'variant_id', 'product_id'] as $field) {
+            $id = (int) ($line->{$field} ?? 0);
+
+            if ($id > 0 && ! in_array($id, $ids, true)) {
+                $ids[] = $id;
+            }
+        }
+
+        foreach ($ids as $id) {
+            $tracking = DB::table('products')->where('id', $id)->value('tracking');
+
+            if (in_array($tracking, ['lot', 'serial'], true)) {
+                return (string) $tracking;
+            }
+        }
+
+        return 'none';
     }
 
     protected function canReceive(object $order): bool
@@ -334,25 +587,103 @@ class PurchaseOrderReceiptController extends Controller
         return 1.0;
     }
 
-    protected function nextReceiptNumber(int $companyId): string
+    protected function nextReceiptNumber(object $order): string
     {
-        $prefix = 'REC-' . now()->format('Ymd') . '-';
+        $companyId = (int) ($order->company_id ?? 0);
+        $warehouseId = (int) ($order->warehouse_id ?? 0);
+        $locationId = (int) ($order->location_id ?? 0);
+        $prefix = $this->receiptReferencePrefix($order);
 
-        $query = DB::table('purchase_receipts')
-            ->where('number', 'like', $prefix . '%');
+        $max = 0;
 
-        if ($companyId > 0 && Schema::hasColumn('purchase_receipts', 'company_id')) {
-            $query->where('company_id', $companyId);
+        foreach ([
+            ['purchase_receipts', 'number'],
+            ['stock_movements', 'reference'],
+        ] as [$table, $column]) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $column)) {
+                continue;
+            }
+
+            $query = DB::table($table)
+                ->where($column, 'like', $prefix . '/IN/%');
+
+            if ($table === 'purchase_receipts' && $companyId > 0 && Schema::hasColumn($table, 'company_id')) {
+                $query->where('company_id', $companyId);
+            }
+
+            if ($table === 'stock_movements') {
+                if ($companyId > 0 && Schema::hasColumn($table, 'company_id')) {
+                    $query->where('company_id', $companyId);
+                }
+
+                if ($warehouseId > 0 && Schema::hasColumn($table, 'warehouse_id')) {
+                    $query->where('warehouse_id', $warehouseId);
+                }
+            }
+
+            $values = $query->pluck($column);
+
+            foreach ($values as $value) {
+                if (preg_match('#/IN/(\d+)$#', (string) $value, $matches)) {
+                    $max = max($max, (int) $matches[1]);
+                }
+            }
         }
 
-        $last = $query->orderByDesc('number')->value('number');
-        $next = 1;
+        return $prefix . '/IN/' . str_pad((string) ($max + 1), 6, '0', STR_PAD_LEFT);
+    }
 
-        if ($last && preg_match('/-(\d+)$/', (string) $last, $matches)) {
-            $next = ((int) $matches[1]) + 1;
+    protected function receiptReferencePrefix(object $order): string
+    {
+        $locationId = (int) ($order->location_id ?? 0);
+
+        if ($locationId > 0 && Schema::hasTable('stock_locations')) {
+            $location = DB::table('stock_locations')->where('id', $locationId)->first();
+
+            foreach (['code', 'barcode', 'reference'] as $field) {
+                $value = trim((string) ($location->{$field} ?? ''));
+
+                if ($value !== '') {
+                    return $this->normalizeReferencePrefix($value);
+                }
+            }
+
+            $name = trim((string) ($location->name ?? ''));
+
+            if ($name !== '') {
+                return $this->normalizeReferencePrefix(str_contains($name, ' - ') ? explode(' - ', $name)[0] : $name);
+            }
         }
 
-        return $prefix . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+        $locationLabel = trim((string) ($order->location_label ?? ''));
+
+        if ($locationLabel !== '') {
+            return $this->normalizeReferencePrefix(str_contains($locationLabel, ' - ') ? explode(' - ', $locationLabel)[0] : $locationLabel);
+        }
+
+        $warehouseId = (int) ($order->warehouse_id ?? 0);
+
+        if ($warehouseId > 0 && Schema::hasTable('warehouses')) {
+            $warehouse = DB::table('warehouses')->where('id', $warehouseId)->first();
+
+            foreach (['code', 'short_code', 'reference'] as $field) {
+                $value = trim((string) ($warehouse->{$field} ?? ''));
+
+                if ($value !== '') {
+                    return $this->normalizeReferencePrefix($value);
+                }
+            }
+        }
+
+        return 'IN';
+    }
+
+    protected function normalizeReferencePrefix(string $value): string
+    {
+        $value = strtoupper(trim($value));
+        $value = preg_replace('/[^A-Z0-9]+/', '', $value) ?: 'IN';
+
+        return substr($value, 0, 12);
     }
 
     protected function tenantId(object $order): int
