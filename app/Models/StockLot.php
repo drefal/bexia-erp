@@ -19,12 +19,20 @@ class StockLot extends Model
         'purchase_receipt_id',
         'status',
         'metadata',
+        'import_document_reference',
+        'imported_color',
+        'imported_model',
+        'customs_office',
+        'customs_entry_date',
+        'customs_entry_number',
+        'motor_number',
     ];
 
     protected $casts = [
         'expiration_date' => 'date',
         'metadata' => 'array',
-    ];
+            'customs_entry_date' => 'date',
+];
 
     public function company(): BelongsTo
     {

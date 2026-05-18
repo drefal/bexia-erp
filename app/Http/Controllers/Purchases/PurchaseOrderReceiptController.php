@@ -54,6 +54,9 @@ class PurchaseOrderReceiptController extends Controller
         $lotNumbers = $request->input('lot_numbers', []);
         $lotExpirationDates = $request->input('lot_expiration_dates', []);
         $serialNumbers = $request->input('serial_numbers', []);
+        $commonImportData = $request->input('common_import_data', []);
+        $lineImportData = $request->input('line_import_data', []);
+        $applyCommonImportToAll = $request->boolean('apply_common_import_to_all');
         $notes = trim((string) $request->input('notes', ''));
 
         try {
@@ -63,6 +66,9 @@ class PurchaseOrderReceiptController extends Controller
                 $lotNumbers,
                 $lotExpirationDates,
                 $serialNumbers,
+                $commonImportData,
+                $lineImportData,
+                $applyCommonImportToAll,
                 $notes
             );
 
@@ -84,6 +90,9 @@ class PurchaseOrderReceiptController extends Controller
         array $lotNumbers,
         array $lotExpirationDates,
         array $serialNumbers,
+        array $commonImportData,
+        array $lineImportData,
+        bool $applyCommonImportToAll,
         string $notes
     ): int {
         return DB::transaction(function () use (
@@ -92,6 +101,9 @@ class PurchaseOrderReceiptController extends Controller
             $lotNumbers,
             $lotExpirationDates,
             $serialNumbers,
+            $commonImportData,
+            $lineImportData,
+            $applyCommonImportToAll,
             $notes
         ): int {
             $order = DB::table('purchase_orders')
@@ -170,6 +182,24 @@ class PurchaseOrderReceiptController extends Controller
                     $this->assertSerialNumbersAvailable($order, $line, $serials);
                 }
 
+                $advancedTrackingConfig = $this->advancedTrackingConfigForLine($line);
+                $importData = $this->importDataForLine(
+                    $commonImportData,
+                    $lineImportData,
+                    $applyCommonImportToAll,
+                    $lineId,
+                    $trackingType,
+                    $serials
+                );
+
+                $this->validateAdvancedTrackingForLine(
+                    $line,
+                    $trackingType,
+                    $serials,
+                    $importData,
+                    $advancedTrackingConfig
+                );
+
                 $unitCost = (float) ($line->unit_cost_without_tax ?? 0);
                 $taxRate = (float) ($line->tax_rate ?? 0);
 
@@ -188,6 +218,7 @@ class PurchaseOrderReceiptController extends Controller
                     'lot_number' => $lotNumber,
                     'lot_expiration_date' => $lotExpirationDate,
                     'serial_numbers' => $serials,
+                    'import_data' => $importData,
                     'lot_id' => null,
                 ];
 
@@ -209,7 +240,8 @@ class PurchaseOrderReceiptController extends Controller
                         $receiptLine['source_line'],
                         $receiptId,
                         (string) $receiptLine['lot_number'],
-                        $receiptLine['lot_expiration_date']
+                        $receiptLine['lot_expiration_date'],
+                        $receiptLine['import_data'] ?? []
                     );
                 }
 
@@ -267,6 +299,7 @@ class PurchaseOrderReceiptController extends Controller
         $this->set($data, $columns, 'lot_expiration_date', $receiptLine['lot_expiration_date'] ?? null);
         $this->set($data, $columns, 'serial_numbers', json_encode($receiptLine['serial_numbers'] ?? []));
         $this->set($data, $columns, 'tracking_type', $receiptLine['tracking_type'] ?? 'none');
+        $this->setImportColumns($data, $columns, $receiptLine['import_data'] ?? []);
         $this->set($data, $columns, 'product_label', $line->product_label ?? null);
         $this->set($data, $columns, 'variant_label', $line->variant_label ?? null);
         $this->set($data, $columns, 'purchase_unit_label', $line->purchase_unit_label ?? null);
@@ -283,7 +316,7 @@ class PurchaseOrderReceiptController extends Controller
         DB::table('purchase_receipt_lines')->insert($data);
     }
 
-    protected function firstOrCreateStockLot(object $order, object $line, int $receiptId, string $lotNumber, ?string $expirationDate): int
+    protected function firstOrCreateStockLot(object $order, object $line, int $receiptId, string $lotNumber, ?string $expirationDate, array $importData = []): int
     {
         if (! Schema::hasTable('stock_lots')) {
             throw new RuntimeException('No existe la tabla de lotes.');
@@ -320,6 +353,12 @@ class PurchaseOrderReceiptController extends Controller
                 $this->set($updates, $columns, 'purchase_order_id', $order->id);
             }
 
+            foreach ($this->importFieldNames() as $fieldName) {
+                if (! empty($importData[$fieldName]) && empty($existing->{$fieldName})) {
+                    $this->set($updates, $columns, $fieldName, $importData[$fieldName]);
+                }
+            }
+
             $this->set($updates, $columns, 'updated_at', now());
 
             if ($updates) {
@@ -339,6 +378,7 @@ class PurchaseOrderReceiptController extends Controller
         $this->set($data, $columns, 'supplier_contact_id', $order->supplier_contact_id ?? null);
         $this->set($data, $columns, 'purchase_order_id', $order->id);
         $this->set($data, $columns, 'purchase_receipt_id', $receiptId);
+        $this->setImportColumns($data, $columns, $importData);
         $this->set($data, $columns, 'status', 'available');
         $this->set($data, $columns, 'metadata', json_encode([
             'source' => 'purchase_receipt',
@@ -424,6 +464,227 @@ class PurchaseOrderReceiptController extends Controller
 
         return $value;
     }
+
+
+    protected function importFieldNames(): array
+    {
+        return [
+            'motor_number',
+            'customs_entry_number',
+            'customs_entry_date',
+            'customs_office',
+            'imported_model',
+            'imported_color',
+            'import_document_reference',
+        ];
+    }
+
+    protected function setImportColumns(array &$data, array $columns, array $importData): void
+    {
+        foreach ($this->importFieldNames() as $fieldName) {
+            $value = $importData[$fieldName] ?? null;
+
+            if ($value === '') {
+                $value = null;
+            }
+
+            $this->set($data, $columns, $fieldName, $value);
+        }
+    }
+
+    protected function importDataForLine(
+        array $commonImportData,
+        array $lineImportData,
+        bool $applyCommonImportToAll,
+        int $lineId,
+        string $trackingType,
+        array $serials
+    ): array {
+        $lineData = $lineImportData[$lineId] ?? [];
+
+        if (! is_array($lineData)) {
+            $lineData = [];
+        }
+
+        $data = [];
+
+        foreach ($this->importFieldNames() as $fieldName) {
+            $lineValue = $this->cleanTextValue($lineData[$fieldName] ?? null);
+            $commonValue = $this->cleanTextValue($commonImportData[$fieldName] ?? null);
+
+            $value = $lineValue !== null
+                ? $lineValue
+                : ($applyCommonImportToAll ? $commonValue : null);
+
+            if ($fieldName === 'customs_entry_date') {
+                $value = $this->normalizeOptionalDate($value, 'fecha de pedimento');
+            }
+
+            if ($fieldName === 'motor_number' && $trackingType === 'serial' && $value !== null) {
+                $motors = $this->parseSimpleList($value);
+
+                if (count($motors) > 1) {
+                    if (count($serials) > 0 && count($motors) !== count($serials)) {
+                        throw new RuntimeException('Si capturas varios números de motor, deben coincidir con la cantidad de números de serie.');
+                    }
+
+                    $value = json_encode($motors);
+                }
+            }
+
+            $data[$fieldName] = $value;
+        }
+
+        return $data;
+    }
+
+    protected function validateAdvancedTrackingForLine(
+        object $line,
+        string $trackingType,
+        array $serials,
+        array $importData,
+        array $config
+    ): void {
+        $mode = (string) ($config['mode'] ?? 'none');
+        $fields = $config['fields'] ?? [];
+
+        if ($mode !== 'required' || ! is_array($fields) || count($fields) === 0) {
+            return;
+        }
+
+        $missing = [];
+
+        foreach ($fields as $fieldName) {
+            $fieldName = (string) $fieldName;
+
+            if ($fieldName === 'serial_number') {
+                if ($trackingType !== 'serial' || count($serials) === 0) {
+                    $missing[] = 'VIN / número de serie';
+                }
+
+                continue;
+            }
+
+            $value = $importData[$fieldName] ?? null;
+
+            if ($value === null || trim((string) $value) === '') {
+                $missing[] = $this->advancedTrackingFieldLabel($fieldName);
+            }
+        }
+
+        if ($missing) {
+            throw new RuntimeException(
+                'Faltan datos obligatorios de trazabilidad para "' .
+                ($line->product_label ?? 'producto') .
+                '": ' .
+                implode(', ', $missing) .
+                '.'
+            );
+        }
+    }
+
+    protected function advancedTrackingConfigForLine(object $line): array
+    {
+        if (! Schema::hasTable('products') || ! Schema::hasColumn('products', 'advanced_tracking_mode')) {
+            return ['mode' => 'none', 'fields' => []];
+        }
+
+        foreach (['product_variant_id', 'variant_id', 'product_id'] as $field) {
+            $id = (int) ($line->{$field} ?? 0);
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            $product = DB::table('products')
+                ->where('id', $id)
+                ->first(['advanced_tracking_mode', 'advanced_tracking_fields']);
+
+            if (! $product) {
+                continue;
+            }
+
+            $mode = (string) ($product->advanced_tracking_mode ?? 'none');
+            $fields = $this->decodeAdvancedTrackingFields($product->advanced_tracking_fields ?? null);
+
+            if (in_array($mode, ['warning', 'required'], true)) {
+                return ['mode' => $mode, 'fields' => $fields];
+            }
+        }
+
+        return ['mode' => 'none', 'fields' => []];
+    }
+
+    protected function decodeAdvancedTrackingFields(mixed $value): array
+    {
+        if (is_array($value)) {
+            return array_values(array_filter(array_map('strval', $value)));
+        }
+
+        if (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+
+            if (is_array($decoded)) {
+                return array_values(array_filter(array_map('strval', $decoded)));
+            }
+
+            return array_values(array_filter(array_map('trim', explode(',', $value))));
+        }
+
+        return [];
+    }
+
+    protected function advancedTrackingFieldLabel(string $fieldName): string
+    {
+        return match ($fieldName) {
+            'serial_number' => 'VIN / número de serie',
+            'motor_number' => 'Número de motor',
+            'customs_entry_number' => 'Número de pedimento',
+            'customs_entry_date' => 'Fecha de pedimento',
+            'customs_office' => 'Aduana',
+            'imported_model' => 'Modelo importado',
+            'imported_color' => 'Color importado',
+            'import_document_reference' => 'Referencia documento',
+            default => $fieldName,
+        };
+    }
+
+    protected function cleanTextValue(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    protected function parseSimpleList(mixed $value): array
+    {
+        if (is_array($value)) {
+            $raw = implode("\n", $value);
+        } else {
+            $raw = (string) $value;
+        }
+
+        $raw = str_replace([';', "\t"], "\n", $raw);
+        $parts = preg_split('/[\r\n,]+/', $raw) ?: [];
+
+        return array_values(array_filter(array_map(fn ($part) => trim((string) $part), $parts)));
+    }
+
+    protected function normalizeOptionalDate(mixed $value, string $label): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            throw new RuntimeException('La ' . $label . ' debe tener formato AAAA-MM-DD.');
+        }
+
+        return $value;
+    }
+
 
     protected function updateOrderLineReceipt(object $line, float $receiveQty, float $receiveBaseQty): void
     {

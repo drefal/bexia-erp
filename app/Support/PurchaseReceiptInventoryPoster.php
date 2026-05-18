@@ -287,7 +287,9 @@ class PurchaseReceiptInventoryPoster
         $warehouseId = (int) ($receipt->warehouse_id ?? 0);
         $locationId = $this->destinationStockLocationId($receipt);
 
-        foreach ($serials as $serial) {
+        $motorNumbers = $this->motorNumbersFromReceiptLine($line);
+
+        foreach ($serials as $serialIndex => $serial) {
             $query = DB::table('stock_serial_numbers')
                 ->where('company_id', $companyId)
                 ->where('product_id', $productId)
@@ -306,6 +308,13 @@ class PurchaseReceiptInventoryPoster
             $this->set($data, $columns, 'product_variant_id', $variantId ?: null);
             $this->set($data, $columns, 'lot_id', ! empty($line->lot_id) ? (int) $line->lot_id : null);
             $this->set($data, $columns, 'serial_number', $serial);
+            $this->set($data, $columns, 'motor_number', $this->motorNumberForSerial($line, $motorNumbers, $serialIndex));
+            $this->set($data, $columns, 'customs_entry_number', $line->customs_entry_number ?? null);
+            $this->set($data, $columns, 'customs_entry_date', $line->customs_entry_date ?? null);
+            $this->set($data, $columns, 'customs_office', $line->customs_office ?? null);
+            $this->set($data, $columns, 'imported_model', $line->imported_model ?? null);
+            $this->set($data, $columns, 'imported_color', $line->imported_color ?? null);
+            $this->set($data, $columns, 'import_document_reference', $line->import_document_reference ?? null);
             $this->set($data, $columns, 'current_warehouse_id', $warehouseId ?: null);
             $this->set($data, $columns, 'current_location_id', $locationId ?: null);
             $this->set($data, $columns, 'status', 'available');
@@ -334,6 +343,44 @@ class PurchaseReceiptInventoryPoster
             DB::table('stock_serial_numbers')->insert($data);
         }
     }
+
+
+    protected function motorNumbersFromReceiptLine(object $line): array
+    {
+        $raw = $line->motor_number ?? null;
+
+        if (is_array($raw)) {
+            $values = $raw;
+        } elseif (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+
+            if (is_array($decoded)) {
+                $values = $decoded;
+            } else {
+                $values = preg_split('/[\r\n,;]+/', $raw) ?: [];
+            }
+        } else {
+            $values = [];
+        }
+
+        return array_values(array_filter(array_map(fn ($value) => trim((string) $value), $values)));
+    }
+
+    protected function motorNumberForSerial(object $line, array $motorNumbers, int $serialIndex): ?string
+    {
+        if (count($motorNumbers) > 1) {
+            return $motorNumbers[$serialIndex] ?? null;
+        }
+
+        if (count($motorNumbers) === 1) {
+            return $motorNumbers[0];
+        }
+
+        $value = trim((string) ($line->motor_number ?? ''));
+
+        return $value === '' ? null : $value;
+    }
+
 
     protected function serialNumbersFromReceiptLine(object $line): array
     {

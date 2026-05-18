@@ -115,6 +115,10 @@ class ReceivePurchaseOrder extends Page
                     default => 'Sin seguimiento',
                 };
 
+                $advancedTracking = $this->advancedTrackingConfigForLine($line);
+                $line->advanced_tracking_mode_for_view = $advancedTracking['mode'] ?? 'none';
+                $line->advanced_tracking_fields_for_view = $advancedTracking['fields'] ?? [];
+
                 return $line;
             });
     }
@@ -132,6 +136,59 @@ class ReceivePurchaseOrder extends Page
 
         return url('/admin/' . $this->tenantId($order) . '/purchase-orders/' . $order->id . '/edit');
     }
+
+
+    protected function advancedTrackingConfigForLine(object $line): array
+    {
+        if (! Schema::hasTable('products') || ! Schema::hasColumn('products', 'advanced_tracking_mode')) {
+            return ['mode' => 'none', 'fields' => []];
+        }
+
+        foreach (['product_variant_id', 'variant_id', 'product_id'] as $field) {
+            $id = (int) ($line->{$field} ?? 0);
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            $product = DB::table('products')
+                ->where('id', $id)
+                ->first(['advanced_tracking_mode', 'advanced_tracking_fields']);
+
+            if (! $product) {
+                continue;
+            }
+
+            $mode = (string) ($product->advanced_tracking_mode ?? 'none');
+            $fields = $this->decodeAdvancedTrackingFields($product->advanced_tracking_fields ?? null);
+
+            if (in_array($mode, ['warning', 'required'], true)) {
+                return ['mode' => $mode, 'fields' => $fields];
+            }
+        }
+
+        return ['mode' => 'none', 'fields' => []];
+    }
+
+    protected function decodeAdvancedTrackingFields(mixed $value): array
+    {
+        if (is_array($value)) {
+            return array_values(array_filter(array_map('strval', $value)));
+        }
+
+        if (is_string($value) && trim($value) !== '') {
+            $decoded = json_decode($value, true);
+
+            if (is_array($decoded)) {
+                return array_values(array_filter(array_map('strval', $decoded)));
+            }
+
+            return array_values(array_filter(array_map('trim', explode(',', $value))));
+        }
+
+        return [];
+    }
+
 
     protected function trackingTypeForLine(object $line): string
     {

@@ -140,17 +140,6 @@ class EditProduct extends EditRecord
         ];
     }
 
-    public function getTitle(): string
-    {
-        $record = $this->getRecord();
-
-        if (($record->is_variant ?? false) && $record->parentProduct) {
-            return 'Editar variante';
-        }
-
-        return 'Editar producto';
-    }
-
     public function getSubheading(): string|HtmlString|null
     {
         $record = $this->getRecord();
@@ -409,5 +398,22 @@ class EditProduct extends EditRecord
 
         return $html;
     }
+
+    public function getHeading(): string
+    {
+        $name = trim((string) ($this->record?->name ?? ''));
+
+        if ($name === '') {
+            return 'Editar producto';
+        }
+
+        return 'Editar producto: ' . $name;
+    }
+
+    public function getTitle(): string
+    {
+        return $this->getHeading();
+    }
+
 
 }

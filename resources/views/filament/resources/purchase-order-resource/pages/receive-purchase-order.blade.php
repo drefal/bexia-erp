@@ -3,6 +3,17 @@
         $order = $this->getOrderRow();
         $lines = $this->getLinesForReceipt();
         $hasTracking = collect($lines)->contains(fn ($line) => in_array((string) ($line->tracking_for_view ?? 'none'), ['lot', 'serial'], true));
+        $hasAdvancedTracking = collect($lines)->contains(fn ($line) => in_array((string) ($line->advanced_tracking_mode_for_view ?? 'none'), ['warning', 'required'], true));
+        $showTrackingColumn = $hasTracking || $hasAdvancedTracking;
+        $importFieldLabels = [
+            'motor_number' => 'Número de motor',
+            'customs_entry_number' => 'Número de pedimento',
+            'customs_entry_date' => 'Fecha de pedimento',
+            'customs_office' => 'Aduana',
+            'imported_model' => 'Modelo importado',
+            'imported_color' => 'Color importado',
+            'import_document_reference' => 'Referencia documento',
+        ];
     @endphp
 
     <style>
@@ -122,6 +133,90 @@
             font-size: 14px;
         }
 
+
+        .import-common {
+            border: 1px solid #dbe3ef;
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 16px;
+        }
+
+        .import-common-title {
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .import-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .import-field label,
+        .line-import-field label {
+            display: block;
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .apply-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .apply-row input {
+            width: auto;
+            min-height: auto;
+        }
+
+        .line-import-box {
+            border: 1px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 10px;
+            margin-top: 8px;
+            background: #fbfdff;
+        }
+
+        .line-import-title {
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 8px;
+        }
+
+        .line-import-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .line-import-grid textarea {
+            min-height: 70px;
+        }
+
+        .advanced-badge {
+            display: inline-flex;
+            width: fit-content;
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-weight: 900;
+            font-size: 11px;
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .advanced-badge.required {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+
         .actions {
             display: flex;
             justify-content: flex-end;
@@ -172,13 +267,49 @@
 
             <div class="bexia-receipt-content">
                 <div class="notice">
-                    @if($hasTracking)
-                        Solo las líneas de productos configurados con seguimiento por lote o número de serie pedirán datos adicionales.
-                        Los productos sin seguimiento se reciben igual que antes.
+                    @if($hasTracking || $hasAdvancedTracking)
+                        Las líneas con lote, número de serie o trazabilidad avanzada pedirán datos adicionales.
+                        Si el producto tiene trazabilidad obligatoria, la recepción se bloqueará cuando falten datos.
                     @else
-                        Esta orden no contiene productos con lote o número de serie. La recepción se capturará solo por cantidad.
+                        Esta orden no contiene productos con lote, número de serie ni trazabilidad avanzada. La recepción se capturará solo por cantidad.
                     @endif
                 </div>
+
+                @if($hasAdvancedTracking)
+                    <div class="import-common">
+                        <div class="import-common-title">Datos comunes de importación</div>
+                        <div class="help">
+                            Si todos los productos de esta recepción comparten pedimento, fecha o aduana, captura los datos aquí y se copiarán a todas las líneas que no tengan valor propio.
+                        </div>
+
+                        <div class="import-grid">
+                            <div class="import-field">
+                                <label>Número de pedimento</label>
+                                <input type="text" name="common_import_data[customs_entry_number]" value="{{ old('common_import_data.customs_entry_number') }}" placeholder="Ej. 26 16 1663 6000377">
+                            </div>
+
+                            <div class="import-field">
+                                <label>Fecha de pedimento</label>
+                                <input type="date" name="common_import_data[customs_entry_date]" value="{{ old('common_import_data.customs_entry_date') }}">
+                            </div>
+
+                            <div class="import-field">
+                                <label>Aduana</label>
+                                <input type="text" name="common_import_data[customs_office]" value="{{ old('common_import_data.customs_office') }}" placeholder="Ej. MANZANILLO">
+                            </div>
+
+                            <div class="import-field">
+                                <label>Referencia documento/factura</label>
+                                <input type="text" name="common_import_data[import_document_reference]" value="{{ old('common_import_data.import_document_reference') }}" placeholder="Factura, XML o referencia">
+                            </div>
+                        </div>
+
+                        <label class="apply-row">
+                            <input type="checkbox" name="apply_common_import_to_all" value="1" @checked(old('apply_common_import_to_all', '1') === '1')>
+                            Aplicar estos datos a todas las líneas que no tengan datos propios.
+                        </label>
+                    </div>
+                @endif
 
                 <table class="bexia-receipt-table">
                     <thead>
@@ -190,7 +321,7 @@
                         <th class="qty">Recibido</th>
                         <th class="qty">Pendiente</th>
                         <th class="qty">A recibir</th>
-                        @if($hasTracking)
+                        @if($showTrackingColumn)
                             <th>Seguimiento</th>
                         @endif
                         <th></th>
@@ -201,6 +332,8 @@
                         @php
                             $tracking = (string) ($line->tracking_for_view ?? 'none');
                             $lineId = (int) $line->id;
+                            $advancedMode = (string) ($line->advanced_tracking_mode_for_view ?? 'none');
+                            $advancedFields = (array) ($line->advanced_tracking_fields_for_view ?? []);
                         @endphp
 
                         <tr>
@@ -225,7 +358,7 @@
                                 >
                             </td>
 
-                            @if($hasTracking)
+                            @if($showTrackingColumn)
                                 <td class="tracking-cell">
                                     @if($tracking === 'lot')
                                         <div class="tracking-box">
@@ -267,6 +400,59 @@
                                         </div>
                                     @else
                                         <span class="help">Sin seguimiento</span>
+                                    @endif
+
+                                    @if(in_array($advancedMode, ['warning', 'required'], true))
+                                        <div class="line-import-box">
+                                            <div class="line-import-title">
+                                                Datos de importación
+                                                <span class="advanced-badge {{ $advancedMode === 'required' ? 'required' : '' }}">
+                                                    {{ $advancedMode === 'required' ? 'Obligatorio' : 'Aviso' }}
+                                                </span>
+                                            </div>
+
+                                            <div class="line-import-grid">
+                                                @foreach($advancedFields as $fieldName)
+                                                    @continue($fieldName === 'serial_number')
+
+                                                    @php
+                                                        $label = $importFieldLabels[$fieldName] ?? $fieldName;
+                                                        $oldKey = 'line_import_data.' . $lineId . '.' . $fieldName;
+                                                    @endphp
+
+                                                    <div class="line-import-field">
+                                                        <label>{{ $label }}</label>
+
+                                                        @if($fieldName === 'customs_entry_date')
+                                                            <input
+                                                                type="date"
+                                                                name="line_import_data[{{ $lineId }}][{{ $fieldName }}]"
+                                                                value="{{ old($oldKey) }}"
+                                                                @disabled($line->pending_for_view <= 0)
+                                                            >
+                                                        @elseif($fieldName === 'motor_number' && $tracking === 'serial')
+                                                            <textarea
+                                                                name="line_import_data[{{ $lineId }}][{{ $fieldName }}]"
+                                                                rows="3"
+                                                                placeholder="Un motor por línea, en el mismo orden que las series"
+                                                                @disabled($line->pending_for_view <= 0)
+                                                            >{{ old($oldKey) }}</textarea>
+                                                        @else
+                                                            <input
+                                                                type="text"
+                                                                name="line_import_data[{{ $lineId }}][{{ $fieldName }}]"
+                                                                value="{{ old($oldKey) }}"
+                                                                @disabled($line->pending_for_view <= 0)
+                                                            >
+                                                        @endif
+                                                    </div>
+                                                @endforeach
+                                            </div>
+
+                                            <div class="help" style="margin-top:8px;">
+                                                Los datos comunes se copiarán automáticamente si esta línea queda vacía.
+                                            </div>
+                                        </div>
                                     @endif
                                 </td>
                             @endif

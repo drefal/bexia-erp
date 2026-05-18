@@ -22,11 +22,19 @@ class StockSerialNumber extends Model
         'purchase_receipt_id',
         'stock_movement_line_id',
         'metadata',
+        'import_document_reference',
+        'imported_color',
+        'imported_model',
+        'customs_office',
+        'customs_entry_date',
+        'customs_entry_number',
+        'motor_number',
     ];
 
     protected $casts = [
         'metadata' => 'array',
-    ];
+            'customs_entry_date' => 'date',
+];
 
     public function company(): BelongsTo
     {
