@@ -33,6 +33,9 @@ class Product extends Model
         'product_type',
         'invoice_policy',
         'tracking',
+        'advanced_tracking_notes',
+        'advanced_tracking_fields',
+        'advanced_tracking_mode',
         'costing_method',
         'standard_cost',
         'sale_price',
@@ -103,6 +106,7 @@ class Product extends Model
         'allow_out_of_stock_sales' => 'boolean',
         'is_active' => 'boolean',
         'has_variants' => 'boolean',
+        'advanced_tracking_fields' => 'array',
 ];
 
     public function company(): BelongsTo
