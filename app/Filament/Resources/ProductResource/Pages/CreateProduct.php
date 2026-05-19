@@ -25,6 +25,47 @@ class CreateProduct extends CreateRecord
             $data['company_id'] = $companyId;
         }
 
+        // BEXIA_V5550E_CREATE_INTERNAL_REFERENCE_MUTATE_BEFORE_CREATE
+        $reference = trim((string) ($data['internal_reference'] ?? ''));
+
+        if ($reference !== '') {
+            $query = \App\Models\Product::query()
+                ->whereRaw('LOWER(TRIM(internal_reference)) = ?', [mb_strtolower($reference, 'UTF-8')]);
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'company_id')) {
+                $checkCompanyId = (int) (($data['company_id'] ?? null) ?: (\Filament\Facades\Filament::getTenant()?->getKey() ?: 0));
+
+                if ($checkCompanyId > 0) {
+                    $query->where('company_id', $checkCompanyId);
+                } else {
+                    $query->whereNull('company_id');
+                }
+            }
+
+            if ($query->exists()) {
+                $data['internal_reference'] = null;
+
+                if (property_exists($this, 'data') && is_array($this->data)) {
+                    $this->data['internal_reference'] = null;
+                }
+
+                $this->form->fill($data);
+
+                // BEXIA_V5550F_INTERNAL_REFERENCE_DUPLICATE_MODAL_DISPATCH_CREATE
+                $this->dispatch(
+                    'bexia-internal-reference-duplicate-modal',
+                    title: 'Referencia interna duplicada',
+                    message: 'La referencia interna ya existe en otro producto de esta empresa. Se limpió el campo para capturar una referencia diferente.',
+                );
+
+                throw new \Filament\Support\Exceptions\Halt();
+            }
+
+            $data['internal_reference'] = $reference;
+        } else {
+            $data['internal_reference'] = null;
+        }
+
         $data['available_in_pos'] = array_key_exists('available_in_pos', $data)
             ? (bool) $data['available_in_pos']
             : true;

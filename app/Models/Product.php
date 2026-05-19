@@ -109,6 +109,52 @@ class Product extends Model
         'advanced_tracking_fields' => 'array',
 ];
 
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $product): void {
+            // BEXIA_V5550_INTERNAL_REFERENCE_UNIQUE_MODEL
+            // La referencia interna es products.internal_reference, separada de products.sku.
+            $reference = trim((string) ($product->internal_reference ?? ''));
+
+            $product->internal_reference = $reference !== '' ? $reference : null;
+
+            if ($product->internal_reference === null) {
+                return;
+            }
+
+            if (! \Illuminate\Support\Facades\Schema::hasTable('products')) {
+                return;
+            }
+
+            $companyId = (int) ($product->company_id ?? 0);
+            $normalizedReference = mb_strtolower($product->internal_reference, 'UTF-8');
+
+            $duplicateQuery = static::query()
+                ->whereRaw('LOWER(TRIM(internal_reference)) = ?', [$normalizedReference]);
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'company_id')) {
+                if ($companyId > 0) {
+                    $duplicateQuery->where('company_id', $companyId);
+                } else {
+                    $duplicateQuery->whereNull('company_id');
+                }
+            }
+
+            if ($product->exists && $product->getKey()) {
+                $duplicateQuery->whereKeyNot($product->getKey());
+            }
+
+            if ($duplicateQuery->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'internal_reference' => 'La referencia interna ya existe en otro producto de esta empresa.',
+                    'data.internal_reference' => 'La referencia interna ya existe en otro producto de esta empresa.',
+                    // BEXIA_V5550B_INTERNAL_REFERENCE_MODEL_DATA_ERROR
+                ]);
+            }
+        });
+    }
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
