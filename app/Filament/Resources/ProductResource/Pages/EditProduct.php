@@ -12,6 +12,73 @@ class EditProduct extends EditRecord
 {
     protected static string $resource = ProductResource::class;
 
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        // BEXIA_V5550E_EDIT_INTERNAL_REFERENCE_MUTATE_BEFORE_SAVE
+        $reference = trim((string) ($data['internal_reference'] ?? ''));
+
+        if ($reference === '') {
+            $data['internal_reference'] = null;
+
+            return $data;
+        }
+
+        $companyId = (int) (
+            ($this->record?->company_id ?? null)
+            ?: ($data['company_id'] ?? 0)
+            ?: (\Filament\Facades\Filament::getTenant()?->getKey() ?: 0)
+        );
+
+        $query = \App\Models\Product::query()
+            ->whereRaw('LOWER(TRIM(internal_reference)) = ?', [mb_strtolower($reference, 'UTF-8')]);
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'company_id')) {
+            if ($companyId > 0) {
+                $query->where('company_id', $companyId);
+            } else {
+                $query->whereNull('company_id');
+            }
+        }
+
+        if ($this->record?->getKey()) {
+            $query->whereKeyNot($this->record->getKey());
+        }
+
+        if (! $query->exists()) {
+            $data['internal_reference'] = $reference;
+
+            return $data;
+        }
+
+        $previousReference = trim((string) (
+            $this->record?->getOriginal('internal_reference')
+            ?: $this->record?->internal_reference
+            ?: ''
+        ));
+
+        $data['internal_reference'] = $previousReference !== '' ? $previousReference : null;
+
+        if (property_exists($this, 'data') && is_array($this->data)) {
+            $this->data['internal_reference'] = $data['internal_reference'];
+        }
+
+        $this->form->fill($data);
+
+        $message = $previousReference !== ''
+            ? 'La referencia interna ya existe en otro producto de esta empresa. Se regresó al valor anterior: ' . $previousReference . '.'
+            : 'La referencia interna ya existe en otro producto de esta empresa. Se limpió el campo.';
+
+        // BEXIA_V5550F_INTERNAL_REFERENCE_DUPLICATE_MODAL_DISPATCH_EDIT
+        $this->dispatch(
+            'bexia-internal-reference-duplicate-modal',
+            title: 'Referencia interna duplicada',
+            message: $message,
+        );
+
+        throw new \Filament\Support\Exceptions\Halt();
+    }
+
     protected function getHeaderActions(): array
     {
         return [

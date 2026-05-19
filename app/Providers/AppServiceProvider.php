@@ -19,6 +19,18 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // BEXIA_V5550G_INTERNAL_REFERENCE_MODAL_RENDER_HOOK
+        if (
+            class_exists(\Filament\Support\Facades\FilamentView::class)
+            && class_exists(\Filament\View\PanelsRenderHook::class)
+            && view()->exists('filament.products.internal-reference-duplicate-modal')
+        ) {
+            \Filament\Support\Facades\FilamentView::registerRenderHook(
+                \Filament\View\PanelsRenderHook::BODY_END,
+                fn (): string => view('filament.products.internal-reference-duplicate-modal')->render(),
+            );
+        }
+
         if (class_exists(PurchaseRequest::class) && class_exists(PurchaseRequestObserver::class)) {
             PurchaseRequest::observe(PurchaseRequestObserver::class);
         }

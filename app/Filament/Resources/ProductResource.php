@@ -919,6 +919,63 @@ Forms\Components\Section::make('Auditoría de precios y costos')
                                         Forms\Components\TextInput::make('internal_reference')
                                             ->label('Referencia interna')
                                             ->maxLength(80)
+                                            ->live(onBlur: true)
+                                            ->dehydrateStateUsing(fn ($state): ?string => filled($state) ? trim((string) $state) : null)
+                                            ->afterStateUpdated(function (mixed $state, \Filament\Forms\Set $set, \Filament\Forms\Get $get, ?\App\Models\Product $record, \Livewire\Component $livewire): void {
+                                                $reference = trim((string) ($state ?? ''));
+
+                                                if ($reference === '') {
+                                                    return;
+                                                }
+
+                                                $companyId = (int) (
+                                                    ($record?->company_id ?? null)
+                                                    ?: ($get('company_id') ?: 0)
+                                                    ?: (\Filament\Facades\Filament::getTenant()?->getKey() ?: 0)
+                                                );
+
+                                                $query = \App\Models\Product::query()
+                                                    ->whereRaw('LOWER(TRIM(internal_reference)) = ?', [mb_strtolower($reference, 'UTF-8')]);
+
+                                                if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'company_id')) {
+                                                    if ($companyId > 0) {
+                                                        $query->where('company_id', $companyId);
+                                                    } else {
+                                                        $query->whereNull('company_id');
+                                                    }
+                                                }
+
+                                                if ($record?->getKey()) {
+                                                    $query->whereKeyNot($record->getKey());
+                                                }
+
+                                                if (! $query->exists()) {
+                                                    return;
+                                                }
+
+                                                $previousReference = $record?->getOriginal('internal_reference')
+                                                    ?: $record?->internal_reference
+                                                    ?: null;
+
+                                                $previousReference = filled($previousReference)
+                                                    ? trim((string) $previousReference)
+                                                    : null;
+
+                                                $set('internal_reference', $previousReference);
+
+                                                $message = $previousReference
+                                                    ? 'La referencia interna ya existe en otro producto de esta empresa. Se regresó al valor anterior: ' . $previousReference . '.'
+                                                    : 'La referencia interna ya existe en otro producto de esta empresa. Se limpió el campo.';
+
+                                                // BEXIA_V5550F_INTERNAL_REFERENCE_DUPLICATE_MODAL_DISPATCH_FIELD
+                                                $livewire->dispatch(
+                                                    'bexia-internal-reference-duplicate-modal',
+                                                    title: 'Referencia interna duplicada',
+                                                    message: $message,
+                                                );
+                                            })
+                                            ->helperText('Debe ser única por empresa. Es diferente del SKU / código de barras.')
+                                            // BEXIA_V5550E_INTERNAL_REFERENCE_NOTICE_NO_INLINE_RULE
                                             ->columnSpan(4),
 
                                         Forms\Components\TextInput::make('sku')
