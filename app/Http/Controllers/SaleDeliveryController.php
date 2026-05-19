@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Inventory\OutboundSerialNumberService;
 use App\Models\SaleDelivery;
 use App\Models\SaleOrder;
 use Illuminate\Http\RedirectResponse;
@@ -18,7 +19,12 @@ class SaleDeliveryController extends Controller
         }
 
         if (! in_array((string) $saleOrder->status, ['confirmed', 'partially_delivered'], true)) {
-            return redirect()->back()->with('error', 'Solo las órdenes confirmadas o parcialmente entregadas pueden crear entregas.');
+            $message = (string) $saleOrder->status === 'delivered'
+                ? 'La orden ya fue entregada completa. No tiene cantidades pendientes para entregar.'
+                : 'Solo las órdenes confirmadas o parcialmente entregadas pueden crear entregas.';
+
+            return redirect('/admin/' . (int) $saleOrder->company_id . '/sale-orders/' . (int) $saleOrder->id . '/edit')
+                ->with('warning', $message);
         }
 
         return view('filament.sales-orders.delivery-standalone', [
@@ -94,8 +100,10 @@ class SaleDeliveryController extends Controller
             return back()->with('error', 'No se encontró la orden de venta relacionada.');
         }
 
+        $serialSelections = $this->normalizeSerialSelections($request->input('serial_numbers', []));
+
         try {
-            $movementId = DB::transaction(function () use ($saleDelivery, $lines, $order): int {
+            $movementId = DB::transaction(function () use ($saleDelivery, $lines, $order, $serialSelections): int {
                 $now = now();
 
                 $lockedQuants = [];
@@ -105,6 +113,23 @@ class SaleDeliveryController extends Controller
 
                     if ($qty <= 0) {
                         throw new \RuntimeException('La línea ' . ($line->product_label ?? '') . ' no tiene cantidad válida.');
+                    }
+
+                    $serialNumberId = $serialSelections[(int) $line->id] ?? null;
+
+                    if ($this->lineRequiresSerialNumber($line) && ! $serialNumberId) {
+                        throw new \RuntimeException('Selecciona número de serie para ' . ($line->product_label ?? 'producto') . $this->variantSuffix($line) . '.');
+                    }
+
+                    if ($serialNumberId && abs($qty - 1.0) > 0.000001) {
+                        throw new \RuntimeException('La línea ' . ($line->product_label ?? 'producto') . $this->variantSuffix($line) . ' usa número de serie y debe entregarse con cantidad 1.');
+                    }
+
+                    if ($serialNumberId) {
+                        app(OutboundSerialNumberService::class)->assertSerialAvailable(
+                            $serialNumberId,
+                            $this->serialContextForDeliveryLine($saleDelivery, $line)
+                        );
                     }
 
                     $quant = $this->lockQuantForDeliveryLine($saleDelivery, $line);
@@ -160,12 +185,18 @@ class SaleDeliveryController extends Controller
                 foreach ($lines as $line) {
                     $qty = $this->decimal($line->quantity ?? 0);
                     $quant = $lockedQuants[(int) $line->id];
+                    $serialNumberId = $serialSelections[(int) $line->id] ?? null;
 
                     $movementLineData = $this->filterTableColumns('stock_movement_lines', [
                         'stock_movement_id' => $movementId,
                         'product_id' => $line->product_id,
                         'product_variant_id' => $line->product_variant_id,
                         'lot_id' => null,
+                        'stock_serial_number_id' => $serialNumberId,
+                        'source_type' => 'sale_delivery',
+                        'source_id' => $saleDelivery->id,
+                        'source_line_type' => 'sale_delivery_line',
+                        'source_line_id' => $line->id,
                         'requested_quantity' => $qty,
                         'done_quantity' => $qty,
                         'unit_cost' => $line->unit_cost ?? 0,
@@ -175,6 +206,13 @@ class SaleDeliveryController extends Controller
                     ]);
 
                     $movementLineId = DB::table('stock_movement_lines')->insertGetId($movementLineData);
+
+                    if ($serialNumberId) {
+                        app(OutboundSerialNumberService::class)->markSold(
+                            $serialNumberId,
+                            $this->serialContextForDeliveryLine($saleDelivery, $line, (int) $movementLineId)
+                        );
+                    }
 
                     /*
                      * Validar entrega:
@@ -196,6 +234,7 @@ class SaleDeliveryController extends Controller
                         ->where('id', $line->id)
                         ->update($this->filterTableColumns('sale_delivery_lines', [
                             'stock_movement_line_id' => $movementLineId,
+                            'stock_serial_number_id' => $serialNumberId,
                             'updated_at' => $now,
                         ]));
                 }
@@ -214,7 +253,18 @@ class SaleDeliveryController extends Controller
                 return $movementId;
             });
 
-            return back()->with('success', 'Entrega validada. Se generó el movimiento de salida #' . $movementId . '.');
+            $orderStatus = (string) DB::table('sales_orders')
+                ->where('id', $saleDelivery->sales_order_id)
+                ->value('status');
+
+            $message = 'Entrega validada. Se generó el movimiento de salida #' . $movementId . '.';
+
+            if ($orderStatus === 'delivered') {
+                return redirect($this->saleOrderEditUrl($saleDelivery))
+                    ->with('success', $message . ' La orden quedó entregada completa.');
+            }
+
+            return back()->with('success', $message);
         } catch (\Throwable $e) {
             report($e);
 
@@ -752,4 +802,129 @@ class SaleDeliveryController extends Controller
             || $user->can('inventory.view')
         );
     }
+
+
+    protected function saleOrderEditUrl(SaleDelivery $saleDelivery): string
+    {
+        return url('/admin/' . (int) $saleDelivery->company_id . '/sale-orders/' . (int) $saleDelivery->sales_order_id . '/edit');
+    }
+
+    protected function normalizeSerialSelections(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($raw as $lineId => $serialNumberId) {
+            $lineId = (int) $lineId;
+            $serialNumberId = (int) $serialNumberId;
+
+            if ($lineId > 0 && $serialNumberId > 0) {
+                $normalized[$lineId] = $serialNumberId;
+            }
+        }
+
+        return $normalized;
+    }
+
+    protected function serialContextForDeliveryLine(SaleDelivery $saleDelivery, object $line, ?int $movementLineId = null): array
+    {
+        return [
+            'company_id' => (int) ($line->company_id ?? $saleDelivery->company_id),
+            'product_id' => (int) ($line->product_id ?? 0),
+            'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
+            'stock_movement_line_id' => $movementLineId,
+            'source_type' => 'sale_delivery',
+            'source_id' => (int) $saleDelivery->id,
+            'source_line_type' => 'sale_delivery_line',
+            'source_line_id' => (int) ($line->id ?? 0),
+            'user_id' => auth()->id(),
+        ];
+    }
+
+    protected function lineRequiresSerialNumber(object $line): bool
+    {
+        if ($this->lineHasAvailableSerialNumbers($line)) {
+            return true;
+        }
+
+        if (! Schema::hasTable('products')) {
+            return false;
+        }
+
+        $ids = [];
+
+        if (! empty($line->product_variant_id)) {
+            $ids[] = (int) $line->product_variant_id;
+        }
+
+        if (! empty($line->product_id)) {
+            $ids[] = (int) $line->product_id;
+        }
+
+        foreach (array_values(array_unique(array_filter($ids))) as $productId) {
+            $product = DB::table('products')->where('id', $productId)->first();
+
+            if (! $product) {
+                continue;
+            }
+
+            foreach (['tracking', 'advanced_tracking_mode'] as $column) {
+                $value = strtolower(trim((string) ($product->{$column} ?? '')));
+
+                if ($value !== '' && (str_contains($value, 'serial') || str_contains($value, 'serie'))) {
+                    return true;
+                }
+            }
+
+            $fields = $product->advanced_tracking_fields ?? null;
+
+            if (is_string($fields) && $fields !== '') {
+                $decoded = json_decode($fields, true);
+
+                if (is_array($decoded)) {
+                    $flat = strtolower(json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+
+                    if (str_contains($flat, 'serial') || str_contains($flat, 'serie')) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    protected function lineHasAvailableSerialNumbers(object $line): bool
+    {
+        if (! Schema::hasTable('stock_serial_numbers')) {
+            return false;
+        }
+
+        $companyId = (int) ($line->company_id ?? 0);
+        $productId = (int) ($line->product_id ?? 0);
+
+        if ($companyId <= 0 || $productId <= 0) {
+            return false;
+        }
+
+        $query = DB::table('stock_serial_numbers')
+            ->where('company_id', $companyId)
+            ->where('product_id', $productId)
+            ->where('status', 'available');
+
+        if (! empty($line->product_variant_id)) {
+            $query->where('product_variant_id', (int) $line->product_variant_id);
+        } else {
+            $query->where(function ($inner): void {
+                $inner->whereNull('product_variant_id')
+                    ->orWhere('product_variant_id', 0);
+            });
+        }
+
+        return $query->exists();
+    }
+
 }

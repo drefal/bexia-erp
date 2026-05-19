@@ -22,11 +22,19 @@ class DeliverSaleOrder extends Page
         $this->record = $this->resolveSaleOrderRecord($record, $tenant);
 
         if (! in_array((string) $this->record->status, ['confirmed', 'partially_delivered'], true)) {
-            Notification::make()
-                ->title('La orden no está lista para entrega')
-                ->body('Solo las órdenes confirmadas o parcialmente entregadas con cantidades pendientes pueden crear entregas.')
-                ->warning()
-                ->send();
+            if ((string) $this->record->status === 'delivered') {
+                Notification::make()
+                    ->title('Orden entregada completa')
+                    ->body('Esta orden ya no tiene cantidades pendientes para entregar.')
+                    ->success()
+                    ->send();
+            } else {
+                Notification::make()
+                    ->title('La orden no está lista para entrega')
+                    ->body('Solo las órdenes confirmadas o parcialmente entregadas con cantidades pendientes pueden crear entregas.')
+                    ->warning()
+                    ->send();
+            }
 
             $this->redirect($this->orderUrl('edit'));
 

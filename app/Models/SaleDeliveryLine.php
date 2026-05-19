@@ -20,6 +20,8 @@ class SaleDeliveryLine extends Model
         'quantity',
         'unit_cost',
         'stock_movement_line_id',
+        'stock_serial_number_id',
+        'serial_tracking_metadata',
         'notes',
     ];
 
