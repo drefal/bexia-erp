@@ -2515,6 +2515,10 @@ document.addEventListener('DOMContentLoaded', function () {
         cartNote = '';
         cartDiscount = null;
         window.BEXIA_POS_LOADED_PENDING_ORDER = null;
+        window.BEXIA_POS_SERIAL_SELECTIONS = {};
+        window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING = {};
+        window.BEXIA_V5544D_PENDING_SERIAL_LOCKS = {};
+        // BEXIA_V5545I3_CLEAR_BUTTON_SERIAL_SELECTIONS
         render();
     });
 
@@ -2529,8 +2533,64 @@ document.addEventListener('DOMContentLoaded', function () {
     window.BEXIA_POS_CART_API = {
         getItems: function () {
             return Array.from(cart.values()).map(function (item) {
+                const maps = window.BEXIA_POS_SERIAL_SELECTIONS || {};
+                const itemId = Number(item.id || 0) || null;
+                let finalProductId = Number(item.product_id || item.parent_product_id || item.id || 0) || null;
+                let finalVariantId = Number(item.product_variant_id || item.variant_id || 0) || null;
+
+                let selectedSerial = null;
+
+                const keys = [
+                    String(finalProductId || '') + ':' + String(finalVariantId || ''),
+                    String(finalProductId || '') + ':',
+                    String(itemId || '') + ':' + String(finalVariantId || ''),
+                    String(itemId || '') + ':'
+                ];
+
+                for (const key of keys) {
+                    if (maps[key]) {
+                        selectedSerial = maps[key];
+                        break;
+                    }
+                }
+
+                if (selectedSerial) {
+                    const selectedProductId = Number(selectedSerial.product_id || 0) || null;
+                    const selectedVariantId = Number(selectedSerial.product_variant_id || 0) || null;
+
+                    if (selectedProductId) {
+                        finalProductId = selectedProductId;
+                    }
+
+                    if (selectedVariantId) {
+                        finalVariantId = selectedVariantId;
+                    }
+                }
+
+                const serialId = Number(
+                    item.stock_serial_number_id
+                    || item.serial_number_id
+                    || (selectedSerial ? selectedSerial.stock_serial_number_id : 0)
+                    || (selectedSerial ? selectedSerial.id : 0)
+                    || 0
+                ) || null;
+
+                const serialNumber = String(
+                    item.serial_number
+                    || (selectedSerial ? selectedSerial.serial_number : '')
+                    || (selectedSerial ? selectedSerial.label : '')
+                    || ''
+                );
+
                 return {
-                    product_id: item.id,
+                    product_id: finalProductId || item.id,
+                    product_variant_id: finalVariantId,
+                    variant_id: finalVariantId,
+                    stock_serial_number_id: serialId,
+                    serial_number_id: serialId,
+                    serial_number: serialNumber,
+                    serial_locked_from_pending: Boolean(item.serial_locked_from_pending),
+                    // BEXIA_V5545I3_GETITEMS_SERIAL_FROM_GLOBAL
                     name: item.name,
                     reference: item.reference,
                     price: item.price,
@@ -2540,6 +2600,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 };
             });
         },
+
         getTotal: function () {
             const gross = grossTotals();
             const discountValue = discountAmount(gross.total);
@@ -2564,10 +2625,20 @@ document.addEventListener('DOMContentLoaded', function () {
             cartNote = '';
             cartDiscount = null;
             window.BEXIA_POS_LOADED_PENDING_ORDER = null;
+            window.BEXIA_POS_SERIAL_SELECTIONS = {};
+            window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING = {};
+            window.BEXIA_V5544D_PENDING_SERIAL_LOCKS = {};
+            window.BEXIA_POS_PRICE_LIST_CHANGED_AFTER_PENDING_LOAD = false;
+            // BEXIA_V5545N_CLEAR_PRICE_LIST_CHANGED_FLAG
+            // BEXIA_V5545I3_CLEAR_SERIAL_SELECTIONS
             render();
         },
         loadPendingOrderItems: function (items) {
             cart.clear();
+            window.BEXIA_POS_PRICE_LIST_CHANGED_AFTER_PENDING_LOAD = false;
+            window.BEXIA_POS_SERIAL_SELECTIONS = {};
+            window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING = {};
+            window.BEXIA_V5544D_PENDING_SERIAL_LOCKS = {};
 
             const loadedOrder = window.BEXIA_POS_LOADED_PENDING_ORDER || {};
             const loadedMeta = loadedOrder.metadata || {};
@@ -2580,15 +2651,59 @@ document.addEventListener('DOMContentLoaded', function () {
                 const total = Number(item.total || item.line_total || 0);
                 const price = Number(item.price || item.unit_price || (qty > 0 && total > 0 ? total / qty : 0));
 
+                const pendingProductId = Number(item.product_id || item.parent_product_id || 0) || null;
+                const pendingVariantId = Number(item.product_variant_id || item.variant_id || 0) || null;
+                const pendingSerialId = Number(item.stock_serial_number_id || item.serial_number_id || 0) || null;
+                const pendingSerialNumber = String(item.serial_number || item.serial_label || item.line_serial_number || '');
+
                 const product = {
-                    id: item.product_id || '',
+                    id: pendingVariantId || pendingProductId || item.id || '',
+                    product_id: pendingProductId || item.product_id || item.id || '',
+                    parent_product_id: pendingProductId || null,
+                    product_variant_id: pendingVariantId,
+                    variant_id: pendingVariantId,
+                    stock_serial_number_id: pendingSerialId,
+                    serial_number_id: pendingSerialId,
+                    serial_number: pendingSerialNumber,
+                    serial_locked_from_pending: Boolean(pendingSerialId),
+                    pending_price_locked_until_price_list_change: true,
+                    original_pending_price: Number.isFinite(price) ? price : 0,
+                    original_pending_tax_rate: Number(item.tax_rate || 0.16),
+                    // BEXIA_V5545N_PENDING_PRICE_LOCK_UNTIL_MANUAL_PRICE_LIST
+                    // BEXIA_V5545M_PENDING_ONLY_LOCK_SERIAL
+                    // BEXIA_V5545I3_LOAD_PENDING_SERIAL_FIELDS
                     name: item.name || item.product_name || 'Producto',
                     reference: item.reference || item.product_reference || '',
                     price: Number.isFinite(price) ? price : 0,
-                    stock: Number(item.stock || 999999),
+                    stock: Number(item.stock || item.available_quantity || item.stock_quantity || 999999),
                     taxRate: Number(item.tax_rate || 0.16),
                     qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
                 };
+
+                if (pendingSerialId) {
+                    const serialPayload = {
+                        id: pendingSerialId,
+                        stock_serial_number_id: pendingSerialId,
+                        product_id: pendingProductId,
+                        product_variant_id: pendingVariantId,
+                        serial_number: pendingSerialNumber,
+                        label: pendingSerialNumber || ('Serie #' + pendingSerialId),
+                        status: 'pending_selected'
+                    };
+
+                    const keys = [
+                        String(pendingProductId || '') + ':' + String(pendingVariantId || ''),
+                        String(pendingProductId || '') + ':',
+                        String(product.id || '') + ':' + String(pendingVariantId || ''),
+                        String(product.id || '') + ':'
+                    ];
+
+                    keys.forEach(function (key) {
+                        window.BEXIA_POS_SERIAL_SELECTIONS[key] = serialPayload;
+                        window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING[key] = serialPayload;
+                        window.BEXIA_V5544D_PENDING_SERIAL_LOCKS[key] = serialPayload;
+                    });
+                }
 
                 const key = lineKey(product);
                 cart.set(key, product);
@@ -2601,6 +2716,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 v5481fBottomChargeTotalEl.textContent = money(this.getTotal());
             }
         },
+
         refreshProductData: function (products) {
             const rows = Array.isArray(products) ? products : [];
             const byId = new Map();
@@ -2612,24 +2728,67 @@ document.addEventListener('DOMContentLoaded', function () {
             let changed = 0;
 
             cart.forEach(function (item, key) {
-                const updated = byId.get(Number(item.id || item.product_id));
+                const updated = byId.get(Number(item.id || item.product_variant_id || item.product_id));
 
                 if (!updated) {
                     return;
                 }
+
+                const oldPrice = Number(item.price || 0);
+                const oldUnitPrice = Number(item.unit_price ?? item.price ?? 0);
+                const oldTaxRate = Number(item.taxRate ?? 0.16);
+                const oldStock = Number(item.stock ?? 0);
 
                 const newPrice = Number(updated.price || updated.public_price || item.price || 0);
                 const newStock = Number(updated.available_quantity ?? updated.stock_quantity ?? item.stock ?? 0);
                 const rawTax = Number(updated.sale_tax_rate ?? item.taxRate ?? 0.16);
                 const taxRate = rawTax > 1 ? rawTax / 100 : rawTax;
 
+                const pendingPriceLocked = Boolean(item.pending_price_locked_until_price_list_change)
+                    && !Boolean(window.BEXIA_POS_PRICE_LIST_CHANGED_AFTER_PENDING_LOAD);
+
+                // BEXIA_V5545N_PENDING_PRICE_ONLY_CHANGES_AFTER_MANUAL_PRICE_LIST
+                // Pendiente cargado:
+                // - conserva precio/impuesto original durante refrescos automáticos.
+                // - si el usuario cambia lista de precios manualmente, se comporta como carrito normal.
+                if (pendingPriceLocked) {
+                    item.price = Number(item.original_pending_price ?? item.price ?? 0);
+                    item.unit_price = Number(item.original_pending_price ?? item.unit_price ?? item.price ?? 0);
+                    item.taxRate = Number(item.original_pending_tax_rate ?? item.taxRate ?? 0.16);
+                    item.stock = newStock;
+
+                    const visibleChanged = (
+                        Number(item.price || 0) !== oldPrice
+                        || Number(item.unit_price ?? item.price ?? 0) !== oldUnitPrice
+                        || Number(item.taxRate ?? 0.16) !== oldTaxRate
+                    );
+
+                    cart.set(key, item);
+
+                    if (visibleChanged) {
+                        changed++;
+                    }
+
+                    return;
+                }
+
+                item.pending_price_locked_until_price_list_change = false;
                 item.price = newPrice;
                 item.unit_price = newPrice;
                 item.stock = newStock;
                 item.taxRate = taxRate;
 
-                cart.set(key, item);
-                changed++;
+                const visibleChanged = (
+                    Number(item.price || 0) !== oldPrice
+                    || Number(item.unit_price ?? item.price ?? 0) !== oldUnitPrice
+                    || Number(item.taxRate ?? 0.16) !== oldTaxRate
+                    || Number(item.stock ?? 0) !== oldStock
+                );
+
+                if (visibleChanged) {
+                    cart.set(key, item);
+                    changed++;
+                }
             });
 
             if (changed > 0) {
@@ -10876,6 +11035,27 @@ document.addEventListener('DOMContentLoaded', function () {
         font-size: 11px;
         font-weight: 900;
     }
+
+    .v5544b-serial-readonly {
+        border: 1px solid #86efac;
+        background: #f0fdf4;
+        color: #14532d;
+        border-radius: 10px;
+        padding: 8px 9px;
+        font-size: 12px;
+        font-weight: 950;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .v5544b-serial-readonly small {
+        color: #166534;
+        font-size: 10px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
 </style>
 
 <script id="v5543b1-pdv-serial-selector-script">
@@ -10889,6 +11069,8 @@ document.addEventListener('DOMContentLoaded', function () {
     window.BEXIA_V5543B1_PDV_SERIAL_SELECTOR_READY = true;
     window.BEXIA_POS_SERIAL_SELECTIONS = window.BEXIA_POS_SERIAL_SELECTIONS || {};
     window.BEXIA_POS_SERIAL_REQUIREMENTS = window.BEXIA_POS_SERIAL_REQUIREMENTS || {};
+    // BEXIA_V5544C_PENDING_SERIAL_LOCK_MAP
+    window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING = window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING || {};
 
     const serialCache = {};
 
@@ -10913,6 +11095,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         window.BEXIA_POS_SERIAL_SELECTIONS = {};
         window.BEXIA_POS_SERIAL_REQUIREMENTS = {};
+        window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING = {};
 
         document.querySelectorAll('[data-v5543b1-serial-box="1"]').forEach(function (box) {
             box.remove();
@@ -10984,11 +11167,21 @@ document.addEventListener('DOMContentLoaded', function () {
         const sid = sessionId();
         const productId = itemProductId(item);
         const variantId = itemVariantId(item);
-        const key = cacheKey(productId, variantId);
 
         if (!sid || productId <= 0) {
             return { ok: false, requires_serial: false, serials: [] };
         }
+
+        // BEXIA_V5545I3_SELECTED_SERIAL_CACHE_KEY
+        // Cuando viene de ticket pendiente, no reutilizar el cache de una venta nueva.
+        const selectedSerialId = Number(
+            item
+            && item.serial_locked_from_pending
+                ? (item.stock_serial_number_id || item.serial_number_id || 0)
+                : 0
+        );
+
+        const key = cacheKey(productId, variantId) + (selectedSerialId > 0 ? (':selected:' + String(selectedSerialId)) : '');
 
         if (serialCache[key]) {
             return serialCache[key];
@@ -10997,7 +11190,8 @@ document.addEventListener('DOMContentLoaded', function () {
         serialCache[key] = fetch(
             '/pos/sessions/' + encodeURIComponent(sid)
                 + '/serials?product_id=' + encodeURIComponent(productId)
-                + (variantId > 0 ? ('&product_variant_id=' + encodeURIComponent(variantId)) : ''),
+                + (variantId > 0 ? ('&product_variant_id=' + encodeURIComponent(variantId)) : '')
+                + (selectedSerialId > 0 ? ('&selected_serial_id=' + encodeURIComponent(selectedSerialId)) : ''),
             {
                 method: 'GET',
                 credentials: 'same-origin',
@@ -11036,17 +11230,21 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        const serial = {
+            stock_serial_number_id: Number(item.stock_serial_number_id),
+            product_variant_id: Number(item.product_variant_id || item.variant_id || 0) || null,
+            serial_number: item.serial_number || ''
+        };
+
+        lockSerialForPendingItem(item, serial);
+
         const existing = selectedForItem(item);
 
         if (existing && existing.stock_serial_number_id) {
             return;
         }
 
-        setSelectedForItem(item, {
-            stock_serial_number_id: Number(item.stock_serial_number_id),
-            product_variant_id: Number(item.product_variant_id || item.variant_id || 0) || null,
-            serial_number: item.serial_number || ''
-        });
+        setSelectedForItem(item, serial);
     }
 
     /* BEXIA_V5543C2_SEED_PENDING_SERIAL_SELECTION */
@@ -11063,6 +11261,31 @@ document.addEventListener('DOMContentLoaded', function () {
 
         window.BEXIA_POS_SERIAL_SELECTIONS[mainKey] = serial;
         window.BEXIA_POS_SERIAL_SELECTIONS[fbKey] = serial;
+    }
+
+    function lockSerialForPendingItem(item, serial) {
+        if (!item || !serial || !serial.stock_serial_number_id) {
+            return;
+        }
+
+        const lock = {
+            stock_serial_number_id: Number(serial.stock_serial_number_id),
+            product_variant_id: Number(serial.product_variant_id || item.product_variant_id || item.variant_id || 0) || null,
+            serial_number: serial.serial_number || item.serial_number || ''
+        };
+
+        window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING[itemKey(item)] = lock;
+        window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING[fallbackKey(item)] = lock;
+    }
+
+    function lockedSerialForPendingItem(item) {
+        if (!item) {
+            return null;
+        }
+
+        return window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING[itemKey(item)]
+            || window.BEXIA_POS_SERIAL_LOCKED_BY_PENDING[fallbackKey(item)]
+            || null;
     }
 
     function patchCartApi() {
@@ -11159,7 +11382,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const requires = Boolean(data && data.requires_serial);
-        const serials = Array.isArray(data && data.serials) ? data.serials : [];
+        let serials = Array.isArray(data && data.serials) ? data.serials : [];
         const key = itemKey(item);
 
         window.BEXIA_POS_SERIAL_REQUIREMENTS[key] = requires;
@@ -11183,8 +11406,31 @@ document.addEventListener('DOMContentLoaded', function () {
         let selected = selectedForItem(item);
         let selectedId = selected ? Number(selected.stock_serial_number_id || 0) : 0;
 
+        // BEXIA_V5545F_CLEAR_STALE_SELECTED_FOR_NEW_LINE
+        // Si es una línea nueva, no debe heredar la serie seleccionada de una prueba anterior.
         if (
             selectedId
+            && item
+            && ! item.serial_locked_from_pending
+            && ! Number(item.stock_serial_number_id || item.serial_number_id || 0)
+        ) {
+            setSelectedForItem(item, null);
+            selected = null;
+            selectedId = 0;
+        }
+
+        // BEXIA_V5544_KEEP_PENDING_SERIAL_SELECTION
+        // Si el item viene de un ticket pendiente con stock_serial_number_id,
+        // conservar esa selección aunque el endpoint normal de disponibles no la regrese.
+        const selectedComesFromPendingItem = Boolean(
+            selectedId
+            && item
+            && Number(item.stock_serial_number_id || item.serial_number_id || 0) === selectedId
+        );
+
+        if (
+            selectedId
+            && ! selectedComesFromPendingItem
             && ! serials.some(function (serial) {
                 return Number(serial.id || 0) === selectedId;
             })
@@ -11192,6 +11438,22 @@ document.addEventListener('DOMContentLoaded', function () {
             setSelectedForItem(item, null);
             selected = null;
             selectedId = 0;
+        }
+
+        if (
+            selectedComesFromPendingItem
+            && ! serials.some(function (serial) {
+                return Number(serial.id || 0) === selectedId;
+            })
+        ) {
+            serials.unshift({
+                id: selectedId,
+                serial_number: selected.serial_number || item.serial_number || ('Serie #' + selectedId),
+                label: selected.serial_number || item.serial_number || ('Serie #' + selectedId),
+                product_id: itemProductId(item),
+                product_variant_id: selected.product_variant_id || itemVariantId(item) || null,
+                status: 'pending_selected'
+            });
         }
 
         const qty = Number(item.qty || item.quantity || 0);
@@ -11222,8 +11484,73 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        html += '<select class="v5543b1-serial-select" data-v5543b1-serial-select="1">';
-        html += '<option value="">Selecciona serie...</option>';
+        const pendingLockedSerial = lockedSerialForPendingItem(item);
+        const shouldRenderPendingReadonly = Boolean(
+            (selectedComesFromPendingItem && selectedId)
+            || (pendingLockedSerial && pendingLockedSerial.stock_serial_number_id)
+        );
+
+        if (shouldRenderPendingReadonly) {
+            // BEXIA_V5544B_PENDING_SERIAL_READONLY
+            const readonlyId = Number(
+                selectedId
+                || (pendingLockedSerial ? pendingLockedSerial.stock_serial_number_id : 0)
+                || 0
+            );
+
+            const readonlySerialLabel = String(
+                (pendingLockedSerial ? pendingLockedSerial.serial_number : '')
+                || (selected ? selected.serial_number : '')
+                || item.serial_number
+                || (
+                    serials.find(function (serial) {
+                        return Number(serial.id || 0) === readonlyId;
+                    }) || {}
+                ).serial_number
+                || ('Serie #' + readonlyId)
+            );
+
+            html += '<div class="v5544b-serial-readonly">';
+            html += '<span>Serie: ' + escapeHtml(readonlySerialLabel) + '</span>';
+            html += '<small>Ticket pendiente</small>';
+            html += '</div>';
+
+            box.innerHTML = html;
+            box.dataset.v5543b2Hash = currentHash;
+            return;
+        }
+
+        const pendingLoadedSerialIdForSelect = Number(item && (item.stock_serial_number_id || item.serial_number_id) || 0);
+
+        if (pendingLoadedSerialIdForSelect > 0) {
+            // BEXIA_V5544E_PENDING_DROPDOWN_SINGLE_OPTION
+            serials = serials.filter(function (serial) {
+                return Number(serial.id || 0) === pendingLoadedSerialIdForSelect;
+            });
+
+            if (serials.length === 0) {
+                serials = [{
+                    id: pendingLoadedSerialIdForSelect,
+                    serial_number: (selected && selected.serial_number) || item.serial_number || ('Serie #' + pendingLoadedSerialIdForSelect),
+                    label: (selected && selected.serial_number) || item.serial_number || ('Serie #' + pendingLoadedSerialIdForSelect),
+                    product_id: itemProductId(item),
+                    product_variant_id: itemVariantId(item) || null,
+                    status: 'pending_selected'
+                }];
+            }
+
+            setSelectedForItem(item, {
+                stock_serial_number_id: pendingLoadedSerialIdForSelect,
+                product_variant_id: itemVariantId(item) || null,
+                serial_number: serials[0].serial_number || serials[0].label || ('Serie #' + pendingLoadedSerialIdForSelect)
+            });
+        }
+
+        html += '<select class="v5543b1-serial-select" data-v5543b1-serial-select="1"' + (pendingLoadedSerialIdForSelect > 0 ? ' disabled' : '') + '>';
+
+        if (pendingLoadedSerialIdForSelect <= 0) {
+            html += '<option value="">Selecciona serie...</option>';
+        }
 
         serials.forEach(function (serial) {
             const id = Number(serial.id || 0);
@@ -11231,7 +11558,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const variantId = Number(serial.product_variant_id || 0);
             const selectedAttr = id === selectedId ? ' selected' : '';
 
-            html += '<option value="' + String(id) + '" data-serial-number="' + escapeHtml(label) + '" data-product-variant-id="' + String(variantId || '') + '"' + selectedAttr + '>' + escapeHtml(label) + '</option>';
+            html += '<option value="' + String(id) + '" data-serial-number="' + escapeHtml(label) + '" data-product-id="' + String(Number(serial.product_id || 0) || itemProductId(item) || '') + '" data-product-variant-id="' + String(variantId || '') + '"' + selectedAttr + '>' + escapeHtml(label) + '</option>';
         });
 
         html += '</select>';
@@ -11256,6 +11583,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 setSelectedForItem(item, {
                     stock_serial_number_id: Number(select.value),
+                    product_id: Number(option.dataset.productId || 0) || itemProductId(item) || null,
                     product_variant_id: Number(option.dataset.productVariantId || 0) || itemVariantId(item) || null,
                     serial_number: option.dataset.serialNumber || option.textContent || ''
                 });
@@ -11484,6 +11812,59 @@ document.addEventListener('DOMContentLoaded', function () {
         window.setTimeout(boot, 250);
         window.setTimeout(boot, 900);
     });
+})();
+</script>
+
+
+<script id="v5545n-price-list-manual-change-detector">
+(function () {
+    'use strict';
+
+    if (window.BEXIA_V5545N_PRICE_LIST_MANUAL_CHANGE_DETECTOR_READY) {
+        return;
+    }
+
+    window.BEXIA_V5545N_PRICE_LIST_MANUAL_CHANGE_DETECTOR_READY = true;
+    window.BEXIA_POS_PRICE_LIST_CHANGED_AFTER_PENDING_LOAD = window.BEXIA_POS_PRICE_LIST_CHANGED_AFTER_PENDING_LOAD || false;
+
+    function isPriceListControl(element) {
+        if (!element) {
+            return false;
+        }
+
+        const raw = [
+            element.id || '',
+            element.name || '',
+            element.getAttribute('data-field') || '',
+            element.getAttribute('data-name') || '',
+            element.getAttribute('wire:model') || '',
+            element.getAttribute('x-model') || '',
+            element.className || ''
+        ].join(' ').toLowerCase();
+
+        return raw.includes('price_list')
+            || raw.includes('pricelist')
+            || raw.includes('price-list')
+            || raw.includes('lista_precio')
+            || raw.includes('lista-precio')
+            || raw.includes('price list')
+            || raw.includes('lista de precio');
+    }
+
+    function markManualPriceListChange(event) {
+        const target = event && event.target ? event.target : null;
+
+        if (!isPriceListControl(target)) {
+            return;
+        }
+
+        window.BEXIA_POS_PRICE_LIST_CHANGED_AFTER_PENDING_LOAD = true;
+    }
+
+    // BEXIA_V5545N_PRICE_LIST_MANUAL_CHANGE_DETECTOR
+    // Captura antes que otros listeners para que refreshProductData ya sepa que fue cambio manual.
+    document.addEventListener('change', markManualPriceListChange, true);
+    document.addEventListener('input', markManualPriceListChange, true);
 })();
 </script>
 

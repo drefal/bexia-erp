@@ -1225,12 +1225,100 @@ abort_if(! $sessionRow, 404);
             return 999999.0;
         }
 
+        // BEXIA_V5545H_STOCK_INITIAL_CARD_SERIAL_VARIANT
+        // En variantes, el stock real se guarda como:
+        // stock_quants.product_id = producto padre
+        // stock_quants.product_variant_id = variante
+        // stock_serial_numbers.product_id = producto padre
+        // stock_serial_numbers.product_variant_id = variante
+        $parentProductId = ! empty($product->parent_product_id) ? (int) $product->parent_product_id : 0;
+        $productIdForStock = $parentProductId > 0 ? $parentProductId : (int) $product->id;
+        $variantIdForStock = $parentProductId > 0 ? (int) $product->id : null;
+
+        $locationId = $this->configuredStockLocationId($pos);
+
+        $usesSerialTracking = false;
+
+        foreach (['tracking', 'advanced_tracking_mode'] as $column) {
+            $value = strtolower(trim((string) ($product->{$column} ?? '')));
+
+            if ($value !== '' && (str_contains($value, 'serial') || str_contains($value, 'serie'))) {
+                $usesSerialTracking = true;
+            }
+        }
+
+        if (
+            ! $usesSerialTracking
+            && $parentProductId > 0
+            && Schema::hasTable('products')
+        ) {
+            $parent = DB::table('products')
+                ->where('id', $parentProductId)
+                ->first();
+
+            if ($parent) {
+                foreach (['tracking', 'advanced_tracking_mode'] as $column) {
+                    $value = strtolower(trim((string) ($parent->{$column} ?? '')));
+
+                    if ($value !== '' && (str_contains($value, 'serial') || str_contains($value, 'serie'))) {
+                        $usesSerialTracking = true;
+                    }
+                }
+            }
+        }
+
+        if (
+            $usesSerialTracking
+            && Schema::hasTable('stock_serial_numbers')
+            && Schema::hasColumn('stock_serial_numbers', 'product_id')
+        ) {
+            $serialQuery = DB::table('stock_serial_numbers')
+                ->where('product_id', $productIdForStock)
+                ->where('status', 'available');
+
+            if (! empty($pos->company_id) && Schema::hasColumn('stock_serial_numbers', 'company_id')) {
+                $serialQuery->where('company_id', $pos->company_id);
+            }
+
+            if (
+                $variantIdForStock
+                && Schema::hasColumn('stock_serial_numbers', 'product_variant_id')
+            ) {
+                $serialQuery->where('product_variant_id', $variantIdForStock);
+            }
+
+            if (
+                ($pos->stock_scope ?? 'current_warehouse') === 'current_warehouse'
+                && ! empty($pos->warehouse_id)
+                && Schema::hasColumn('stock_serial_numbers', 'current_warehouse_id')
+            ) {
+                $serialQuery->where('current_warehouse_id', $pos->warehouse_id);
+            }
+
+            if (
+                $locationId
+                && ($pos->stock_scope ?? 'current_warehouse') === 'current_warehouse'
+                && Schema::hasColumn('stock_serial_numbers', 'current_location_id')
+            ) {
+                $serialQuery->where('current_location_id', $locationId);
+            }
+
+            return (float) $serialQuery->count();
+        }
+
         if (! Schema::hasTable('stock_quants')) {
             return 0.0;
         }
 
         $query = DB::table('stock_quants')
-            ->where('product_id', $product->id);
+            ->where('product_id', $productIdForStock);
+
+        if (
+            $variantIdForStock
+            && Schema::hasColumn('stock_quants', 'product_variant_id')
+        ) {
+            $query->where('product_variant_id', $variantIdForStock);
+        }
 
         if (! empty($pos->company_id) && Schema::hasColumn('stock_quants', 'company_id')) {
             $query->where('company_id', $pos->company_id);
@@ -1239,8 +1327,6 @@ abort_if(! $sessionRow, 404);
         if (($pos->stock_scope ?? 'current_warehouse') === 'current_warehouse' && ! empty($pos->warehouse_id)) {
             $query->where('warehouse_id', $pos->warehouse_id);
         }
-
-        $locationId = $this->configuredStockLocationId($pos);
 
         if ($locationId && ($pos->stock_scope ?? 'current_warehouse') === 'current_warehouse') {
             $query->where('location_id', $locationId);
@@ -1256,8 +1342,15 @@ abort_if(! $sessionRow, 404);
 
         if (Schema::hasTable('stock_reservations')) {
             $reservationQuery = DB::table('stock_reservations')
-                ->where('product_id', $product->id)
+                ->where('product_id', $productIdForStock)
                 ->where('status', 'active');
+
+            if (
+                $variantIdForStock
+                && Schema::hasColumn('stock_reservations', 'product_variant_id')
+            ) {
+                $reservationQuery->where('product_variant_id', $variantIdForStock);
+            }
 
             if (! empty($pos->company_id) && Schema::hasColumn('stock_reservations', 'company_id')) {
                 $reservationQuery->where('company_id', $pos->company_id);
@@ -1276,8 +1369,6 @@ abort_if(! $sessionRow, 404);
 
         $reserved = max($reservedFromQuant, $reservedFromReservations);
 
-        // En el PDV, el número operativo debe ser disponible para venta:
-        // existencia física menos reservas activas de tickets pendientes.
         return max(0.0, round($quantity - $reserved, 6));
     }
 
@@ -2741,6 +2832,8 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                     'serial_number' => ! empty($line->stock_serial_number_id) && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')
                         ? (string) (\Illuminate\Support\Facades\DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
                         : '',
+                    'serial_locked_from_pending' => ! empty($line->stock_serial_number_id),
+                    // BEXIA_V5544D_PENDING_SERIAL_LOCK_PAYLOAD
                     'name' => (string) ($line->product_name ?? 'Producto'),
                     'reference' => (string) ($line->product_reference ?? ''),
                     'qty' => (float) ($line->quantity ?? 0),
@@ -2954,7 +3047,9 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                         'serial_number' => ! empty($line->stock_serial_number_id) && Schema::hasTable('stock_serial_numbers')
                             ? (string) (DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
                             : '',
-                        'name' => (string) ($line->product_name ?? 'Producto'),
+                        'serial_locked_from_pending' => ! empty($line->stock_serial_number_id),
+                    // BEXIA_V5544D_PENDING_SERIAL_LOCK_PAYLOAD
+                    'name' => (string) ($line->product_name ?? 'Producto'),
                         'reference' => (string) ($line->product_reference ?? ''),
                         'qty' => (float) ($line->quantity ?? 0),
                         'price' => (float) ($line->unit_price ?? 0),
@@ -3982,6 +4077,8 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                     'serial_number' => ! empty($line->stock_serial_number_id) && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')
                         ? (string) (\Illuminate\Support\Facades\DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
                         : '',
+                    'serial_locked_from_pending' => ! empty($line->stock_serial_number_id),
+                    // BEXIA_V5544D_PENDING_SERIAL_LOCK_PAYLOAD
                     'name' => (string) ($line->product_name ?? 'Producto'),
                     'reference' => (string) ($line->product_reference ?? ''),
                     'qty' => (float) ($line->quantity ?? 0),
@@ -6513,6 +6610,14 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             }
         }
 
+        // BEXIA_V5545G_SELECT_PARENT_TRACKING_FOR_SERIAL_STOCK
+        // Necesario para calcular stock visual de variantes serializadas.
+        foreach (['parent_product_id', 'tracking', 'advanced_tracking_mode'] as $column) {
+            if (in_array($column, $productColumns, true)) {
+                $select[] = "p.$column";
+            }
+        }
+
         foreach (['sale_price', 'price', 'list_price', 'public_price', 'sale_tax_rate'] as $column) {
             if (in_array($column, $productColumns, true)) {
                 $select[] = "p.$column";
@@ -6528,6 +6633,61 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
         $ids = $products->pluck('id')->map(fn ($id) => (int) $id)->filter()->values();
 
         $stockByProduct = collect();
+
+        // BEXIA_V5545G_SERIAL_AVAILABLE_BY_PRODUCT_VARIANT
+        // Para productos con número de serie, el stock visible en PDV debe ser el conteo de series available.
+        $productStockPairs = $products
+            ->map(function ($product): array {
+                $parentId = ! empty($product->parent_product_id) ? (int) $product->parent_product_id : 0;
+
+                return [
+                    'product_id' => $parentId > 0 ? $parentId : (int) $product->id,
+                    'product_variant_id' => $parentId > 0 ? (int) $product->id : null,
+                ];
+            })
+            ->filter(fn (array $pair): bool => (int) $pair['product_id'] > 0)
+            ->unique(fn (array $pair): string => ((int) $pair['product_id']) . ':' . ((int) ($pair['product_variant_id'] ?? 0)))
+            ->values();
+
+        $serialAvailableByProductVariant = collect();
+
+        if (
+            $productStockPairs->isNotEmpty()
+            && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')
+            && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'product_id')
+        ) {
+            $serialProductIds = $productStockPairs
+                ->pluck('product_id')
+                ->map(fn ($id) => (int) $id)
+                ->filter()
+                ->unique()
+                ->values();
+
+            $serialQuery = \Illuminate\Support\Facades\DB::table('stock_serial_numbers')
+                ->whereIn('product_id', $serialProductIds)
+                ->where('status', 'available');
+
+            if ($companyId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'company_id')) {
+                $serialQuery->where('company_id', $companyId);
+            }
+
+            if ($warehouseId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'current_warehouse_id')) {
+                $serialQuery->where('current_warehouse_id', $warehouseId);
+            }
+
+            if (! empty($locationId) && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'current_location_id')) {
+                $serialQuery->where('current_location_id', $locationId);
+            }
+
+            $serialRows = $serialQuery
+                ->selectRaw('product_id, product_variant_id, COUNT(*) as available_serials')
+                ->groupBy('product_id', 'product_variant_id')
+                ->get();
+
+            $serialAvailableByProductVariant = $serialRows->keyBy(function ($row): string {
+                return ((int) $row->product_id) . ':' . ((int) ($row->product_variant_id ?? 0));
+            });
+        }
 
         if (
             $ids->isNotEmpty()
@@ -6564,12 +6724,27 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             $stockByProduct = $stockRows->keyBy(fn ($row) => (int) $row->product_id);
         }
 
-        $payload = $products->map(function ($product) use ($productColumns, $stockByProduct, $selectedPriceListId) {
+        $payload = $products->map(function ($product) use ($productColumns, $stockByProduct, $serialAvailableByProductVariant, $selectedPriceListId) {
             $stock = $stockByProduct->get((int) $product->id);
 
             $quantity = round((float) ($stock->quantity ?? 0), 4);
             $reserved = round((float) ($stock->reserved_quantity ?? 0), 4);
             $available = round($quantity - $reserved, 4);
+
+            // BEXIA_V5545G_USE_SERIAL_COUNT_AS_VISIBLE_STOCK
+            // Si esta fila es una variante serializada, mostrar el conteo real de series disponibles.
+            $parentIdForStock = ! empty($product->parent_product_id) ? (int) $product->parent_product_id : 0;
+            $productIdForSerialStock = $parentIdForStock > 0 ? $parentIdForStock : (int) $product->id;
+            $variantIdForSerialStock = $parentIdForStock > 0 ? (int) $product->id : 0;
+            $serialStockKey = $productIdForSerialStock . ':' . $variantIdForSerialStock;
+
+            if ($serialAvailableByProductVariant->has($serialStockKey)) {
+                $serialStock = (float) ($serialAvailableByProductVariant->get($serialStockKey)->available_serials ?? 0);
+
+                $quantity = $serialStock;
+                $reserved = 0.0;
+                $available = $serialStock;
+            }
 
             $basePrice = 0.0;
 
@@ -6884,6 +7059,7 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
 
         $productId = (int) $request->query('product_id', 0);
         $variantId = (int) $request->query('product_variant_id', $request->query('variant_id', 0));
+        $selectedSerialId = (int) $request->query('selected_serial_id', $request->query('stock_serial_number_id', 0));
 
         if ($productId <= 0) {
             return response()->json([
@@ -6976,10 +7152,60 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
                 }
             }
 
-            $serials = $query
+            $serialRows = $query
                 ->orderBy('serial_number')
                 ->limit(100)
-                ->get()
+                ->get();
+
+            // BEXIA_V5544E_SELECTED_PENDING_SERIAL_ONLY
+            // Si se carga un ticket pendiente y ya trae serie, el selector debe mostrar solo esa serie.
+            if ($selectedSerialId > 0) {
+                $selectedSerialForPending = \Illuminate\Support\Facades\DB::table('stock_serial_numbers')
+                    ->where('id', $selectedSerialId)
+                    ->where('company_id', $companyId)
+                    ->where('product_id', $productId)
+                    ->first();
+
+                if (
+                    $selectedSerialForPending
+                    && (
+                        $variantId <= 0
+                        || empty($selectedSerialForPending->product_variant_id)
+                        || (int) $selectedSerialForPending->product_variant_id === $variantId
+                    )
+                ) {
+                    $serialRows = collect([$selectedSerialForPending]);
+                } else {
+                    $serialRows = $serialRows
+                        ->filter(function ($serial) use ($selectedSerialId): bool {
+                            return (int) ($serial->id ?? 0) === $selectedSerialId;
+                        })
+                        ->values();
+                }
+            }
+
+            // BEXIA_V5544_INCLUDE_SELECTED_PENDING_SERIAL
+            // Si se carga un ticket pendiente, incluir la serie ya elegida aunque no esté en la lista normal de available.
+            if ($selectedSerialId > 0 && ! $serialRows->contains('id', $selectedSerialId)) {
+                $selectedSerial = \Illuminate\Support\Facades\DB::table('stock_serial_numbers')
+                    ->where('id', $selectedSerialId)
+                    ->where('company_id', $companyId)
+                    ->where('product_id', $productId)
+                    ->first();
+
+                if (
+                    $selectedSerial
+                    && (
+                        $variantId <= 0
+                        || empty($selectedSerial->product_variant_id)
+                        || (int) $selectedSerial->product_variant_id === $variantId
+                    )
+                ) {
+                    $serialRows->prepend($selectedSerial);
+                }
+            }
+
+            $serials = $serialRows
                 ->map(function ($serial): array {
                     return [
                         'id' => (int) $serial->id,
