@@ -23,7 +23,9 @@ class ViewPurchaseReceiptPanel extends Page
 
         $model = PurchaseReceiptResource::getModel();
 
-        $this->record = $model::query()->whereKey($this->receiptId)->firstOrFail();
+        $this->record = $model::query()
+            ->whereKey($this->receiptId)
+            ->firstOrFail();
     }
 
     public function getTitle(): string
@@ -40,9 +42,20 @@ class ViewPurchaseReceiptPanel extends Page
 
     public function receipt(): object
     {
-        return DB::table('purchase_receipts')
+        $receipt = DB::table('purchase_receipts')
             ->where('id', $this->receiptId)
-            ->firstOrFail();
+            ->first();
+
+        if (! $receipt) {
+            abort(404, 'No se encontró la recepción.');
+        }
+
+        return $receipt;
+    }
+
+    public function getReceiptRow(): ?object
+    {
+        return $this->receipt();
     }
 
     public function order(): ?object
@@ -56,6 +69,11 @@ class ViewPurchaseReceiptPanel extends Page
         return DB::table('purchase_orders')
             ->where('id', $receipt->purchase_order_id)
             ->first();
+    }
+
+    public function getOrderRow(): ?object
+    {
+        return $this->order();
     }
 
     public function movement(): ?object
@@ -118,6 +136,11 @@ class ViewPurchaseReceiptPanel extends Page
             ->get();
     }
 
+    public function getLinesForReceipt(): Collection
+    {
+        return $this->lines();
+    }
+
     public function ocUrl(): string
     {
         $receipt = $this->receipt();
@@ -159,6 +182,14 @@ class ViewPurchaseReceiptPanel extends Page
 
         if (is_numeric($tenant)) {
             return (int) $tenant;
+        }
+
+        if (is_object($tenant) && isset($tenant->id)) {
+            return (int) $tenant->id;
+        }
+
+        if (is_object($tenant) && method_exists($tenant, 'getKey')) {
+            return (int) $tenant->getKey();
         }
 
         if ((int) ($receipt->company_id ?? 0) > 0) {

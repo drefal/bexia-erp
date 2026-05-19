@@ -138,19 +138,24 @@ class ReceivePurchaseOrder extends Page
     }
 
 
+
     protected function advancedTrackingConfigForLine(object $line): array
     {
         if (! Schema::hasTable('products') || ! Schema::hasColumn('products', 'advanced_tracking_mode')) {
             return ['mode' => 'none', 'fields' => []];
         }
 
-        foreach (['product_variant_id', 'variant_id', 'product_id'] as $field) {
+        $ids = [];
+
+        foreach (['product_id', 'product_variant_id', 'variant_id'] as $field) {
             $id = (int) ($line->{$field} ?? 0);
 
-            if ($id <= 0) {
-                continue;
+            if ($id > 0 && ! in_array($id, $ids, true)) {
+                $ids[] = $id;
             }
+        }
 
+        foreach ($ids as $id) {
             $product = DB::table('products')
                 ->where('id', $id)
                 ->first(['advanced_tracking_mode', 'advanced_tracking_fields']);

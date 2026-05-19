@@ -279,53 +279,36 @@
                 </thead>
                 <tbody>
                     @foreach($lines as $line)
-                        <tr>
-                            <td><strong>{{ $line->product_label ?? 'Producto' }}
-@php
-    $trackingType = (string) ($line->tracking_type ?? 'none');
-    $serialValues = [];
-    $rawSerials = $line->serial_numbers ?? null;
+    @php
+        $trackingType = (string) ($line->tracking_type ?? 'none');
+    @endphp
 
-    if (is_string($rawSerials) && trim($rawSerials) !== '') {
-        $decodedSerials = json_decode($rawSerials, true);
-        $serialValues = is_array($decodedSerials) ? $decodedSerials : preg_split('/[\r\n,;]+/', $rawSerials);
-    } elseif (is_array($rawSerials)) {
-        $serialValues = $rawSerials;
-    }
+    <tr>
+        <td>
+            <strong>{{ $line->product_label ?? 'Producto' }}</strong>
 
-    $serialValues = array_values(array_filter(array_map(fn ($v) => trim((string) $v), $serialValues)));
-@endphp
+            @if($trackingType === 'lot' && ! empty($line->lot_number ?? null))
+                <div style="margin-top:5px;">
+                    <span style="display:inline-flex;border-radius:999px;border:1px solid #a7f3d0;background:#ecfdf5;color:#047857;padding:4px 8px;font-size:12px;font-weight:800;">
+                        Lote: {{ $line->lot_number }}
+                    </span>
+                </div>
+            @elseif($trackingType === 'serial')
+                <div style="margin-top:5px;color:#64748b;font-size:12px;font-weight:700;">
+                    Detalle abajo
+                </div>
+            @endif
+        </td>
+        <td>{{ $line->variant_label ?? '—' }}</td>
+        <td>{{ $line->purchase_unit_label ?? '—' }}</td>
+        <td class="right">{{ $qty($line->received_quantity ?? 0) }}</td>
+        <td class="right">{{ $money($line->unit_cost_without_tax ?? 0) }}</td>
+        <td class="right">{{ $money($line->line_tax ?? 0) }}</td>
+        <td class="right"><strong>{{ $money($line->line_total_with_tax ?? 0) }}</strong></td>
+    </tr>
 
-@if($trackingType === 'lot' && ! empty($line->lot_number))
-    <div style="margin-top:6px; font-size:11px; color:#065f46;">
-        <strong>Lote:</strong> {{ $line->lot_number }}
-        @if(! empty($line->lot_expiration_date))
-            <span> · Cad.: {{ \Illuminate\Support\Carbon::parse($line->lot_expiration_date)->format('d/m/Y') }}</span>
-        @endif
-    </div>
-@endif
-
-@if($trackingType === 'serial' && count($serialValues))
-    <div style="margin-top:6px; font-size:11px; color:#9a3412;">
-        <strong>Número(s) de serie:</strong>
-        <div style="margin-top:2px;">
-            @foreach($serialValues as $serial)
-                <span style="display:inline-block; margin:2px 4px 2px 0; padding:2px 6px; border-radius:999px; background:#fff7ed; border:1px solid #fed7aa;">
-                    {{ $serial }}
-                </span>
-            @endforeach
-        </div>
-    </div>
-@endif
-</strong></td>
-                            <td>{{ $line->variant_label ?? '—' }}</td>
-                            <td>{{ $line->purchase_unit_label ?? '—' }}</td>
-                            <td class="right">{{ $qty($line->received_quantity ?? 0) }}</td>
-                            <td class="right">{{ $money($line->unit_cost_without_tax ?? 0) }}</td>
-                            <td class="right">{{ $money($line->line_tax ?? 0) }}</td>
-                            <td class="right"><strong>{{ $money($line->line_total_with_tax ?? 0) }}</strong></td>
-                        </tr>
-                    @endforeach
+    @include('purchases.receipts.partials.tracking-details', ['line' => $line, 'trackingDetailsColspan' => 7])
+@endforeach
                 </tbody>
             </table>
         </div>

@@ -288,8 +288,10 @@ class PurchaseReceiptInventoryPoster
         $locationId = $this->destinationStockLocationId($receipt);
 
         $motorNumbers = $this->motorNumbersFromReceiptLine($line);
+        $serialImportRows = $this->serialImportRowsFromReceiptLine($line);
 
         foreach ($serials as $serialIndex => $serial) {
+            $serialImportRow = $serialImportRows[$serialIndex] ?? [];
             $query = DB::table('stock_serial_numbers')
                 ->where('company_id', $companyId)
                 ->where('product_id', $productId)
@@ -308,13 +310,13 @@ class PurchaseReceiptInventoryPoster
             $this->set($data, $columns, 'product_variant_id', $variantId ?: null);
             $this->set($data, $columns, 'lot_id', ! empty($line->lot_id) ? (int) $line->lot_id : null);
             $this->set($data, $columns, 'serial_number', $serial);
-            $this->set($data, $columns, 'motor_number', $this->motorNumberForSerial($line, $motorNumbers, $serialIndex));
-            $this->set($data, $columns, 'customs_entry_number', $line->customs_entry_number ?? null);
-            $this->set($data, $columns, 'customs_entry_date', $line->customs_entry_date ?? null);
-            $this->set($data, $columns, 'customs_office', $line->customs_office ?? null);
-            $this->set($data, $columns, 'imported_model', $line->imported_model ?? null);
-            $this->set($data, $columns, 'imported_color', $line->imported_color ?? null);
-            $this->set($data, $columns, 'import_document_reference', $line->import_document_reference ?? null);
+            $this->set($data, $columns, 'motor_number', $this->serialImportValue($serialImportRow, $line, 'motor_number', $this->motorNumberForSerial($line, $motorNumbers, $serialIndex)));
+            $this->set($data, $columns, 'customs_entry_number', $this->serialImportValue($serialImportRow, $line, 'customs_entry_number'));
+            $this->set($data, $columns, 'customs_entry_date', $this->serialImportValue($serialImportRow, $line, 'customs_entry_date'));
+            $this->set($data, $columns, 'customs_office', $this->serialImportValue($serialImportRow, $line, 'customs_office'));
+            $this->set($data, $columns, 'imported_model', $this->serialImportValue($serialImportRow, $line, 'imported_model'));
+            $this->set($data, $columns, 'imported_color', $this->serialImportValue($serialImportRow, $line, 'imported_color'));
+            $this->set($data, $columns, 'import_document_reference', $this->serialImportValue($serialImportRow, $line, 'import_document_reference'));
             $this->set($data, $columns, 'current_warehouse_id', $warehouseId ?: null);
             $this->set($data, $columns, 'current_location_id', $locationId ?: null);
             $this->set($data, $columns, 'status', 'available');
@@ -342,6 +344,43 @@ class PurchaseReceiptInventoryPoster
 
             DB::table('stock_serial_numbers')->insert($data);
         }
+    }
+
+
+
+    protected function serialImportRowsFromReceiptLine(object $line): array
+    {
+        $raw = $line->serial_import_rows ?? null;
+
+        if (is_array($raw)) {
+            $rows = $raw;
+        } elseif (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+            $rows = is_array($decoded) ? $decoded : [];
+        } else {
+            $rows = [];
+        }
+
+        return array_values(array_filter($rows, fn ($row): bool => is_array($row)));
+    }
+
+    protected function serialImportValue(array $row, object $line, string $fieldName, mixed $fallback = null): mixed
+    {
+        $value = $row[$fieldName] ?? null;
+
+        if ($value === null || trim((string) $value) === '') {
+            $value = $fallback;
+        }
+
+        if ($value === null || trim((string) $value) === '') {
+            $value = $line->{$fieldName} ?? null;
+        }
+
+        if ($value === null || trim((string) $value) === '') {
+            return null;
+        }
+
+        return $value;
     }
 
 

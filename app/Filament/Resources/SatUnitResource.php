@@ -12,11 +12,13 @@ use Filament\Tables\Table;
 
 class SatUnitResource extends Resource
 {
+
+    protected static bool $isScopedToTenant = false;
     protected static ?string $model = SatUnit::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-scale';
 
-    protected static ?string $navigationGroup = 'Facturación';
+    protected static ?string $navigationGroup = 'Catálogos de facturación';
 
     protected static ?string $navigationLabel = 'Unidades SAT';
 

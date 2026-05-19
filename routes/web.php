@@ -362,3 +362,13 @@ Route::middleware(['auth'])->get(
     \App\Http\Controllers\TreasuryMovementPrintController::class
 )->name('treasury.movements.print');
 
+
+use App\Http\Controllers\Inventory\TrackingPrintPdfController;
+
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/admin/{tenant}/stock-serial-numbers/{record}/pdf', [TrackingPrintPdfController::class, 'serial'])
+        ->name('bexia.inventory.stock-serial-numbers.pdf');
+
+    Route::get('/admin/{tenant}/stock-lots/{record}/pdf', [TrackingPrintPdfController::class, 'lot'])
+        ->name('bexia.inventory.stock-lots.pdf');
+});

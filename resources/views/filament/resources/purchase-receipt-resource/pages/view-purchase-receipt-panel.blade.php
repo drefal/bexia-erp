@@ -8,23 +8,8 @@
         $receivedBy = $this->receivedBy();
         $lines = $this->lines();
 
-        $money = fn ($v) => '$' . number_format((float) $v, 2);
-        $qty = fn ($v) => number_format((float) $v, 6);
-
-        $serialValuesForLine = function ($line): array {
-            $raw = $line->serial_numbers ?? null;
-
-            if (is_string($raw) && trim($raw) !== '') {
-                $decoded = json_decode($raw, true);
-                $values = is_array($decoded) ? $decoded : preg_split('/[\r\n,;]+/', $raw);
-            } elseif (is_array($raw)) {
-                $values = $raw;
-            } else {
-                $values = [];
-            }
-
-            return array_values(array_filter(array_map(fn ($v) => trim((string) $v), $values)));
-        };
+        $money = fn ($value): string => '$' . number_format((float) $value, 2);
+        $qty = fn ($value): string => number_format((float) $value, 6);
     @endphp
 
     <style>
@@ -173,49 +158,29 @@
         .bexia-tracking-empty {
             color: #94a3b8;
             font-size: 13px;
+            font-weight: 700;
         }
 
-        .bexia-lot {
+        .bexia-tracking-badge {
             display: inline-flex;
             border-radius: 999px;
-            border: 1px solid #a7f3d0;
-            background: #ecfdf5;
             padding: 5px 9px;
             font-size: 13px;
             font-weight: 900;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+        }
+
+        .bexia-tracking-lot {
+            border-color: #a7f3d0;
+            background: #ecfdf5;
             color: #047857;
         }
 
-        .bexia-serial-details {
-            max-width: 360px;
-            border-radius: 12px;
-            border: 1px solid #fed7aa;
+        .bexia-tracking-serial {
+            border-color: #fed7aa;
             background: #fff7ed;
-            padding: 8px 10px;
-        }
-
-        .bexia-serial-details summary {
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 900;
-            color: #9a3412;
-        }
-
-        .bexia-serial-list {
-            max-height: 180px;
-            overflow-y: auto;
-            margin-top: 8px;
-        }
-
-        .bexia-serial-chip {
-            display: inline-flex;
-            margin: 2px 4px 2px 0;
-            border-radius: 999px;
-            border: 1px solid #fed7aa;
-            background: #ffffff;
-            padding: 4px 9px;
-            font-size: 13px;
-            font-weight: 800;
             color: #9a3412;
         }
 
@@ -262,25 +227,15 @@
     </style>
 
     <div class="bexia-receipt-actions">
-        <a href="{{ $this->ocUrl() }}" class="bexia-btn">
-            Ver OC
-        </a>
-
-        <a href="{{ $this->movementUrl() }}" class="bexia-btn">
-            Ver movimiento
-        </a>
-
-        <a href="{{ $this->printUrl() }}" target="_blank" rel="noopener" class="bexia-btn bexia-btn-primary">
-            Imprimir
-        </a>
+        <a href="{{ $this->ocUrl() }}" class="bexia-btn">Ver OC</a>
+        <a href="{{ $this->movementUrl() }}" class="bexia-btn">Ver movimiento</a>
+        <a href="{{ $this->printUrl() }}" target="_blank" rel="noopener" class="bexia-btn bexia-btn-primary">Imprimir</a>
     </div>
 
     <div class="bexia-receipt-card">
         <div class="bexia-receipt-header">
             <div>
-                <div class="bexia-receipt-title">
-                    Recepción de compra
-                </div>
+                <div class="bexia-receipt-title">Recepción de compra</div>
                 <div class="bexia-receipt-muted">
                     {{ $order->supplier_name ?? $receipt->supplier_name ?? 'Proveedor' }}
                 </div>
@@ -347,39 +302,20 @@
                     @foreach($lines as $line)
                         @php
                             $trackingType = (string) ($line->tracking_type ?? 'none');
-                            $serialValues = $serialValuesForLine($line);
-                            $shownSerials = array_slice($serialValues, 0, 20);
-                            $hiddenSerialCount = max(count($serialValues) - count($shownSerials), 0);
                         @endphp
 
                         <tr>
                             <td><strong>{{ $line->product_label ?? 'Producto' }}</strong></td>
                             <td>{{ $line->variant_label ?? '—' }}</td>
                             <td>
-                                @if($trackingType === 'lot' && ! empty($line->lot_number))
-                                    <span class="bexia-lot">Lote: {{ $line->lot_number }}</span>
-
-                                    @if(! empty($line->lot_expiration_date))
-                                        <div style="margin-top:6px; font-size:13px; color:#64748b;">
-                                            Caducidad: {{ \Carbon\Carbon::parse($line->lot_expiration_date)->format('d/m/Y') }}
-                                        </div>
-                                    @endif
-                                @elseif($trackingType === 'serial' && count($serialValues))
-                                    <details class="bexia-serial-details">
-                                        <summary>{{ count($serialValues) }} número(s) de serie</summary>
-
-                                        <div class="bexia-serial-list">
-                                            @foreach($shownSerials as $serial)
-                                                <span class="bexia-serial-chip">{{ $serial }}</span>
-                                            @endforeach
-
-                                            @if($hiddenSerialCount > 0)
-                                                <div style="margin-top:8px; font-size:13px; font-weight:800; color:#9a3412;">
-                                                    +{{ $hiddenSerialCount }} serie(s) más
-                                                </div>
-                                            @endif
-                                        </div>
-                                    </details>
+                                @if($trackingType === 'lot' && ! empty($line->lot_number ?? null))
+                                    <span class="bexia-tracking-badge bexia-tracking-lot">
+                                        Lote: {{ $line->lot_number }}
+                                    </span>
+                                @elseif($trackingType === 'serial')
+                                    <span class="bexia-tracking-badge bexia-tracking-serial">
+                                        Detalle abajo
+                                    </span>
                                 @else
                                     <span class="bexia-tracking-empty">Sin seguimiento</span>
                                 @endif
@@ -390,6 +326,8 @@
                             <td class="bexia-num">{{ $money($line->line_tax ?? 0) }}</td>
                             <td class="bexia-num"><strong>{{ $money($line->line_total_with_tax ?? 0) }}</strong></td>
                         </tr>
+
+                        @include('purchases.receipts.partials.tracking-details', ['line' => $line, 'trackingDetailsColspan' => 8])
                     @endforeach
                 </tbody>
             </table>

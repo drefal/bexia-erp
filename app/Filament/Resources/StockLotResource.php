@@ -184,7 +184,9 @@ class StockLotResource extends Resource
                     ->query(fn (Builder $query): Builder => $query->whereNotNull('expiration_date')),
             ])
             ->actions([
-                Tables\Actions\EditAction::make()
+
+                \Filament\Tables\Actions\ViewAction::make()
+                    ->label('Ver detalle'),                Tables\Actions\EditAction::make()
                     ->label('Editar'),
             ])
             ->bulkActions([])
@@ -194,7 +196,9 @@ class StockLotResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListStockLots::route('/'),
+            
+            
+            'print' => Pages\PrintStockLot::route('/{record}/print'),'view' => Pages\ViewStockLot::route('/{record}/view'),'index' => Pages\ListStockLots::route('/'),
             'create' => Pages\CreateStockLot::route('/create'),
             'edit' => Pages\EditStockLot::route('/{record}/edit'),
         ];

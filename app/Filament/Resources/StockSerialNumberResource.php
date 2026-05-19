@@ -63,6 +63,7 @@ class StockSerialNumberResource extends Resource
     {
         return $form
             ->schema([
+
                 Forms\Components\Hidden::make('company_id')
                     ->default(fn (): ?int => static::currentCompanyId())
                     ->dehydrated(true),
@@ -160,6 +161,7 @@ class StockSerialNumberResource extends Resource
     {
         return $table
             ->columns([
+
                 Tables\Columns\TextColumn::make('serial_number')
                     ->label('Serie')
                     ->searchable()
@@ -216,7 +218,9 @@ class StockSerialNumberResource extends Resource
                     ->options(fn (): array => static::warehouseOptions()),
             ])
             ->actions([
-                Tables\Actions\EditAction::make()
+
+                \Filament\Tables\Actions\ViewAction::make()
+                    ->label('Ver detalle'),                Tables\Actions\EditAction::make()
                     ->label('Editar'),
             ])
             ->bulkActions([])
@@ -226,7 +230,9 @@ class StockSerialNumberResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListStockSerialNumbers::route('/'),
+            
+            
+            'print' => Pages\PrintStockSerialNumber::route('/{record}/print'),'view' => Pages\ViewStockSerialNumber::route('/{record}/view'),'index' => Pages\ListStockSerialNumbers::route('/'),
             'create' => Pages\CreateStockSerialNumber::route('/create'),
             'edit' => Pages\EditStockSerialNumber::route('/{record}/edit'),
         ];
