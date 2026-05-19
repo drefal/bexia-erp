@@ -372,3 +372,9 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/admin/{tenant}/stock-lots/{record}/pdf', [TrackingPrintPdfController::class, 'lot'])
         ->name('bexia.inventory.stock-lots.pdf');
 });
+
+// BEXIA_V5543B1_PDV_SERIALS_ENDPOINT
+Route::middleware(['web', 'auth'])
+    ->get('/pos/sessions/{session}/serials', [\App\Http\Controllers\PosController::class, 'serialsForProduct'])
+    ->name('pos.sessions.serials');
+

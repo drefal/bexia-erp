@@ -10841,4 +10841,649 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 
+<style id="v5543b1-pdv-serial-selector-style">
+    /* BEXIA_V5543B1_PDV_SERIAL_SELECTOR */
+    .v5543b1-serial-box {
+        grid-column: 1 / -1;
+        margin-top: 8px;
+        border: 1px solid #bfdbfe;
+        background: #eff6ff;
+        border-radius: 12px;
+        padding: 8px 10px;
+        display: grid;
+        gap: 6px;
+    }
+
+    .v5543b1-serial-label {
+        font-size: 11px;
+        font-weight: 950;
+        color: #1e3a8a;
+    }
+
+    .v5543b1-serial-select {
+        width: 100%;
+        border: 1px solid #93c5fd;
+        border-radius: 10px;
+        padding: 8px 9px;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 12px;
+        font-weight: 850;
+    }
+
+    .v5543b1-serial-warning {
+        color: #b91c1c;
+        font-size: 11px;
+        font-weight: 900;
+    }
+</style>
+
+<script id="v5543b1-pdv-serial-selector-script">
+(function () {
+    'use strict';
+
+    if (window.BEXIA_V5543B1_PDV_SERIAL_SELECTOR_READY) {
+        return;
+    }
+
+    window.BEXIA_V5543B1_PDV_SERIAL_SELECTOR_READY = true;
+    window.BEXIA_POS_SERIAL_SELECTIONS = window.BEXIA_POS_SERIAL_SELECTIONS || {};
+    window.BEXIA_POS_SERIAL_REQUIREMENTS = window.BEXIA_POS_SERIAL_REQUIREMENTS || {};
+
+    const serialCache = {};
+
+    function clearSerialStateWhenCartIsEmpty() {
+        // BEXIA_V5543C4_CLEAR_SERIAL_CACHE_WHEN_CART_EMPTY
+        const cartBox = document.getElementById('v5339-cart-items');
+
+        if (!cartBox) {
+            return false;
+        }
+
+        const visibleLines = cartBox.querySelectorAll('.v5339-cart-line').length;
+        const items = baseItems();
+
+        if (visibleLines > 0 || items.length > 0) {
+            return false;
+        }
+
+        Object.keys(serialCache || {}).forEach(function (key) {
+            delete serialCache[key];
+        });
+
+        window.BEXIA_POS_SERIAL_SELECTIONS = {};
+        window.BEXIA_POS_SERIAL_REQUIREMENTS = {};
+
+        document.querySelectorAll('[data-v5543b1-serial-box="1"]').forEach(function (box) {
+            box.remove();
+        });
+
+        return true;
+    }
+
+    function sessionId() {
+        const match = String(window.location.pathname || '').match(/\/pos\/sessions\/(\d+)\/screen/);
+        return match ? match[1] : null;
+    }
+
+    function notice(message, type) {
+        type = type || 'warning';
+
+        const api = window.BEXIA_POS_CART_API || null;
+
+        if (api && typeof api.setWarning === 'function') {
+            api.setWarning(message);
+            return;
+        }
+
+        const box = document.getElementById('v5356-pos-notice');
+
+        if (box) {
+            box.textContent = message;
+            box.className = 'v5356-pos-notice';
+
+            if (type === 'warning') {
+                box.classList.add('is-warning');
+            }
+
+            if (type === 'error') {
+                box.classList.add('is-error');
+            }
+
+            box.style.display = 'block';
+            return;
+        }
+
+        alert(message);
+    }
+
+    function itemProductId(item) {
+        return Number(item && (item.product_id || item.id) || 0);
+    }
+
+    function itemVariantId(item) {
+        return Number(item && (item.product_variant_id || item.variant_id) || 0);
+    }
+
+    function itemKey(item) {
+        const productId = itemProductId(item);
+        const variantId = itemVariantId(item);
+
+        return String(productId || '') + ':' + String(variantId || '');
+    }
+
+    function fallbackKey(item) {
+        return String(itemProductId(item) || '') + ':';
+    }
+
+    function cacheKey(productId, variantId) {
+        return String(productId || '') + ':' + String(variantId || '');
+    }
+
+    async function fetchSerials(item) {
+        const sid = sessionId();
+        const productId = itemProductId(item);
+        const variantId = itemVariantId(item);
+        const key = cacheKey(productId, variantId);
+
+        if (!sid || productId <= 0) {
+            return { ok: false, requires_serial: false, serials: [] };
+        }
+
+        if (serialCache[key]) {
+            return serialCache[key];
+        }
+
+        serialCache[key] = fetch(
+            '/pos/sessions/' + encodeURIComponent(sid)
+                + '/serials?product_id=' + encodeURIComponent(productId)
+                + (variantId > 0 ? ('&product_variant_id=' + encodeURIComponent(variantId)) : ''),
+            {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            }
+        )
+            .then(function (response) {
+                return response.json().catch(function () {
+                    return {};
+                }).then(function (data) {
+                    if (!response.ok || data.ok === false) {
+                        return { ok: false, requires_serial: false, serials: [], message: data.message || 'No se pudieron cargar series.' };
+                    }
+
+                    return data;
+                });
+            })
+            .catch(function (error) {
+                return { ok: false, requires_serial: false, serials: [], message: error.message || 'No se pudieron cargar series.' };
+            });
+
+        return serialCache[key];
+    }
+
+    function selectedForItem(item) {
+        return window.BEXIA_POS_SERIAL_SELECTIONS[itemKey(item)]
+            || window.BEXIA_POS_SERIAL_SELECTIONS[fallbackKey(item)]
+            || null;
+    }
+
+    function seedSelectionFromItem(item) {
+        if (!item || !item.stock_serial_number_id) {
+            return;
+        }
+
+        const existing = selectedForItem(item);
+
+        if (existing && existing.stock_serial_number_id) {
+            return;
+        }
+
+        setSelectedForItem(item, {
+            stock_serial_number_id: Number(item.stock_serial_number_id),
+            product_variant_id: Number(item.product_variant_id || item.variant_id || 0) || null,
+            serial_number: item.serial_number || ''
+        });
+    }
+
+    /* BEXIA_V5543C2_SEED_PENDING_SERIAL_SELECTION */
+
+    function setSelectedForItem(item, serial) {
+        const mainKey = itemKey(item);
+        const fbKey = fallbackKey(item);
+
+        if (!serial) {
+            delete window.BEXIA_POS_SERIAL_SELECTIONS[mainKey];
+            delete window.BEXIA_POS_SERIAL_SELECTIONS[fbKey];
+            return;
+        }
+
+        window.BEXIA_POS_SERIAL_SELECTIONS[mainKey] = serial;
+        window.BEXIA_POS_SERIAL_SELECTIONS[fbKey] = serial;
+    }
+
+    function patchCartApi() {
+        const api = window.BEXIA_POS_CART_API || null;
+
+        if (!api || typeof api.getItems !== 'function') {
+            return false;
+        }
+
+        if (!api.__v5543b1OriginalGetItems) {
+            api.__v5543b1OriginalGetItems = api.getItems.bind(api);
+
+            api.getItems = function () {
+                const rows = api.__v5543b1OriginalGetItems() || [];
+
+                return rows.map(function (item) {
+                    const selected = selectedForItem(item);
+
+                    if (!selected || !selected.stock_serial_number_id) {
+                        return item;
+                    }
+
+                    return {
+                        ...item,
+                        product_variant_id: selected.product_variant_id || item.product_variant_id || item.variant_id || null,
+                        variant_id: selected.product_variant_id || item.variant_id || null,
+                        stock_serial_number_id: selected.stock_serial_number_id,
+                        serial_number_id: selected.stock_serial_number_id,
+                        serial_number: selected.serial_number || ''
+                    };
+                });
+            };
+        }
+
+        return true;
+    }
+
+    function baseItems() {
+        const api = window.BEXIA_POS_CART_API || null;
+
+        if (!api) {
+            return [];
+        }
+
+        if (typeof api.__v5543b1OriginalGetItems === 'function') {
+            return api.__v5543b1OriginalGetItems() || [];
+        }
+
+        if (typeof api.getItems === 'function') {
+            return api.getItems() || [];
+        }
+
+        return [];
+    }
+
+    function guardSerialBoxEvents(box) {
+        if (!box || box.__v5543b2SerialGuard) {
+            return;
+        }
+
+        box.__v5543b2SerialGuard = true;
+
+        ['pointerdown', 'mousedown', 'mouseup', 'click', 'dblclick', 'keydown', 'keyup', 'focusin'].forEach(function (eventName) {
+            box.addEventListener(eventName, function (event) {
+                event.stopPropagation();
+
+                if (typeof event.stopImmediatePropagation === 'function') {
+                    event.stopImmediatePropagation();
+                }
+            }, true);
+        });
+    }
+
+    function serialSelectorIsActive() {
+        const active = document.activeElement;
+
+        return !!(
+            active
+            && active.closest
+            && active.closest('[data-v5543b1-serial-box="1"]')
+        );
+    }
+
+    /* BEXIA_V5543B2_FIX_SERIAL_DROPDOWN */
+    function renderSerialBox(line, item, data) {
+        let box = line.querySelector('[data-v5543b1-serial-box="1"]');
+
+        if (box) {
+            guardSerialBoxEvents(box);
+
+            if (box.contains(document.activeElement)) {
+                return;
+            }
+        }
+
+        const requires = Boolean(data && data.requires_serial);
+        const serials = Array.isArray(data && data.serials) ? data.serials : [];
+        const key = itemKey(item);
+
+        window.BEXIA_POS_SERIAL_REQUIREMENTS[key] = requires;
+
+        if (!requires && serials.length === 0) {
+            if (box) {
+                box.remove();
+            }
+            return;
+        }
+
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'v5543b1-serial-box';
+            box.setAttribute('data-v5543b1-serial-box', '1');
+            line.appendChild(box);
+        }
+
+        guardSerialBoxEvents(box);
+
+        let selected = selectedForItem(item);
+        let selectedId = selected ? Number(selected.stock_serial_number_id || 0) : 0;
+
+        if (
+            selectedId
+            && ! serials.some(function (serial) {
+                return Number(serial.id || 0) === selectedId;
+            })
+        ) {
+            setSelectedForItem(item, null);
+            selected = null;
+            selectedId = 0;
+        }
+
+        const qty = Number(item.qty || item.quantity || 0);
+        const currentHash = JSON.stringify({
+            requires: requires,
+            selectedId: selectedId,
+            qty: qty,
+            serials: serials.map(function (serial) {
+                return [
+                    Number(serial.id || 0),
+                    String(serial.label || serial.serial_number || ''),
+                    Number(serial.product_variant_id || 0)
+                ];
+            })
+        });
+
+        if (box.dataset.v5543b2Hash === currentHash) {
+            return;
+        }
+
+        let html = '';
+        html += '<div class="v5543b1-serial-label">Número de serie requerido</div>';
+
+        if (serials.length === 0) {
+            html += '<div class="v5543b1-serial-warning">No hay series disponibles para este producto en este PDV.</div>';
+            box.innerHTML = html;
+            box.dataset.v5543b2Hash = currentHash;
+            return;
+        }
+
+        html += '<select class="v5543b1-serial-select" data-v5543b1-serial-select="1">';
+        html += '<option value="">Selecciona serie...</option>';
+
+        serials.forEach(function (serial) {
+            const id = Number(serial.id || 0);
+            const label = String(serial.label || serial.serial_number || ('Serie #' + id));
+            const variantId = Number(serial.product_variant_id || 0);
+            const selectedAttr = id === selectedId ? ' selected' : '';
+
+            html += '<option value="' + String(id) + '" data-serial-number="' + escapeHtml(label) + '" data-product-variant-id="' + String(variantId || '') + '"' + selectedAttr + '>' + escapeHtml(label) + '</option>';
+        });
+
+        html += '</select>';
+
+        if (qty !== 1) {
+            html += '<div class="v5543b1-serial-warning">Este producto usa serie. La cantidad debe ser 1 por línea.</div>';
+        }
+
+        box.innerHTML = html;
+        box.dataset.v5543b2Hash = currentHash;
+
+        const select = box.querySelector('[data-v5543b1-serial-select="1"]');
+
+        if (select) {
+            select.addEventListener('change', function () {
+                const option = select.options[select.selectedIndex];
+
+                if (!select.value) {
+                    setSelectedForItem(item, null);
+                    return;
+                }
+
+                setSelectedForItem(item, {
+                    stock_serial_number_id: Number(select.value),
+                    product_variant_id: Number(option.dataset.productVariantId || 0) || itemVariantId(item) || null,
+                    serial_number: option.dataset.serialNumber || option.textContent || ''
+                });
+            });
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    async function hydrateVisibleCart() {
+        if (!patchCartApi()) {
+            return;
+        }
+
+        const cartBox = document.getElementById('v5339-cart-items');
+
+        if (!cartBox) {
+            return;
+        }
+
+        const items = baseItems();
+        const lines = Array.from(cartBox.querySelectorAll('.v5339-cart-line'));
+
+        items.forEach(seedSelectionFromItem);
+
+        lines.forEach(function (line, index) {
+            const item = items[index];
+
+            if (!item || itemProductId(item) <= 0) {
+                return;
+            }
+
+            fetchSerials(item).then(function (data) {
+                renderSerialBox(line, item, data || {});
+            });
+        });
+    }
+
+    function validateSerialsForItems(items) {
+        const missing = [];
+
+        (items || []).forEach(function (item) {
+            const key = itemKey(item);
+            const fbKey = fallbackKey(item);
+            const requires = Boolean(window.BEXIA_POS_SERIAL_REQUIREMENTS[key] || window.BEXIA_POS_SERIAL_REQUIREMENTS[fbKey]);
+            const selected = selectedForItem(item);
+            const qty = Number(item.qty || item.quantity || 0);
+
+            if (!requires) {
+                return;
+            }
+
+            if (qty !== 1) {
+                missing.push('El producto "' + String(item.name || item.product_name || item.product_id || '') + '" usa número de serie y debe venderse con cantidad 1.');
+                return;
+            }
+
+            if (!selected || !selected.stock_serial_number_id) {
+                missing.push('Selecciona número de serie para "' + String(item.name || item.product_name || item.product_id || '') + '".');
+            }
+        });
+
+        return missing;
+    }
+
+
+    /* BEXIA_V5543B3_SELECT_CHANGE_ALLOWED */
+    document.addEventListener('change', function (event) {
+        const select = event.target && event.target.closest
+            ? event.target.closest('[data-v5543b1-serial-select="1"]')
+            : null;
+
+        if (!select) {
+            return;
+        }
+
+        const box = select.closest('[data-v5543b1-serial-box="1"]');
+        const line = select.closest('.v5339-cart-line');
+        const cartBox = document.getElementById('v5339-cart-items');
+
+        if (!box || !line || !cartBox) {
+            return;
+        }
+
+        const lines = Array.from(cartBox.querySelectorAll('.v5339-cart-line'));
+        const index = lines.indexOf(line);
+        const items = baseItems();
+        const item = items[index];
+
+        if (!item) {
+            return;
+        }
+
+        const option = select.options[select.selectedIndex];
+
+        if (!select.value) {
+            setSelectedForItem(item, null);
+            return;
+        }
+
+        setSelectedForItem(item, {
+            stock_serial_number_id: Number(select.value),
+            product_variant_id: Number(option.dataset.productVariantId || 0) || itemVariantId(item) || null,
+            serial_number: option.dataset.serialNumber || option.textContent || ''
+        });
+    }, true);
+
+    function patchFetchValidation() {
+        if (window.BEXIA_V5543B1_FETCH_PATCHED) {
+            return;
+        }
+
+        window.BEXIA_V5543B1_FETCH_PATCHED = true;
+
+        const originalFetch = window.fetch.bind(window);
+
+        window.fetch = function (input, init) {
+            try {
+                const url = typeof input === 'string'
+                    ? input
+                    : (input && input.url ? input.url : '');
+
+                const method = init && init.method
+                    ? String(init.method).toUpperCase()
+                    : 'GET';
+
+                if (
+                    method === 'POST'
+                    && /\/pos\/sessions\/\d+\/orders/.test(url)
+                    && init
+                    && init.body
+                ) {
+                    const body = JSON.parse(init.body);
+
+                    if (body && Array.isArray(body.items)) {
+                        body.items = body.items.map(function (item) {
+                            const selected = selectedForItem(item);
+
+                            if (!selected || !selected.stock_serial_number_id) {
+                                return item;
+                            }
+
+                            return {
+                                ...item,
+                                product_variant_id: selected.product_variant_id || item.product_variant_id || item.variant_id || null,
+                                variant_id: selected.product_variant_id || item.variant_id || null,
+                                stock_serial_number_id: selected.stock_serial_number_id,
+                                serial_number_id: selected.stock_serial_number_id,
+                                serial_number: selected.serial_number || ''
+                            };
+                        });
+
+                        const errors = validateSerialsForItems(body.items);
+
+                        if (errors.length) {
+                            const message = errors[0];
+                            notice(message, 'warning');
+
+                            return Promise.reject(new Error(message));
+                        }
+
+                        init = {
+                            ...init,
+                            body: JSON.stringify(body)
+                        };
+                    }
+                }
+            } catch (error) {
+                if (error && error.message) {
+                    return Promise.reject(error);
+                }
+            }
+
+            return originalFetch(input, init);
+        };
+    }
+
+    function boot() {
+        patchCartApi();
+        patchFetchValidation();
+        hydrateVisibleCart();
+
+        const cartBox = document.getElementById('v5339-cart-items');
+
+        if (cartBox && !cartBox.__v5543b1Observer) {
+            cartBox.__v5543b1Observer = new MutationObserver(function () {
+                window.clearTimeout(window.__v5543b1HydrateTimer);
+
+                if (clearSerialStateWhenCartIsEmpty()) {
+                    return;
+                }
+
+                window.__v5543b1HydrateTimer = window.setTimeout(function () {
+                    clearSerialStateWhenCartIsEmpty();
+                    hydrateVisibleCart();
+                }, 80);
+            });
+
+            cartBox.__v5543b1Observer.observe(cartBox, {
+                childList: true,
+                subtree: true
+            });
+        }
+
+        window.setInterval(function () {
+            if (serialSelectorIsActive()) {
+                return;
+            }
+
+            if (clearSerialStateWhenCartIsEmpty()) {
+                return;
+            }
+
+            hydrateVisibleCart();
+        }, 2500);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        window.setTimeout(boot, 250);
+        window.setTimeout(boot, 900);
+    });
+})();
+</script>
 

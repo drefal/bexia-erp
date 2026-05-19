@@ -380,6 +380,27 @@
                 <tr>
                     <td colspan="3" class="item-name">
                         {{ $line->product_name ?? 'Producto' }}
+                        {{-- BEXIA_V5543C2_PRINT_SERIAL_NUMBER --}}
+                        @php
+                            $serialToPrint = trim((string) (
+                                $line->line_serial_number
+                                ?? $line->serial_number
+                                ?? ''
+                            ));
+
+                            if ($serialToPrint === '' && ! empty($line->serial_tracking_metadata)) {
+                                $serialMeta = json_decode((string) $line->serial_tracking_metadata, true);
+
+                                if (is_array($serialMeta)) {
+                                    $serialToPrint = trim((string) ($serialMeta['serial_number'] ?? ''));
+                                }
+                            }
+                        @endphp
+
+                        @if($serialToPrint !== '')
+                            <br><small>Serie: {{ $serialToPrint }}</small>
+                        @endif
+
                     </td>
                 </tr>
                 <tr>

@@ -2326,6 +2326,50 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 ? (int) $item['product_id']
                 : null;
 
+            $productVariantId = null;
+            $stockSerialNumberId = null;
+
+            foreach (['product_variant_id', 'variant_id'] as $variantKey) {
+                if (isset($item[$variantKey]) && is_numeric($item[$variantKey]) && (int) $item[$variantKey] > 0) {
+                    $productVariantId = (int) $item[$variantKey];
+                    break;
+                }
+            }
+
+            foreach (['stock_serial_number_id', 'serial_number_id'] as $serialKey) {
+                if (isset($item[$serialKey]) && is_numeric($item[$serialKey]) && (int) $item[$serialKey] > 0) {
+                    $stockSerialNumberId = (int) $item[$serialKey];
+                    break;
+                }
+            }
+
+            if ($stockSerialNumberId && Schema::hasTable('stock_serial_numbers')) {
+                $serial = DB::table('stock_serial_numbers')
+                    ->where('id', $stockSerialNumberId)
+                    ->first();
+
+                if ($serial) {
+                    $productId = (int) ($serial->product_id ?? $productId);
+                    $productVariantId = ! empty($serial->product_variant_id) ? (int) $serial->product_variant_id : $productVariantId;
+                }
+            }
+
+            if (
+                ! $productVariantId
+                && $productId
+                && Schema::hasTable('products')
+                && Schema::hasColumn('products', 'parent_product_id')
+            ) {
+                $product = DB::table('products')
+                    ->where('id', $productId)
+                    ->first();
+
+                if ($product && ! empty($product->parent_product_id)) {
+                    $productVariantId = $productId;
+                    $productId = (int) $product->parent_product_id;
+                }
+            }
+
             $name = trim((string) ($item['name'] ?? 'Producto'));
             $reference = trim((string) ($item['reference'] ?? ''));
 
@@ -2357,6 +2401,8 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
 
             $normalizedItems[] = [
                 'product_id' => $productId,
+                'product_variant_id' => Schema::hasColumn('pos_order_lines', 'product_variant_id') ? $productVariantId : null,
+                'stock_serial_number_id' => Schema::hasColumn('pos_order_lines', 'stock_serial_number_id') ? $stockSerialNumberId : null,
                 'product_name' => $name ?: 'Producto',
                 'product_reference' => $reference ?: null,
                 'quantity' => $qty,
@@ -2690,6 +2736,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             ->map(function ($line) {
                 return [
                     'product_id' => $line->product_id ? (int) $line->product_id : null,
+                    'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
+                    'stock_serial_number_id' => ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null,
+                    'serial_number' => ! empty($line->stock_serial_number_id) && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')
+                        ? (string) (\Illuminate\Support\Facades\DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
+                        : '',
                     'name' => (string) ($line->product_name ?? 'Producto'),
                     'reference' => (string) ($line->product_reference ?? ''),
                     'qty' => (float) ($line->quantity ?? 0),
@@ -2898,6 +2949,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                     return [
                         'id' => (int) $line->id,
                         'product_id' => ! empty($line->product_id) ? (int) $line->product_id : null,
+                        'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
+                        'stock_serial_number_id' => ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null,
+                        'serial_number' => ! empty($line->stock_serial_number_id) && Schema::hasTable('stock_serial_numbers')
+                            ? (string) (DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
+                            : '',
                         'name' => (string) ($line->product_name ?? 'Producto'),
                         'reference' => (string) ($line->product_reference ?? ''),
                         'qty' => (float) ($line->quantity ?? 0),
@@ -3329,9 +3385,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             $orderRow->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
 
-        $lines = \Illuminate\Support\Facades\DB::table('pos_order_lines')
-            ->where('pos_order_id', $orderRow->id)
-            ->orderBy('id')
+        $lines = \Illuminate\Support\Facades\DB::table('pos_order_lines as l')
+            ->leftJoin('stock_serial_numbers as ss', 'ss.id', '=', 'l.stock_serial_number_id')
+            ->where('l.pos_order_id', $orderRow->id)
+            ->orderBy('l.id')
+            ->select('l.*', 'ss.serial_number as line_serial_number')
             ->get();
 
         $employeeName = '';
@@ -3421,9 +3479,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             }
         }
 
-        $lines = \Illuminate\Support\Facades\DB::table('pos_order_lines')
-            ->where('pos_order_id', $orderRow->id)
-            ->orderBy('id')
+        $lines = \Illuminate\Support\Facades\DB::table('pos_order_lines as l')
+            ->leftJoin('stock_serial_numbers as ss', 'ss.id', '=', 'l.stock_serial_number_id')
+            ->where('l.pos_order_id', $orderRow->id)
+            ->orderBy('l.id')
+            ->select('l.*', 'ss.serial_number as line_serial_number')
             ->get();
 
         $payments = \Illuminate\Support\Facades\DB::table('pos_order_payments')
@@ -3917,6 +3977,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 return [
                     'id' => (int) $line->id,
                     'product_id' => $line->product_id ? (int) $line->product_id : null,
+                    'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
+                    'stock_serial_number_id' => ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null,
+                    'serial_number' => ! empty($line->stock_serial_number_id) && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')
+                        ? (string) (\Illuminate\Support\Facades\DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
+                        : '',
                     'name' => (string) ($line->product_name ?? 'Producto'),
                     'reference' => (string) ($line->product_reference ?? ''),
                     'qty' => (float) ($line->quantity ?? 0),
@@ -6764,6 +6829,180 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
         $price = (float) $item->{$priceColumn};
 
         return $price > 0 ? round($price, 4) : $fallback;
+    }
+
+
+    public function serialsForProduct(\Illuminate\Http\Request $request, int $session)
+    {
+        if (! auth()->check()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Tu sesión expiró. Vuelve a iniciar sesión.',
+            ], 401);
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('pos_sessions')) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No está disponible la tabla de sesiones PDV.',
+            ], 422);
+        }
+
+        $sessionRow = \Illuminate\Support\Facades\DB::table('pos_sessions')
+            ->where('id', $session)
+            ->first();
+
+        if (! $sessionRow) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No se encontró la sesión PDV.',
+            ], 404);
+        }
+
+        $pos = null;
+
+        if (! empty($sessionRow->pos_point_id) && \Illuminate\Support\Facades\Schema::hasTable('pos_points')) {
+            $pos = \Illuminate\Support\Facades\DB::table('pos_points')
+                ->where('id', (int) $sessionRow->pos_point_id)
+                ->first();
+        }
+
+        if ($pos && method_exists($this, 'authorizePos')) {
+            try {
+                $this->authorizePos($pos);
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'No tienes permiso para consultar este PDV.',
+                ], 403);
+            }
+        }
+
+        $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
+        $warehouseId = (int) ($pos->warehouse_id ?? 0);
+        $locationId = (int) ($pos->stock_source_location_id ?? $pos->stock_location_id ?? 0);
+
+        $productId = (int) $request->query('product_id', 0);
+        $variantId = (int) $request->query('product_variant_id', $request->query('variant_id', 0));
+
+        if ($productId <= 0) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Producto inválido.',
+            ], 422);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('products')) {
+            $product = \Illuminate\Support\Facades\DB::table('products')
+                ->where('id', $productId)
+                ->first();
+
+            if (
+                $product
+                && ! $variantId
+                && \Illuminate\Support\Facades\Schema::hasColumn('products', 'parent_product_id')
+                && ! empty($product->parent_product_id)
+            ) {
+                $variantId = $productId;
+                $productId = (int) $product->parent_product_id;
+            }
+        }
+
+        $requiresSerial = false;
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('products')) {
+            $ids = array_values(array_unique(array_filter([$productId, $variantId])));
+
+            foreach ($ids as $id) {
+                $row = \Illuminate\Support\Facades\DB::table('products')
+                    ->where('id', (int) $id)
+                    ->first();
+
+                if (! $row) {
+                    continue;
+                }
+
+                foreach (['tracking', 'advanced_tracking_mode'] as $column) {
+                    $value = strtolower(trim((string) ($row->{$column} ?? '')));
+
+                    if ($value !== '' && (str_contains($value, 'serial') || str_contains($value, 'serie'))) {
+                        $requiresSerial = true;
+                    }
+                }
+            }
+        }
+
+        $serials = collect();
+
+        if ($companyId > 0 && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')) {
+            $query = \Illuminate\Support\Facades\DB::table('stock_serial_numbers')
+                ->where('company_id', $companyId)
+                ->where('product_id', $productId)
+                ->where('status', 'available');
+
+            if ($variantId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'product_variant_id')) {
+                $query->where('product_variant_id', $variantId);
+            }
+
+            if ($warehouseId > 0) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'current_warehouse_id')) {
+                    $query->where(function ($inner) use ($warehouseId): void {
+                        $inner->where('current_warehouse_id', $warehouseId)
+                            ->orWhereNull('current_warehouse_id')
+                            ->orWhere('current_warehouse_id', 0);
+                    });
+                } elseif (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'warehouse_id')) {
+                    $query->where(function ($inner) use ($warehouseId): void {
+                        $inner->where('warehouse_id', $warehouseId)
+                            ->orWhereNull('warehouse_id')
+                            ->orWhere('warehouse_id', 0);
+                    });
+                }
+            }
+
+            if ($locationId > 0) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'current_location_id')) {
+                    $query->where(function ($inner) use ($locationId): void {
+                        $inner->where('current_location_id', $locationId)
+                            ->orWhereNull('current_location_id')
+                            ->orWhere('current_location_id', 0);
+                    });
+                } elseif (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'location_id')) {
+                    $query->where(function ($inner) use ($locationId): void {
+                        $inner->where('location_id', $locationId)
+                            ->orWhereNull('location_id')
+                            ->orWhere('location_id', 0);
+                    });
+                }
+            }
+
+            $serials = $query
+                ->orderBy('serial_number')
+                ->limit(100)
+                ->get()
+                ->map(function ($serial): array {
+                    return [
+                        'id' => (int) $serial->id,
+                        'serial_number' => (string) ($serial->serial_number ?? ''),
+                        'label' => (string) ($serial->serial_number ?? ('Serie #' . $serial->id)),
+                        'product_id' => (int) ($serial->product_id ?? 0),
+                        'product_variant_id' => ! empty($serial->product_variant_id) ? (int) $serial->product_variant_id : null,
+                        'status' => (string) ($serial->status ?? ''),
+                    ];
+                });
+        }
+
+        if ($serials->isNotEmpty()) {
+            $requiresSerial = true;
+        }
+
+        return response()->json([
+            'ok' => true,
+            'requires_serial' => $requiresSerial,
+            'product_id' => $productId,
+            'product_variant_id' => $variantId ?: null,
+            'serials' => $serials->values(),
+        ]);
     }
 
 

@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Support\Inventory\OutboundSerialNumberService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -129,18 +130,47 @@ class PosInventoryPoster
 
                 foreach ($stockLines as $line) {
                     $qty = round((float) ($line->quantity ?? 0), 6);
-                    $productId = (int) ($line->product_id ?? 0);
+                    $lineProduct = $this->normalizePosLineProduct($line);
+                    $productId = (int) $lineProduct['product_id'];
+                    $productVariantId = $lineProduct['product_variant_id'];
+                    $serialNumberId = ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null;
 
                     if ($qty <= 0 || $productId <= 0) {
                         continue;
                     }
 
-                    $quant = DB::table('stock_quants')
+                    if ($this->lineRequiresSerialNumber($companyId, $productId, $productVariantId)) {
+                        if (! $serialNumberId) {
+                            return $this->updateOrderMetadata($order, [
+                                'inventory_status' => 'pending_serial_required',
+                                'inventory_message' => 'Selecciona número de serie para ' . ($line->product_name ?? ('producto #' . $productId)) . '.',
+                            ]);
+                        }
+
+                        if (abs($qty - 1.0) > 0.000001) {
+                            return $this->updateOrderMetadata($order, [
+                                'inventory_status' => 'pending_serial_quantity',
+                                'inventory_message' => 'El producto ' . ($line->product_name ?? ('producto #' . $productId)) . ' usa número de serie y debe venderse con cantidad 1 por línea.',
+                            ]);
+                        }
+
+                        app(OutboundSerialNumberService::class)->assertSerialAvailable(
+                            $serialNumberId,
+                            $this->serialContextForPosLine($order, $line, $companyId, null)
+                        );
+                    }
+
+                    $quantQuery = DB::table('stock_quants')
                         ->where('company_id', $companyId)
                         ->where('warehouse_id', $warehouseId)
                         ->where('location_id', $sourceLocationId)
-                        ->where('product_id', $productId)
-                        ->whereNull('product_variant_id')
+                        ->where('product_id', $productId);
+
+                    $productVariantId
+                        ? $quantQuery->where('product_variant_id', $productVariantId)
+                        : $quantQuery->whereNull('product_variant_id');
+
+                    $quant = $quantQuery
                         ->whereNull('lot_id')
                         ->lockForUpdate()
                         ->first();
@@ -187,7 +217,10 @@ class PosInventoryPoster
 
                 foreach ($stockLines as $line) {
                     $qty = round((float) ($line->quantity ?? 0), 6);
-                    $productId = (int) ($line->product_id ?? 0);
+                    $lineProduct = $this->normalizePosLineProduct($line);
+                    $productId = (int) $lineProduct['product_id'];
+                    $productVariantId = $lineProduct['product_variant_id'];
+                    $serialNumberId = ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null;
 
                     if ($qty <= 0 || $productId <= 0) {
                         continue;
@@ -201,11 +234,16 @@ class PosInventoryPoster
 
                     $unitCost = $this->lineUnitCost($line, $quant);
 
-                    DB::table('stock_movement_lines')->insert($this->filterTableColumns('stock_movement_lines', [
+                    $movementLineId = DB::table('stock_movement_lines')->insertGetId($this->filterTableColumns('stock_movement_lines', [
                         'stock_movement_id' => $movementId,
                         'product_id' => $productId,
-                        'product_variant_id' => null,
+                        'product_variant_id' => $productVariantId,
                         'lot_id' => null,
+                        'stock_serial_number_id' => $serialNumberId,
+                        'source_type' => 'pos_order',
+                        'source_id' => $order->id,
+                        'source_line_type' => 'pos_order_line',
+                        'source_line_id' => $line->id,
                         'requested_quantity' => $qty,
                         'done_quantity' => $qty,
                         'unit_cost' => $unitCost,
@@ -213,6 +251,13 @@ class PosInventoryPoster
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]));
+
+                    if ($serialNumberId) {
+                        app(OutboundSerialNumberService::class)->markSold(
+                            $serialNumberId,
+                            $this->serialContextForPosLine($order, $line, $companyId, (int) $movementLineId)
+                        );
+                    }
 
                     DB::table('stock_quants')
                         ->where('id', $quant->id)
@@ -240,6 +285,89 @@ class PosInventoryPoster
         }
     }
 
+
+    protected function normalizePosLineProduct(object $line): array
+    {
+        $productId = (int) ($line->product_id ?? 0);
+        $productVariantId = ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null;
+
+        if (
+            ! $productVariantId
+            && $productId > 0
+            && Schema::hasTable('products')
+            && Schema::hasColumn('products', 'parent_product_id')
+        ) {
+            $product = DB::table('products')->where('id', $productId)->first();
+
+            if ($product && ! empty($product->parent_product_id)) {
+                $productVariantId = $productId;
+                $productId = (int) $product->parent_product_id;
+            }
+        }
+
+        return [
+            'product_id' => $productId,
+            'product_variant_id' => $productVariantId,
+        ];
+    }
+
+    protected function lineRequiresSerialNumber(int $companyId, int $productId, ?int $productVariantId = null): bool
+    {
+        if (Schema::hasTable('stock_serial_numbers') && $companyId > 0 && $productId > 0) {
+            $serialQuery = DB::table('stock_serial_numbers')
+                ->where('company_id', $companyId)
+                ->where('product_id', $productId)
+                ->where('status', 'available');
+
+            $productVariantId
+                ? $serialQuery->where('product_variant_id', $productVariantId)
+                : $serialQuery->whereNull('product_variant_id');
+
+            if ($serialQuery->exists()) {
+                return true;
+            }
+        }
+
+        if (! Schema::hasTable('products')) {
+            return false;
+        }
+
+        foreach (array_values(array_filter([$productId, $productVariantId])) as $id) {
+            $product = DB::table('products')->where('id', (int) $id)->first();
+
+            if (! $product) {
+                continue;
+            }
+
+            foreach (['tracking', 'advanced_tracking_mode'] as $column) {
+                $value = strtolower(trim((string) ($product->{$column} ?? '')));
+
+                if ($value !== '' && (str_contains($value, 'serial') || str_contains($value, 'serie'))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    protected function serialContextForPosLine(object $order, object $line, int $companyId, ?int $movementLineId = null): array
+    {
+        $lineProduct = $this->normalizePosLineProduct($line);
+
+        return [
+            'company_id' => $companyId,
+            'product_id' => (int) $lineProduct['product_id'],
+            'product_variant_id' => $lineProduct['product_variant_id'],
+            'stock_movement_line_id' => $movementLineId,
+            'source_type' => 'pos_order',
+            'source_id' => (int) ($order->id ?? 0),
+            'source_line_type' => 'pos_order_line',
+            'source_line_id' => (int) ($line->id ?? 0),
+            'user_id' => auth()->id(),
+        ];
+    }
+
     protected function stockableLines($lines)
     {
         $productIds = collect($lines)
@@ -265,6 +393,11 @@ class PosInventoryPoster
 
                 if ($productId <= 0 || $qty <= 0) {
                     return false;
+                }
+
+                // BEXIA_V5543C2_SERIAL_LINE_ALWAYS_STOCKABLE
+                if (! empty($line->stock_serial_number_id)) {
+                    return true;
                 }
 
                 $product = $products->get($productId);
