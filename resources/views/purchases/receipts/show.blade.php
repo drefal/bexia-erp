@@ -279,16 +279,36 @@
                 </thead>
                 <tbody>
                     @foreach($lines as $line)
-                        <tr>
-                            <td><strong>{{ $line->product_label ?? 'Producto' }}</strong></td>
-                            <td>{{ $line->variant_label ?? '—' }}</td>
-                            <td>{{ $line->purchase_unit_label ?? '—' }}</td>
-                            <td class="right">{{ $qty($line->received_quantity ?? 0) }}</td>
-                            <td class="right">{{ $money($line->unit_cost_without_tax ?? 0) }}</td>
-                            <td class="right">{{ $money($line->line_tax ?? 0) }}</td>
-                            <td class="right"><strong>{{ $money($line->line_total_with_tax ?? 0) }}</strong></td>
-                        </tr>
-                    @endforeach
+    @php
+        $trackingType = (string) ($line->tracking_type ?? 'none');
+    @endphp
+
+    <tr>
+        <td>
+            <strong>{{ $line->product_label ?? 'Producto' }}</strong>
+
+            @if($trackingType === 'lot' && ! empty($line->lot_number ?? null))
+                <div style="margin-top:5px;">
+                    <span style="display:inline-flex;border-radius:999px;border:1px solid #a7f3d0;background:#ecfdf5;color:#047857;padding:4px 8px;font-size:12px;font-weight:800;">
+                        Lote: {{ $line->lot_number }}
+                    </span>
+                </div>
+            @elseif($trackingType === 'serial')
+                <div style="margin-top:5px;color:#64748b;font-size:12px;font-weight:700;">
+                    Detalle abajo
+                </div>
+            @endif
+        </td>
+        <td>{{ $line->variant_label ?? '—' }}</td>
+        <td>{{ $line->purchase_unit_label ?? '—' }}</td>
+        <td class="right">{{ $qty($line->received_quantity ?? 0) }}</td>
+        <td class="right">{{ $money($line->unit_cost_without_tax ?? 0) }}</td>
+        <td class="right">{{ $money($line->line_tax ?? 0) }}</td>
+        <td class="right"><strong>{{ $money($line->line_total_with_tax ?? 0) }}</strong></td>
+    </tr>
+
+    @include('purchases.receipts.partials.tracking-details', ['line' => $line, 'trackingDetailsColspan' => 7])
+@endforeach
                 </tbody>
             </table>
         </div>

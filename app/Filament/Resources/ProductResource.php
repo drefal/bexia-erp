@@ -1366,6 +1366,66 @@ Forms\Components\Section::make('Atributos de catálogo')
                                             ->native(false)
                                             ->columnSpan(4),
 
+                                        Forms\Components\Section::make('Trazabilidad avanzada / Importación')
+                                            ->description('Configura si este producto debe pedir VIN/serie, motor y datos de importación durante la recepción de compra.')
+                                            ->schema([
+                                                Forms\Components\Grid::make([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                    'xl' => 3,
+                                                ])
+                                                    ->schema([
+                                                        Forms\Components\Select::make('advanced_tracking_mode')
+                                                            ->label('Nivel de control')
+                                                            ->options([
+                                                                'none' => 'No aplica',
+                                                                'warning' => 'Recomendada con aviso',
+                                                                'required' => 'Obligatoria',
+                                                            ])
+                                                            ->default('none')
+                                                            ->helperText('Obligatoria bloquea la recepción si faltan datos. Recomendada solo muestra aviso.'),
+
+                                                        Forms\Components\Placeholder::make('advanced_tracking_help')
+                                                            ->label('Uso recomendado')
+                                                            ->content('Úsalo para productos importados o con identificación individual, por ejemplo motocicletas con VIN, motor y pedimento.')
+                                                            ->columnSpan([
+                                                                'default' => 1,
+                                                                'md' => 1,
+                                                                'xl' => 2,
+                                                            ]),
+                                                    ]),
+
+                                                Forms\Components\CheckboxList::make('advanced_tracking_fields')
+                                                    ->label('Campos solicitados')
+                                                    ->options([
+                                                        'serial_number' => 'VIN / número de serie',
+                                                        'motor_number' => 'Número de motor',
+                                                        'customs_entry_number' => 'Número de pedimento',
+                                                        'customs_entry_date' => 'Fecha de pedimento',
+                                                        'customs_office' => 'Aduana',
+                                                        'imported_model' => 'Modelo importado',
+                                                        'imported_color' => 'Color importado',
+                                                    ])
+                                                    ->columns([
+                                                        'default' => 1,
+                                                        'md' => 2,
+                                                        'xl' => 3,
+                                                    ])
+                                                    ->gridDirection('row')
+                                                    ->helperText('Selecciona los datos que se pedirán durante la recepción de compra.')
+                                                    ->columnSpanFull(),
+
+                                                Forms\Components\Textarea::make('advanced_tracking_notes')
+                                                    ->label('Notas de trazabilidad')
+                                                    ->rows(2)
+                                                    ->columnSpanFull()
+                                                    ->helperText('Uso interno para indicar reglas o instrucciones especiales de captura.'),
+                                            ])
+                                            ->collapsible()
+                                            ->collapsed(fn (?Product $record): bool => (string) ($record?->advanced_tracking_mode ?? 'none') === 'none')
+                                            ->columnSpanFull(),
+
+
                                         Forms\Components\Select::make('costing_method')
                                             ->label('Método de costeo')
                                             ->options([
@@ -1958,6 +2018,21 @@ Forms\Components\Placeholder::make('variants_inner_table')
                         default => $state,
                     }),
 
+                Tables\Columns\TextColumn::make('advanced_tracking_mode')
+                    ->label('Trazabilidad avanzada')
+                    ->formatStateUsing(fn (?string $state): string => match ((string) $state) {
+                        'required' => 'Obligatoria',
+                        'warning' => 'Recomendada',
+                        default => 'No aplica',
+                    })
+                    ->badge()
+                    ->color(fn (?string $state): string => match ((string) $state) {
+                        'required' => 'danger',
+                        'warning' => 'warning',
+                        default => 'gray',
+                    })
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('product_list_stock')
                     ->label('Stock')
                     ->getStateUsing(fn (Product $record): string => static::productListStockLabel($record))
@@ -2020,6 +2095,14 @@ Forms\Components\Placeholder::make('variants_inner_table')
                         'none' => 'Sin seguimiento',
                         'lot' => 'Lotes',
                         'serial' => 'Series',
+                    ]),
+
+                Tables\Filters\SelectFilter::make('advanced_tracking_mode')
+                    ->label('Trazabilidad avanzada')
+                    ->options([
+                        'none' => 'No aplica',
+                        'warning' => 'Recomendada con aviso',
+                        'required' => 'Obligatoria',
                     ]),
 
                 Tables\Filters\TernaryFilter::make('is_active')

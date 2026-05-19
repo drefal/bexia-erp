@@ -486,7 +486,7 @@ class StockMovementResource extends Resource
             return '#';
         }
 
-        return url('/admin/' . $tenantId . '/purchase-receipts/' . $receiptId . ($pdf ? '/pdf' : ''));
+        return url('/admin/' . $tenantId . '/purchase-receipts/' . $receiptId . ($pdf ? '/pdf' : '/panel'));
     }
 
 
@@ -1134,18 +1134,8 @@ class StockMovementResource extends Resource
                     ->icon('heroicon-o-document-text')
                     ->color('gray')
                     ->visible(fn ($record): bool => static::stockMovementReceiptId($record) !== null)
-                    ->modalHeading(fn ($record): string => 'Recepción ' . ($record->reference ?? ''))
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('Cerrar')
-                    ->modalWidth('7xl')
-                    ->modalContent(fn ($record) => view('filament.stock-movements.purchase-receipt-modal', [
-                        'receiptId' => static::stockMovementReceiptId($record),
-                        'tenantId' => (int) ($record->company_id ?? request()->route('tenant') ?? 0),
-                    ])),
-
-
-
-
+                    ->url(fn ($record): string => static::stockMovementReceiptUrl($record, false))
+                    ->openUrlInNewTab(false),
 
                 Tables\Actions\Action::make('view_pos_output')
                     ->label('Ver salida PDV')

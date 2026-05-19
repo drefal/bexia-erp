@@ -162,16 +162,19 @@
                     ></textarea>
                 </div>
 
-                <div class="mt-3 flex justify-end">
+                <div class="mt-4 flex justify-end" id="bexia-create-delivery-button-wrapper">
                     <button
                         type="submit"
+                        id="bexia-create-delivery-button"
+                        data-bexia-create-delivery-button="1"
                         @disabled(! $canCreateDelivery)
                         class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+                        style="display: inline-flex !important; align-items: center; justify-content: center; visibility: visible !important;"
                     >
                         Crear entrega
                     </button>
                 </div>
-            </form>
+</form>
         </div>
 
         <div class="rounded-xl border border-gray-200 bg-white p-4">
@@ -215,13 +218,14 @@
                                 <form
                                     method="POST"
                                     action="{{ route('sales-deliveries.validate', ['saleDelivery' => $delivery->id]) }}"
+                                    id="bexia-validate-delivery-form-{{ $delivery->id }}"
                                     data-bexia-validate-delivery-form="1"
                                 >
                                     @csrf
                                     <button type="submit" class="rounded-lg border border-green-200 px-3 py-1 text-xs font-semibold text-green-700">
                                         Validar entrega
                                     </button>
-                                </form>
+</form>
 
                                 <form method="POST" action="{{ route('sales-deliveries.cancel', ['saleDelivery' => $delivery->id]) }}">
                                     @csrf
@@ -235,9 +239,189 @@
 
                     <div class="mt-2 text-xs text-gray-600">
                         @foreach(($deliveryLines[$delivery->id] ?? collect()) as $dLine)
-                            <div>
-                                {{ $dLine->product_label }}@if($dLine->variant_label) — {{ $dLine->variant_label }}@endif:
-                                <strong>{{ number_format((float) $dLine->quantity, 2) }}</strong>
+                            @php
+                                $selectedSerialId = ! empty($dLine->stock_serial_number_id) ? (int) $dLine->stock_serial_number_id : null;
+                                $requiresSerial = false;
+                                $serialOptions = collect();
+                                $quantityForSerial = (float) ($dLine->quantity ?? 0);
+
+                                $productIdsToCheck = array_values(array_unique(array_filter([
+                                    ! empty($dLine->product_variant_id) ? (int) $dLine->product_variant_id : null,
+                                    ! empty($dLine->product_id) ? (int) $dLine->product_id : null,
+                                ])));
+
+                                if (Schema::hasTable('products')) {
+                                    foreach ($productIdsToCheck as $productIdToCheck) {
+                                        $trackingProduct = DB::table('products')->where('id', $productIdToCheck)->first();
+
+                                        if (! $trackingProduct) {
+                                            continue;
+                                        }
+
+                                        $trackingValue = strtolower(trim((string) ($trackingProduct->tracking ?? '')));
+                                        $advancedTrackingMode = strtolower(trim((string) ($trackingProduct->advanced_tracking_mode ?? '')));
+
+                                        if (
+                                            str_contains($trackingValue, 'serial')
+                                            || str_contains($trackingValue, 'serie')
+                                            || str_contains($advancedTrackingMode, 'serial')
+                                            || str_contains($advancedTrackingMode, 'serie')
+                                        ) {
+                                            $requiresSerial = true;
+                                            break;
+                                        }
+
+                                        $advancedFields = $trackingProduct->advanced_tracking_fields ?? null;
+
+                                        if (is_string($advancedFields) && $advancedFields !== '') {
+                                            $decodedFields = json_decode($advancedFields, true);
+
+                                            if (is_array($decodedFields)) {
+                                                $flatFields = strtolower(json_encode($decodedFields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+
+                                                if (str_contains($flatFields, 'serial') || str_contains($flatFields, 'serie')) {
+                                                    $requiresSerial = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (! $requiresSerial && Schema::hasTable('stock_serial_numbers')) {
+                                    $hasSerialQuery = DB::table('stock_serial_numbers')
+                                        ->where('company_id', $dLine->company_id)
+                                        ->where('product_id', $dLine->product_id)
+                                        ->where('status', 'available');
+
+                                    if (! empty($dLine->product_variant_id)) {
+                                        $hasSerialQuery->where('product_variant_id', $dLine->product_variant_id);
+                                    } else {
+                                        $hasSerialQuery->where(function ($query) {
+                                            $query->whereNull('product_variant_id')
+                                                ->orWhere('product_variant_id', 0);
+                                        });
+                                    }
+
+                                    $requiresSerial = $hasSerialQuery->exists();
+                                }
+
+                                if (
+                                    $delivery->status === 'draft'
+                                    && ($requiresSerial || $selectedSerialId)
+                                    && Schema::hasTable('stock_serial_numbers')
+                                ) {
+                                    $serialCompanyId = (int) ($dLine->company_id ?? 0);
+                                    $serialProductId = (int) ($dLine->product_id ?? 0);
+                                    $serialVariantId = ! empty($dLine->product_variant_id) ? (int) $dLine->product_variant_id : null;
+
+                                    $serialQuery = DB::table('stock_serial_numbers')
+                                        ->where('company_id', $serialCompanyId)
+                                        ->where('product_id', $serialProductId)
+                                        ->where(function ($query) use ($selectedSerialId) {
+                                            $query->where('status', 'available');
+
+                                            if ($selectedSerialId) {
+                                                $query->orWhere('id', $selectedSerialId);
+                                            }
+                                        });
+
+                                    if ($serialVariantId) {
+                                        $serialQuery->where('product_variant_id', $serialVariantId);
+                                    } else {
+                                        $serialQuery->where(function ($query) {
+                                            $query->whereNull('product_variant_id')
+                                                ->orWhere('product_variant_id', 0);
+                                        });
+                                    }
+
+                                    $serialOptions = $serialQuery
+                                        ->whereNotNull('serial_number')
+                                        ->orderBy('serial_number')
+                                        ->limit(100)
+                                        ->get()
+                                        ->filter(function ($serialOption) use ($serialCompanyId, $serialProductId, $serialVariantId) {
+                                            if ((int) ($serialOption->company_id ?? 0) !== $serialCompanyId) {
+                                                return false;
+                                            }
+
+                                            if ((int) ($serialOption->product_id ?? 0) !== $serialProductId) {
+                                                return false;
+                                            }
+
+                                            $optionVariantId = ! empty($serialOption->product_variant_id) ? (int) $serialOption->product_variant_id : null;
+
+                                            return $serialVariantId
+                                                ? $optionVariantId === $serialVariantId
+                                                : $optionVariantId === null;
+                                        })
+                                        ->values();
+                                }
+
+                                $selectedSerialLabel = $selectedSerialId && Schema::hasTable('stock_serial_numbers')
+                                    ? DB::table('stock_serial_numbers')->where('id', $selectedSerialId)->value('serial_number')
+                                    : null;
+                            @endphp
+
+                            <div class="mb-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
+                                <div>
+                                    {{ $dLine->product_label }}@if($dLine->variant_label) - {{ $dLine->variant_label }}@endif:
+                                    <strong>{{ number_format((float) $dLine->quantity, 2) }}</strong>
+                                </div>
+
+                                @if($delivery->status === 'draft' && $requiresSerial)
+                                    <div class="mt-2">
+                                        <label class="mb-1 block text-xs font-semibold text-gray-700">
+                                            Numero de serie requerido
+                                        </label>
+
+                                        <select
+                                            name="serial_numbers[{{ $dLine->id }}]"
+                                            form="bexia-validate-delivery-form-{{ $delivery->id }}"
+                                            class="w-full rounded-lg border-gray-300 text-xs"
+                                            required
+                                            data-product-id="{{ $dLine->product_id }}"
+                                            data-product-variant-id="{{ $dLine->product_variant_id }}"
+                                        >
+                                            <option value="">Selecciona numero de serie de este producto...</option>
+                                            @foreach($serialOptions as $serialOption)
+                                                <option value="{{ $serialOption->id }}" @selected($selectedSerialId === (int) $serialOption->id)>
+                                                    {{ $serialOption->serial_number }}
+                                                    @if(! empty($serialOption->motor_number))
+                                                        / Motor: {{ $serialOption->motor_number }}
+                                                    @endif
+                                                    @if(! empty($serialOption->customs_entry_number))
+                                                        / Pedimento: {{ $serialOption->customs_entry_number }}
+                                                    @endif
+                                                </option>
+                                            @endforeach
+                                        </select>
+
+                                        <div class="mt-1 text-[11px] text-gray-500">
+                                            Filtro aplicado: producto #{{ $dLine->product_id }}
+                                            @if(! empty($dLine->product_variant_id))
+                                                / variante #{{ $dLine->product_variant_id }}
+                                            @endif
+                                            · opciones: {{ $serialOptions->count() }}
+                                        </div>
+
+                                        @if($serialOptions->isEmpty())
+                                            <div class="mt-1 text-xs text-red-600">
+                                                No hay numeros de serie disponibles para este producto/variante.
+                                            </div>
+                                        @endif
+
+                                        @if(abs($quantityForSerial - 1.0) > 0.000001)
+                                            <div class="mt-1 text-xs text-amber-700">
+                                                Para productos con numero de serie, esta entrega debe tener cantidad 1.
+                                            </div>
+                                        @endif
+                                    </div>
+                                @elseif($selectedSerialLabel)
+                                    <div class="mt-1 text-xs text-gray-600">
+                                        Serie: <strong>{{ $selectedSerialLabel }}</strong>
+                                    </div>
+                                @endif
                             </div>
                         @endforeach
                     </div>
@@ -334,8 +518,109 @@
     </div>
 </div>
 
+
+<div
+    id="bexia-delivery-notice-modal"
+    style="display: none; position: fixed; inset: 0; z-index: 10000; align-items: center; justify-content: center; background: rgba(17, 24, 39, 0.55); padding: 24px;"
+>
+    <div
+        style="width: 100%; max-width: 480px; border-radius: 18px; background: #ffffff; padding: 24px; box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28); border: 1px solid rgba(226, 232, 240, 0.9);"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bexia-delivery-notice-title"
+    >
+        <div
+            id="bexia-delivery-notice-title"
+            style="font-size: 18px; font-weight: 800; color: #111827; margin-bottom: 8px;"
+        >
+            Revisa la entrega
+        </div>
+
+        <div
+            id="bexia-delivery-notice-message"
+            style="font-size: 14px; line-height: 1.55; color: #374151; margin-bottom: 20px;"
+        >
+            Captura al menos una cantidad para entregar.
+        </div>
+
+        <div style="display: flex; justify-content: flex-end;">
+            <button
+                type="button"
+                id="bexia-delivery-notice-accept"
+                style="border: 0; border-radius: 10px; background: #4f46e5; color: white; font-weight: 800; padding: 10px 18px; cursor: pointer;"
+            >
+                Aceptar
+            </button>
+        </div>
+    </div>
+</div>
+
+
 <script>
 (function () {
+    function bexiaShowDeliveryNoticeModal(message, title) {
+        var modal = document.getElementById('bexia-delivery-notice-modal');
+
+        if (! modal) {
+            return false;
+        }
+
+        var messageElement = document.getElementById('bexia-delivery-notice-message');
+        var titleElement = document.getElementById('bexia-delivery-notice-title');
+
+        if (titleElement) {
+            titleElement.textContent = title || 'Revisa la entrega';
+        }
+
+        if (messageElement) {
+            messageElement.textContent = message || 'Captura al menos una cantidad para entregar.';
+        }
+
+        modal.style.display = 'flex';
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        var acceptButton = document.getElementById('bexia-delivery-notice-accept');
+
+        if (acceptButton) {
+            setTimeout(function () {
+                acceptButton.focus();
+            }, 30);
+        }
+
+        return true;
+    }
+
+    function bexiaHideDeliveryNoticeModal() {
+        var modal = document.getElementById('bexia-delivery-notice-modal');
+
+        if (! modal) {
+            return;
+        }
+
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    document.addEventListener('click', function (event) {
+        if (
+            event.target
+            && (
+                event.target.id === 'bexia-delivery-notice-accept'
+                || event.target.id === 'bexia-delivery-notice-modal'
+            )
+        ) {
+            event.preventDefault();
+            bexiaHideDeliveryNoticeModal();
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            bexiaHideDeliveryNoticeModal();
+        }
+    });
 
     var bexiaPendingValidateDeliveryForm = null;
 
@@ -539,24 +824,34 @@
     });
 
     var form = document.getElementById('bexia-delivery-form');
+    var createDeliveryButton = document.getElementById('bexia-create-delivery-button');
 
-    if (form) {
-        form.addEventListener('submit', function (event) {
+    if (createDeliveryButton && form) {
+        createDeliveryButton.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (createDeliveryButton.disabled) {
+                return false;
+            }
+
             var state = currentState();
 
             if (! state.any) {
-                event.preventDefault();
-                alert('Captura al menos una cantidad para entregar.');
-                return;
+                pendingSubmit = false;
+                bexiaShowDeliveryNoticeModal('Captura al menos una cantidad para entregar.', 'Revisa la entrega');
+                return false;
             }
 
             if (state.partial && ! pendingSubmit) {
-                event.preventDefault();
                 showPartialModal();
-                return;
+                return false;
             }
 
             pendingSubmit = false;
+            form.submit();
+
+            return false;
         });
     }
 
@@ -611,6 +906,14 @@
         }
     });
 
+
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            bexiaHideDeliveryNoticeModal();
+        }
+    });
+    // bexia-delivery-notice-escape-listener
 
 })();
 </script>

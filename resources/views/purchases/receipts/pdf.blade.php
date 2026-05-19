@@ -292,7 +292,7 @@
         }
 
         body {
-            font-size: 8.5px;
+            font-size: 7.5px;
             line-height: 1.18;
         }
 
@@ -522,7 +522,7 @@
         }
 
         .folio-box .doc-title {
-            font-size: 8.5px;
+            font-size: 7.5px;
             line-height: 1.1;
             margin: 0 0 3px 0;
             white-space: normal;
@@ -550,6 +550,46 @@
         }
 
     </style>
+
+
+<style>
+    .bexia-pdf-logo-header {
+        width: 100%;
+        min-height: 58px;
+        height: 58px;
+        padding: 0 0 8px 0;
+        margin: 0 0 12px 0;
+        border-bottom: 1px solid #d7dee8;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+    }
+
+    .bexia-pdf-logo-header img {
+        display: block;
+        width: auto;
+        height: auto;
+        max-height: 46px;
+        max-width: 160px;
+        object-fit: contain;
+    }
+
+    .bexia-pdf-series {
+        margin-top: 3px;
+        font-size: 7.5px;
+        line-height: 1.18;
+        font-weight: normal;
+        color: #111827;
+        word-break: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .bexia-pdf-series strong {
+        font-weight: 700;
+    }
+</style>
+
+
 </head>
 <body>
 @if(! empty($pdfFallback))
@@ -566,16 +606,14 @@
                     <div class="brand-wrap">
                         @if($logo)
                             <div class="logo-box">
-                                <img class="logo" src="{{ $logo }}" alt="Logo">
+                                <div class="bexia-pdf-logo-header"><img style="display:block; width:auto; height:auto; max-height:46px; max-width:160px; object-fit:contain;" class="logo" src="{{ $logo }}" alt="Logo"></div>
                             </div>
                         @endif
 
                         <div class="brand-text">
-                            <div class="company-name">{{ $companyName }}</div>
+                            
                             @if($companyRfc)
-                                <div class="company-meta">RFC: {{ $companyRfc }}</div>
                             @endif
-                            <div class="company-meta">Documento generado por Bexia ERP</div>
                         </div>
                     </div>
                 </td>
@@ -643,18 +681,36 @@
             </thead>
             <tbody>
                 @foreach($lines as $line)
-                    <tr>
-                        <td>
-                            <div class="product">{{ $line->product_label ?? 'Producto' }}</div>
-                        </td>
-                        <td class="muted">{{ $line->variant_label ?? '—' }}</td>
-                        <td class="muted">{{ $line->purchase_unit_label ?? '—' }}</td>
-                        <td class="right">{{ $qty($line->received_quantity ?? 0) }}</td>
-                        <td class="right">{{ $money($line->unit_cost_without_tax ?? 0) }}</td>
-                        <td class="right">{{ $money($line->line_tax ?? 0) }}</td>
-                        <td class="right"><strong>{{ $money($line->line_total_with_tax ?? 0) }}</strong></td>
-                    </tr>
-                @endforeach
+    @php
+        $trackingType = (string) ($line->tracking_type ?? 'none');
+    @endphp
+
+    <tr>
+        <td>
+            <strong>{{ $line->product_label ?? 'Producto' }}</strong>
+
+            @if($trackingType === 'lot' && ! empty($line->lot_number ?? null))
+                <div style="margin-top:4px;">
+                    <span style="display:inline-block;border-radius:999px;border:1px solid #a7f3d0;background:#ecfdf5;color:#047857;padding:3px 7px;font-size:9px;font-weight:bold;">
+                        Lote: {{ $line->lot_number }}
+                    </span>
+                </div>
+            @elseif($trackingType === 'serial')
+                <div style="margin-top:4px;color:#64748b;font-size:9px;font-weight:bold;">
+                    Detalle abajo
+                </div>
+            @endif
+        </td>
+        <td class="muted">{{ $line->variant_label ?? '—' }}</td>
+        <td class="muted">{{ $line->purchase_unit_label ?? '—' }}</td>
+        <td class="right">{{ $qty($line->received_quantity ?? 0) }}</td>
+        <td class="right">{{ $money($line->unit_cost_without_tax ?? 0) }}</td>
+        <td class="right">{{ $money($line->line_tax ?? 0) }}</td>
+        <td class="right"><strong>{{ $money($line->line_total_with_tax ?? 0) }}</strong></td>
+    </tr>
+
+    @include('purchases.receipts.partials.tracking-details', ['line' => $line, 'trackingDetailsColspan' => 7])
+@endforeach
             </tbody>
         </table>
 
@@ -698,7 +754,6 @@
     </div>
 
     <div class="footer">
-        {{ $receipt->number ?? '' }} · {{ $companyName }} · Bexia ERP
     </div>
 </div>
 </body>

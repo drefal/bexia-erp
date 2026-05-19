@@ -186,6 +186,7 @@ public static function canCreate(): bool
     {
         return [
             'index' => Pages\ListPurchaseReceipts::route('/'),
+            'view_panel' => Pages\ViewPurchaseReceiptPanel::route('/{record}/panel'),
         ];
     }
 

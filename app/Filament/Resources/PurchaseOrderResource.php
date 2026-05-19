@@ -261,6 +261,7 @@ public static function shouldRegisterNavigation(): bool
     {
         return [
             'index' => Pages\ListPurchaseOrders::route('/'),
+            'receive' => Pages\ReceivePurchaseOrder::route('/{record}/receive'),
             'view' => Pages\ViewPurchaseOrder::route('/{record}'),
             'edit' => Pages\EditPurchaseOrder::route('/{record}/edit'),
         ];

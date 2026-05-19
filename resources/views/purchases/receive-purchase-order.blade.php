@@ -60,7 +60,7 @@
         td {
             border-bottom: 1px solid #edf2f7;
             padding: 10px;
-            vertical-align: middle;
+            vertical-align: top;
         }
 
         input, textarea {
@@ -70,6 +70,7 @@
             padding: 8px 10px;
             min-height: 38px;
             outline: none;
+            box-sizing: border-box;
         }
 
         input:focus, textarea:focus {
@@ -85,6 +86,42 @@
         .receive-input {
             max-width: 150px;
             text-align: right;
+        }
+
+        .tracking-cell {
+            min-width: 240px;
+        }
+
+        .tracking-box {
+            display: grid;
+            gap: 8px;
+        }
+
+        .tracking-label {
+            display: inline-flex;
+            width: fit-content;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-weight: 800;
+            font-size: 12px;
+            background: #eef2ff;
+            color: #3730a3;
+        }
+
+        .tracking-label.lot {
+            background: #ecfdf5;
+            color: #065f46;
+        }
+
+        .tracking-label.serial {
+            background: #fff7ed;
+            color: #9a3412;
+        }
+
+        .help {
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.35;
         }
 
         .actions {
@@ -152,6 +189,10 @@
     </style>
 </head>
 <body>
+@php
+    $hasTracking = collect($lines)->contains(fn ($line) => in_array((string) ($line->tracking_for_view ?? 'none'), ['lot', 'serial'], true));
+@endphp
+
 <div class="page">
     @if(session('error'))
         <div class="error">{{ session('error') }}</div>
@@ -171,7 +212,12 @@
 
             <div class="content">
                 <div class="notice">
-                    Esta versión registra la recepción documental. El movimiento de inventario se conectará en el siguiente paso.
+                    @if($hasTracking)
+                        Solo las líneas de productos configurados con seguimiento por lote o número de serie pedirán datos adicionales.
+                        Los productos sin seguimiento se reciben igual que antes.
+                    @else
+                        Esta orden no contiene productos con lote o número de serie. La recepción se capturará solo por cantidad.
+                    @endif
                 </div>
 
                 <table>
@@ -184,11 +230,19 @@
                         <th class="qty">Recibido</th>
                         <th class="qty">Pendiente</th>
                         <th class="qty">A recibir</th>
+                        @if($hasTracking)
+                            <th>Seguimiento</th>
+                        @endif
                         <th></th>
                     </tr>
                     </thead>
                     <tbody>
                     @foreach($lines as $line)
+                        @php
+                            $tracking = (string) ($line->tracking_for_view ?? 'none');
+                            $lineId = (int) $line->id;
+                        @endphp
+
                         <tr>
                             <td>
                                 <strong>{{ $line->product_label ?? 'Producto' }}</strong>
@@ -205,16 +259,63 @@
                                     step="0.000001"
                                     min="0"
                                     max="{{ $line->pending_for_view }}"
-                                    name="quantities[{{ $line->id }}]"
-                                    value="{{ $line->pending_for_view > 0 ? number_format((float) $line->pending_for_view, 6, '.', '') : '0' }}"
+                                    name="quantities[{{ $lineId }}]"
+                                    value="{{ old('quantities.' . $lineId, $line->pending_for_view > 0 ? number_format((float) $line->pending_for_view, 6, '.', '') : '0') }}"
                                     @disabled($line->pending_for_view <= 0)
                                 >
                             </td>
+
+                            @if($hasTracking)
+                                <td class="tracking-cell">
+                                    @if($tracking === 'lot')
+                                        <div class="tracking-box">
+                                            <span class="tracking-label lot">Lote</span>
+
+                                            <input
+                                                type="text"
+                                                name="lot_numbers[{{ $lineId }}]"
+                                                value="{{ old('lot_numbers.' . $lineId) }}"
+                                                placeholder="Número de lote"
+                                                @disabled($line->pending_for_view <= 0)
+                                            >
+
+                                            <input
+                                                type="date"
+                                                name="lot_expiration_dates[{{ $lineId }}]"
+                                                value="{{ old('lot_expiration_dates.' . $lineId) }}"
+                                                @disabled($line->pending_for_view <= 0)
+                                            >
+
+                                            <div class="help">
+                                                El lote solo es obligatorio si la cantidad a recibir es mayor a cero.
+                                            </div>
+                                        </div>
+                                    @elseif($tracking === 'serial')
+                                        <div class="tracking-box">
+                                            <span class="tracking-label serial">Número de serie</span>
+
+                                            <textarea
+                                                name="serial_numbers[{{ $lineId }}]"
+                                                rows="4"
+                                                placeholder="Un número de serie por línea"
+                                                @disabled($line->pending_for_view <= 0)
+                                            >{{ old('serial_numbers.' . $lineId) }}</textarea>
+
+                                            <div class="help">
+                                                Captura un número de serie por unidad recibida. También puedes separar por coma.
+                                            </div>
+                                        </div>
+                                    @else
+                                        <span class="help">Sin seguimiento</span>
+                                    @endif
+                                </td>
+                            @endif
+
                             <td>
                                 <button
                                     type="button"
                                     class="btn btn-gray btn-small"
-                                    onclick="this.closest('tr').querySelector('input').value='0'"
+                                    onclick="this.closest('tr').querySelector('.receive-input').value='0'"
                                 >
                                     No recibir
                                 </button>
@@ -226,7 +327,7 @@
 
                 <div class="notes">
                     <label style="font-weight:800; display:block; margin-bottom:6px;">Notas de recepción</label>
-                    <textarea name="notes" rows="3" placeholder="Notas opcionales de recepción"></textarea>
+                    <textarea name="notes" rows="3" placeholder="Notas opcionales de recepción">{{ old('notes') }}</textarea>
                 </div>
 
                 <div class="actions">

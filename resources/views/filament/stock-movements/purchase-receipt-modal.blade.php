@@ -47,6 +47,21 @@
 
     $money = fn ($v) => '$' . number_format((float) $v, 2);
     $qty = fn ($v) => number_format((float) $v, 6);
+
+    $serialValuesForLine = function ($line): array {
+        $raw = $line->serial_numbers ?? null;
+
+        if (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+            $values = is_array($decoded) ? $decoded : preg_split('/[\r\n,;]+/', $raw);
+        } elseif (is_array($raw)) {
+            $values = $raw;
+        } else {
+            $values = [];
+        }
+
+        return array_values(array_filter(array_map(fn ($v) => trim((string) $v), $values)));
+    };
 @endphp
 
 @if(! $receipt)
@@ -99,6 +114,7 @@
                     <tr>
                         <th class="px-3 py-2 text-left font-black text-gray-700">Producto</th>
                         <th class="px-3 py-2 text-left font-black text-gray-700">Variante</th>
+                        <th class="px-3 py-2 text-left font-black text-gray-700">Seguimiento</th>
                         <th class="px-3 py-2 text-right font-black text-gray-700">Cantidad</th>
                         <th class="px-3 py-2 text-right font-black text-gray-700">Costo</th>
                         <th class="px-3 py-2 text-right font-black text-gray-700">Total</th>
@@ -106,9 +122,53 @@
                 </thead>
                 <tbody>
                     @foreach($lines as $line)
+                        @php
+                            $trackingType = (string) ($line->tracking_type ?? 'none');
+                            $serialValues = $serialValuesForLine($line);
+                            $shownSerials = array_slice($serialValues, 0, 12);
+                            $hiddenSerialCount = max(count($serialValues) - count($shownSerials), 0);
+                        @endphp
+
                         <tr class="border-t border-gray-100">
                             <td class="px-3 py-2 font-bold text-gray-900">{{ $line->product_label ?? 'Producto' }}</td>
                             <td class="px-3 py-2 text-gray-600">{{ $line->variant_label ?? '—' }}</td>
+
+                            <td class="px-3 py-2 text-gray-700">
+                                @if($trackingType === 'lot' && ! empty($line->lot_number))
+                                    <div class="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                                        Lote: {{ $line->lot_number }}
+                                    </div>
+
+                                    @if(! empty($line->lot_expiration_date))
+                                        <div class="mt-1 text-xs text-gray-500">
+                                            Caducidad: {{ \Carbon\Carbon::parse($line->lot_expiration_date)->format('d/m/Y') }}
+                                        </div>
+                                    @endif
+                                @elseif($trackingType === 'serial' && count($serialValues))
+                                    <details class="rounded-lg border border-orange-200 bg-orange-50 p-2">
+                                        <summary class="cursor-pointer text-xs font-black text-orange-800">
+                                            {{ count($serialValues) }} número(s) de serie
+                                        </summary>
+
+                                        <div class="mt-2 max-h-52 overflow-y-auto">
+                                            @foreach($shownSerials as $serial)
+                                                <span class="mb-1 mr-1 inline-flex rounded-full border border-orange-200 bg-white px-2 py-1 text-xs font-bold text-orange-800">
+                                                    {{ $serial }}
+                                                </span>
+                                            @endforeach
+
+                                            @if($hiddenSerialCount > 0)
+                                                <div class="mt-2 text-xs font-bold text-orange-700">
+                                                    +{{ $hiddenSerialCount }} serie(s) más
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </details>
+                                @else
+                                    <span class="text-xs text-gray-400">Sin seguimiento</span>
+                                @endif
+                            </td>
+
                             <td class="px-3 py-2 text-right tabular-nums">
                                 {{ $qty($line->received_quantity ?? 0) }}
                                 <div class="text-xs text-gray-500">{{ $line->purchase_unit_label ?? '' }}</div>
@@ -136,6 +196,15 @@
                     <strong>{{ $money($receipt->total_with_tax ?? 0) }}</strong>
                 </div>
             </div>
+        </div>
+
+        <div class="flex justify-end gap-2">
+            <a
+                href="{{ url('/admin/' . $tenantId . '/purchase-receipts/' . $receipt->id) }}"
+                class="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
+            >
+                Abrir recepción completa
+            </a>
         </div>
     </div>
 @endif
