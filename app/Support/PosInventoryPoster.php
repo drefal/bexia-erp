@@ -134,9 +134,19 @@ class PosInventoryPoster
                     $productId = (int) $lineProduct['product_id'];
                     $productVariantId = $lineProduct['product_variant_id'];
                     $serialNumberId = ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null;
+                    $lotId = ! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null;
 
                     if ($qty <= 0 || $productId <= 0) {
                         continue;
+                    }
+
+                    if ($this->lineRequiresLotNumber($companyId, $productId, $productVariantId)) {
+                        if (! $lotId) {
+                            return $this->updateOrderMetadata($order, [
+                                'inventory_status' => 'pending_lot_required',
+                                'inventory_message' => 'Selecciona lote para ' . ($line->product_name ?? ('producto #' . $productId)) . '.',
+                            ]);
+                        }
                     }
 
                     if ($this->lineRequiresSerialNumber($companyId, $productId, $productVariantId)) {
@@ -170,10 +180,21 @@ class PosInventoryPoster
                         ? $quantQuery->where('product_variant_id', $productVariantId)
                         : $quantQuery->whereNull('product_variant_id');
 
+                    if ($lotId) {
+                        $quantQuery->where('lot_id', $lotId);
+                    } elseif ($this->lineRequiresLotNumber($companyId, $productId, $productVariantId)) {
+                        $quantQuery->whereNotNull('lot_id');
+                    } else {
+                        $quantQuery->whereNull('lot_id');
+                    }
+
                     $quant = $quantQuery
-                        ->whereNull('lot_id')
                         ->lockForUpdate()
                         ->first();
+
+                    if ($quant && ! $lotId && ! empty($quant->lot_id)) {
+                        $lotId = (int) $quant->lot_id;
+                    }
 
                     if (! $quant) {
                         return $this->updateOrderMetadata($order, [
@@ -191,7 +212,10 @@ class PosInventoryPoster
                         ]);
                     }
 
-                    $lockedQuants[(int) $line->id] = $quant;
+                    $lockedQuants[(int) $line->id] = [
+                        'quant' => $quant,
+                        'lot_id' => $lotId,
+                    ];
                 }
 
                 $reference = $this->nextMovementReference($operationType, $companyId, $warehouseId, $sourceLocationId, $pos);
@@ -221,12 +245,13 @@ class PosInventoryPoster
                     $productId = (int) $lineProduct['product_id'];
                     $productVariantId = $lineProduct['product_variant_id'];
                     $serialNumberId = ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null;
+                    $lockedQuant = $lockedQuants[(int) $line->id] ?? null;
+                    $quant = is_array($lockedQuant) ? ($lockedQuant['quant'] ?? null) : $lockedQuant;
+                    $lotId = is_array($lockedQuant) ? ($lockedQuant['lot_id'] ?? null) : (! empty($quant->lot_id) ? (int) $quant->lot_id : null);
 
                     if ($qty <= 0 || $productId <= 0) {
                         continue;
                     }
-
-                    $quant = $lockedQuants[(int) $line->id] ?? null;
 
                     if (! $quant) {
                         continue;
@@ -238,7 +263,7 @@ class PosInventoryPoster
                         'stock_movement_id' => $movementId,
                         'product_id' => $productId,
                         'product_variant_id' => $productVariantId,
-                        'lot_id' => null,
+                        'lot_id' => $lotId,
                         'stock_serial_number_id' => $serialNumberId,
                         'source_type' => 'pos_order',
                         'source_id' => $order->id,
@@ -251,6 +276,10 @@ class PosInventoryPoster
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]));
+
+                    if ($lotId) {
+                        $this->markPosLineLotTracking($line, (int) $lotId, $order, (int) $movementLineId);
+                    }
 
                     if ($serialNumberId) {
                         app(OutboundSerialNumberService::class)->markSold(
@@ -311,6 +340,44 @@ class PosInventoryPoster
         ];
     }
 
+    protected function lineRequiresLotNumber(int $companyId, int $productId, ?int $productVariantId = null): bool
+    {
+        if ($companyId <= 0 || $productId <= 0) {
+            return false;
+        }
+
+        if (Schema::hasTable('products')) {
+            foreach (array_values(array_unique(array_filter([$productId, $productVariantId]))) as $id) {
+                $product = DB::table('products')->where('id', (int) $id)->first();
+
+                if (! $product) {
+                    continue;
+                }
+
+                foreach (['tracking', 'advanced_tracking_mode'] as $column) {
+                    $value = strtolower(trim((string) ($product->{$column} ?? '')));
+
+                    if ($value !== '' && (str_contains($value, 'lot') || str_contains($value, 'lote'))) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        if (Schema::hasTable('stock_lots')) {
+            $query = DB::table('stock_lots')
+                ->where('company_id', $companyId)
+                ->where('product_id', $productId);
+
+            $productVariantId
+                ? $query->where('product_variant_id', $productVariantId)
+                : $query->whereNull('product_variant_id');
+
+            return $query->exists();
+        }
+
+        return false;
+    }
     protected function lineRequiresSerialNumber(int $companyId, int $productId, ?int $productVariantId = null): bool
     {
         if (Schema::hasTable('stock_serial_numbers') && $companyId > 0 && $productId > 0) {
@@ -351,6 +418,54 @@ class PosInventoryPoster
         return false;
     }
 
+    protected function lotContextForPosLine(object $order, object $line, int $lotId, ?int $movementLineId = null): array
+    {
+        $lot = Schema::hasTable('stock_lots')
+            ? DB::table('stock_lots')->where('id', $lotId)->first()
+            : null;
+
+        $lineProduct = $this->normalizePosLineProduct($line);
+
+        return [
+            'stock_lot_id' => $lotId,
+            'lot_number' => $lot->lot_number ?? null,
+            'product_id' => (int) $lineProduct['product_id'],
+            'product_variant_id' => $lineProduct['product_variant_id'],
+            'stock_movement_line_id' => $movementLineId,
+            'source_type' => 'pos_order',
+            'source_id' => (int) ($order->id ?? 0),
+            'source_line_type' => 'pos_order_line',
+            'source_line_id' => (int) ($line->id ?? 0),
+            'user_id' => auth()->id(),
+            'updated_at' => now()->toDateTimeString(),
+        ];
+    }
+
+    protected function markPosLineLotTracking(object $line, int $lotId, object $order, int $movementLineId): void
+    {
+        if (! Schema::hasTable('pos_order_lines')) {
+            return;
+        }
+
+        $updates = [
+            'updated_at' => now(),
+        ];
+
+        if (Schema::hasColumn('pos_order_lines', 'stock_lot_id')) {
+            $updates['stock_lot_id'] = $lotId;
+        }
+
+        if (Schema::hasColumn('pos_order_lines', 'lot_tracking_metadata')) {
+            $updates['lot_tracking_metadata'] = json_encode(
+                $this->lotContextForPosLine($order, $line, $lotId, $movementLineId),
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+        }
+
+        DB::table('pos_order_lines')
+            ->where('id', (int) ($line->id ?? 0))
+            ->update($this->filterTableColumns('pos_order_lines', $updates));
+    }
     protected function serialContextForPosLine(object $order, object $line, int $companyId, ?int $movementLineId = null): array
     {
         $lineProduct = $this->normalizePosLineProduct($line);

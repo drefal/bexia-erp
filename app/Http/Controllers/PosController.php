@@ -2419,6 +2419,7 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
 
             $productVariantId = null;
             $stockSerialNumberId = null;
+            $stockLotId = null;
 
             foreach (['product_variant_id', 'variant_id'] as $variantKey) {
                 if (isset($item[$variantKey]) && is_numeric($item[$variantKey]) && (int) $item[$variantKey] > 0) {
@@ -2431,6 +2432,42 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 if (isset($item[$serialKey]) && is_numeric($item[$serialKey]) && (int) $item[$serialKey] > 0) {
                     $stockSerialNumberId = (int) $item[$serialKey];
                     break;
+                }
+            }
+
+            foreach (['stock_lot_id', 'lot_id'] as $lotKey) {
+                if (isset($item[$lotKey]) && is_numeric($item[$lotKey]) && (int) $item[$lotKey] > 0) {
+                    $stockLotId = (int) $item[$lotKey];
+                    break;
+                }
+            }
+
+            if (! $stockLotId && isset($item['metadata']) && is_array($item['metadata'])) {
+                foreach (['stock_lot_id', 'lot_id'] as $lotKey) {
+                    if (isset($item['metadata'][$lotKey]) && is_numeric($item['metadata'][$lotKey]) && (int) $item['metadata'][$lotKey] > 0) {
+                        $stockLotId = (int) $item['metadata'][$lotKey];
+                        break;
+                    }
+                }
+            }
+
+            if (! $stockLotId && isset($item['raw']) && is_array($item['raw'])) {
+                foreach (['stock_lot_id', 'lot_id'] as $lotKey) {
+                    if (isset($item['raw'][$lotKey]) && is_numeric($item['raw'][$lotKey]) && (int) $item['raw'][$lotKey] > 0) {
+                        $stockLotId = (int) $item['raw'][$lotKey];
+                        break;
+                    }
+                }
+            }
+
+            if ($stockLotId && Schema::hasTable('stock_lots')) {
+                $lot = DB::table('stock_lots')
+                    ->where('id', $stockLotId)
+                    ->first();
+
+                if ($lot) {
+                    $productId = (int) ($lot->product_id ?? $productId);
+                    $productVariantId = ! empty($lot->product_variant_id) ? (int) $lot->product_variant_id : $productVariantId;
                 }
             }
 
@@ -2494,6 +2531,16 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 'product_id' => $productId,
                 'product_variant_id' => Schema::hasColumn('pos_order_lines', 'product_variant_id') ? $productVariantId : null,
                 'stock_serial_number_id' => Schema::hasColumn('pos_order_lines', 'stock_serial_number_id') ? $stockSerialNumberId : null,
+                'stock_lot_id' => Schema::hasColumn('pos_order_lines', 'stock_lot_id') ? $stockLotId : null,
+                'lot_tracking_metadata' => Schema::hasColumn('pos_order_lines', 'lot_tracking_metadata') && $stockLotId
+                    ? json_encode([
+                        'stock_lot_id' => $stockLotId,
+                        'source_type' => 'pos_order',
+                        'source_line_type' => 'pos_order_line',
+                        'selected_from' => 'pos_lot_selector',
+                        'updated_at' => now()->toDateTimeString(),
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    : null,
                 'product_name' => $name ?: 'Producto',
                 'product_reference' => $reference ?: null,
                 'quantity' => $qty,
@@ -2829,6 +2876,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                     'product_id' => $line->product_id ? (int) $line->product_id : null,
                     'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
                     'stock_serial_number_id' => ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null,
+                    'stock_lot_id' => ! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null,
+                    'lot_number' => ! empty($line->stock_lot_id) && \Illuminate\Support\Facades\Schema::hasTable('stock_lots')
+                        ? (string) (\Illuminate\Support\Facades\DB::table('stock_lots')->where('id', (int) $line->stock_lot_id)->value('lot_number') ?? '')
+                        : '',
+                    'lot_locked_from_pending' => ! empty($line->stock_lot_id),
                     'serial_number' => ! empty($line->stock_serial_number_id) && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')
                         ? (string) (\Illuminate\Support\Facades\DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
                         : '',
@@ -3044,6 +3096,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                         'product_id' => ! empty($line->product_id) ? (int) $line->product_id : null,
                         'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
                         'stock_serial_number_id' => ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null,
+                        'stock_lot_id' => ! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null,
+                        'lot_number' => ! empty($line->stock_lot_id) && Schema::hasTable('stock_lots')
+                            ? (string) (DB::table('stock_lots')->where('id', (int) $line->stock_lot_id)->value('lot_number') ?? '')
+                            : '',
+                        'lot_locked_from_pending' => ! empty($line->stock_lot_id),
                         'serial_number' => ! empty($line->stock_serial_number_id) && Schema::hasTable('stock_serial_numbers')
                             ? (string) (DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
                             : '',
@@ -4074,6 +4131,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                     'product_id' => $line->product_id ? (int) $line->product_id : null,
                     'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
                     'stock_serial_number_id' => ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null,
+                    'stock_lot_id' => ! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null,
+                    'lot_number' => ! empty($line->stock_lot_id) && \Illuminate\Support\Facades\Schema::hasTable('stock_lots')
+                        ? (string) (\Illuminate\Support\Facades\DB::table('stock_lots')->where('id', (int) $line->stock_lot_id)->value('lot_number') ?? '')
+                        : '',
+                    'lot_locked_from_pending' => ! empty($line->stock_lot_id),
                     'serial_number' => ! empty($line->stock_serial_number_id) && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')
                         ? (string) (\Illuminate\Support\Facades\DB::table('stock_serial_numbers')->where('id', (int) $line->stock_serial_number_id)->value('serial_number') ?? '')
                         : '',
@@ -7006,6 +7068,212 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
         return $price > 0 ? round($price, 4) : $fallback;
     }
 
+
+    public function lotsForProduct(\Illuminate\Http\Request $request, int $session)
+    {
+        if (! auth()->check()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Tu sesión expiró. Vuelve a iniciar sesión.',
+            ], 401);
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('pos_sessions')) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No está disponible la tabla de sesiones PDV.',
+            ], 422);
+        }
+
+        $sessionRow = \Illuminate\Support\Facades\DB::table('pos_sessions')
+            ->where('id', $session)
+            ->first();
+
+        if (! $sessionRow) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No se encontró la sesión PDV.',
+            ], 404);
+        }
+
+        $pos = null;
+
+        if (! empty($sessionRow->pos_point_id) && \Illuminate\Support\Facades\Schema::hasTable('pos_points')) {
+            $pos = \Illuminate\Support\Facades\DB::table('pos_points')
+                ->where('id', (int) $sessionRow->pos_point_id)
+                ->first();
+        }
+
+        if ($pos && method_exists($this, 'authorizePos')) {
+            try {
+                $this->authorizePos($pos);
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'No tienes permiso para consultar este PDV.',
+                ], 403);
+            }
+        }
+
+        $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
+        $warehouseId = (int) ($pos->warehouse_id ?? 0);
+        $locationId = (int) ($pos->stock_source_location_id ?? $pos->stock_location_id ?? 0);
+
+        $productId = (int) $request->query('product_id', 0);
+        $variantId = (int) $request->query('product_variant_id', $request->query('variant_id', 0));
+        $selectedLotId = (int) $request->query('selected_lot_id', $request->query('stock_lot_id', 0));
+
+        if ($productId <= 0) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Producto inválido.',
+            ], 422);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('products')) {
+            $product = \Illuminate\Support\Facades\DB::table('products')
+                ->where('id', $productId)
+                ->first();
+
+            if (
+                $product
+                && ! $variantId
+                && \Illuminate\Support\Facades\Schema::hasColumn('products', 'parent_product_id')
+                && ! empty($product->parent_product_id)
+            ) {
+                $variantId = $productId;
+                $productId = (int) $product->parent_product_id;
+            }
+        }
+
+        $requiresLot = false;
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('products')) {
+            $ids = array_values(array_unique(array_filter([$productId, $variantId])));
+
+            foreach ($ids as $id) {
+                $row = \Illuminate\Support\Facades\DB::table('products')
+                    ->where('id', (int) $id)
+                    ->first();
+
+                if (! $row) {
+                    continue;
+                }
+
+                foreach (['tracking', 'advanced_tracking_mode'] as $column) {
+                    $value = strtolower(trim((string) ($row->{$column} ?? '')));
+
+                    if ($value !== '' && (str_contains($value, 'lot') || str_contains($value, 'lote'))) {
+                        $requiresLot = true;
+                    }
+                }
+            }
+        }
+
+        $lots = collect();
+
+        if (
+            $companyId > 0
+            && $warehouseId > 0
+            && $locationId > 0
+            && \Illuminate\Support\Facades\Schema::hasTable('stock_lots')
+            && \Illuminate\Support\Facades\Schema::hasTable('stock_quants')
+        ) {
+            $query = \Illuminate\Support\Facades\DB::table('stock_lots as l')
+                ->join('stock_quants as q', 'q.lot_id', '=', 'l.id')
+                ->where('l.company_id', $companyId)
+                ->where('q.company_id', $companyId)
+                ->where('l.product_id', $productId)
+                ->where('q.product_id', $productId)
+                ->where('q.warehouse_id', $warehouseId)
+                ->where('q.location_id', $locationId)
+                ->where('q.quantity', '>', 0)
+                ->where(function ($inner) use ($selectedLotId): void {
+                    $inner->whereRaw('(q.quantity - q.reserved_quantity) > 0');
+
+                    if ($selectedLotId > 0) {
+                        $inner->orWhere('l.id', $selectedLotId);
+                    }
+                });
+
+            if ($variantId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('stock_lots', 'product_variant_id')) {
+                $query->where('l.product_variant_id', $variantId)
+                    ->where('q.product_variant_id', $variantId);
+            } else {
+                $query->where(function ($inner): void {
+                    $inner->whereNull('l.product_variant_id')
+                        ->orWhere('l.product_variant_id', 0);
+                })->whereNull('q.product_variant_id');
+            }
+
+            $lotRows = $query
+                ->select([
+                    'l.id',
+                    'l.lot_number',
+                    'l.product_id',
+                    'l.product_variant_id',
+                    'l.expiration_date',
+                    'q.quantity',
+                    'q.reserved_quantity',
+                ])
+                ->orderBy('l.expiration_date')
+                ->orderBy('l.id')
+                ->limit(100)
+                ->get();
+
+            if ($selectedLotId > 0 && ! $lotRows->contains('id', $selectedLotId)) {
+                $selectedLot = \Illuminate\Support\Facades\DB::table('stock_lots')
+                    ->where('id', $selectedLotId)
+                    ->where('company_id', $companyId)
+                    ->where('product_id', $productId)
+                    ->first();
+
+                if (
+                    $selectedLot
+                    && (
+                        $variantId <= 0
+                        || empty($selectedLot->product_variant_id)
+                        || (int) $selectedLot->product_variant_id === $variantId
+                    )
+                ) {
+                    $lotRows->prepend($selectedLot);
+                }
+            }
+
+            $lots = $lotRows
+                ->map(function ($lot): array {
+                    $available = max(0, (float) ($lot->quantity ?? 0) - (float) ($lot->reserved_quantity ?? 0));
+                    $availableText = rtrim(rtrim(number_format($available, 2, '.', ','), '0'), '.');
+
+                    return [
+                        'id' => (int) $lot->id,
+                        'stock_lot_id' => (int) $lot->id,
+                        'lot_number' => (string) ($lot->lot_number ?? ''),
+                        'label' => (string) (
+                            ($lot->lot_number ?? ('Lote #' . $lot->id))
+                            . (! empty($lot->expiration_date) ? ' · vence ' . $lot->expiration_date : '')
+                            . ' · disp. ' . $availableText
+                        ),
+                        'product_id' => (int) ($lot->product_id ?? 0),
+                        'product_variant_id' => ! empty($lot->product_variant_id) ? (int) $lot->product_variant_id : null,
+                        'expiration_date' => $lot->expiration_date ?? null,
+                        'available_quantity' => $available,
+                    ];
+                });
+        }
+
+        if ($lots->isNotEmpty()) {
+            $requiresLot = true;
+        }
+
+        return response()->json([
+            'ok' => true,
+            'requires_lot' => $requiresLot,
+            'product_id' => $productId,
+            'product_variant_id' => $variantId ?: null,
+            'lots' => $lots->values(),
+        ]);
+    }
 
     public function serialsForProduct(\Illuminate\Http\Request $request, int $session)
     {
