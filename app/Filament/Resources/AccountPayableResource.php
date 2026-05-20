@@ -33,6 +33,52 @@ class AccountPayableResource extends Resource
 
     protected static ?int $navigationSort = 10;
 
+    public static function statusLabel(?string $state): string
+    {
+        return match ($state) {
+            'draft' => 'Borrador',
+            'open' => 'Abierta',
+            'partial' => 'Parcial',
+            'paid' => 'Pagada',
+            'cancelled' => 'Cancelada',
+            default => filled($state) ? (string) $state : 'Sin estado',
+        };
+    }
+
+    public static function statusColor(?string $state): string
+    {
+        return match ($state) {
+            'draft' => 'gray',
+            'open' => 'warning',
+            'partial' => 'info',
+            'paid' => 'success',
+            'cancelled' => 'danger',
+            default => 'gray',
+        };
+    }
+
+    public static function accountingStatusLabel(?string $state): string
+    {
+        return match ($state) {
+            null, '' => 'Pendiente',
+            'pending' => 'Pendiente',
+            'posted' => 'Contabilizada',
+            'error' => 'Error',
+            'cancelled' => 'Cancelada',
+            default => (string) $state,
+        };
+    }
+
+    public static function accountingStatusColor(?string $state): string
+    {
+        return match ($state) {
+            'posted' => 'success',
+            'error' => 'danger',
+            'cancelled' => 'gray',
+            default => 'warning',
+        };
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([]);
@@ -60,6 +106,8 @@ class AccountPayableResource extends Resource
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
+                    ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
+                    ->color(fn (?string $state): string => static::statusColor($state))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('issue_date')
@@ -75,25 +123,19 @@ class AccountPayableResource extends Resource
                 Tables\Columns\TextColumn::make('total')
                     ->label('Total')
                     ->alignEnd()
-                    ->formatStateUsing(function ($state, AccountPayable $record): string {
-                        return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                    })
+                    ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('paid_total')
                     ->label('Pagado')
                     ->alignEnd()
-                    ->formatStateUsing(function ($state, AccountPayable $record): string {
-                        return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                    })
+                    ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('balance_total')
                     ->label('Saldo')
                     ->alignEnd()
-                    ->formatStateUsing(function ($state, AccountPayable $record): string {
-                        return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                    })
+                    ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
             ])
             ->filters([
@@ -121,7 +163,13 @@ class AccountPayableResource extends Resource
                     ->columns(3)
                     ->schema([
                         TextEntry::make('number')->label('Folio'),
-                        TextEntry::make('status')->label('Estado')->badge(),
+
+                        TextEntry::make('status')
+                            ->label('Estado')
+                            ->badge()
+                            ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
+                            ->color(fn (?string $state): string => static::statusColor($state)),
+
                         TextEntry::make('supplier_name')->label('Proveedor'),
                         TextEntry::make('purchaseOrder.number')->label('Orden de compra')->placeholder('Sin orden'),
                         TextEntry::make('purchaseReceipt.number')->label('Recepción')->placeholder('Sin recepción'),
@@ -136,31 +184,28 @@ class AccountPayableResource extends Resource
                     ->schema([
                         TextEntry::make('subtotal')
                             ->label('Subtotal')
-                            ->formatStateUsing(function ($state, AccountPayable $record): string {
-                                return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                            }),
+                            ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('tax_total')
                             ->label('Impuestos')
-                            ->formatStateUsing(function ($state, AccountPayable $record): string {
-                                return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                            }),
+                            ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('total')
                             ->label('Total')
-                            ->formatStateUsing(function ($state, AccountPayable $record): string {
-                                return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                            }),
+                            ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('balance_total')
                             ->label('Saldo')
-                            ->formatStateUsing(function ($state, AccountPayable $record): string {
-                                return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                            }),
+                            ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                     ]),
 
                 Section::make('Conexión contable')
                     ->description('CxP es un módulo separado. Estos campos solo muestran la póliza generada cuando se contabilice.')
                     ->columns(3)
                     ->schema([
-                        TextEntry::make('accounting_status')->label('Estado contable')->placeholder('Pendiente'),
+                        TextEntry::make('accounting_status')
+                            ->label('Estado contable')
+                            ->badge()
+                            ->formatStateUsing(fn (?string $state): string => static::accountingStatusLabel($state))
+                            ->color(fn (?string $state): string => static::accountingStatusColor($state)),
+
                         TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Sin póliza'),
                         TextEntry::make('accounting_posted_at')->label('Contabilizado')->dateTime()->placeholder('Pendiente'),
                         TextEntry::make('accounting_error_message')->label('Error contable')->columnSpanFull()->placeholder('Sin error'),

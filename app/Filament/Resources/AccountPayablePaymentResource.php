@@ -33,6 +33,26 @@ class AccountPayablePaymentResource extends Resource
 
     protected static ?int $navigationSort = 20;
 
+    public static function statusLabel(?string $state): string
+    {
+        return match ($state) {
+            'draft' => 'Borrador',
+            'posted' => 'Aplicado',
+            'cancelled' => 'Cancelado',
+            default => filled($state) ? (string) $state : 'Sin estado',
+        };
+    }
+
+    public static function statusColor(?string $state): string
+    {
+        return match ($state) {
+            'draft' => 'gray',
+            'posted' => 'success',
+            'cancelled' => 'danger',
+            default => 'gray',
+        };
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([]);
@@ -60,14 +80,14 @@ class AccountPayablePaymentResource extends Resource
                 Tables\Columns\TextColumn::make('amount')
                     ->label('Importe')
                     ->alignEnd()
-                    ->formatStateUsing(function ($state, AccountPayablePayment $record): string {
-                        return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                    })
+                    ->formatStateUsing(fn ($state, AccountPayablePayment $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
-                    ->badge(),
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
+                    ->color(fn (?string $state): string => static::statusColor($state)),
 
                 Tables\Columns\TextColumn::make('reference')
                     ->label('Referencia')
@@ -89,13 +109,17 @@ class AccountPayablePaymentResource extends Resource
                     ->schema([
                         TextEntry::make('accountPayable.number')->label('CxP'),
                         TextEntry::make('accountPayable.supplier_name')->label('Proveedor'),
-                        TextEntry::make('status')->label('Estado')->badge(),
+
+                        TextEntry::make('status')
+                            ->label('Estado')
+                            ->badge()
+                            ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
+                            ->color(fn (?string $state): string => static::statusColor($state)),
+
                         TextEntry::make('payment_date')->label('Fecha')->date(),
                         TextEntry::make('amount')
                             ->label('Importe')
-                            ->formatStateUsing(function ($state, AccountPayablePayment $record): string {
-                                return '$' . number_format((float) $state, 2) . ' ' . $record->currency;
-                            }),
+                            ->formatStateUsing(fn ($state, AccountPayablePayment $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('reference')->label('Referencia')->placeholder('Sin referencia'),
                         TextEntry::make('treasury_movement_id')->label('Movimiento tesorería')->placeholder('Pendiente'),
                         TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Pendiente'),
