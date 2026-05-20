@@ -42,9 +42,7 @@ class ViewStockSerialNumber extends Page
             return null;
         }
 
-        return DB::table('stock_serial_numbers')
-            ->where('id', $this->serialId)
-            ->first();
+        return DB::table('stock_serial_numbers')->where('id', $this->serialId)->first();
     }
 
     public function product(): ?object
@@ -55,22 +53,30 @@ class ViewStockSerialNumber extends Page
             return null;
         }
 
-        return DB::table('products')
-            ->where('id', $serial->product_id)
-            ->first();
+        return DB::table('products')->where('id', $serial->product_id)->first();
     }
 
     public function variant(): ?object
     {
         $serial = $this->serial();
 
-        if (! $serial || empty($serial->product_variant_id) || ! Schema::hasTable('product_variants')) {
+        if (! $serial || empty($serial->product_variant_id)) {
             return null;
         }
 
-        return DB::table('product_variants')
-            ->where('id', $serial->product_variant_id)
-            ->first();
+        if (Schema::hasTable('product_variants')) {
+            $variant = DB::table('product_variants')->where('id', $serial->product_variant_id)->first();
+
+            if ($variant) {
+                return $variant;
+            }
+        }
+
+        if (Schema::hasTable('products')) {
+            return DB::table('products')->where('id', $serial->product_variant_id)->first();
+        }
+
+        return null;
     }
 
     public function lot(): ?object
@@ -82,15 +88,11 @@ class ViewStockSerialNumber extends Page
         }
 
         if (property_exists($serial, 'lot_id') && ! empty($serial->lot_id)) {
-            return DB::table('stock_lots')
-                ->where('id', $serial->lot_id)
-                ->first();
+            return DB::table('stock_lots')->where('id', $serial->lot_id)->first();
         }
 
         if (property_exists($serial, 'lot_number') && ! empty($serial->lot_number) && Schema::hasColumn('stock_lots', 'lot_number')) {
-            return DB::table('stock_lots')
-                ->where('lot_number', $serial->lot_number)
-                ->first();
+            return DB::table('stock_lots')->where('lot_number', $serial->lot_number)->first();
         }
 
         return null;
@@ -104,9 +106,7 @@ class ViewStockSerialNumber extends Page
             return null;
         }
 
-        return DB::table('purchase_receipts')
-            ->where('id', $serial->purchase_receipt_id)
-            ->first();
+        return DB::table('purchase_receipts')->where('id', $serial->purchase_receipt_id)->first();
     }
 
     public function receiptLine(): ?object
@@ -118,9 +118,7 @@ class ViewStockSerialNumber extends Page
         }
 
         if (property_exists($serial, 'purchase_receipt_line_id') && ! empty($serial->purchase_receipt_line_id)) {
-            return DB::table('purchase_receipt_lines')
-                ->where('id', $serial->purchase_receipt_line_id)
-                ->first();
+            return DB::table('purchase_receipt_lines')->where('id', $serial->purchase_receipt_line_id)->first();
         }
 
         if (! empty($serial->purchase_receipt_id) && ! empty($serial->serial_number)) {
@@ -145,9 +143,7 @@ class ViewStockSerialNumber extends Page
             return null;
         }
 
-        return DB::table('stock_movements')
-            ->where('id', $receipt->stock_movement_id)
-            ->first();
+        return DB::table('stock_movements')->where('id', $receipt->stock_movement_id)->first();
     }
 
     public function warehouse(): ?object
@@ -158,17 +154,13 @@ class ViewStockSerialNumber extends Page
             return null;
         }
 
-        $warehouseId = $serial->current_warehouse_id
-            ?? $serial->warehouse_id
-            ?? null;
+        $warehouseId = $serial->current_warehouse_id ?? $serial->warehouse_id ?? null;
 
         if (! $warehouseId) {
             return null;
         }
 
-        return DB::table('warehouses')
-            ->where('id', $warehouseId)
-            ->first();
+        return DB::table('warehouses')->where('id', $warehouseId)->first();
     }
 
     public function location(): ?object
@@ -179,17 +171,116 @@ class ViewStockSerialNumber extends Page
             return null;
         }
 
-        $locationId = $serial->current_location_id
-            ?? $serial->location_id
-            ?? null;
+        $locationId = $serial->current_location_id ?? $serial->location_id ?? null;
 
         if (! $locationId) {
             return null;
         }
 
-        return DB::table('stock_locations')
-            ->where('id', $locationId)
+        return DB::table('stock_locations')->where('id', $locationId)->first();
+    }
+
+    public function posOrderLine(): ?object
+    {
+        $serial = $this->serial();
+
+        if (! $serial || ! Schema::hasTable('pos_order_lines')) {
+            return null;
+        }
+
+        if (($serial->out_source_line_type ?? null) === 'pos_order_line' && ! empty($serial->out_source_line_id)) {
+            $line = DB::table('pos_order_lines')->where('id', $serial->out_source_line_id)->first();
+
+            if ($line) {
+                return $line;
+            }
+        }
+
+        return DB::table('pos_order_lines')
+            ->where('stock_serial_number_id', $serial->id)
+            ->orderByDesc('id')
             ->first();
+    }
+
+    public function posOrder(): ?object
+    {
+        $serial = $this->serial();
+
+        if (! $serial || ! Schema::hasTable('pos_orders')) {
+            return null;
+        }
+
+        if (($serial->out_source_type ?? null) === 'pos_order' && ! empty($serial->out_source_id)) {
+            $order = DB::table('pos_orders')->where('id', $serial->out_source_id)->first();
+
+            if ($order) {
+                return $order;
+            }
+        }
+
+        $line = $this->posOrderLine();
+
+        if ($line && ! empty($line->pos_order_id)) {
+            return DB::table('pos_orders')->where('id', $line->pos_order_id)->first();
+        }
+
+        return null;
+    }
+
+    public function outboundMovementLine(): ?object
+    {
+        $serial = $this->serial();
+
+        if (! $serial || ! Schema::hasTable('stock_movement_lines')) {
+            return null;
+        }
+
+        if (! empty($serial->out_stock_movement_line_id)) {
+            $line = DB::table('stock_movement_lines')->where('id', $serial->out_stock_movement_line_id)->first();
+
+            if ($line) {
+                return $line;
+            }
+        }
+
+        return DB::table('stock_movement_lines')
+            ->where('stock_serial_number_id', $serial->id)
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    public function outboundMovement(): ?object
+    {
+        $line = $this->outboundMovementLine();
+
+        if (! $line || empty($line->stock_movement_id) || ! Schema::hasTable('stock_movements')) {
+            return null;
+        }
+
+        return DB::table('stock_movements')->where('id', $line->stock_movement_id)->first();
+    }
+
+    public function movementHistory()
+    {
+        $serial = $this->serial();
+
+        if (! $serial || ! Schema::hasTable('stock_movement_lines') || ! Schema::hasTable('stock_movements')) {
+            return collect();
+        }
+
+        return DB::table('stock_movement_lines as l')
+            ->leftJoin('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
+            ->select([
+                'l.*',
+                'm.reference as movement_reference',
+                'm.status as movement_status',
+                'm.movement_at as movement_at',
+                'm.origin_document as origin_document',
+            ])
+            ->where('l.stock_serial_number_id', $serial->id)
+            ->orderByDesc('l.id')
+            ->limit(30)
+            ->get();
     }
 
     public function receiptUrl(): ?string
@@ -213,6 +304,108 @@ class ViewStockSerialNumber extends Page
         }
 
         return url('/admin/' . $this->tenantId($serial) . '/stock-lots/' . $lot->id . '/view');
+    }
+
+    public function printUrl(): string
+    {
+        $serial = $this->serial();
+
+        return url('/admin/' . $this->tenantId($serial) . '/stock-serial-numbers/' . $this->serialId . '/print');
+    }
+
+    public function contactLabel(mixed $contactId): string
+    {
+        if (empty($contactId) || ! Schema::hasTable('contacts')) {
+            return '—';
+        }
+
+        $contact = DB::table('contacts')->where('id', $contactId)->first();
+
+        if (! $contact) {
+            return '#' . $contactId;
+        }
+
+        return trim(collect([
+            $contact->name ?? null,
+            $contact->business_name ?? null,
+            $contact->legal_name ?? null,
+            $contact->commercial_name ?? null,
+            $contact->rfc ?? null,
+        ])->filter()->unique()->implode(' - ')) ?: ('#' . $contactId);
+    }
+
+    public function posPointLabel(mixed $posPointId): string
+    {
+        if (empty($posPointId) || ! Schema::hasTable('pos_points')) {
+            return '—';
+        }
+
+        $posPoint = DB::table('pos_points')->where('id', $posPointId)->first();
+
+        if (! $posPoint) {
+            return '#' . $posPointId;
+        }
+
+        return ($posPoint->name ?? $posPoint->code ?? $posPoint->number ?? null) ?: ('#' . $posPointId);
+    }
+
+    public function userLabel(mixed $userId): string
+    {
+        if (empty($userId) || ! Schema::hasTable('users')) {
+            return '—';
+        }
+
+        $user = DB::table('users')->where('id', $userId)->first();
+
+        if (! $user) {
+            return '#' . $userId;
+        }
+
+        return ($user->name ?? $user->email ?? null) ?: ('#' . $userId);
+    }
+
+    public function sourceLabel(mixed $type, mixed $id): string
+    {
+        if (empty($type) && empty($id)) {
+            return '—';
+        }
+
+        $labels = [
+            'pos_order' => 'Venta PDV',
+            'pos_order_line' => 'Línea PDV',
+            'sale_delivery' => 'Entrega de venta',
+            'sale_delivery_line' => 'Línea entrega',
+            'purchase_receipt' => 'Recepción de compra',
+            'purchase_receipt_line' => 'Línea recepción',
+            'stock_movement' => 'Movimiento inventario',
+            'stock_movement_line' => 'Línea movimiento',
+        ];
+
+        return ($labels[(string) $type] ?? (string) $type) . (! empty($id) ? ' #' . $id : '');
+    }
+
+    public function formatDateTime(mixed $value): string
+    {
+        if (empty($value)) {
+            return '—';
+        }
+
+        try {
+            return \Carbon\Carbon::parse($value)->format('d/m/Y H:i');
+        } catch (\Throwable) {
+            return (string) $value;
+        }
+    }
+
+    public function formatNumber(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '—';
+        }
+
+        return is_numeric($value)
+            ? rtrim(rtrim(number_format((float) $value, 6, '.', ','), '0'), '.')
+            : (string) $value;
     }
 
     protected function tenantId(?object $row = null): int
@@ -272,19 +465,4 @@ class ViewStockSerialNumber extends Page
 
         return 0;
     }
-
-    public function printUrl(): string
-    {
-        $serial = $this->serial();
-
-        return url('/admin/' . $this->tenantId($serial) . '/stock-serial-numbers/' . $this->serialId . '/pdf');
-    }
-
-    public function downloadPdfUrl(): string
-    {
-        return $this->printUrl() . '?download=1';
-    }
-
-
-
 }
