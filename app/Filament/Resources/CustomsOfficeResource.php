@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class CustomsOfficeResource extends Resource
 {
@@ -27,6 +28,42 @@ class CustomsOfficeResource extends Resource
     protected static ?string $pluralModelLabel = 'Aduanas';
 
     protected static ?int $navigationSort = 95;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->check()
+            && auth()->user()->can('settings.access');
+    }
+
+    public static function canViewAny(): bool
+    {
+        return auth()->check()
+            && auth()->user()->can('settings.access');
+    }
+
+    public static function canCreate(): bool
+    {
+        return auth()->check()
+            && auth()->user()->can('settings.access');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return auth()->check()
+            && auth()->user()->can('settings.access');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return auth()->check()
+            && auth()->user()->can('settings.access');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return auth()->check()
+            && auth()->user()->can('settings.access');
+    }
 
     public static function form(Form $form): Form
     {

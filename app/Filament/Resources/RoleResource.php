@@ -68,14 +68,14 @@ public static function canCreate(): bool
             ->withCount('permissions')
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
-
     public static function shouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 
         return auth()->check()
             && (
-                $user?->can('rol.view')
+                $user?->can('roles.view') ||
+                $user?->can('roles.manage')
             );
     }
 
@@ -85,7 +85,8 @@ public static function canCreate(): bool
 
         return auth()->check()
             && (
-                $user?->can('rol.view')
+                $user?->can('roles.view') ||
+                $user?->can('roles.manage')
             );
     }
 
