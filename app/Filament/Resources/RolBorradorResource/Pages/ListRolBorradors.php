@@ -4,16 +4,16 @@ namespace App\Filament\Resources\RolBorradorResource\Pages;
 
 use App\Filament\Resources\RolBorradorResource;
 use Filament\Actions;
-use Filament\Resources\Pages\EditRecord;
+use Filament\Resources\Pages\ListRecords;
 
-class EditRolBorrador extends EditRecord
+class ListRolBorradors extends ListRecords
 {
     protected static string $resource = RolBorradorResource::class;
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
+            Actions\CreateAction::make(),
         ];
     }
 }

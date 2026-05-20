@@ -205,6 +205,17 @@
             padding-top: 6px;
         }
     </style>
+@php
+    $pdfLotLabel = function ($lotId) {
+        if (empty($lotId) || ! \Illuminate\Support\Facades\Schema::hasTable('stock_lots')) {
+            return '—';
+        }
+
+        $lot = \Illuminate\Support\Facades\DB::table('stock_lots')->where('id', $lotId)->first();
+
+        return $lot->lot_number ?? ('#' . $lotId);
+    };
+@endphp
 </head>
 <body>
 @php
@@ -287,9 +298,10 @@
 <table class="lines">
     <thead>
         <tr>
-            <th style="width: 50%;">Producto</th>
-            <th style="width: 28%;">Variante</th>
-            <th style="width: 22%;" class="right">Cantidad entregada</th>
+            <th style="width: 40%;">Producto</th>
+            <th style="width: 23%;">Variante</th>
+            <th style="width: 20%;">Lote</th>
+            <th style="width: 17%;" class="right">Cantidad entregada</th>
         </tr>
     </thead>
     <tbody>
@@ -297,11 +309,12 @@
             <tr>
                 <td class="strong">{{ $line->product_label ?? '—' }}</td>
                 <td>{{ $line->variant_label ?: '—' }}</td>
+                <td>{{ $pdfLotLabel($line->stock_lot_id ?? null) }}</td>
                 <td class="right">{{ number_format((float) ($line->quantity ?? 0), 2) }}</td>
             </tr>
         @empty
             <tr>
-                <td colspan="3" class="muted">Sin productos en esta entrega.</td>
+                <td colspan="4" class="muted">Sin productos en esta entrega.</td>
             </tr>
         @endforelse
     </tbody>

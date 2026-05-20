@@ -101,9 +101,10 @@ class SaleDeliveryController extends Controller
         }
 
         $serialSelections = $this->normalizeSerialSelections($request->input('serial_numbers', []));
+        $lotSelections = $this->normalizeLotSelections($request->input('lot_numbers', []));
 
         try {
-            $movementId = DB::transaction(function () use ($saleDelivery, $lines, $order, $serialSelections): int {
+            $movementId = DB::transaction(function () use ($saleDelivery, $lines, $order, $serialSelections, $lotSelections): int {
                 $now = now();
 
                 $lockedQuants = [];
@@ -132,11 +133,20 @@ class SaleDeliveryController extends Controller
                         );
                     }
 
-                    $quant = $this->lockQuantForDeliveryLine($saleDelivery, $line);
+                    $requestedLotId = $lotSelections[(int) $line->id] ?? null;
+                    $lineLotId = $this->selectedLotIdForDeliveryLine($line, $requestedLotId);
+
+                    if ($this->lineRequiresLotNumber($line) && ! $lineLotId) {
+                        throw new \RuntimeException('Selecciona lote para ' . ($line->product_label ?? 'producto') . $this->variantSuffix($line) . '.');
+                    }
+
+                    $quant = $this->lockQuantForDeliveryLine($saleDelivery, $line, $lineLotId);
 
                     if (! $quant) {
                         throw new \RuntimeException('No hay existencia para ' . ($line->product_label ?? 'producto') . $this->variantSuffix($line) . '.');
                     }
+
+                    $lineLotId = $lineLotId ?: (! empty($quant->lot_id) ? (int) $quant->lot_id : null);
 
                     /*
                      * En borrador la cantidad debe estar reservada.
@@ -157,7 +167,10 @@ class SaleDeliveryController extends Controller
                         );
                     }
 
-                    $lockedQuants[(int) $line->id] = $quant;
+                    $lockedQuants[(int) $line->id] = [
+                        'quant' => $quant,
+                        'lot_id' => $lineLotId,
+                    ];
                 }
 
                 $movementData = $this->filterTableColumns('stock_movements', [
@@ -184,14 +197,20 @@ class SaleDeliveryController extends Controller
 
                 foreach ($lines as $line) {
                     $qty = $this->decimal($line->quantity ?? 0);
-                    $quant = $lockedQuants[(int) $line->id];
+                    $lockedQuant = $lockedQuants[(int) $line->id];
+                    $quant = is_array($lockedQuant) ? ($lockedQuant['quant'] ?? null) : $lockedQuant;
+                    $lineLotId = is_array($lockedQuant) ? ($lockedQuant['lot_id'] ?? null) : (! empty($quant->lot_id) ? (int) $quant->lot_id : null);
                     $serialNumberId = $serialSelections[(int) $line->id] ?? null;
+
+                    if ($lineLotId) {
+                        $this->releaseMismatchedLotReservation($saleDelivery, $line, (int) $lineLotId, $qty, $now);
+                    }
 
                     $movementLineData = $this->filterTableColumns('stock_movement_lines', [
                         'stock_movement_id' => $movementId,
                         'product_id' => $line->product_id,
                         'product_variant_id' => $line->product_variant_id,
-                        'lot_id' => null,
+                        'lot_id' => $lineLotId,
                         'stock_serial_number_id' => $serialNumberId,
                         'source_type' => 'sale_delivery',
                         'source_id' => $saleDelivery->id,
@@ -235,6 +254,8 @@ class SaleDeliveryController extends Controller
                         ->update($this->filterTableColumns('sale_delivery_lines', [
                             'stock_movement_line_id' => $movementLineId,
                             'stock_serial_number_id' => $serialNumberId,
+                            'stock_lot_id' => $lineLotId,
+                            'lot_tracking_metadata' => $lineLotId ? json_encode($this->lotTrackingContextForDeliveryLine($saleDelivery, $line, (int) $lineLotId, (int) $movementLineId), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
                             'updated_at' => $now,
                         ]));
                 }
@@ -468,6 +489,18 @@ class SaleDeliveryController extends Controller
                     'reserved_quantity' => $this->decimal($quant->reserved_quantity ?? 0) + $qty,
                     'updated_at' => now(),
                 ]));
+
+            $lotId = ! empty($quant->lot_id) ? (int) $quant->lot_id : null;
+
+            if ($lotId) {
+                DB::table('sale_delivery_lines')
+                    ->where('id', $line->id)
+                    ->update($this->filterTableColumns('sale_delivery_lines', [
+                        'stock_lot_id' => $lotId,
+                        'lot_tracking_metadata' => json_encode($this->lotTrackingContextForDeliveryLine($saleDelivery, $line, $lotId, null), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                        'updated_at' => now(),
+                    ]));
+            }
         }
     }
 
@@ -678,7 +711,7 @@ class SaleDeliveryController extends Controller
         }
     }
 
-    protected function lockQuantForDeliveryLine(SaleDelivery $saleDelivery, object $line): ?object
+    protected function lockQuantForDeliveryLine(SaleDelivery $saleDelivery, object $line, ?int $preferredLotId = null): ?object
     {
         $query = DB::table('stock_quants')
             ->where('company_id', $saleDelivery->company_id)
@@ -692,7 +725,154 @@ class SaleDeliveryController extends Controller
             $query->whereNull('product_variant_id');
         }
 
-        return $query->lockForUpdate()->first();
+        $lineLotId = $preferredLotId ?: (! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null);
+
+        if ($lineLotId) {
+            $query->where('lot_id', $lineLotId);
+        } elseif ($this->lineRequiresLotNumber($line)) {
+            $query->whereNotNull('lot_id');
+        }
+
+        return $query
+            ->where('quantity', '>', 0)
+            ->orderByRaw('CASE WHEN lot_id IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first();
+    }
+
+    protected function normalizeLotSelections(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+
+        foreach ($raw as $lineId => $lotId) {
+            if (is_numeric($lineId) && is_numeric($lotId) && (int) $lineId > 0 && (int) $lotId > 0) {
+                $out[(int) $lineId] = (int) $lotId;
+            }
+        }
+
+        return $out;
+    }
+
+    protected function selectedLotIdForDeliveryLine(object $line, mixed $requestedLotId = null): ?int
+    {
+        $lotId = is_numeric($requestedLotId) && (int) $requestedLotId > 0
+            ? (int) $requestedLotId
+            : (! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null);
+
+        if (! $lotId || ! Schema::hasTable('stock_lots')) {
+            return null;
+        }
+
+        $query = DB::table('stock_lots')
+            ->where('id', $lotId)
+            ->where('company_id', $line->company_id)
+            ->where('product_id', $line->product_id);
+
+        if (! empty($line->product_variant_id)) {
+            $query->where('product_variant_id', $line->product_variant_id);
+        } else {
+            $query->where(function ($q): void {
+                $q->whereNull('product_variant_id')
+                    ->orWhere('product_variant_id', 0);
+            });
+        }
+
+        return $query->exists() ? $lotId : null;
+    }
+
+    protected function lineRequiresLotNumber(object $line): bool
+    {
+        if (! Schema::hasTable('products')) {
+            return false;
+        }
+
+        $productIds = array_values(array_unique(array_filter([
+            ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
+            ! empty($line->product_id) ? (int) $line->product_id : null,
+        ])));
+
+        foreach ($productIds as $productId) {
+            $product = DB::table('products')->where('id', $productId)->first();
+
+            if (! $product) {
+                continue;
+            }
+
+            $tracking = strtolower(trim((string) ($product->tracking ?? '')));
+            $advancedMode = strtolower(trim((string) ($product->advanced_tracking_mode ?? '')));
+
+            if (
+                str_contains($tracking, 'lot')
+                || str_contains($tracking, 'lote')
+                || str_contains($advancedMode, 'lot')
+                || str_contains($advancedMode, 'lote')
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function lotTrackingContextForDeliveryLine(SaleDelivery $saleDelivery, object $line, int $lotId, ?int $movementLineId = null): array
+    {
+        $lot = Schema::hasTable('stock_lots')
+            ? DB::table('stock_lots')->where('id', $lotId)->first()
+            : null;
+
+        return [
+            'stock_lot_id' => $lotId,
+            'lot_number' => $lot->lot_number ?? null,
+            'source_type' => 'sale_delivery',
+            'source_id' => (int) $saleDelivery->id,
+            'source_line_type' => 'sale_delivery_line',
+            'source_line_id' => (int) ($line->id ?? 0),
+            'stock_movement_line_id' => $movementLineId,
+            'updated_at' => now()->toDateTimeString(),
+        ];
+    }
+
+    protected function releaseMismatchedLotReservation(SaleDelivery $saleDelivery, object $line, int $newLotId, float $qty, mixed $now): void
+    {
+        $oldLotId = ! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null;
+
+        if ($oldLotId === $newLotId) {
+            return;
+        }
+
+        $query = DB::table('stock_quants')
+            ->where('company_id', $saleDelivery->company_id)
+            ->where('warehouse_id', $saleDelivery->warehouse_id)
+            ->where('location_id', $saleDelivery->source_location_id)
+            ->where('product_id', $line->product_id);
+
+        if (! empty($line->product_variant_id)) {
+            $query->where('product_variant_id', $line->product_variant_id);
+        } else {
+            $query->whereNull('product_variant_id');
+        }
+
+        $oldLotId
+            ? $query->where('lot_id', $oldLotId)
+            : $query->whereNull('lot_id');
+
+        $oldQuant = $query->lockForUpdate()->first();
+
+        if (! $oldQuant) {
+            return;
+        }
+
+        DB::table('stock_quants')
+            ->where('id', $oldQuant->id)
+            ->update($this->filterTableColumns('stock_quants', [
+                'reserved_quantity' => max(0, $this->decimal($oldQuant->reserved_quantity ?? 0) - $qty),
+                'updated_at' => $now,
+            ]));
     }
 
     protected function stockOperationTypeId(int $companyId): ?int

@@ -1,6 +1,7 @@
 <x-filament-panels::page>
     @php
         $lot = $this->lot();
+        $sales = $this->saleDeliveryLines();
         $movements = $this->movements();
         $serials = $this->serials();
         $quants = $this->quants();
@@ -22,9 +23,10 @@
             'quarantined' => 'En cuarentena',
             'damaged' => 'Dañado',
             'expired' => 'Caducado',
-            'done' => 'Hecho',
+            'done' => 'Validada',
             'draft' => 'Borrador',
             'pending' => 'Pendiente',
+            'cancelled' => 'Cancelada',
         ];
 
         $statusText = function ($status) use ($statusLabels): string {
@@ -52,6 +54,7 @@
         .bexia-table th{background:#f8fafc;border-bottom:1px solid #dbe3ef;padding:13px 14px;text-align:left;font-weight:800;color:#334155}
         .bexia-table td{border-bottom:1px solid #edf2f7;padding:13px 14px;vertical-align:top;color:#0f172a}
         .bexia-table .right{text-align:right}
+        .bexia-empty{text-align:center;color:#64748b;padding:18px}
         @media(max-width:1100px){.bexia-grid{grid-template-columns:1fr}}
     </style>
 
@@ -66,7 +69,7 @@
         <div class="bexia-card">
             <div class="bexia-card-header">
                 <div class="bexia-title">{{ $value($lot->lot_number ?? null) }}</div>
-                <div class="bexia-subtitle">Detalle del lote. Los datos de compra, importación, existencias y movimientos se muestran en las secciones inferiores.</div>
+                <div class="bexia-subtitle">Detalle del lote, existencias y movimientos relacionados.</div>
             </div>
 
             <div class="bexia-grid">
@@ -104,47 +107,94 @@
 
         <div class="bexia-card">
             <div class="bexia-card-header">
-                <div class="bexia-title">Trazabilidad / Importación</div>
-                <div class="bexia-subtitle">Datos capturados en la recepción para este lote.</div>
+                <div class="bexia-title">Ventas / salidas del lote</div>
+                <div class="bexia-subtitle">Entregas de venta y salidas relacionadas directamente a este lote.</div>
             </div>
 
-            <div class="bexia-grid">
-                <div class="bexia-field">
-                    <div class="bexia-label">Número de motor</div>
-                    <div class="bexia-value">{{ $value($lot->motor_number ?? null) }}</div>
-                </div>
+            <div class="bexia-table-wrap">
+                <table class="bexia-table">
+                    <thead>
+                        <tr>
+                            <th>Entrega</th>
+                            <th>Orden</th>
+                            <th>Cliente</th>
+                            <th>Estado</th>
+                            <th>Fecha</th>
+                            <th class="right">Cantidad</th>
+                            <th>Movimiento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($sales as $row)
+                            <tr>
+                                <td>{{ $row->delivery_number ?? ('Entrega #' . ($row->sale_delivery_id ?? '—')) }}</td>
+                                <td>{{ $row->sale_order_number ?? ('Orden #' . ($row->sales_order_id ?? '—')) }}</td>
+                                <td>{{ $row->customer_name ?? '—' }}</td>
+                                <td>{{ $statusText($row->delivery_status ?? null) }}</td>
+                                <td>{{ $this->dt($row->delivery_delivered_at ?? $row->delivery_created_at ?? $row->created_at ?? null) }}</td>
+                                <td class="right">{{ $this->n($row->quantity ?? null) }}</td>
+                                <td>
+                                    @if(! empty($row->movement_line_id))
+                                        Línea #{{ $row->movement_line_id }}
+                                    @elseif(! empty($row->stock_movement_line_id))
+                                        Línea #{{ $row->stock_movement_line_id }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="7" class="bexia-empty">
+                                    No hay ventas o salidas ligadas a este lote.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
-                <div class="bexia-field">
-                    <div class="bexia-label">Número de pedimento</div>
-                    <div class="bexia-value">{{ $value($lot->customs_entry_number ?? null) }}</div>
-                </div>
+        <div class="bexia-card">
+            <div class="bexia-card-header">
+                <div class="bexia-title">Existencias por ubicación</div>
+                <div class="bexia-subtitle">Existencia actual del lote por almacén y ubicación.</div>
+            </div>
 
-                <div class="bexia-field">
-                    <div class="bexia-label">Fecha pedimento</div>
-                    <div class="bexia-value">{{ $this->d($lot->customs_entry_date ?? null) }}</div>
-                </div>
-
-                <div class="bexia-field">
-                    <div class="bexia-label">Aduana</div>
-                    <div class="bexia-value">{{ $value($lot->customs_office ?? null) }}</div>
-                </div>
-
-                <div class="bexia-field">
-                    <div class="bexia-label">Modelo importado</div>
-                    <div class="bexia-value">{{ $value($lot->imported_model ?? null) }}</div>
-                </div>
-
-                <div class="bexia-field">
-                    <div class="bexia-label">Color importado</div>
-                    <div class="bexia-value">{{ $value($lot->imported_color ?? null) }}</div>
-                </div>
+            <div class="bexia-table-wrap">
+                <table class="bexia-table">
+                    <thead>
+                        <tr>
+                            <th>Quant</th>
+                            <th>Almacén</th>
+                            <th>Ubicación</th>
+                            <th class="right">Cantidad</th>
+                            <th class="right">Reservado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($quants as $row)
+                            <tr>
+                                <td>#{{ $row->id }}</td>
+                                <td>{{ $this->labelFromTable('warehouses', $row->warehouse_id ?? null, ['name', 'code']) }}</td>
+                                <td>{{ $this->labelFromTable('stock_locations', $row->location_id ?? $row->stock_location_id ?? null, ['name', 'code']) }}</td>
+                                <td class="right">{{ $this->n($row->quantity ?? $row->on_hand_quantity ?? null) }}</td>
+                                <td class="right">{{ $this->n($row->reserved_quantity ?? null) }}</td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="5" class="bexia-empty">Sin existencias por ubicación.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </div>
 
         <div class="bexia-card">
             <div class="bexia-card-header">
                 <div class="bexia-title">Historial de movimientos del lote</div>
-                <div class="bexia-subtitle">Entradas y salidas ligadas a stock_movement_lines.lot_id.</div>
+                <div class="bexia-subtitle">Movimientos de inventario ligados a stock_movement_lines.lot_id.</div>
             </div>
 
             <div class="bexia-table-wrap">
@@ -171,41 +221,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" style="text-align:center;color:#64748b;padding:18px">Sin movimientos ligados al lote.</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="bexia-card">
-            <div class="bexia-card-header">
-                <div class="bexia-title">Existencias por ubicación</div>
-                <div class="bexia-subtitle">Existencia actual del lote por almacén y ubicación.</div>
-            </div>
-
-            <div class="bexia-table-wrap">
-                <table class="bexia-table">
-                    <thead>
-                        <tr>
-                            <th>Quant</th>
-                            <th>Almacén</th>
-                            <th>Ubicación</th>
-                            <th class="right">Cantidad</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($quants as $row)
-                            <tr>
-                                <td>#{{ $row->id }}</td>
-                                <td>{{ $this->labelFromTable('warehouses', $row->warehouse_id ?? null, ['name', 'code']) }}</td>
-                                <td>{{ $this->labelFromTable('stock_locations', $row->location_id ?? $row->stock_location_id ?? null, ['name', 'code']) }}</td>
-                                <td class="right">{{ $this->n($row->quantity ?? $row->on_hand_quantity ?? $row->available_quantity ?? null) }}</td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="4" style="text-align:center;color:#64748b;padding:18px">Sin existencias por ubicación.</td>
+                                <td colspan="6" class="bexia-empty">Sin movimientos ligados al lote.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -216,7 +232,7 @@
         <div class="bexia-card">
             <div class="bexia-card-header">
                 <div class="bexia-title">Series dentro del lote</div>
-                <div class="bexia-subtitle">Números de serie ligados a este lote.</div>
+                <div class="bexia-subtitle">Números de serie ligados a este lote, si aplica.</div>
             </div>
 
             <div class="bexia-table-wrap">
@@ -239,7 +255,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" style="text-align:center;color:#64748b;padding:18px">Sin series ligadas al lote.</td>
+                                <td colspan="4" class="bexia-empty">Sin series ligadas al lote.</td>
                             </tr>
                         @endforelse
                     </tbody>

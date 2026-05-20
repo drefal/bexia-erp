@@ -49,6 +49,93 @@ class ViewStockLot extends Page
         return DB::table('stock_lots')->where('id', $this->lotId)->first();
     }
 
+    public function saleDeliveryLines()
+    {
+        $lot = $this->lot();
+
+        if (
+            ! $lot
+            || ! Schema::hasTable('sale_delivery_lines')
+            || ! Schema::hasTable('sale_deliveries')
+        ) {
+            return collect();
+        }
+
+        $query = DB::table('sale_delivery_lines as dl')
+            ->join('sale_deliveries as d', 'd.id', '=', 'dl.sale_delivery_id');
+
+        if (Schema::hasTable('sales_orders')) {
+            $query->leftJoin('sales_orders as so', 'so.id', '=', 'dl.sales_order_id');
+        }
+
+        if (Schema::hasTable('stock_movement_lines')) {
+            $query->leftJoin('stock_movement_lines as ml', 'ml.id', '=', 'dl.stock_movement_line_id');
+        }
+
+        if (Schema::hasTable('stock_movements')) {
+            $query->leftJoin('stock_movements as sm', 'sm.id', '=', 'd.stock_movement_id');
+        }
+
+        $query->where(function ($where) use ($lot): void {
+            $added = false;
+
+            if (Schema::hasColumn('sale_delivery_lines', 'stock_lot_id')) {
+                $where->where('dl.stock_lot_id', $lot->id);
+                $added = true;
+            }
+
+            if (Schema::hasTable('stock_movement_lines') && Schema::hasColumn('stock_movement_lines', 'lot_id')) {
+                $added
+                    ? $where->orWhere('ml.lot_id', $lot->id)
+                    : $where->where('ml.lot_id', $lot->id);
+
+                $added = true;
+            }
+
+            if (Schema::hasColumn('sale_delivery_lines', 'lot_tracking_metadata')) {
+                $patterns = [
+                    '%"stock_lot_id":' . (int) $lot->id . '%',
+                    '%"stock_lot_id": "' . (int) $lot->id . '"%',
+                ];
+
+                if (! empty($lot->lot_number)) {
+                    $patterns[] = '%' . str_replace(['%', '_'], ['\%', '\_'], (string) $lot->lot_number) . '%';
+                }
+
+                foreach ($patterns as $pattern) {
+                    $added
+                        ? $where->orWhereRaw('CAST(dl.lot_tracking_metadata AS TEXT) ILIKE ?', [$pattern])
+                        : $where->whereRaw('CAST(dl.lot_tracking_metadata AS TEXT) ILIKE ?', [$pattern]);
+
+                    $added = true;
+                }
+            }
+
+            if (! $added) {
+                $where->whereRaw('1 = 0');
+            }
+        });
+
+        return $query
+            ->select([
+                'dl.*',
+                'd.number as delivery_number',
+                'd.status as delivery_status',
+                'd.delivered_at as delivery_delivered_at',
+                'd.created_at as delivery_created_at',
+                'd.stock_movement_id as delivery_stock_movement_id',
+                DB::raw('COALESCE(so.number, NULL) as sale_order_number'),
+                DB::raw('COALESCE(so.customer_name, NULL) as customer_name'),
+                DB::raw('COALESCE(ml.id, NULL) as movement_line_id'),
+                DB::raw('COALESCE(ml.lot_id, NULL) as movement_lot_id'),
+                DB::raw('COALESCE(sm.reference, NULL) as movement_reference'),
+            ])
+            ->orderByDesc('d.id')
+            ->orderByDesc('dl.id')
+            ->limit(100)
+            ->get();
+    }
+
     public function movements()
     {
         $lot = $this->lot();
