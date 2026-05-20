@@ -14,6 +14,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class AccountPayablePaymentResource extends Resource
 {
@@ -87,7 +88,8 @@ class AccountPayablePaymentResource extends Resource
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
-                    ->color(fn (?string $state): string => static::statusColor($state)),
+                    ->color(fn (?string $state): string => static::statusColor($state))
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('reference')
                     ->label('Referencia')
@@ -95,17 +97,8 @@ class AccountPayablePaymentResource extends Resource
                     ->placeholder('Sin referencia'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make()->label('Ver'),
-
-                Tables\Actions\Action::make('print_payment')
-                    ->label('Imprimir')
-                    ->icon('heroicon-o-printer')
-                    ->color('gray')
-                    ->url(fn (AccountPayablePayment $record): string => route('account-payable-payments.print', [
-                        'tenant' => $record->company_id,
-                        'payment' => $record->id,
-                    ]))
-                    ->openUrlInNewTab(),
+                Tables\Actions\ViewAction::make()
+                    ->label('Ver'),
             ])
             ->bulkActions([]);
     }
@@ -134,6 +127,7 @@ class AccountPayablePaymentResource extends Resource
                         TextEntry::make('treasury_movement_id')->label('Movimiento tesorería')->placeholder('Pendiente'),
                         TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Pendiente'),
                         TextEntry::make('posted_at')->label('Aplicado')->dateTime()->placeholder('Pendiente'),
+                        TextEntry::make('cancelled_at')->label('Cancelado')->dateTime()->placeholder('No cancelado'),
                     ]),
             ]);
     }
@@ -181,6 +175,150 @@ class AccountPayablePaymentResource extends Resource
     public static function canDelete(Model $record): bool
     {
         return false;
+    }
+
+    public static function canCancelPayment(AccountPayablePayment $record): bool
+    {
+        return static::userCanPermission('account_payables.cancel_payment')
+            && $record->status === 'posted'
+            && $record->accounting_entry_id === null;
+    }
+
+    public static function cancelPostedPayment(int $paymentId): array
+    {
+        $result = [
+            'payable_status' => null,
+            'payable_balance' => null,
+            'treasury_balance' => null,
+        ];
+
+        DB::transaction(function () use ($paymentId, &$result): void {
+            $payment = DB::table('account_payable_payments')
+                ->where('id', $paymentId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $payment) {
+                throw new \RuntimeException('No se encontró el pago.');
+            }
+
+            if ($payment->status !== 'posted') {
+                throw new \RuntimeException('Solo se pueden cancelar pagos aplicados.');
+            }
+
+            if ($payment->accounting_entry_id !== null) {
+                throw new \RuntimeException('Este pago ya tiene póliza contable. Primero debe cancelarse/reversarse la póliza.');
+            }
+
+            $payable = DB::table('account_payables')
+                ->where('id', $payment->account_payable_id)
+                ->where('company_id', $payment->company_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $payable) {
+                throw new \RuntimeException('No se encontró la cuenta por pagar relacionada.');
+            }
+
+            $treasuryAccount = DB::table('treasury_accounts')
+                ->where('id', $payment->treasury_account_id)
+                ->where('company_id', $payment->company_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $treasuryAccount) {
+                throw new \RuntimeException('No se encontró la cuenta/caja de tesorería relacionada.');
+            }
+
+            $movement = null;
+
+            if ($payment->treasury_movement_id) {
+                $movement = DB::table('treasury_movements')
+                    ->where('id', $payment->treasury_movement_id)
+                    ->where('company_id', $payment->company_id)
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if ($movement && $movement->status === 'cancelled') {
+                throw new \RuntimeException('El movimiento de tesorería ya está cancelado.');
+            }
+
+            $amount = round((float) $payment->amount, 4);
+
+            if ($amount <= 0) {
+                throw new \RuntimeException('El importe del pago no es válido.');
+            }
+
+            $newTreasuryBalance = round((float) $treasuryAccount->current_balance + $amount, 4);
+
+            $newPaid = round(max(0, (float) $payable->paid_total - $amount), 4);
+            $newBalance = round(max(0, (float) $payable->total - $newPaid), 4);
+
+            if ($newBalance <= 0.0001) {
+                $newPayableStatus = 'paid';
+            } elseif ($newPaid > 0.0001) {
+                $newPayableStatus = 'partial';
+            } else {
+                $newPayableStatus = 'open';
+            }
+
+            DB::table('account_payable_payments')
+                ->where('id', $payment->id)
+                ->update([
+                    'status' => 'cancelled',
+                    'cancelled_at' => now(),
+                    'updated_at' => now(),
+                    'metadata' => json_encode(array_merge(
+                        json_decode((string) ($payment->metadata ?? '{}'), true) ?: [],
+                        [
+                            'cancelled_by_patch' => 'v5.56.5',
+                            'cancelled_reason' => 'manual_cancel_from_cxp_payment',
+                        ]
+                    ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+
+            if ($movement) {
+                DB::table('treasury_movements')
+                    ->where('id', $movement->id)
+                    ->update([
+                        'status' => 'cancelled',
+                        'cancelled_at' => now(),
+                        'updated_at' => now(),
+                        'metadata' => json_encode(array_merge(
+                            json_decode((string) ($movement->metadata ?? '{}'), true) ?: [],
+                            [
+                                'cancelled_by_patch' => 'v5.56.5',
+                                'cancelled_reason' => 'manual_cancel_from_cxp_payment',
+                            ]
+                        ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    ]);
+            }
+
+            DB::table('treasury_accounts')
+                ->where('id', $treasuryAccount->id)
+                ->update([
+                    'current_balance' => $newTreasuryBalance,
+                    'updated_at' => now(),
+                ]);
+
+            DB::table('account_payables')
+                ->where('id', $payable->id)
+                ->update([
+                    'paid_total' => $newPaid,
+                    'balance_total' => $newBalance,
+                    'status' => $newPayableStatus,
+                    'updated_at' => now(),
+                ]);
+
+            $result = [
+                'payable_status' => $newPayableStatus,
+                'payable_balance' => $newBalance,
+                'treasury_balance' => $newTreasuryBalance,
+            ];
+        });
+
+        return $result;
     }
 
     public static function getPages(): array

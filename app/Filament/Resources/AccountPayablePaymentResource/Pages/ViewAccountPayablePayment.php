@@ -3,8 +3,12 @@
 namespace App\Filament\Resources\AccountPayablePaymentResource\Pages;
 
 use App\Filament\Resources\AccountPayablePaymentResource;
+use App\Filament\Resources\AccountPayableResource;
+use App\Models\AccountPayablePayment;
 use Filament\Actions;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Throwable;
 
 class ViewAccountPayablePayment extends ViewRecord
 {
@@ -22,6 +26,44 @@ class ViewAccountPayablePayment extends ViewRecord
                     'payment' => $this->record->id,
                 ]))
                 ->openUrlInNewTab(),
+
+            Actions\Action::make('cancel_payment')
+                ->label('Cancelar pago')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading('Cancelar pago a proveedor')
+                ->modalDescription('Esta acción cancelará el pago, liberará la CxP, cancelará el movimiento de tesorería y regresará el saldo a la caja/banco.')
+                ->modalSubmitActionLabel('Sí, cancelar pago')
+                ->visible(fn (): bool => AccountPayablePaymentResource::canCancelPayment($this->record))
+                ->action(function (): void {
+                    try {
+                        /** @var AccountPayablePayment $record */
+                        $record = $this->record;
+
+                        $result = AccountPayablePaymentResource::cancelPostedPayment((int) $record->id);
+
+                        Notification::make()
+                            ->title('Pago cancelado')
+                            ->body(
+                                'CxP actualizada a: '
+                                . AccountPayableResource::statusLabel($result['payable_status'])
+                                . '. Saldo actual: $'
+                                . number_format((float) $result['payable_balance'], 2)
+                                . '.'
+                            )
+                            ->success()
+                            ->send();
+
+                        $this->record->refresh();
+                    } catch (Throwable $e) {
+                        Notification::make()
+                            ->title('No se pudo cancelar el pago')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
         ];
     }
 }
