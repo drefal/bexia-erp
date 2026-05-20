@@ -378,3 +378,6 @@ Route::middleware(['web', 'auth'])
     ->get('/pos/sessions/{session}/serials', [\App\Http\Controllers\PosController::class, 'serialsForProduct'])
     ->name('pos.sessions.serials');
 
+Route::middleware(['web', 'auth'])
+    ->get('/pos/sessions/{session}/lots', [\App\Http\Controllers\PosController::class, 'lotsForProduct'])
+    ->name('pos.sessions.lots');

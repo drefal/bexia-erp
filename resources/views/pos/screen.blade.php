@@ -11058,6 +11058,544 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 </style>
 
+
+<style id="v5554i2-pdv-lot-selector-style">
+    .v5554i2-lot-box {
+        grid-column: 1 / -1;
+        margin-top: 8px;
+        padding: 9px 10px;
+        border: 1px solid #f59e0b;
+        background: #fffbeb;
+        border-radius: 12px;
+        display: grid;
+        gap: 6px;
+    }
+    .v5554i2-lot-title {
+        font-size: 11px;
+        font-weight: 950;
+        color: #92400e;
+    }
+    .v5554i2-lot-select {
+        width: 100%;
+        border: 1px solid #f59e0b;
+        background: #ffffff;
+        border-radius: 10px;
+        padding: 8px 9px;
+        font-size: 12px;
+        font-weight: 850;
+        color: #0f172a;
+    }
+    .v5554i2-lot-help {
+        font-size: 11px;
+        font-weight: 800;
+        color: #92400e;
+    }
+    .v5554i2-lot-help.is-ok {
+        color: #166534;
+    }
+    .v5554i2-lot-help.is-error {
+        color: #b91c1c;
+    }
+</style>
+
+<script id="v5554i2-pdv-lot-selector-script">
+(function () {
+    "use strict";
+
+    if (window.BEXIA_V5554J_PDV_LOT_SELECTOR_READY) {
+        return;
+    }
+
+    window.BEXIA_V5554J_PDV_LOT_SELECTOR_READY = true;
+    window.BEXIA_POS_LOT_SELECTIONS = window.BEXIA_POS_LOT_SELECTIONS || {};
+    window.BEXIA_POS_LOT_REQUIREMENTS = window.BEXIA_POS_LOT_REQUIREMENTS || {};
+    window.BEXIA_V5554J_LOT_INTERACT_UNTIL = 0;
+
+    const lotCache = {};
+
+    function sessionId() {
+        const match = String(window.location.pathname || "").match(/\/pos\/sessions\/(\d+)\/screen/);
+        return match ? match[1] : null;
+    }
+
+    function markLotInteracting() {
+        window.BEXIA_V5554J_LOT_INTERACT_UNTIL = Date.now() + 2200;
+    }
+
+    function lotSelectorIsActive() {
+        const active = document.activeElement;
+
+        if (Date.now() < Number(window.BEXIA_V5554J_LOT_INTERACT_UNTIL || 0)) {
+            return true;
+        }
+
+        return Boolean(
+            active
+            && active.closest
+            && active.closest("[data-v5554i2-lot-box='1']")
+        );
+    }
+
+    function api() {
+        return window.BEXIA_POS_CART_API || null;
+    }
+
+    function originalItems() {
+        const cartApi = api();
+
+        if (!cartApi) {
+            return [];
+        }
+
+        if (typeof cartApi.__v5554jOriginalGetItems === "function") {
+            return cartApi.__v5554jOriginalGetItems() || [];
+        }
+
+        if (typeof cartApi.__v5554i2OriginalGetItems === "function") {
+            return cartApi.__v5554i2OriginalGetItems() || [];
+        }
+
+        if (typeof cartApi.__v5543b1OriginalGetItems === "function") {
+            return cartApi.__v5543b1OriginalGetItems() || [];
+        }
+
+        if (typeof cartApi.getItems === "function") {
+            return cartApi.getItems() || [];
+        }
+
+        return [];
+    }
+
+    function itemProductId(item) {
+        return Number((item && (item.product_id || item.id || (item.raw && item.raw.product_id) || (item.metadata && item.metadata.product_id))) || 0);
+    }
+
+    function itemVariantId(item) {
+        return Number((item && (item.product_variant_id || item.variant_id || (item.raw && item.raw.product_variant_id) || (item.metadata && item.metadata.product_variant_id))) || 0);
+    }
+
+    function itemKey(item) {
+        return String(itemProductId(item) || "") + ":" + String(itemVariantId(item) || "");
+    }
+
+    function selectedForItem(item) {
+        return window.BEXIA_POS_LOT_SELECTIONS[itemKey(item)] || null;
+    }
+
+    function setSelectedForItem(item, lot) {
+        const key = itemKey(item);
+
+        if (!lot || !lot.stock_lot_id) {
+            delete window.BEXIA_POS_LOT_SELECTIONS[key];
+            return;
+        }
+
+        window.BEXIA_POS_LOT_SELECTIONS[key] = {
+            stock_lot_id: Number(lot.stock_lot_id || lot.id || lot.lot_id || 0),
+            lot_id: Number(lot.stock_lot_id || lot.id || lot.lot_id || 0),
+            lot_number: String(lot.lot_number || ""),
+            label: String(lot.label || lot.lot_number || ""),
+            product_variant_id: Number(lot.product_variant_id || itemVariantId(item) || 0) || null
+        };
+    }
+
+    function setNotice(message) {
+        const cartApi = api();
+
+        if (cartApi && typeof cartApi.setWarning === "function") {
+            cartApi.setWarning(message);
+            return;
+        }
+
+        alert(message);
+    }
+
+    async function fetchLotsForItem(item) {
+        const sid = sessionId();
+        const productId = itemProductId(item);
+        const variantId = itemVariantId(item);
+
+        if (!sid || productId <= 0) {
+            return { ok: false, requires_lot: false, lots: [] };
+        }
+
+        const cacheKey = String(productId) + ":" + String(variantId || "");
+
+        if (lotCache[cacheKey]) {
+            return lotCache[cacheKey];
+        }
+
+        const url = "/pos/sessions/" + encodeURIComponent(sid)
+            + "/lots?product_id=" + encodeURIComponent(productId)
+            + (variantId > 0 ? ("&product_variant_id=" + encodeURIComponent(variantId)) : "");
+
+        lotCache[cacheKey] = fetch(url, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: {
+                "Accept": "application/json",
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        })
+            .then(function (response) {
+                return response.json().catch(function () {
+                    return {};
+                }).then(function (data) {
+                    if (!response.ok || data.ok === false) {
+                        return {
+                            ok: false,
+                            requires_lot: false,
+                            lots: [],
+                            message: data.message || "No se pudieron cargar lotes."
+                        };
+                    }
+
+                    return data;
+                });
+            })
+            .catch(function (error) {
+                return {
+                    ok: false,
+                    requires_lot: false,
+                    lots: [],
+                    message: error.message || "No se pudieron cargar lotes."
+                };
+            });
+
+        return lotCache[cacheKey];
+    }
+
+    function escapeHtml(value) {
+        return String(value === null || value === undefined ? "" : value)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    function guardLotBox(box) {
+        if (!box || box.__v5554jGuarded) {
+            return;
+        }
+
+        box.__v5554jGuarded = true;
+
+        [
+            "pointerdown",
+            "mousedown",
+            "mouseup",
+            "click",
+            "dblclick",
+            "touchstart",
+            "touchend",
+            "keydown",
+            "keyup",
+            "focusin",
+            "focusout"
+        ].forEach(function (eventName) {
+            box.addEventListener(eventName, function (event) {
+                markLotInteracting();
+                event.stopPropagation();
+
+                if (typeof event.stopImmediatePropagation === "function") {
+                    event.stopImmediatePropagation();
+                }
+            }, true);
+        });
+    }
+
+    function renderLotBox(line, item, data) {
+        if (!line || !item) {
+            return;
+        }
+
+        const lots = Array.isArray(data.lots) ? data.lots : [];
+        const requiresLot = Boolean(data.requires_lot || lots.length > 0);
+
+        window.BEXIA_POS_LOT_REQUIREMENTS[itemKey(item)] = requiresLot;
+
+        let box = line.querySelector("[data-v5554i2-lot-box='1']");
+
+        if (box && lotSelectorIsActive() && box.contains(document.activeElement)) {
+            return;
+        }
+
+        if (!requiresLot) {
+            if (box && !lotSelectorIsActive()) {
+                box.remove();
+            }
+            return;
+        }
+
+        if (!box) {
+            box = document.createElement("div");
+            box.className = "v5554i2-lot-box";
+            box.setAttribute("data-v5554i2-lot-box", "1");
+            line.appendChild(box);
+        }
+
+        guardLotBox(box);
+
+        const selected = selectedForItem(item);
+        const selectedId = selected ? Number(selected.stock_lot_id || 0) : 0;
+
+        const hash = JSON.stringify({
+            key: itemKey(item),
+            selectedId: selectedId,
+            lots: lots.map(function (lot) {
+                return [
+                    Number(lot.stock_lot_id || lot.id || lot.lot_id || 0),
+                    String(lot.label || lot.lot_number || "")
+                ];
+            })
+        });
+
+        if (box.dataset.v5554jHash === hash) {
+            return;
+        }
+
+        if (box.contains(document.activeElement) || lotSelectorIsActive()) {
+            return;
+        }
+
+        let html = "";
+        html += "<div class='v5554i2-lot-title'>Lote requerido</div>";
+
+        if (!lots.length) {
+            html += "<div class='v5554i2-lot-help is-error'>No hay lotes disponibles para este producto.</div>";
+            box.innerHTML = html;
+            box.dataset.v5554jHash = hash;
+            guardLotBox(box);
+            return;
+        }
+
+        html += "<select class='v5554i2-lot-select' data-v5554i2-lot-select='1'>";
+        html += "<option value=''>Selecciona lote...</option>";
+
+        lots.forEach(function (lot) {
+            const id = Number(lot.stock_lot_id || lot.id || lot.lot_id || 0);
+            const label = String(lot.label || lot.lot_number || ("Lote #" + id));
+            const lotNumber = String(lot.lot_number || label);
+            const variantId = Number(lot.product_variant_id || itemVariantId(item) || 0) || "";
+            const selectedAttr = selectedId && selectedId === id ? " selected" : "";
+
+            html += "<option value='" + id + "'"
+                + " data-lot-number='" + escapeHtml(lotNumber) + "'"
+                + " data-product-variant-id='" + escapeHtml(variantId) + "'"
+                + selectedAttr + ">"
+                + escapeHtml(label)
+                + "</option>";
+        });
+
+        html += "</select>";
+        html += "<div class='v5554i2-lot-help" + (selectedId ? " is-ok" : "") + "'>"
+            + (selectedId ? "Lote seleccionado." : "Selecciona el lote físico que se vende.")
+            + "</div>";
+
+        box.innerHTML = html;
+        box.dataset.v5554jHash = hash;
+        guardLotBox(box);
+
+        const select = box.querySelector("[data-v5554i2-lot-select='1']");
+        const help = box.querySelector(".v5554i2-lot-help");
+
+        if (select) {
+            select.addEventListener("pointerdown", markLotInteracting, true);
+            select.addEventListener("mousedown", markLotInteracting, true);
+            select.addEventListener("focus", markLotInteracting, true);
+            select.addEventListener("click", function (event) {
+                markLotInteracting();
+                event.stopPropagation();
+
+                if (typeof event.stopImmediatePropagation === "function") {
+                    event.stopImmediatePropagation();
+                }
+            }, true);
+
+            select.addEventListener("change", function () {
+                markLotInteracting();
+
+                const option = select.options[select.selectedIndex];
+
+                if (!select.value) {
+                    setSelectedForItem(item, null);
+
+                    if (help) {
+                        help.textContent = "Selecciona el lote físico que se vende.";
+                        help.classList.remove("is-ok");
+                    }
+
+                    box.dataset.v5554jHash = "";
+
+                    return;
+                }
+
+                setSelectedForItem(item, {
+                    stock_lot_id: Number(select.value),
+                    lot_number: option ? option.dataset.lotNumber : "",
+                    product_variant_id: option ? Number(option.dataset.productVariantId || 0) || null : null
+                });
+
+                if (help) {
+                    help.textContent = "Lote seleccionado: " + (option ? option.textContent : select.value);
+                    help.classList.add("is-ok");
+                }
+
+                box.dataset.v5554jHash = "";
+            });
+        }
+    }
+
+    function patchCartApi() {
+        const cartApi = api();
+
+        if (!cartApi || typeof cartApi.getItems !== "function") {
+            return false;
+        }
+
+        if (!cartApi.__v5554jOriginalGetItems) {
+            cartApi.__v5554jOriginalGetItems = cartApi.getItems.bind(cartApi);
+
+            cartApi.getItems = function () {
+                const rows = cartApi.__v5554jOriginalGetItems() || [];
+
+                return rows.map(function (item) {
+                    const selected = selectedForItem(item);
+
+                    if (!selected || !selected.stock_lot_id) {
+                        return item;
+                    }
+
+                    return {
+                        ...item,
+                        stock_lot_id: Number(selected.stock_lot_id),
+                        lot_id: Number(selected.stock_lot_id),
+                        lot_number: selected.lot_number || "",
+                        product_variant_id: selected.product_variant_id || item.product_variant_id || item.variant_id || null,
+                        variant_id: selected.product_variant_id || item.variant_id || null
+                    };
+                });
+            };
+        }
+
+        return true;
+    }
+
+    function hydrateCart() {
+        if (lotSelectorIsActive()) {
+            return;
+        }
+
+        if (!patchCartApi()) {
+            return;
+        }
+
+        const cartBox = document.getElementById("v5339-cart-items");
+
+        if (!cartBox) {
+            return;
+        }
+
+        const lines = Array.from(cartBox.querySelectorAll(".v5339-cart-line"));
+        const items = originalItems();
+
+        lines.forEach(function (line, index) {
+            const item = items[index];
+
+            if (!item || itemProductId(item) <= 0) {
+                return;
+            }
+
+            fetchLotsForItem(item).then(function (data) {
+                renderLotBox(line, item, data || {});
+            });
+        });
+    }
+
+    function validateBeforePay() {
+        const cartApi = api();
+        const items = cartApi && typeof cartApi.getItems === "function"
+            ? cartApi.getItems()
+            : [];
+
+        for (const item of items) {
+            const key = itemKey(item);
+            const requires = Boolean(window.BEXIA_POS_LOT_REQUIREMENTS[key]);
+
+            if (!requires) {
+                continue;
+            }
+
+            if (!item.stock_lot_id && !item.lot_id) {
+                setNotice("Selecciona lote para " + String(item.name || item.product_name || "el producto") + " antes de cobrar.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    function patchFetch() {
+        if (window.BEXIA_V5554J_FETCH_PATCHED) {
+            return;
+        }
+
+        window.BEXIA_V5554J_FETCH_PATCHED = true;
+
+        const originalFetch = window.fetch.bind(window);
+
+        window.fetch = function (input, init) {
+            const url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+            const method = String((init && init.method) || "GET").toUpperCase();
+
+            if (method === "POST" && /\/pos\/sessions\/\d+\/orders/.test(url)) {
+                if (!validateBeforePay()) {
+                    return Promise.reject(new Error("Selecciona lote antes de cobrar."));
+                }
+            }
+
+            return originalFetch(input, init);
+        };
+    }
+
+    function boot() {
+        patchCartApi();
+        patchFetch();
+        hydrateCart();
+
+        const cartBox = document.getElementById("v5339-cart-items");
+
+        if (cartBox && !cartBox.__v5554jLotObserver) {
+            cartBox.__v5554jLotObserver = new MutationObserver(function () {
+                if (lotSelectorIsActive()) {
+                    return;
+                }
+
+                clearTimeout(window.__v5554jLotHydrateTimer);
+                window.__v5554jLotHydrateTimer = setTimeout(hydrateCart, 120);
+            });
+
+            cartBox.__v5554jLotObserver.observe(cartBox, {
+                childList: true,
+                subtree: true
+            });
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        setTimeout(boot, 250);
+        setTimeout(boot, 900);
+        setTimeout(boot, 1600);
+    });
+
+    setInterval(function () {
+        if (!lotSelectorIsActive()) {
+            hydrateCart();
+        }
+    }, 3500);
+})();
+</script>
 <script id="v5543b1-pdv-serial-selector-script">
 (function () {
     'use strict';
@@ -11867,4 +12405,3 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('input', markManualPriceListChange, true);
 })();
 </script>
-
