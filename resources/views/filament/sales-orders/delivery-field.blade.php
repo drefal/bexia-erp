@@ -361,6 +361,116 @@
                                 $selectedSerialLabel = $selectedSerialId && Schema::hasTable('stock_serial_numbers')
                                     ? DB::table('stock_serial_numbers')->where('id', $selectedSerialId)->value('serial_number')
                                     : null;
+
+                                $selectedLotId = ! empty($dLine->stock_lot_id) ? (int) $dLine->stock_lot_id : null;
+                                $requiresLot = false;
+                                $lotOptions = collect();
+
+                                if (Schema::hasTable('products')) {
+                                    foreach ($productIdsToCheck as $productIdToCheck) {
+                                        $trackingProduct = DB::table('products')->where('id', $productIdToCheck)->first();
+
+                                        if (! $trackingProduct) {
+                                            continue;
+                                        }
+
+                                        $trackingValue = strtolower(trim((string) ($trackingProduct->tracking ?? '')));
+                                        $advancedTrackingMode = strtolower(trim((string) ($trackingProduct->advanced_tracking_mode ?? '')));
+
+                                        if (
+                                            str_contains($trackingValue, 'lot')
+                                            || str_contains($trackingValue, 'lote')
+                                            || str_contains($advancedTrackingMode, 'lot')
+                                            || str_contains($advancedTrackingMode, 'lote')
+                                        ) {
+                                            $requiresLot = true;
+                                            break;
+                                        }
+
+                                        $advancedFields = $trackingProduct->advanced_tracking_fields ?? null;
+
+                                        if (is_string($advancedFields) && $advancedFields !== '') {
+                                            $flatFields = strtolower($advancedFields);
+
+                                            if (str_contains($flatFields, 'lot') || str_contains($flatFields, 'lote')) {
+                                                $requiresLot = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (Schema::hasTable('stock_lots')) {
+                                    $lotCheckQuery = DB::table('stock_lots')
+                                        ->where('company_id', $dLine->company_id)
+                                        ->where('product_id', $dLine->product_id);
+
+                                    if (! empty($dLine->product_variant_id)) {
+                                        $lotCheckQuery->where('product_variant_id', $dLine->product_variant_id);
+                                    } else {
+                                        $lotCheckQuery->where(function ($query) {
+                                            $query->whereNull('product_variant_id')
+                                                ->orWhere('product_variant_id', 0);
+                                        });
+                                    }
+
+                                    $requiresLot = $requiresLot || $lotCheckQuery->exists();
+                                }
+
+                                if (
+                                    $delivery->status === 'draft'
+                                    && ($requiresLot || $selectedLotId)
+                                    && Schema::hasTable('stock_lots')
+                                    && Schema::hasTable('stock_quants')
+                                ) {
+                                    $lotCompanyId = (int) ($dLine->company_id ?? 0);
+                                    $lotProductId = (int) ($dLine->product_id ?? 0);
+                                    $lotVariantId = ! empty($dLine->product_variant_id) ? (int) $dLine->product_variant_id : null;
+
+                                    $lotOptions = DB::table('stock_lots as l')
+                                        ->join('stock_quants as q', 'q.lot_id', '=', 'l.id')
+                                        ->where('l.company_id', $lotCompanyId)
+                                        ->where('l.product_id', $lotProductId)
+                                        ->where('q.company_id', $lotCompanyId)
+                                        ->where('q.product_id', $lotProductId)
+                                        ->where('q.warehouse_id', $delivery->warehouse_id)
+                                        ->where('q.location_id', $delivery->source_location_id)
+                                        ->where('q.quantity', '>', 0)
+                                        ->where(function ($query) use ($selectedLotId) {
+                                            $query->whereRaw('(q.quantity - q.reserved_quantity) > 0');
+
+                                            if ($selectedLotId) {
+                                                $query->orWhere('l.id', $selectedLotId);
+                                            }
+                                        });
+
+                                    if ($lotVariantId) {
+                                        $lotOptions->where('l.product_variant_id', $lotVariantId)
+                                            ->where('q.product_variant_id', $lotVariantId);
+                                    } else {
+                                        $lotOptions->where(function ($query) {
+                                            $query->whereNull('l.product_variant_id')
+                                                ->orWhere('l.product_variant_id', 0);
+                                        })->whereNull('q.product_variant_id');
+                                    }
+
+                                    $lotOptions = $lotOptions
+                                        ->select([
+                                            'l.id',
+                                            'l.lot_number',
+                                            'l.expiration_date',
+                                            'q.quantity',
+                                            'q.reserved_quantity',
+                                        ])
+                                        ->orderBy('l.expiration_date')
+                                        ->orderBy('l.id')
+                                        ->limit(100)
+                                        ->get();
+                                }
+
+                                $selectedLotLabel = $selectedLotId && Schema::hasTable('stock_lots')
+                                    ? DB::table('stock_lots')->where('id', $selectedLotId)->value('lot_number')
+                                    : null;
                             @endphp
 
                             <div class="mb-2 rounded-lg border border-gray-100 bg-gray-50 p-2">
@@ -368,6 +478,39 @@
                                     {{ $dLine->product_label }}@if($dLine->variant_label) - {{ $dLine->variant_label }}@endif:
                                     <strong>{{ number_format((float) $dLine->quantity, 2) }}</strong>
                                 </div>
+
+                                @if($delivery->status === 'draft' && $requiresLot)
+                                    <div class="mt-2">
+                                        <label class="mb-1 block text-xs font-semibold text-gray-700">
+                                            Lote requerido
+                                        </label>
+
+                                        <select
+                                            name="lot_numbers[{{ $dLine->id }}]"
+                                            form="bexia-validate-delivery-form-{{ $delivery->id }}"
+                                            class="w-full rounded-lg border-gray-300 text-xs"
+                                            required
+                                        >
+                                            <option value="">Selecciona lote</option>
+                                            @foreach($lotOptions as $lotOption)
+                                                @php
+                                                    $availableLotQty = max(0, (float) ($lotOption->quantity ?? 0) - (float) ($lotOption->reserved_quantity ?? 0));
+                                                @endphp
+                                                <option value="{{ $lotOption->id }}" @selected($selectedLotId === (int) $lotOption->id)>
+                                                    {{ $lotOption->lot_number }}
+                                                    @if($lotOption->expiration_date)
+                                                        · vence {{ $lotOption->expiration_date }}
+                                                    @endif
+                                                    · disp. {{ number_format($availableLotQty, 2) }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                @elseif($selectedLotLabel)
+                                    <div class="mt-1 text-xs text-gray-600">
+                                        Lote: <span class="font-semibold">{{ $selectedLotLabel }}</span>
+                                    </div>
+                                @endif
 
                                 @if($delivery->status === 'draft' && $requiresSerial)
                                     <div class="mt-2">

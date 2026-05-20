@@ -229,6 +229,20 @@
         return $variantText !== '' ? $variantText : ($reference !== '' ? $reference : '—');
     };
 
+    $lotLabel = function ($lotId) {
+        if (! $lotId || ! Schema::hasTable('stock_lots')) {
+            return '—';
+        }
+
+        $lot = DB::table('stock_lots')->where('id', $lotId)->first();
+
+        if (! $lot) {
+            return '—';
+        }
+
+        return $lot->lot_number ?? ('#' . $lotId);
+    };
+
     $deliveryLineByMovementLine = $lines
         ->filter(fn ($line) => ! empty($line->stock_movement_line_id))
         ->keyBy('stock_movement_line_id');
@@ -278,6 +292,7 @@
                     <tr>
                         <th class="px-3 py-2">Producto</th>
                         <th class="px-3 py-2">Variante</th>
+                        <th class="px-3 py-2">Lote</th>
                         <th class="px-3 py-2 text-right">Cantidad</th>
                         <th class="px-3 py-2">Línea de movimiento</th>
                     </tr>
@@ -287,6 +302,7 @@
                         <tr class="border-t border-gray-100">
                             <td class="px-3 py-2 font-medium text-gray-950">{{ $line->product_label }}</td>
                             <td class="px-3 py-2 text-gray-700">{{ $line->variant_label ?: '—' }}</td>
+                            <td class="px-3 py-2 text-gray-700">{{ $lotLabel($line->stock_lot_id ?? null) }}</td>
                             <td class="px-3 py-2 text-right font-semibold">{{ number_format((float) $line->quantity, 2) }}</td>
                             <td class="px-3 py-2 text-gray-700">{{ $line->stock_movement_line_id ? ('Línea #' . $line->stock_movement_line_id) : 'Pendiente' }}</td>
                         </tr>
@@ -317,6 +333,7 @@
                         <tr>
                             <th class="px-3 py-2">Producto</th>
                             <th class="px-3 py-2">Variante</th>
+                            <th class="px-3 py-2">Lote</th>
                             <th class="px-3 py-2 text-right">Cantidad solicitada</th>
                             <th class="px-3 py-2 text-right">Cantidad realizada</th>
                         </tr>
@@ -333,6 +350,9 @@
                                 </td>
                                 <td class="px-3 py-2 text-gray-700">
                                     {{ $deliveryLine->variant_label ?? $variantLabel($line->product_variant_id) }}
+                                </td>
+                                <td class="px-3 py-2 text-gray-700">
+                                    {{ $lotLabel($deliveryLine->stock_lot_id ?? $line->lot_id ?? null) }}
                                 </td>
                                 <td class="px-3 py-2 text-right">{{ number_format((float) $line->requested_quantity, 2) }}</td>
                                 <td class="px-3 py-2 text-right font-semibold">{{ number_format((float) $line->done_quantity, 2) }}</td>
