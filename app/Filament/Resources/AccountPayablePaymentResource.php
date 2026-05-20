@@ -95,7 +95,17 @@ class AccountPayablePaymentResource extends Resource
                     ->placeholder('Sin referencia'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
+                Tables\Actions\ViewAction::make()->label('Ver'),
+
+                Tables\Actions\Action::make('print_payment')
+                    ->label('Imprimir')
+                    ->icon('heroicon-o-printer')
+                    ->color('gray')
+                    ->url(fn (AccountPayablePayment $record): string => route('account-payable-payments.print', [
+                        'tenant' => $record->company_id,
+                        'payment' => $record->id,
+                    ]))
+                    ->openUrlInNewTab(),
             ])
             ->bulkActions([]);
     }

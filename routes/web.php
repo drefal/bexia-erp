@@ -381,3 +381,15 @@ Route::middleware(['web', 'auth'])
 Route::middleware(['web', 'auth'])
     ->get('/pos/sessions/{session}/lots', [\App\Http\Controllers\PosController::class, 'lotsForProduct'])
     ->name('pos.sessions.lots');
+
+Route::middleware(['auth'])->group(function () {
+    Route::get(
+        'admin/{tenant}/account-payables/{payable}/print',
+        [\App\Http\Controllers\AccountPayablePrintController::class, 'payable']
+    )->name('account-payables.print');
+
+    Route::get(
+        'admin/{tenant}/account-payable-payments/{payment}/print',
+        [\App\Http\Controllers\AccountPayablePrintController::class, 'payment']
+    )->name('account-payable-payments.print');
+});

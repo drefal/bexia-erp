@@ -37,8 +37,8 @@ class AccountPayableResource extends Resource
     {
         return match ($state) {
             'draft' => 'Borrador',
-            'open' => 'Abierta',
-            'partial' => 'Parcial',
+            'open' => 'Pendiente de pago',
+            'partial' => 'Pago parcial',
             'paid' => 'Pagada',
             'cancelled' => 'Cancelada',
             default => filled($state) ? (string) $state : 'Sin estado',
@@ -88,6 +88,7 @@ class AccountPayableResource extends Resource
     {
         return $table
             ->defaultSort('id', 'desc')
+            ->persistFiltersInSession()
             ->columns([
                 Tables\Columns\TextColumn::make('number')
                     ->label('Folio')
@@ -138,19 +139,9 @@ class AccountPayableResource extends Resource
                     ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
             ])
-            ->filters([
-                Tables\Filters\SelectFilter::make('status')
-                    ->label('Estado')
-                    ->options([
-                        'draft' => 'Borrador',
-                        'open' => 'Abierta',
-                        'partial' => 'Parcial',
-                        'paid' => 'Pagada',
-                        'cancelled' => 'Cancelada',
-                    ]),
-            ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->label('Ver'),
             ])
             ->bulkActions([]);
     }
@@ -190,6 +181,9 @@ class AccountPayableResource extends Resource
                             ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('total')
                             ->label('Total')
+                            ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
+                        TextEntry::make('paid_total')
+                            ->label('Pagado')
                             ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('balance_total')
                             ->label('Saldo')
