@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Support\Cxp\AccountPayableFromPurchaseReceiptService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -53,6 +54,9 @@ class PurchaseReceiptInventoryPoster
 
             $this->syncMovementLinesAndQuants($receipt, $movementId);
             $this->markReceiptPosted($receipt, $movementId);
+
+            app(AccountPayableFromPurchaseReceiptService::class)
+                ->createFromReceipt((int) $receipt->id, auth()->id());
 
             return $movementId;
         });
