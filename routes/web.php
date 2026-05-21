@@ -382,6 +382,21 @@ Route::middleware(['web', 'auth'])
     ->get('/pos/sessions/{session}/lots', [\App\Http\Controllers\PosController::class, 'lotsForProduct'])
     ->name('pos.sessions.lots');
 
+
+// BEXIA V5.57.4k - Impresión CxC y cobros de clientes
+Route::middleware(['auth'])->group(function () {
+    Route::get(
+        'admin/{tenant}/account-receivables/{receivable}/print',
+        [\App\Http\Controllers\AccountReceivablePrintController::class, 'receivable']
+    )->name('account-receivables.print');
+
+    Route::get(
+        'admin/{tenant}/account-receivable-payments/{payment}/print',
+        [\App\Http\Controllers\AccountReceivablePrintController::class, 'payment']
+    )->name('account-receivable-payments.print');
+});
+// END BEXIA V5.57.4k - Impresión CxC y cobros de clientes
+
 Route::middleware(['auth'])->group(function () {
     Route::get(
         'admin/{tenant}/account-payables/{payable}/print',

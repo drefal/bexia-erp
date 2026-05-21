@@ -20,6 +20,16 @@ class ViewAccountReceivable extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('print_receivable')
+                ->label('Imprimir PDF')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->url(fn (): string => route('account-receivables.print', [
+                    'tenant' => $this->tenantCompanyId(),
+                    'receivable' => $this->record->id,
+                ]))
+                ->openUrlInNewTab(),
+
             Actions\Action::make('register_collection')
                 ->label('Registrar cobro')
                 ->icon('heroicon-o-banknotes')
