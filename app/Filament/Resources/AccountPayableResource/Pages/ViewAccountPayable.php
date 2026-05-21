@@ -62,6 +62,7 @@ class ViewAccountPayable extends ViewRecord
                         ->required()
                         ->searchable()
                         ->preload()
+                        ->default(fn (): ?int => \App\Support\Cxp\AccountPayableSettings::defaultTreasuryAccountId($this->tenantCompanyId()))
                         ->options(function (): array {
                             $companyId = $this->tenantCompanyId();
 
@@ -89,6 +90,7 @@ class ViewAccountPayable extends ViewRecord
                         ->required()
                         ->searchable()
                         ->preload()
+                        ->default(fn (): ?int => \App\Support\Cxp\AccountPayableSettings::defaultPaymentFormId($this->tenantCompanyId()))
                         ->options(function (): array {
                             $companyId = $this->tenantCompanyId();
 
