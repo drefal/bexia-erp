@@ -6,6 +6,7 @@ use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\PermissionRegistrar;
 
 class CxcCustomerStatementReport extends Page
 {
@@ -29,6 +30,15 @@ class CxcCustomerStatementReport extends Page
 
     protected static function userCanReports(): bool
     {
+        try {
+            $tenant = Filament::getTenant();
+
+            if ($tenant && method_exists($tenant, 'getKey') && class_exists(PermissionRegistrar::class)) {
+                app(PermissionRegistrar::class)->setPermissionsTeamId((int) $tenant->getKey());
+            }
+        } catch (\Throwable $e) {
+        }
+
         $user = auth()->user();
 
         if (! $user) {
@@ -40,6 +50,7 @@ class CxcCustomerStatementReport extends Page
             || $user->can('account_receivables.collect')
             || $user->can('account_receivables.update')
             || $user->can('account_receivables.create')
+            || $user->can('account_receivables.aging')
             || $user->can('account_receivables.customer_statement')
         )) {
             return true;
@@ -52,10 +63,8 @@ class CxcCustomerStatementReport extends Page
 
                     if (
                         str_contains($normalized, 'super')
-                        && (
-                            str_contains($normalized, 'admin')
-                            || str_contains($normalized, 'administrador')
-                        )
+                        || str_contains($normalized, 'admin')
+                        || str_contains($normalized, 'administrador')
                     ) {
                         return true;
                     }
