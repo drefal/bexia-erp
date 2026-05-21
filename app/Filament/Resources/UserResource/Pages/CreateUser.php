@@ -12,6 +12,11 @@ class CreateUser extends CreateRecord
 {
     protected static string $resource = UserResource::class;
 
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        return UserResource::normalizeOperationalDefaults($data);
+    }
+
     protected function afterCreate(): void
     {
         $roleIds = $this->data['role_ids'] ?? [];
