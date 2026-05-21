@@ -409,6 +409,23 @@ Route::middleware(['auth'])->group(function () {
     )->name('account-payable-payments.print');
 });
 
+
+// BEXIA V5.57.6a - Exportes CxC PDF/Excel
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/admin/{tenant}/cxc/reports/aging/pdf', [\App\Http\Controllers\Reports\Cxc\AccountReceivableReportExportController::class, 'agingPdf'])
+        ->name('account-receivables.reports.aging.pdf');
+
+    Route::get('/admin/{tenant}/cxc/reports/aging/excel', [\App\Http\Controllers\Reports\Cxc\AccountReceivableReportExportController::class, 'agingExcel'])
+        ->name('account-receivables.reports.aging.excel');
+
+    Route::get('/admin/{tenant}/cxc/reports/customer-statement/pdf', [\App\Http\Controllers\Reports\Cxc\AccountReceivableReportExportController::class, 'customerPdf'])
+        ->name('account-receivables.reports.customer-statement.pdf');
+
+    Route::get('/admin/{tenant}/cxc/reports/customer-statement/excel', [\App\Http\Controllers\Reports\Cxc\AccountReceivableReportExportController::class, 'customerExcel'])
+        ->name('account-receivables.reports.customer-statement.excel');
+});
+// END BEXIA V5.57.6a - Exportes CxC PDF/Excel
+
 // BEXIA V5.56.7c - Exportes CxP PDF/Excel
 Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/admin/{tenant}/cxp/reports/aging/pdf', [\App\Http\Controllers\Reports\Cxp\AccountPayableReportExportController::class, 'agingPdf'])
