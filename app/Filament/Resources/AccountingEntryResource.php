@@ -97,6 +97,9 @@ class AccountingEntryResource extends Resource
     public static function sourceLabel(?string $source): string
     {
         return [
+            'account_payable_payment' => 'Pago de cuenta por pagar',
+            'account_payable_payment_cancellation' => 'Cancelación de pago CxP',
+
             'inventory.adjustment_in:manual_inventory' => 'Ajuste manual de inventario',
             'inventory.sale_issue:sales_order_lines' => 'Costo de venta',
             'inventory.purchase_receipt:purchase_order_lines' => 'Entrada compra',
