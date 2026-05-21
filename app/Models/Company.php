@@ -16,6 +16,8 @@ class Company extends Model implements HasAvatar
         'business_name',
         'slug',
         'active',
+        'default_warehouse_id',
+        'default_location_id',
         'organization_id',
         'company_group_id',
         'tax_id',
