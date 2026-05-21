@@ -38,12 +38,13 @@ class AccountReceivableFromInvoiceService
                 return null;
             }
 
-            /*
-             * IMPORTANTE:
-             * Buscamos primero por factura y también por venta relacionada.
-             * Así evitamos duplicar si una venta entregada ya creó CxC y luego se factura.
-             */
             $existingId = $this->existingReceivableId($companyId, $invoiceId, $saleOrderId);
+            $existing = $existingId
+                ? DB::table('account_receivables')->where('id', $existingId)->first()
+                : null;
+
+            $wasSalesOrderReceivable = $existing
+                && (string) ($existing->source_type ?? '') === 'sales_order';
 
             if ($this->isInvoiceCancelled($invoice)) {
                 if ($existingId) {
@@ -52,7 +53,7 @@ class AccountReceivableFromInvoiceService
                         ->update([
                             'status' => 'cancelled',
                             'invoice_id' => $invoiceId,
-                            'sale_order_id' => $saleOrderId,
+                            'sale_order_id' => $saleOrderId ?: ($existing->sale_order_id ?? null),
                             'accounting_status' => 'cancelled',
                             'accounting_error_message' => null,
                             'updated_at' => now(),
@@ -69,14 +70,19 @@ class AccountReceivableFromInvoiceService
                         ->update([
                             'status' => 'paid',
                             'invoice_id' => $invoiceId,
-                            'sale_order_id' => $saleOrderId,
+                            'sale_order_id' => $saleOrderId ?: ($existing->sale_order_id ?? null),
                             'collected_total' => $paid,
                             'balance_total' => 0,
                             'updated_at' => now(),
                         ]);
+
+                    if ($wasSalesOrderReceivable) {
+                        app(\App\Support\Accounting\AccountReceivableInvoiceReclassificationPoster::class)
+                            ->reclassify((int) $existingId, (int) $invoiceId, $userId);
+                    }
                 }
 
-                return null;
+                return $existingId;
             }
 
             if (! $this->isInvoiceIssuedEnough($invoice)) {
@@ -93,9 +99,9 @@ class AccountReceivableFromInvoiceService
                 'status' => $status,
                 'source_type' => 'invoice',
                 'source_id' => $invoiceId,
-                'sale_order_id' => $saleOrderId,
+                'sale_order_id' => $saleOrderId ?: ($existing->sale_order_id ?? null),
                 'invoice_id' => $invoiceId,
-                'customer_contact_id' => $invoice->contact_id ?? null,
+                'customer_contact_id' => $invoice->contact_id ?? ($existing->customer_contact_id ?? null),
                 'customer_name' => $this->customerName($invoice),
                 'customer_reference' => $this->customerReference($invoice),
                 'issue_date' => $issueDate,
@@ -106,14 +112,14 @@ class AccountReceivableFromInvoiceService
                 'total' => $total,
                 'collected_total' => $paid,
                 'balance_total' => $balance,
-                'accounting_status' => $this->accountingStatus($invoice),
-                'accounting_entry_id' => $invoice->accounting_entry_id ?? null,
-                'accounting_posted_at' => $invoice->accounting_posted_at ?? null,
+                'accounting_status' => 'pending',
+                'accounting_entry_id' => null,
+                'accounting_posted_at' => null,
                 'accounting_error_message' => null,
                 'notes' => 'CxC generada/actualizada automáticamente desde factura ' . ($invoice->number ?? ('#' . $invoiceId)),
                 'metadata' => json_encode([
                     'created_by' => 'AccountReceivableFromInvoiceService',
-                    'version' => 'v5.57.2c',
+                    'version' => 'v5.57.3c',
                     'invoice_number' => $invoice->number ?? null,
                     'invoice_status' => $invoice->status ?? null,
                     'cfdi_status' => $invoice->cfdi_status ?? null,
@@ -123,6 +129,7 @@ class AccountReceivableFromInvoiceService
                     'source_number' => $invoice->source_number ?? null,
                     'sale_order_id_detected' => $saleOrderId,
                     'dedupe_rule' => 'invoice_or_sale_order',
+                    'reclassification_rule' => $wasSalesOrderReceivable ? 'sales_order_bridge_to_invoice' : 'invoice_direct',
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'created_by_user_id' => $userId,
                 'created_at' => now(),
@@ -130,10 +137,6 @@ class AccountReceivableFromInvoiceService
             ];
 
             if ($existingId) {
-                /*
-                 * Si la CxC nació desde venta, conservamos source_type/source_id original
-                 * para no romper historial, pero le agregamos invoice_id y actualizamos importes.
-                 */
                 unset(
                     $payload['company_id'],
                     $payload['number'],
@@ -142,14 +145,35 @@ class AccountReceivableFromInvoiceService
                     $payload['created_at']
                 );
 
+                if ($wasSalesOrderReceivable) {
+                    unset(
+                        $payload['accounting_status'],
+                        $payload['accounting_entry_id'],
+                        $payload['accounting_posted_at']
+                    );
+                }
+
                 DB::table('account_receivables')
                     ->where('id', $existingId)
                     ->update($payload);
 
+                if ($wasSalesOrderReceivable) {
+                    app(\App\Support\Accounting\AccountReceivableInvoiceReclassificationPoster::class)
+                        ->reclassify((int) $existingId, (int) $invoiceId, $userId);
+                } else {
+                    app(\App\Support\Accounting\AccountReceivableAccountingPoster::class)
+                        ->postReceivable((int) $existingId, $userId);
+                }
+
                 return $existingId;
             }
 
-            return (int) DB::table('account_receivables')->insertGetId($payload);
+            $newId = (int) DB::table('account_receivables')->insertGetId($payload);
+
+            app(\App\Support\Accounting\AccountReceivableAccountingPoster::class)
+                ->postReceivable($newId, $userId);
+
+            return $newId;
         });
     }
 
@@ -163,18 +187,6 @@ class AccountReceivableFromInvoiceService
     {
         return in_array((string) ($invoice->status ?? ''), ['issued'], true)
             || in_array((string) ($invoice->cfdi_status ?? ''), ['stamped'], true);
-    }
-
-    protected function accountingStatus(object $invoice): string
-    {
-        if (
-            (string) ($invoice->accounting_status ?? '') === 'posted'
-            && ! empty($invoice->accounting_entry_id)
-        ) {
-            return 'posted';
-        }
-
-        return 'pending';
     }
 
     protected function existingReceivableId(int $companyId, int $invoiceId, ?int $saleOrderId = null): ?int

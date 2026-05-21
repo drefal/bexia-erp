@@ -18,6 +18,7 @@ class LinesRelationManager extends RelationManager
         return [
             'account_receivable_invoice' => 'CxC por factura',
             'account_receivable_sales_order' => 'CxC por venta entregada',
+            'account_receivable_invoice_reclassification' => 'Reclasificación CxC por factura',
             'account_payable_purchase_receipt' => 'CxP por recepción de compra',
             'account_payable_payment' => 'Pago de cuenta por pagar',
             'account_payable_payment_cancellation' => 'Cancelación de pago CxP',

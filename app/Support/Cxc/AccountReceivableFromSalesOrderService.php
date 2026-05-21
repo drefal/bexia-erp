@@ -54,16 +54,7 @@ class AccountReceivableFromSalesOrderService
             $accountingEntryId = null;
             $accountingPostedAt = null;
 
-            if (
-                (string) ($order->accounting_status ?? '') === 'posted'
-                && ! empty($order->accounting_entry_id)
-            ) {
-                $accountingStatus = 'posted';
-                $accountingEntryId = (int) $order->accounting_entry_id;
-                $accountingPostedAt = $order->accounting_posted_at ?: now();
-            }
-
-            return (int) DB::table('account_receivables')->insertGetId([
+            $receivableId = (int) DB::table('account_receivables')->insertGetId([
                 'company_id' => $companyId,
                 'number' => $this->nextReceivableNumber($companyId, (string) ($order->number ?? ('SO-' . $salesOrderId))),
                 'status' => 'open',
@@ -100,6 +91,21 @@ class AccountReceivableFromSalesOrderService
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            try {
+                app(\App\Support\Accounting\AccountReceivableAccountingPoster::class)
+                    ->postReceivable($receivableId, $userId);
+            } catch (\Throwable $e) {
+                DB::table('account_receivables')
+                    ->where('id', $receivableId)
+                    ->update([
+                        'accounting_status' => 'error',
+                        'accounting_error_message' => $e->getMessage(),
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            return $receivableId;
         });
     }
 
