@@ -228,6 +228,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                                             ->searchable()
                                             ->preload()
                                             ->options(fn (): array => static::warehouseOptions())
+                                            ->getOptionLabelUsing(fn ($value): ?string => static::warehouseLabel((int) ($value ?? 0)))
                                             ->default(fn (): ?int => static::defaultUserWarehouseId())
                                             ->reactive()
                                             ->helperText('Este almacén será usado para reservar y entregar la venta.'),
@@ -237,6 +238,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                                             ->searchable()
                                             ->preload()
                                             ->options(fn (Forms\Get $get): array => static::locationOptions((int) ($get('warehouse_id') ?? 0)))
+                                            ->getOptionLabelUsing(fn ($value): ?string => static::locationLabel((int) ($value ?? 0)))
                                             ->default(fn (): ?int => static::defaultUserLocationId())
                                             ->helperText('Ubicación desde donde saldrá la mercancía.'),
 
@@ -1192,6 +1194,51 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
     }
 
 
+
+
+    protected static function warehouseLabel(int $warehouseId): ?string
+    {
+        if ($warehouseId <= 0 || ! Schema::hasTable('warehouses')) {
+            return null;
+        }
+
+        $warehouse = DB::table('warehouses')->where('id', $warehouseId)->first();
+
+        if (! $warehouse) {
+            return null;
+        }
+
+        $code = trim((string) ($warehouse->code ?? ''));
+        $name = trim((string) ($warehouse->name ?? ''));
+
+        if ($name === '') {
+            $name = 'Almacén #' . $warehouseId;
+        }
+
+        return $code !== '' ? $code . ' - ' . $name : $name;
+    }
+
+    protected static function locationLabel(int $locationId): ?string
+    {
+        if ($locationId <= 0 || ! Schema::hasTable('stock_locations')) {
+            return null;
+        }
+
+        $location = DB::table('stock_locations')->where('id', $locationId)->first();
+
+        if (! $location) {
+            return null;
+        }
+
+        $code = trim((string) ($location->code ?? ''));
+        $name = trim((string) ($location->name ?? ''));
+
+        if ($name === '') {
+            $name = 'Ubicación #' . $locationId;
+        }
+
+        return $code !== '' ? $code . ' - ' . $name : $name;
+    }
 
 
     protected static function warehouseOptions(): array

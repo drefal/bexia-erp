@@ -281,6 +281,20 @@ class SaleDeliveryController extends Controller
             $message = 'Entrega validada. Se generó el movimiento de salida #' . $movementId . '.';
 
             if ($orderStatus === 'delivered') {
+                try {
+                    $receivableId = app(\App\Support\Cxc\AccountReceivableFromSalesOrderService::class)
+                        ->createFromSalesOrder((int) $saleDelivery->sales_order_id, auth()->id());
+
+                    if ($receivableId) {
+                        $message .= ' Se generó/actualizó la CxC #' . $receivableId . '.';
+                    }
+                } catch (\Throwable $e) {
+                    report($e);
+
+                    return redirect($this->saleOrderEditUrl($saleDelivery))
+                        ->with('warning', $message . ' La orden quedó entregada completa, pero no se pudo generar CxC: ' . $e->getMessage());
+                }
+
                 return redirect($this->saleOrderEditUrl($saleDelivery))
                     ->with('success', $message . ' La orden quedó entregada completa.');
             }
@@ -536,10 +550,15 @@ class SaleDeliveryController extends Controller
             ->where('location_id', $saleOrder->location_id)
             ->where('product_id', $line['product_id']);
 
-        if (! empty($line['product_variant_id'])) {
-            $query->where('product_variant_id', $line['product_variant_id']);
+        $variantId = (int) ($line['product_variant_id'] ?? 0);
+
+        if ($variantId > 0) {
+            $query->where('product_variant_id', $variantId);
         } else {
-            $query->whereNull('product_variant_id');
+            $query->where(function ($q): void {
+                $q->whereNull('product_variant_id')
+                    ->orWhere('product_variant_id', 0);
+            });
         }
 
         $quant = $query->lockForUpdate()->first();
@@ -719,10 +738,15 @@ class SaleDeliveryController extends Controller
             ->where('location_id', $saleDelivery->source_location_id)
             ->where('product_id', $line->product_id);
 
-        if (! empty($line->product_variant_id)) {
-            $query->where('product_variant_id', $line->product_variant_id);
+        $variantId = (int) ($line->product_variant_id ?? 0);
+
+        if ($variantId > 0) {
+            $query->where('product_variant_id', $variantId);
         } else {
-            $query->whereNull('product_variant_id');
+            $query->where(function ($q): void {
+                $q->whereNull('product_variant_id')
+                    ->orWhere('product_variant_id', 0);
+            });
         }
 
         $lineLotId = $preferredLotId ?: (! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null);
@@ -851,10 +875,15 @@ class SaleDeliveryController extends Controller
             ->where('location_id', $saleDelivery->source_location_id)
             ->where('product_id', $line->product_id);
 
-        if (! empty($line->product_variant_id)) {
-            $query->where('product_variant_id', $line->product_variant_id);
+        $variantId = (int) ($line->product_variant_id ?? 0);
+
+        if ($variantId > 0) {
+            $query->where('product_variant_id', $variantId);
         } else {
-            $query->whereNull('product_variant_id');
+            $query->where(function ($q): void {
+                $q->whereNull('product_variant_id')
+                    ->orWhere('product_variant_id', 0);
+            });
         }
 
         $oldLotId

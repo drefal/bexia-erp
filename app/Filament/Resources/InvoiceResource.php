@@ -1399,6 +1399,17 @@ public static function canEdit(Model $record): bool
                 'updated_at' => now(),
             ]);
 
+        try {
+            app(\App\Support\Cxc\AccountReceivableFromInvoiceService::class)
+                ->createFromInvoice((int) $record->id, auth()->id());
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Factura marcada como facturada, pero no se pudo generar CxC')
+                ->body($e->getMessage())
+                ->warning()
+                ->send();
+        }
+
         Notification::make()
             ->title('Factura marcada como facturada')
             ->success()
