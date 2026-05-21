@@ -88,6 +88,7 @@ class AccountReceivablePaymentAccountingPoster
             }
 
             $currency = (string) ($payment->currency ?: 'MXN');
+            $sourceType = 'account_receivable_payment';
             $label = 'Cobro CxC ' . ($receivable->number ?? ('#' . $receivable->id));
             $entryNumber = $this->buildEntryNumber($journal, 'CXC-COB', (int) $payment->id);
 
