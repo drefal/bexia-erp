@@ -229,8 +229,11 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                                             ->preload()
                                             ->options(fn (): array => static::warehouseOptions())
                                             ->getOptionLabelUsing(fn ($value): ?string => static::warehouseLabel((int) ($value ?? 0)))
-                                            ->default(fn (): ?int => static::defaultUserWarehouseId())
+                                            ->default(fn (): ?int => static::defaultOperationalWarehouseId())
                                             ->reactive()
+                                            ->afterStateUpdated(function ($state, Forms\Set $set): void {
+                                                $set('location_id', static::defaultOperationalLocationId((int) ($state ?? 0)));
+                                            })
                                             ->helperText('Este almacén será usado para reservar y entregar la venta.'),
 
                                         Forms\Components\Select::make('location_id')
@@ -239,7 +242,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                                             ->preload()
                                             ->options(fn (Forms\Get $get): array => static::locationOptions((int) ($get('warehouse_id') ?? 0)))
                                             ->getOptionLabelUsing(fn ($value): ?string => static::locationLabel((int) ($value ?? 0)))
-                                            ->default(fn (): ?int => static::defaultUserLocationId())
+                                            ->default(fn (): ?int => static::defaultOperationalLocationId())
                                             ->helperText('Ubicación desde donde saldrá la mercancía.'),
 
                                         Forms\Components\Select::make('delivery_policy')
@@ -975,10 +978,185 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
 
     protected static function defaultUserWarehouseId(): ?int
     {
-        $id = auth()->user()?->default_warehouse_id ?? null;
+        return static::defaultOperationalWarehouseId();
+    }
+
+
+
+    protected static function defaultOperationalWarehouseId(): ?int
+    {
+        $companyId = static::tenantCompanyId();
+
+        if ($companyId <= 0) {
+            return null;
+        }
+
+        $userWarehouseId = (int) (auth()->user()?->default_warehouse_id ?? 0);
+
+        if (static::warehouseBelongsToTenant($userWarehouseId, $companyId)) {
+            return $userWarehouseId;
+        }
+
+        $companyWarehouseId = static::companyDefaultWarehouseId($companyId);
+
+        if (static::warehouseBelongsToTenant($companyWarehouseId, $companyId)) {
+            return $companyWarehouseId;
+        }
+
+        return static::firstActiveWarehouseId($companyId);
+    }
+
+    protected static function defaultOperationalLocationId(?int $warehouseId = null): ?int
+    {
+        $companyId = static::tenantCompanyId();
+
+        if ($companyId <= 0) {
+            return null;
+        }
+
+        $warehouseId = $warehouseId && $warehouseId > 0
+            ? (int) $warehouseId
+            : static::defaultOperationalWarehouseId();
+
+        if (! $warehouseId || ! static::warehouseBelongsToTenant((int) $warehouseId, $companyId)) {
+            return null;
+        }
+
+        $userLocationId = (int) (auth()->user()?->default_location_id ?? 0);
+
+        if (static::locationBelongsToTenantAndWarehouse($userLocationId, $companyId, (int) $warehouseId)) {
+            return $userLocationId;
+        }
+
+        $companyLocationId = static::companyDefaultLocationId($companyId);
+
+        if (static::locationBelongsToTenantAndWarehouse($companyLocationId, $companyId, (int) $warehouseId)) {
+            return $companyLocationId;
+        }
+
+        return static::firstActiveLocationId($companyId, (int) $warehouseId);
+    }
+
+    protected static function companyDefaultWarehouseId(int $companyId): ?int
+    {
+        if ($companyId <= 0 || ! Schema::hasTable('companies') || ! Schema::hasColumn('companies', 'default_warehouse_id')) {
+            return null;
+        }
+
+        $id = DB::table('companies')
+            ->where('id', $companyId)
+            ->value('default_warehouse_id');
 
         return $id ? (int) $id : null;
     }
+
+    protected static function companyDefaultLocationId(int $companyId): ?int
+    {
+        if ($companyId <= 0 || ! Schema::hasTable('companies') || ! Schema::hasColumn('companies', 'default_location_id')) {
+            return null;
+        }
+
+        $id = DB::table('companies')
+            ->where('id', $companyId)
+            ->value('default_location_id');
+
+        return $id ? (int) $id : null;
+    }
+
+    protected static function warehouseBelongsToTenant(?int $warehouseId, int $companyId): bool
+    {
+        $warehouseId = (int) ($warehouseId ?? 0);
+
+        if ($warehouseId <= 0 || $companyId <= 0 || ! Schema::hasTable('warehouses')) {
+            return false;
+        }
+
+        $query = DB::table('warehouses')->where('id', $warehouseId);
+
+        if (Schema::hasColumn('warehouses', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        if (Schema::hasColumn('warehouses', 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        return $query->exists();
+    }
+
+    protected static function locationBelongsToTenantAndWarehouse(?int $locationId, int $companyId, int $warehouseId): bool
+    {
+        $locationId = (int) ($locationId ?? 0);
+
+        if ($locationId <= 0 || $companyId <= 0 || $warehouseId <= 0 || ! Schema::hasTable('stock_locations')) {
+            return false;
+        }
+
+        $query = DB::table('stock_locations')
+            ->where('id', $locationId)
+            ->where('warehouse_id', $warehouseId);
+
+        if (Schema::hasColumn('stock_locations', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        if (Schema::hasColumn('stock_locations', 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        return $query->exists();
+    }
+
+    protected static function firstActiveWarehouseId(int $companyId): ?int
+    {
+        if ($companyId <= 0 || ! Schema::hasTable('warehouses')) {
+            return null;
+        }
+
+        $query = DB::table('warehouses');
+
+        if (Schema::hasColumn('warehouses', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        if (Schema::hasColumn('warehouses', 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        $id = $query
+            ->orderBy('name')
+            ->orderBy('id')
+            ->value('id');
+
+        return $id ? (int) $id : null;
+    }
+
+    protected static function firstActiveLocationId(int $companyId, int $warehouseId): ?int
+    {
+        if ($companyId <= 0 || $warehouseId <= 0 || ! Schema::hasTable('stock_locations')) {
+            return null;
+        }
+
+        $query = DB::table('stock_locations')
+            ->where('warehouse_id', $warehouseId);
+
+        if (Schema::hasColumn('stock_locations', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        if (Schema::hasColumn('stock_locations', 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        $id = $query
+            ->orderBy('name')
+            ->orderBy('id')
+            ->value('id');
+
+        return $id ? (int) $id : null;
+    }
+
+
 
     protected static function defaultUserLocationId(): ?int
     {
