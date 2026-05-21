@@ -179,9 +179,11 @@ class AccountPayablePaymentResource extends Resource
 
     public static function canCancelPayment(AccountPayablePayment $record): bool
     {
-        return static::userCanPermission('account_payables.cancel_payment')
-            && $record->status === 'posted'
-            && $record->accounting_entry_id === null;
+        /*
+         * Se permite cancelar pagos aplicados aunque ya tengan póliza.
+         * Si tiene accounting_entry_id, cancelPostedPayment() genera reversa contable.
+         */
+        return (string) $record->status === 'posted';
     }
 
     public static function cancelPostedPayment(int $paymentId): array
@@ -190,6 +192,7 @@ class AccountPayablePaymentResource extends Resource
             'payable_status' => null,
             'payable_balance' => null,
             'treasury_balance' => null,
+            'reversal_entry_id' => null,
         ];
 
         DB::transaction(function () use ($paymentId, &$result): void {
@@ -202,12 +205,15 @@ class AccountPayablePaymentResource extends Resource
                 throw new \RuntimeException('No se encontró el pago.');
             }
 
-            if ($payment->status !== 'posted') {
+            if ((string) $payment->status !== 'posted') {
                 throw new \RuntimeException('Solo se pueden cancelar pagos aplicados.');
             }
 
+            $reversalEntry = null;
+
             if ($payment->accounting_entry_id !== null) {
-                throw new \RuntimeException('Este pago ya tiene póliza contable. Primero debe cancelarse/reversarse la póliza.');
+                $reversalEntry = app(\App\Support\Accounting\AccountPayablePaymentAccountingPoster::class)
+                    ->cancelPayment((int) $payment->id, auth()->id());
             }
 
             $payable = DB::table('account_payables')
@@ -240,7 +246,7 @@ class AccountPayablePaymentResource extends Resource
                     ->first();
             }
 
-            if ($movement && $movement->status === 'cancelled') {
+            if ($movement && (string) $movement->status === 'cancelled') {
                 throw new \RuntimeException('El movimiento de tesorería ya está cancelado.');
             }
 
@@ -272,8 +278,9 @@ class AccountPayablePaymentResource extends Resource
                     'metadata' => json_encode(array_merge(
                         json_decode((string) ($payment->metadata ?? '{}'), true) ?: [],
                         [
-                            'cancelled_by_patch' => 'v5.56.5',
+                            'cancelled_by_patch' => 'v5.56.6l',
                             'cancelled_reason' => 'manual_cancel_from_cxp_payment',
+                            'reversal_entry_id' => $reversalEntry?->id,
                         ]
                     ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 ]);
@@ -288,8 +295,9 @@ class AccountPayablePaymentResource extends Resource
                         'metadata' => json_encode(array_merge(
                             json_decode((string) ($movement->metadata ?? '{}'), true) ?: [],
                             [
-                                'cancelled_by_patch' => 'v5.56.5',
+                                'cancelled_by_patch' => 'v5.56.6l',
                                 'cancelled_reason' => 'manual_cancel_from_cxp_payment',
+                                'reversal_entry_id' => $reversalEntry?->id,
                             ]
                         ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     ]);
@@ -315,6 +323,7 @@ class AccountPayablePaymentResource extends Resource
                 'payable_status' => $newPayableStatus,
                 'payable_balance' => $newBalance,
                 'treasury_balance' => $newTreasuryBalance,
+                'reversal_entry_id' => $reversalEntry?->id,
             ];
         });
 

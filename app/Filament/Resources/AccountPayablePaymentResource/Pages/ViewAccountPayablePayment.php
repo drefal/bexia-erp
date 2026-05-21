@@ -18,7 +18,7 @@ class ViewAccountPayablePayment extends ViewRecord
     {
         return [
             Actions\Action::make('print_payment')
-                ->label('Imprimir pago')
+                ->label('Imprimir PDF')
                 ->icon('heroicon-o-printer')
                 ->color('gray')
                 ->url(fn (): string => route('account-payable-payments.print', [
@@ -33,7 +33,7 @@ class ViewAccountPayablePayment extends ViewRecord
                 ->color('danger')
                 ->requiresConfirmation()
                 ->modalHeading('Cancelar pago a proveedor')
-                ->modalDescription('Esta acción cancelará el pago, liberará la CxP, cancelará el movimiento de tesorería y regresará el saldo a la caja/banco.')
+                ->modalDescription('Esta acción cancelará el pago, liberará la CxP, cancelará el movimiento de tesorería, regresará el saldo a caja/banco y generará la reversa contable si el pago ya tiene póliza.')
                 ->modalSubmitActionLabel('Sí, cancelar pago')
                 ->visible(fn (): bool => AccountPayablePaymentResource::canCancelPayment($this->record))
                 ->action(function (): void {
@@ -43,15 +43,19 @@ class ViewAccountPayablePayment extends ViewRecord
 
                         $result = AccountPayablePaymentResource::cancelPostedPayment((int) $record->id);
 
+                        $message = 'CxP actualizada a: '
+                            . AccountPayableResource::statusLabel($result['payable_status'])
+                            . '. Saldo actual: $'
+                            . number_format((float) $result['payable_balance'], 2)
+                            . '.';
+
+                        if (! empty($result['reversal_entry_id'])) {
+                            $message .= ' Reversa contable #' . $result['reversal_entry_id'] . '.';
+                        }
+
                         Notification::make()
                             ->title('Pago cancelado')
-                            ->body(
-                                'CxP actualizada a: '
-                                . AccountPayableResource::statusLabel($result['payable_status'])
-                                . '. Saldo actual: $'
-                                . number_format((float) $result['payable_balance'], 2)
-                                . '.'
-                            )
+                            ->body($message)
                             ->success()
                             ->send();
 

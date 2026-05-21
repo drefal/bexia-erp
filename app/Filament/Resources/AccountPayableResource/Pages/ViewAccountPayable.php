@@ -341,6 +341,9 @@ class ViewAccountPayable extends ViewRecord
                     'status' => $newStatus,
                     'updated_at' => now(),
                 ]);
+
+            app(\App\Support\Accounting\AccountPayablePaymentAccountingPoster::class)
+                ->postPayment((int) $paymentId, auth()->id());
         });
 
         return [
