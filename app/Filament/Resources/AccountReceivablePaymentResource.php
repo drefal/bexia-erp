@@ -14,6 +14,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class AccountReceivablePaymentResource extends Resource
 {
@@ -193,6 +194,155 @@ class AccountReceivablePaymentResource extends Resource
     public static function canDelete(Model $record): bool
     {
         return false;
+    }
+
+    public static function canCancelPayment(AccountReceivablePayment $record): bool
+    {
+        return (string) $record->status === 'posted';
+    }
+
+    public static function cancelPostedPayment(int $paymentId): array
+    {
+        $result = [
+            'receivable_status' => null,
+            'receivable_balance' => null,
+            'treasury_balance' => null,
+            'reversal_entry_id' => null,
+        ];
+
+        DB::transaction(function () use ($paymentId, &$result): void {
+            $payment = DB::table('account_receivable_payments')
+                ->where('id', $paymentId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $payment) {
+                throw new \RuntimeException('No se encontró el cobro.');
+            }
+
+            if ((string) $payment->status !== 'posted') {
+                throw new \RuntimeException('Solo se pueden cancelar cobros aplicados.');
+            }
+
+            $reversalEntry = null;
+
+            if ($payment->accounting_entry_id !== null) {
+                $reversalEntry = app(\App\Support\Accounting\AccountReceivablePaymentAccountingPoster::class)
+                    ->cancelPayment((int) $payment->id, auth()->id());
+            }
+
+            $receivable = DB::table('account_receivables')
+                ->where('id', $payment->account_receivable_id)
+                ->where('company_id', $payment->company_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $receivable) {
+                throw new \RuntimeException('No se encontró la cuenta por cobrar relacionada.');
+            }
+
+            $treasuryAccount = DB::table('treasury_accounts')
+                ->where('id', $payment->treasury_account_id)
+                ->where('company_id', $payment->company_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $treasuryAccount) {
+                throw new \RuntimeException('No se encontró la cuenta/caja de tesorería relacionada.');
+            }
+
+            $movement = null;
+
+            if ($payment->treasury_movement_id) {
+                $movement = DB::table('treasury_movements')
+                    ->where('id', $payment->treasury_movement_id)
+                    ->where('company_id', $payment->company_id)
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if ($movement && (string) $movement->status === 'cancelled') {
+                throw new \RuntimeException('El movimiento de tesorería ya está cancelado.');
+            }
+
+            $amount = round((float) $payment->amount, 4);
+
+            if ($amount <= 0) {
+                throw new \RuntimeException('El importe del cobro no es válido.');
+            }
+
+            $newTreasuryBalance = round((float) $treasuryAccount->current_balance - $amount, 4);
+
+            $newCollected = round(max(0, (float) $receivable->collected_total - $amount), 4);
+            $newBalance = round(max(0, (float) $receivable->total - $newCollected), 4);
+
+            if ($newBalance <= 0.0001) {
+                $newReceivableStatus = 'paid';
+            } elseif ($newCollected > 0.0001) {
+                $newReceivableStatus = 'partial';
+            } else {
+                $newReceivableStatus = 'open';
+            }
+
+            DB::table('account_receivable_payments')
+                ->where('id', $payment->id)
+                ->update([
+                    'status' => 'cancelled',
+                    'cancelled_at' => now(),
+                    'updated_at' => now(),
+                    'metadata' => json_encode(array_merge(
+                        json_decode((string) ($payment->metadata ?? '{}'), true) ?: [],
+                        [
+                            'cancelled_by_patch' => 'v5.57.5',
+                            'cancelled_reason' => 'manual_cancel_from_cxc_payment',
+                            'reversal_entry_id' => $reversalEntry?->id,
+                        ]
+                    ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                ]);
+
+            if ($movement) {
+                DB::table('treasury_movements')
+                    ->where('id', $movement->id)
+                    ->update([
+                        'status' => 'cancelled',
+                        'cancelled_at' => now(),
+                        'updated_at' => now(),
+                        'metadata' => json_encode(array_merge(
+                            json_decode((string) ($movement->metadata ?? '{}'), true) ?: [],
+                            [
+                                'cancelled_by_patch' => 'v5.57.5',
+                                'cancelled_reason' => 'manual_cancel_from_cxc_payment',
+                                'reversal_entry_id' => $reversalEntry?->id,
+                            ]
+                        ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    ]);
+            }
+
+            DB::table('treasury_accounts')
+                ->where('id', $treasuryAccount->id)
+                ->update([
+                    'current_balance' => $newTreasuryBalance,
+                    'updated_at' => now(),
+                ]);
+
+            DB::table('account_receivables')
+                ->where('id', $receivable->id)
+                ->update([
+                    'collected_total' => $newCollected,
+                    'balance_total' => $newBalance,
+                    'status' => $newReceivableStatus,
+                    'updated_at' => now(),
+                ]);
+
+            $result = [
+                'receivable_status' => $newReceivableStatus,
+                'receivable_balance' => $newBalance,
+                'treasury_balance' => $newTreasuryBalance,
+                'reversal_entry_id' => $reversalEntry?->id,
+            ];
+        });
+
+        return $result;
     }
 
     public static function getPages(): array

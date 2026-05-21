@@ -97,7 +97,7 @@ class AccountReceivablePaymentAccountingPoster
                 'entry_number' => $entryNumber,
                 'entry_date' => $payment->payment_date ?: now()->toDateString(),
                 'status' => 'posted',
-                'source_type' => 'account_receivable_payment',
+                'source_type' => $sourceType,
                 'source_id' => $payment->id,
                 'source_label' => $label,
                 'currency' => $currency,
@@ -169,6 +169,162 @@ class AccountReceivablePaymentAccountingPoster
         });
     }
 
+    public function cancelPayment(int $paymentId, ?int $userId = null): ?object
+    {
+        return DB::transaction(function () use ($paymentId, $userId): ?object {
+            $payment = DB::table('account_receivable_payments')
+                ->where('id', $paymentId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $payment) {
+                throw new RuntimeException('No se encontró el cobro CxC para reversar contablemente.');
+            }
+
+            if (! $payment->accounting_entry_id) {
+                return null;
+            }
+
+            $originalEntry = DB::table('accounting_entries')
+                ->where('id', $payment->accounting_entry_id)
+                ->where('company_id', $payment->company_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $originalEntry) {
+                throw new RuntimeException('No se encontró la póliza original del cobro CxC.');
+            }
+
+            $existingReversal = DB::table('accounting_entries')
+                ->where('company_id', $payment->company_id)
+                ->where('source_type', 'account_receivable_payment_cancellation')
+                ->where('source_id', $payment->id)
+                ->whereIn('status', ['draft', 'posted'])
+                ->first();
+
+            if ($existingReversal) {
+                if ((string) $originalEntry->status !== 'cancelled') {
+                    DB::table('accounting_entries')
+                        ->where('id', $originalEntry->id)
+                        ->update([
+                            'status' => 'cancelled',
+                            'cancelled_at' => now(),
+                            'cancelled_by_entry_id' => $existingReversal->id,
+                            'updated_at' => now(),
+                        ]);
+                }
+
+                return $existingReversal;
+            }
+
+            if ((string) $originalEntry->status === 'cancelled' && $originalEntry->cancelled_by_entry_id) {
+                return DB::table('accounting_entries')->where('id', $originalEntry->cancelled_by_entry_id)->first();
+            }
+
+            $receivable = DB::table('account_receivables')
+                ->where('id', $payment->account_receivable_id)
+                ->where('company_id', $payment->company_id)
+                ->first();
+
+            if (! $receivable) {
+                throw new RuntimeException('No se encontró la CxC relacionada al cobro.');
+            }
+
+            $treasuryAccount = DB::table('treasury_accounts')
+                ->where('id', $payment->treasury_account_id)
+                ->where('company_id', $payment->company_id)
+                ->first();
+
+            if (! $treasuryAccount) {
+                throw new RuntimeException('No se encontró la cuenta/caja relacionada al cobro.');
+            }
+
+            $customerAccount = $this->resolveCustomerReceivableAccount((int) $payment->company_id);
+            $cashOrBankAccount = $this->resolveTreasuryAccountingAccount((int) $payment->company_id, $treasuryAccount);
+            $journal = $this->resolveJournal((int) $payment->company_id, $treasuryAccount);
+
+            $amount = round((float) $payment->amount, 6);
+
+            if ($amount <= 0) {
+                throw new RuntimeException('El importe del cobro CxC no es válido para reversar.');
+            }
+
+            $currency = (string) ($payment->currency ?: 'MXN');
+            $label = 'Cancelación cobro CxC ' . ($receivable->number ?? ('#' . $receivable->id));
+            $entryNumber = $this->buildEntryNumber($journal, 'CXC-CAN', (int) $payment->id);
+
+            $reversalEntryId = DB::table('accounting_entries')->insertGetId([
+                'company_id' => $payment->company_id,
+                'journal_id' => $journal?->id,
+                'entry_number' => $entryNumber,
+                'entry_date' => now()->toDateString(),
+                'status' => 'posted',
+                'source_type' => 'account_receivable_payment_cancellation',
+                'source_id' => $payment->id,
+                'source_label' => $label,
+                'currency' => $currency,
+                'total_debit' => $amount,
+                'total_credit' => $amount,
+                'posted_at' => now(),
+                'cancelled_at' => null,
+                'cancelled_by_entry_id' => null,
+                'created_by_user_id' => $userId ?: ($payment->created_by_user_id ?? null),
+                'posted_by_user_id' => $userId,
+                'notes' => 'Póliza de reversa generada automáticamente por cancelación de cobro CxC.',
+                'metadata' => json_encode([
+                    'created_by_patch' => 'v5.57.5',
+                    'reverses_accounting_entry_id' => $originalEntry->id,
+                    'account_receivable_payment_id' => $payment->id,
+                    'account_receivable_id' => $receivable->id,
+                    'account_receivable_number' => $receivable->number,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $this->createLine(
+                $reversalEntryId,
+                (int) $payment->company_id,
+                (int) $customerAccount->id,
+                1,
+                'Cargo a clientes - ' . $label,
+                $amount,
+                0,
+                $currency,
+                $receivable->customer_contact_id ?? null,
+                (int) $payment->id,
+                'account_receivable_payment_cancellation'
+            );
+
+            $this->createLine(
+                $reversalEntryId,
+                (int) $payment->company_id,
+                (int) $cashOrBankAccount->id,
+                2,
+                'Abono a ' . $cashOrBankAccount->name . ' - ' . $label,
+                0,
+                $amount,
+                $currency,
+                $receivable->customer_contact_id ?? null,
+                (int) $payment->id,
+                'account_receivable_payment_cancellation'
+            );
+
+            $this->assertEntryBalances($reversalEntryId);
+
+            DB::table('accounting_entries')
+                ->where('id', $originalEntry->id)
+                ->update([
+                    'status' => 'cancelled',
+                    'cancelled_at' => now(),
+                    'cancelled_by_entry_id' => $reversalEntryId,
+                    'updated_at' => now(),
+                ]);
+
+            return DB::table('accounting_entries')->where('id', $reversalEntryId)->first();
+        });
+    }
+
     protected function createLine(
         int $entryId,
         int $companyId,
@@ -179,7 +335,8 @@ class AccountReceivablePaymentAccountingPoster
         float $credit,
         string $currency,
         ?int $partnerContactId,
-        int $paymentId
+        int $paymentId,
+        string $sourceType = 'account_receivable_payment'
     ): void {
         $account = DB::table('accounting_accounts')
             ->where('id', $accountId)
@@ -200,7 +357,7 @@ class AccountReceivablePaymentAccountingPoster
             'debit' => round($debit, 6),
             'credit' => round($credit, 6),
             'currency' => $currency,
-            'source_type' => 'account_receivable_payment',
+            'source_type' => $sourceType,
             'source_id' => $paymentId,
             'metadata' => json_encode([
                 'account_code' => $account->code,
