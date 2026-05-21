@@ -143,7 +143,15 @@ class SaleDeliveryController extends Controller
                     $quant = $this->lockQuantForDeliveryLine($saleDelivery, $line, $lineLotId);
 
                     if (! $quant) {
-                        throw new \RuntimeException('No hay existencia para ' . ($line->product_label ?? 'producto') . $this->variantSuffix($line) . '.');
+                        throw new \RuntimeException(
+                            'No hay existencia para '
+                            . ($line->product_label ?? 'producto')
+                            . $this->variantSuffix($line)
+                            . ' en '
+                            . $this->deliverySourceLabel($saleDelivery)
+                            . '. '
+                            . $this->availabilityHintForDeliveryLine($saleDelivery, $line, $qty, $lineLotId)
+                        );
                     }
 
                     $lineLotId = $lineLotId ?: (! empty($quant->lot_id) ? (int) $quant->lot_id : null);
@@ -159,11 +167,14 @@ class SaleDeliveryController extends Controller
                             'Existencia insuficiente para '
                             . ($line->product_label ?? 'producto')
                             . $this->variantSuffix($line)
+                            . ' en '
+                            . $this->deliverySourceLabel($saleDelivery)
                             . '. Existencia: '
                             . number_format($physical, 2)
                             . ', requerido: '
                             . number_format($qty, 2)
-                            . '.'
+                            . '. '
+                            . $this->availabilityHintForDeliveryLine($saleDelivery, $line, $qty, $lineLotId)
                         );
                     }
 
@@ -479,7 +490,15 @@ class SaleDeliveryController extends Controller
             $quant = $this->lockQuantForDeliveryLine($saleDelivery, $line);
 
             if (! $quant) {
-                throw new \RuntimeException('No hay existencia para reservar ' . ($line->product_label ?? 'producto') . $this->variantSuffix($line) . '.');
+                throw new \RuntimeException(
+                    'No hay existencia para reservar '
+                    . ($line->product_label ?? 'producto')
+                    . $this->variantSuffix($line)
+                    . ' en '
+                    . $this->deliverySourceLabel($saleDelivery)
+                    . '. '
+                    . $this->availabilityHintForDeliveryLine($saleDelivery, $line, $qty)
+                );
             }
 
             $available = $this->decimal($quant->quantity ?? 0) - $this->decimal($quant->reserved_quantity ?? 0);
@@ -489,11 +508,14 @@ class SaleDeliveryController extends Controller
                     'Existencia disponible insuficiente para reservar '
                     . ($line->product_label ?? 'producto')
                     . $this->variantSuffix($line)
+                    . ' en '
+                    . $this->deliverySourceLabel($saleDelivery)
                     . '. Disponible: '
                     . number_format($available, 2)
                     . ', requerido: '
                     . number_format($qty, 2)
-                    . '.'
+                    . '. '
+                    . $this->availabilityHintForDeliveryLine($saleDelivery, $line, $qty)
                 );
             }
 
@@ -564,7 +586,14 @@ class SaleDeliveryController extends Controller
         $quant = $query->lockForUpdate()->first();
 
         if (! $quant) {
-            throw new \RuntimeException('No hay existencia para ' . ($line['product_label'] ?? 'producto') . '.');
+            throw new \RuntimeException(
+                'No hay existencia para '
+                . ($line['product_label'] ?? 'producto')
+                . ' en '
+                . $this->saleOrderSourceLabel($saleOrder)
+                . '. '
+                . $this->availabilityHintForSaleOrderLine($saleOrder, $line, $qty)
+            );
         }
 
         $available = $this->decimal($quant->quantity ?? 0) - $this->decimal($quant->reserved_quantity ?? 0);
@@ -573,13 +602,204 @@ class SaleDeliveryController extends Controller
             throw new \RuntimeException(
                 'Existencia disponible insuficiente para '
                 . ($line['product_label'] ?? 'producto')
+                . ' en '
+                . $this->saleOrderSourceLabel($saleOrder)
                 . '. Disponible: '
                 . number_format($available, 2)
                 . ', requerido: '
                 . number_format($qty, 2)
-                . '.'
+                . '. '
+                . $this->availabilityHintForSaleOrderLine($saleOrder, $line, $qty)
             );
         }
+    }
+
+    protected function saleOrderSourceLabel(SaleOrder $saleOrder): string
+    {
+        return $this->warehouseLocationLabel(
+            (int) ($saleOrder->warehouse_id ?? 0),
+            (int) ($saleOrder->location_id ?? 0)
+        );
+    }
+
+    protected function deliverySourceLabel(SaleDelivery $saleDelivery): string
+    {
+        return $this->warehouseLocationLabel(
+            (int) ($saleDelivery->warehouse_id ?? 0),
+            (int) ($saleDelivery->source_location_id ?? 0)
+        );
+    }
+
+    protected function warehouseLocationLabel(int $warehouseId, int $locationId): string
+    {
+        $warehouse = $warehouseId > 0 && Schema::hasTable('warehouses')
+            ? DB::table('warehouses')->where('id', $warehouseId)->first()
+            : null;
+
+        $location = $locationId > 0 && Schema::hasTable('stock_locations')
+            ? DB::table('stock_locations')->where('id', $locationId)->first()
+            : null;
+
+        $warehouseName = $warehouse
+            ? trim((string) ($warehouse->name ?? ('Almacén #' . $warehouseId)))
+            : ($warehouseId > 0 ? 'Almacén #' . $warehouseId : 'almacén no definido');
+
+        $locationName = $location
+            ? trim((string) ($location->name ?? ('Ubicación #' . $locationId)))
+            : ($locationId > 0 ? 'Ubicación #' . $locationId : 'ubicación no definida');
+
+        return $warehouseName . ' / ' . $locationName;
+    }
+
+    protected function availabilityHintForSaleOrderLine(SaleOrder $saleOrder, array $line, float $required): string
+    {
+        return $this->stockAvailabilityHint(
+            (int) $saleOrder->company_id,
+            (int) ($line['product_id'] ?? 0),
+            (int) ($line['product_variant_id'] ?? 0),
+            $required,
+            (int) ($saleOrder->warehouse_id ?? 0),
+            (int) ($saleOrder->location_id ?? 0)
+        );
+    }
+
+    protected function availabilityHintForDeliveryLine(SaleDelivery $saleDelivery, object $line, float $required, ?int $lotId = null): string
+    {
+        return $this->stockAvailabilityHint(
+            (int) $saleDelivery->company_id,
+            (int) ($line->product_id ?? 0),
+            (int) ($line->product_variant_id ?? 0),
+            $required,
+            (int) ($saleDelivery->warehouse_id ?? 0),
+            (int) ($saleDelivery->source_location_id ?? 0),
+            $lotId,
+            $this->lineRequiresLotNumber($line)
+        );
+    }
+
+    protected function stockAvailabilityHint(
+        int $companyId,
+        int $productId,
+        int $variantId,
+        float $required,
+        int $currentWarehouseId = 0,
+        int $currentLocationId = 0,
+        ?int $lotId = null,
+        bool $requiresLot = false
+    ): string {
+        if (
+            $companyId <= 0
+            || $productId <= 0
+            || ! Schema::hasTable('stock_quants')
+            || ! Schema::hasTable('warehouses')
+            || ! Schema::hasTable('stock_locations')
+        ) {
+            return 'No fue posible consultar existencias alternativas.';
+        }
+
+        $query = DB::table('stock_quants as q')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'q.warehouse_id')
+            ->leftJoin('stock_locations as l', 'l.id', '=', 'q.location_id')
+            ->where('q.company_id', $companyId)
+            ->where('q.product_id', $productId);
+
+        if ($variantId > 0) {
+            $query->where('q.product_variant_id', $variantId);
+        } else {
+            $query->where(function ($q): void {
+                $q->whereNull('q.product_variant_id')
+                    ->orWhere('q.product_variant_id', 0);
+            });
+        }
+
+        if ($lotId) {
+            $query->where('q.lot_id', $lotId);
+        } elseif ($requiresLot) {
+            $query->whereNotNull('q.lot_id');
+        }
+
+        $rows = $query
+            ->selectRaw('
+                q.warehouse_id,
+                q.location_id,
+                COALESCE(w.name, CONCAT(\'Almacén #\', q.warehouse_id)) as warehouse_name,
+                COALESCE(l.name, CONCAT(\'Ubicación #\', q.location_id)) as location_name,
+                SUM(q.quantity) as quantity,
+                SUM(COALESCE(q.reserved_quantity, 0)) as reserved,
+                SUM(q.quantity - COALESCE(q.reserved_quantity, 0)) as available
+            ')
+            ->groupBy('q.warehouse_id', 'q.location_id', 'w.name', 'l.name')
+            ->havingRaw('SUM(q.quantity - COALESCE(q.reserved_quantity, 0)) > 0')
+            ->orderByDesc(DB::raw('SUM(q.quantity - COALESCE(q.reserved_quantity, 0))'))
+            ->limit(5)
+            ->get();
+
+        if ($rows->isEmpty()) {
+            $activeSourceCount = DB::table('stock_locations as l')
+                ->join('warehouses as w', 'w.id', '=', 'l.warehouse_id')
+                ->where('l.company_id', $companyId)
+                ->where('w.company_id', $companyId)
+                ->where('l.is_active', true)
+                ->where('w.is_active', true)
+                ->count();
+
+            $totalAvailableCompanyQuery = DB::table('stock_quants')
+                ->where('company_id', $companyId)
+                ->where('product_id', $productId);
+
+            if ($variantId > 0) {
+                $totalAvailableCompanyQuery->where('product_variant_id', $variantId);
+            } else {
+                $totalAvailableCompanyQuery->where(function ($q): void {
+                    $q->whereNull('product_variant_id')
+                        ->orWhere('product_variant_id', 0);
+                });
+            }
+
+            $totalAvailableCompany = (float) $totalAvailableCompanyQuery
+                ->selectRaw('COALESCE(SUM(quantity - COALESCE(reserved_quantity, 0)), 0) as available')
+                ->value('available');
+
+            if ($totalAvailableCompany <= 0) {
+                return 'No se encontró existencia disponible de este producto en ningún almacén de esta empresa. Registra una recepción, ajuste de inventario o transferencia antes de crear la entrega.';
+            }
+
+            if ((int) $activeSourceCount <= 1) {
+                return 'Esta empresa solo tiene un almacén/ubicación activa para sugerir y no hay existencia suficiente ahí. Registra una recepción, ajuste de inventario o transferencia antes de crear la entrega.';
+            }
+
+            return 'No se encontró existencia disponible de este producto en otros almacenes/ubicaciones de esta empresa. Registra una recepción, ajuste de inventario o transferencia antes de crear la entrega.';
+        }
+
+        $sufficient = $rows->filter(function ($row) use ($required): bool {
+            return $this->decimal($row->available ?? 0) + 0.000001 >= $required;
+        });
+
+        $displayRows = ($sufficient->isNotEmpty() ? $sufficient : $rows)->take(3);
+
+        $locations = $displayRows
+            ->map(function ($row): string {
+                $label = trim((string) ($row->warehouse_name ?? ('Almacén #' . $row->warehouse_id)))
+                    . ' / '
+                    . trim((string) ($row->location_name ?? ('Ubicación #' . $row->location_id)));
+
+                return $label . ' (disponible: ' . number_format($this->decimal($row->available ?? 0), 2) . ')';
+            })
+            ->implode('; ');
+
+        $prefix = $sufficient->isNotEmpty()
+            ? 'Sí hay existencia suficiente en: '
+            : 'Hay existencia parcial en: ';
+
+        $action = $sufficient->isNotEmpty()
+            ? ' Cambia el almacén/ubicación de la orden o mueve inventario antes de crear la entrega.'
+            : ' Mueve inventario o ajusta la cantidad a entregar.';
+
+        if ($currentWarehouseId > 0 && $currentLocationId > 0) {
+            $action .= ' Almacén actual: ' . $this->warehouseLocationLabel($currentWarehouseId, $currentLocationId) . '.';
+        }
+
+        return $prefix . $locations . '.' . $action;
     }
 
     protected function detectDeliveryType($pendingLines, array $rows): string

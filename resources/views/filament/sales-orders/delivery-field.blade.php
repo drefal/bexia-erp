@@ -8,6 +8,7 @@
     $lines = collect();
     $deliveries = collect();
     $deliveryLines = collect();
+    $stockWarnings = collect();
 
     if ($order && $tablesReady) {
         $reservedTotals = DB::table('sale_delivery_lines as l')
@@ -42,12 +43,132 @@
             ->limit(20)
             ->get();
 
-        if ($deliveries->isNotEmpty()) {
-            $deliveryLines = DB::table('sale_delivery_lines')
-                ->whereIn('sale_delivery_id', $deliveries->pluck('id')->all())
-                ->orderBy('id')
-                ->get()
-                ->groupBy('sale_delivery_id');
+        if (
+            $order
+            && Schema::hasTable('stock_quants')
+            && Schema::hasTable('warehouses')
+            && Schema::hasTable('stock_locations')
+            && ! empty($order->warehouse_id)
+            && ! empty($order->location_id)
+        ) {
+            $currentWarehouse = DB::table('warehouses')->where('id', $order->warehouse_id)->first();
+            $currentLocation = DB::table('stock_locations')->where('id', $order->location_id)->first();
+
+            $currentSourceLabel = trim((string) ($currentWarehouse->name ?? ('Almacén #' . $order->warehouse_id)))
+                . ' / '
+                . trim((string) ($currentLocation->name ?? ('Ubicación #' . $order->location_id)));
+
+            foreach ($lines as $line) {
+                if ((float) ($line->_pending ?? 0) <= 0) {
+                    continue;
+                }
+
+                $variantId = (int) ($line->product_variant_id ?? 0);
+
+                $currentQuery = DB::table('stock_quants')
+                    ->where('company_id', $order->company_id)
+                    ->where('warehouse_id', $order->warehouse_id)
+                    ->where('location_id', $order->location_id)
+                    ->where('product_id', $line->product_id);
+
+                if ($variantId > 0) {
+                    $currentQuery->where('product_variant_id', $variantId);
+                } else {
+                    $currentQuery->where(function ($query) {
+                        $query->whereNull('product_variant_id')
+                            ->orWhere('product_variant_id', 0);
+                    });
+                }
+
+                $currentAvailable = (float) $currentQuery
+                    ->selectRaw('COALESCE(SUM(quantity - COALESCE(reserved_quantity, 0)), 0) as available')
+                    ->value('available');
+
+                if ($currentAvailable + 0.000001 >= (float) $line->_pending) {
+                    continue;
+                }
+
+                $altQuery = DB::table('stock_quants as q')
+                    ->leftJoin('warehouses as w', 'w.id', '=', 'q.warehouse_id')
+                    ->leftJoin('stock_locations as l', 'l.id', '=', 'q.location_id')
+                    ->where('q.company_id', $order->company_id)
+                    ->where('q.product_id', $line->product_id)
+                    ->where(function ($query) use ($order) {
+                        $query->where('q.warehouse_id', '!=', $order->warehouse_id)
+                            ->orWhere('q.location_id', '!=', $order->location_id);
+                    });
+
+                if ($variantId > 0) {
+                    $altQuery->where('q.product_variant_id', $variantId);
+                } else {
+                    $altQuery->where(function ($query) {
+                        $query->whereNull('q.product_variant_id')
+                            ->orWhere('q.product_variant_id', 0);
+                    });
+                }
+
+                $alternatives = $altQuery
+                    ->selectRaw("
+                        q.warehouse_id,
+                        q.location_id,
+                        COALESCE(w.name, CONCAT('Almacén #', q.warehouse_id)) as warehouse_name,
+                        COALESCE(l.name, CONCAT('Ubicación #', q.location_id)) as location_name,
+                        SUM(q.quantity - COALESCE(q.reserved_quantity, 0)) as available
+                    ")
+                    ->groupBy('q.warehouse_id', 'q.location_id', 'w.name', 'l.name')
+                    ->havingRaw('SUM(q.quantity - COALESCE(q.reserved_quantity, 0)) > 0')
+                    ->orderByDesc(DB::raw('SUM(q.quantity - COALESCE(q.reserved_quantity, 0))'))
+                    ->limit(3)
+                    ->get();
+
+                $sufficient = $alternatives->filter(function ($alt) use ($line) {
+                    return (float) ($alt->available ?? 0) + 0.000001 >= (float) ($line->_pending ?? 0);
+                });
+
+                $displayAlternatives = ($sufficient->isNotEmpty() ? $sufficient : $alternatives)
+                    ->map(function ($alt) {
+                        return trim((string) $alt->warehouse_name)
+                            . ' / '
+                            . trim((string) $alt->location_name)
+                            . ' (disponible: '
+                            . number_format((float) ($alt->available ?? 0), 2)
+                            . ')';
+                    })
+                    ->values()
+                    ->all();
+
+                $activeSourceCount = DB::table('stock_locations as l')
+                    ->join('warehouses as w', 'w.id', '=', 'l.warehouse_id')
+                    ->where('l.company_id', $order->company_id)
+                    ->where('w.company_id', $order->company_id)
+                    ->where('l.is_active', true)
+                    ->where('w.is_active', true)
+                    ->count();
+
+                $totalAvailableCompany = DB::table('stock_quants')
+                    ->where('company_id', $order->company_id)
+                    ->where('product_id', $line->product_id)
+                    ->when($variantId > 0, fn ($query) => $query->where('product_variant_id', $variantId))
+                    ->when($variantId <= 0, function ($query) {
+                        $query->where(function ($sub) {
+                            $sub->whereNull('product_variant_id')
+                                ->orWhere('product_variant_id', 0);
+                        });
+                    })
+                    ->selectRaw('COALESCE(SUM(quantity - COALESCE(reserved_quantity, 0)), 0) as available')
+                    ->value('available');
+
+                $stockWarnings->push([
+                    'product' => $line->product_label ?: 'Producto',
+                    'pending' => (float) ($line->_pending ?? 0),
+                    'current_available' => $currentAvailable,
+                    'current_source' => $currentSourceLabel,
+                    'alternatives' => $displayAlternatives,
+                    'has_sufficient_alternative' => $sufficient->isNotEmpty(),
+                    'active_source_count' => (int) $activeSourceCount,
+                    'total_available_company' => (float) $totalAvailableCompany,
+                ]);
+            }
         }
     }
 
@@ -90,12 +211,6 @@
                     Al crear la entrega se reserva inventario. Al validar, se genera la salida y se descuenta existencia.
                 </div>
             </div>
-
-            @if(! $canCreateDelivery)
-                <div class="mb-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
-                    Solo se pueden crear entregas cuando la orden está confirmada y tiene cantidades pendientes.
-                </div>
-            @endif
 
             <div
                 id="bexia-partial-warning"
