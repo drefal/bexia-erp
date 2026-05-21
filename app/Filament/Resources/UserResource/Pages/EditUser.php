@@ -20,6 +20,11 @@ class EditUser extends EditRecord
         return $data;
     }
 
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        return UserResource::normalizeOperationalDefaults($data);
+    }
+
     protected function afterSave(): void
     {
         $roleIds = $this->data['role_ids'] ?? [];

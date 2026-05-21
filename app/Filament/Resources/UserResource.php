@@ -200,7 +200,8 @@ public static function canCreate(): bool
                         ->label('Ubicación predeterminada')
                         ->searchable()
                         ->preload()
-                        ->options(fn (Forms\Get $get): array => static::locationOptions((int) ($get('default_warehouse_id') ?? 0))),
+                        ->options(fn (): array => static::locationOptions())
+                        ->helperText('No se borra al cambiar almacén. Al guardar se valida que pertenezca al almacén seleccionado.'),
                 ])
                 ->columns(2),
 
@@ -348,6 +349,40 @@ public static function canCreate(): bool
             })
             ->all();
     }
+
+
+    public static function normalizeOperationalDefaults(array $data): array
+    {
+        $warehouseId = (int) ($data['default_warehouse_id'] ?? 0);
+        $locationId = (int) ($data['default_location_id'] ?? 0);
+
+        if ($warehouseId <= 0 && $locationId <= 0) {
+            return $data;
+        }
+
+        if ($warehouseId <= 0 && $locationId > 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'default_warehouse_id' => 'Selecciona un almacén predeterminado antes de guardar una ubicación predeterminada.',
+            ]);
+        }
+
+        if ($warehouseId > 0 && ! array_key_exists($warehouseId, static::warehouseOptions())) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'default_warehouse_id' => 'El almacén predeterminado no pertenece a la empresa actual o no está activo.',
+            ]);
+        }
+
+        if ($locationId > 0 && ! array_key_exists($locationId, static::locationOptions($warehouseId))) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'default_location_id' => 'La ubicación predeterminada debe pertenecer al almacén seleccionado y a la empresa actual.',
+            ]);
+        }
+
+        return $data;
+    }
+
+
+
 
 
     public static function table(Table $table): Table
