@@ -393,3 +393,19 @@ Route::middleware(['auth'])->group(function () {
         [\App\Http\Controllers\AccountPayablePrintController::class, 'payment']
     )->name('account-payable-payments.print');
 });
+
+// BEXIA V5.56.7c - Exportes CxP PDF/Excel
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/admin/{tenant}/cxp/reports/aging/pdf', [\App\Http\Controllers\Reports\Cxp\AccountPayableReportExportController::class, 'agingPdf'])
+        ->name('account-payables.reports.aging.pdf');
+
+    Route::get('/admin/{tenant}/cxp/reports/aging/excel', [\App\Http\Controllers\Reports\Cxp\AccountPayableReportExportController::class, 'agingExcel'])
+        ->name('account-payables.reports.aging.excel');
+
+    Route::get('/admin/{tenant}/cxp/reports/supplier-statement/pdf', [\App\Http\Controllers\Reports\Cxp\AccountPayableReportExportController::class, 'supplierPdf'])
+        ->name('account-payables.reports.supplier-statement.pdf');
+
+    Route::get('/admin/{tenant}/cxp/reports/supplier-statement/excel', [\App\Http\Controllers\Reports\Cxp\AccountPayableReportExportController::class, 'supplierExcel'])
+        ->name('account-payables.reports.supplier-statement.excel');
+});
+// END BEXIA V5.56.7c - Exportes CxP PDF/Excel
