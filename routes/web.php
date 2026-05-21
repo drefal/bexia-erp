@@ -382,6 +382,21 @@ Route::middleware(['web', 'auth'])
     ->get('/pos/sessions/{session}/lots', [\App\Http\Controllers\PosController::class, 'lotsForProduct'])
     ->name('pos.sessions.lots');
 
+
+// BEXIA V5.57.4k - Impresión CxC y cobros de clientes
+Route::middleware(['auth'])->group(function () {
+    Route::get(
+        'admin/{tenant}/account-receivables/{receivable}/print',
+        [\App\Http\Controllers\AccountReceivablePrintController::class, 'receivable']
+    )->name('account-receivables.print');
+
+    Route::get(
+        'admin/{tenant}/account-receivable-payments/{payment}/print',
+        [\App\Http\Controllers\AccountReceivablePrintController::class, 'payment']
+    )->name('account-receivable-payments.print');
+});
+// END BEXIA V5.57.4k - Impresión CxC y cobros de clientes
+
 Route::middleware(['auth'])->group(function () {
     Route::get(
         'admin/{tenant}/account-payables/{payable}/print',
@@ -393,6 +408,23 @@ Route::middleware(['auth'])->group(function () {
         [\App\Http\Controllers\AccountPayablePrintController::class, 'payment']
     )->name('account-payable-payments.print');
 });
+
+
+// BEXIA V5.57.6a - Exportes CxC PDF/Excel
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/admin/{tenant}/cxc/reports/aging/pdf', [\App\Http\Controllers\Reports\Cxc\AccountReceivableReportExportController::class, 'agingPdf'])
+        ->name('account-receivables.reports.aging.pdf');
+
+    Route::get('/admin/{tenant}/cxc/reports/aging/excel', [\App\Http\Controllers\Reports\Cxc\AccountReceivableReportExportController::class, 'agingExcel'])
+        ->name('account-receivables.reports.aging.excel');
+
+    Route::get('/admin/{tenant}/cxc/reports/customer-statement/pdf', [\App\Http\Controllers\Reports\Cxc\AccountReceivableReportExportController::class, 'customerPdf'])
+        ->name('account-receivables.reports.customer-statement.pdf');
+
+    Route::get('/admin/{tenant}/cxc/reports/customer-statement/excel', [\App\Http\Controllers\Reports\Cxc\AccountReceivableReportExportController::class, 'customerExcel'])
+        ->name('account-receivables.reports.customer-statement.excel');
+});
+// END BEXIA V5.57.6a - Exportes CxC PDF/Excel
 
 // BEXIA V5.56.7c - Exportes CxP PDF/Excel
 Route::middleware(['web', 'auth'])->group(function () {
