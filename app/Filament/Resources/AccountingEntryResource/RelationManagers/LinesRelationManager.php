@@ -16,10 +16,23 @@ class LinesRelationManager extends RelationManager
     public static function sourceLabel(?string $source): string
     {
         return [
+            'account_payable_purchase_receipt' => 'CxP por recepción de compra',
+            'account_payable_payment' => 'Pago de cuenta por pagar',
+            'account_payable_payment_cancellation' => 'Cancelación de pago CxP',
+
             'inventory.adjustment_in' => 'Ajuste de inventario',
+            'inventory.adjustment_out' => 'Ajuste negativo de inventario',
+            'inventory.adjustment_in:manual_inventory' => 'Ajuste manual de inventario',
+            'inventory.adjustment_out:manual_inventory' => 'Ajuste negativo de inventario',
             'inventory.purchase_receipt' => 'Entrada por compra',
+            'inventory.purchase_receipt:purchase_order_lines' => 'Entrada compra',
             'inventory.sale_issue' => 'Costo de venta',
+            'inventory.sale_issue:sales_order_lines' => 'Costo de venta',
+            'inventory.sale_issue:pos_order_lines' => 'Costo POS',
             'inventory.customer_return' => 'Devolución de cliente',
+            'inventory.customer_return:pos_order_refund_lines' => 'Devolución POS',
+            'inventory.supplier_return' => 'Devolución a proveedor',
+
             'accounting.reversal' => 'Reversa contable',
             'invoice' => 'Factura',
         ][$source] ?? ($source ?: 'Sin origen');

@@ -409,3 +409,10 @@ Route::middleware(['web', 'auth'])->group(function () {
         ->name('account-payables.reports.supplier-statement.excel');
 });
 // END BEXIA V5.56.7c - Exportes CxP PDF/Excel
+
+// BEXIA V5.56.10e accounting entry PDF
+Route::middleware(['web', 'auth'])->group(function (): void {
+    Route::get('/admin/{tenant}/accounting-entries/{accountingEntry}/print', \App\Http\Controllers\Accounting\AccountingEntryPrintController::class)
+        ->name('accounting.entries.print');
+});
+// END BEXIA V5.56.10e accounting entry PDF
