@@ -28,7 +28,7 @@ class PosPointResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
 
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 70;
 
     protected static bool $isScopedToTenant = false;
 

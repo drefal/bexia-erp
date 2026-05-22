@@ -18,7 +18,7 @@ class ReplenishmentReport extends Page
 
     protected static ?string $title = 'Reporte de reabastecimiento';
 
-    protected static ?int $navigationSort = 75;
+    protected static ?int $navigationSort = 110;
 
     protected static string $view = 'filament.pages.replenishment-report';
 

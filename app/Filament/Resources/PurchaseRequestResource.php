@@ -28,7 +28,7 @@ class PurchaseRequestResource extends Resource
 
     protected static ?string $navigationLabel = 'Solicitudes de compra';
 
-    protected static ?int $navigationSort = 200;
+    protected static ?int $navigationSort = 10;
 
     protected static ?string $modelLabel = 'solicitud de compra';
 

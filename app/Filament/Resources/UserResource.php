@@ -24,6 +24,8 @@ use Spatie\Permission\Models\Role;
 
 class UserResource extends Resource
 {
+    protected static ?int $navigationSort = 40;
+    protected static ?string $navigationGroup = 'Seguridad';
     protected static ?string $model = User::class;
     protected static bool $isScopedToTenant = false;
     protected static ?string $navigationIcon = 'heroicon-o-users';
@@ -125,24 +127,18 @@ public static function canCreate(): bool
         return $query;
     }
 
-    public static function shouldRegisterNavigation(): bool
+        public static function shouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('users.view')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
-    public static function canViewAny(): bool
+        public static function canViewAny(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('users.view')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function form(Form $form): Form

@@ -23,7 +23,7 @@ class ApprovalWorkflowResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-check-badge';
 
-    protected static ?string $navigationGroup = 'Configuración';
+    protected static ?string $navigationGroup = 'Configuración empresa';
 
     protected static ?string $navigationLabel = 'Flujos de aprobación';
 
@@ -31,7 +31,7 @@ class ApprovalWorkflowResource extends Resource
 
     protected static ?string $pluralModelLabel = 'flujos de aprobación';
 
-    protected static ?int $navigationSort = 85;
+    protected static ?int $navigationSort = 20;
 
     protected static bool $isScopedToTenant = false;
 

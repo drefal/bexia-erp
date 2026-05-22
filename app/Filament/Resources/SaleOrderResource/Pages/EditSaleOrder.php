@@ -15,6 +15,45 @@ class EditSaleOrder extends EditRecord
     {
         $this->record->recalculateTotals();
     }
+    protected function salesSectionLabel(): string
+    {
+        $status = (string) ($this->record->status ?? '');
+
+        if (in_array($status, [
+            'confirmed',
+            'partially_delivered',
+            'delivered',
+            'invoiced',
+            'partially_invoiced',
+            'closed',
+        ], true)) {
+            return 'Órdenes de venta';
+        }
+
+        return 'Cotizaciones';
+    }
+
+    protected function salesSectionUrl(): string
+    {
+        return $this->salesSectionLabel() === 'Órdenes de venta'
+            ? SaleOrderResource::getUrl('orders')
+            : SaleOrderResource::getUrl('quotes');
+    }
+
+    public function getBreadcrumbs(): array
+    {
+        return [
+            $this->salesSectionUrl() => $this->salesSectionLabel(),
+            '#' => (string) ($this->record->number ?? $this->record->getKey()),
+        ];
+    }
+
+    public function getTitle(): string
+    {
+        return $this->salesSectionLabel() === 'Órdenes de venta'
+            ? 'Editar orden de venta'
+            : 'Editar cotización';
+    }
 
     protected function getHeaderActions(): array
     {
@@ -340,14 +379,4 @@ class EditSaleOrder extends EditRecord
                 }),
         ];
     }
-    public function getTitle(): string
-    {
-        $number = $this->record?->number ?: '';
-
-        return $this->record?->status === 'draft'
-            ? trim('Cotización ' . $number)
-            : trim('Orden de venta ' . $number);
-    }
-
-
 }

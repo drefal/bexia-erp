@@ -19,7 +19,7 @@ class AccountingReports extends Page
 
     protected static ?string $title = 'Reportes contables';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 60;
 
     protected static string $view = 'filament.pages.accounting-reports';
 

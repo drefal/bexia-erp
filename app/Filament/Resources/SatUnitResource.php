@@ -18,7 +18,7 @@ class SatUnitResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-scale';
 
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
 
     protected static ?string $navigationLabel = 'Unidades SAT';
 
@@ -26,7 +26,7 @@ class SatUnitResource extends Resource
 
     protected static ?string $pluralModelLabel = 'unidades SAT';
 
-    protected static ?int $navigationSort = 30;
+    protected static ?int $navigationSort = 20;
 
 public static function canCreate(): bool
 {

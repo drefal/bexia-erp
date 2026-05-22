@@ -21,7 +21,7 @@ class SatCfdiUseTaxRegimeResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-adjustments-horizontal';
 
-    protected static ?string $navigationGroup = 'Configuración facturación';
+    protected static ?string $navigationGroup = 'Facturación';
 
     protected static ?string $navigationLabel = 'Uso CFDI por régimen';
 
@@ -31,7 +31,7 @@ class SatCfdiUseTaxRegimeResource extends Resource
 
     protected static ?string $slug = 'cfdi-use-tax-regimes';
 
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 40;
 
 public static function canCreate(): bool
     {

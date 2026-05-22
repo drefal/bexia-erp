@@ -15,9 +15,9 @@ class MyNotifications extends Page
 
     protected static ?string $title = 'Mis avisos';
 
-    protected static ?string $navigationGroup = 'Aprobaciones';
+    protected static ?string $navigationGroup = 'Inicio';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 20;
 
     protected static string $view = 'filament.pages.my-notifications';
 

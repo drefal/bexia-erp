@@ -20,11 +20,11 @@ class SalesPriceListResource extends Resource
 
     protected static ?string $tenantOwnershipRelationshipName = 'company';
 
-    protected static ?string $navigationGroup = 'Ventas';
+    protected static ?string $navigationGroup = 'Productos';
 
-    protected static ?string $navigationLabel = 'Listas de Precios';
+    protected static ?string $navigationLabel = 'Listas de precios';
 
-    protected static ?int $navigationSort = 320;
+    protected static ?int $navigationSort = 40;
 protected static ?string $modelLabel = 'lista de precios';
 
     protected static ?string $pluralModelLabel = 'listas de precios';

@@ -19,11 +19,11 @@ class ProductPriceCostAuditResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-clock';
 
-    protected static ?string $navigationGroup = 'Ventas';
+    protected static ?string $navigationGroup = 'Productos';
 
-    protected static ?string $navigationLabel = 'Listas de Precios';
+    protected static ?string $navigationLabel = 'Auditoría de precios/costos';
 
-    protected static ?int $navigationSort = 320;
+    protected static ?int $navigationSort = 50;
 protected static ?string $modelLabel = 'auditoría de precio/costo';
 
     protected static ?string $pluralModelLabel = 'auditoría de precios y costos de productos';

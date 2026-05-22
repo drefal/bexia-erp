@@ -19,11 +19,11 @@ class SatBillingCatalogItemResource extends Resource
     protected static bool $isScopedToTenant = false;
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
     protected static ?string $navigationLabel = 'Catálogos CFDI';
     protected static ?string $modelLabel = 'Elemento CFDI';
     protected static ?string $pluralModelLabel = 'Catálogos CFDI';
-    protected static ?int $navigationSort = 50;
+    protected static ?int $navigationSort = 70;
 
     public static function canAccess(): bool
     {

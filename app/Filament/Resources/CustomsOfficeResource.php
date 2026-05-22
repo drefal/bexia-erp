@@ -19,7 +19,7 @@ class CustomsOfficeResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office-2';
 
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
 
     protected static ?string $navigationLabel = 'Aduanas';
 
@@ -27,7 +27,7 @@ class CustomsOfficeResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Aduanas';
 
-    protected static ?int $navigationSort = 95;
+    protected static ?int $navigationSort = 90;
 
     public static function shouldRegisterNavigation(): bool
     {

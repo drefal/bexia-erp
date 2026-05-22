@@ -18,7 +18,7 @@ class CashDenominationResource extends Resource
 {
     protected static ?string $model = CashDenomination::class;
 
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
 
     protected static ?string $navigationLabel = 'Denominaciones';
 
@@ -28,7 +28,7 @@ class CashDenominationResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
 
-    protected static ?int $navigationSort = 32;
+    protected static ?int $navigationSort = 40;
 
     protected static bool $isScopedToTenant = false;
 

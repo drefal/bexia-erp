@@ -19,7 +19,7 @@ protected static ?string $model = PaymentTerm::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-clock';
 
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
 
     protected static ?string $navigationLabel = 'Términos de pago';
 
@@ -27,7 +27,7 @@ protected static ?string $model = PaymentTerm::class;
 
     protected static ?string $pluralModelLabel = 'términos de pago';
 
-    protected static ?int $navigationSort = 60;
+    protected static ?int $navigationSort = 80;
 
     protected static bool $isScopedToTenant = false;
 

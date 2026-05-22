@@ -16,9 +16,9 @@ class MyPendingApprovals extends Page
 
     protected static ?string $title = 'Mis aprobaciones pendientes';
 
-    protected static ?string $navigationGroup = 'Aprobaciones';
+    protected static ?string $navigationGroup = 'Inicio';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 10;
 
     protected static string $view = 'filament.pages.my-pending-approvals';
 protected static function canUseApprovalsPage(): bool

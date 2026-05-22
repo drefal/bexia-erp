@@ -20,11 +20,11 @@ class SatProductServiceCodeResource extends Resource
     protected static ?string $model = SatProductServiceCode::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
     protected static ?string $navigationLabel = 'Claves producto/servicio SAT';
     protected static ?string $modelLabel = 'Clave producto/servicio SAT';
     protected static ?string $pluralModelLabel = 'Claves producto/servicio SAT';
-    protected static ?int $navigationSort = 40;
+    protected static ?int $navigationSort = 50;
 
     protected static function canManage(): bool
     {

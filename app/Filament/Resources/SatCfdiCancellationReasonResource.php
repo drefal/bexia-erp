@@ -16,7 +16,7 @@ class SatCfdiCancellationReasonResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-x-circle';
 
-    protected static ?string $navigationGroup = 'Configuración facturación';
+    protected static ?string $navigationGroup = 'Facturación';
 
     protected static ?string $navigationLabel = 'Motivos cancelación CFDI';
 
@@ -24,7 +24,7 @@ class SatCfdiCancellationReasonResource extends Resource
 
     protected static ?string $pluralModelLabel = 'motivos de cancelación CFDI';
 
-    protected static ?int $navigationSort = 60;
+    protected static ?int $navigationSort = 50;
 
 public static function shouldRegisterNavigation(): bool
     {

@@ -21,7 +21,7 @@ class BillingSeriesResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-numbered-list';
 
-    protected static ?string $navigationGroup = 'Configuración facturación';
+    protected static ?string $navigationGroup = 'Facturación';
 
     protected static ?string $navigationLabel = 'Series de facturación';
 
@@ -31,7 +31,7 @@ class BillingSeriesResource extends Resource
 
     protected static ?string $slug = 'billing-series';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 30;
 
 public static function canCreate(): bool
     {

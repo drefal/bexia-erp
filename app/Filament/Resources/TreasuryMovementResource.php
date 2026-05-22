@@ -21,6 +21,7 @@ use Throwable;
 
 class TreasuryMovementResource extends Resource
 {
+    protected static ?string $navigationLabel = 'Movimientos de tesorería';
     protected static ?string $model = TreasuryMovement::class;
 
     protected static ?string $tenantOwnershipRelationshipName = 'company';

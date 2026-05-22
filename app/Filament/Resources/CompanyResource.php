@@ -34,7 +34,7 @@ class CompanyResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office-2';
 
-    protected static ?string $navigationGroup = 'Configuración';
+    protected static ?string $navigationGroup = 'Configuración Bexia';
 
     protected static ?int $navigationSort = 30;
 
@@ -148,24 +148,18 @@ public static function canCreate(): bool
         return $query->whereRaw('1 = 0');
     }
 
-    public static function shouldRegisterNavigation(): bool
+        public static function shouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('settings.access')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
-    public static function canViewAny(): bool
+        public static function canViewAny(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('settings.access')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function form(Form $form): Form

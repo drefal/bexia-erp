@@ -34,7 +34,7 @@ protected static ?string $model = Product::class;
     protected static ?string $navigationGroup = 'Productos';
     protected static ?string $navigationLabel = 'Productos';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 10;
 protected static ?string $modelLabel = 'producto';
     protected static ?string $pluralModelLabel = 'productos';
     protected static ?string $tenantOwnershipRelationshipName = 'company';

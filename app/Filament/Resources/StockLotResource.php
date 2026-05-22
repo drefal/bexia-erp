@@ -29,7 +29,7 @@ class StockLotResource extends Resource
 
     protected static ?string $pluralModelLabel = 'lotes';
 
-    protected static ?int $navigationSort = 52;
+    protected static ?int $navigationSort = 60;
 
     protected static bool $isScopedToTenant = false;
 

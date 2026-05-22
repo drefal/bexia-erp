@@ -20,7 +20,7 @@ class PurchaseReceiptResource extends Resource
 
     protected static ?string $navigationLabel = 'Recepciones de compra';
 
-    protected static ?int $navigationSort = 210;
+    protected static ?int $navigationSort = 50;
 protected static ?string $modelLabel = 'recepción de compra';
 
     protected static ?string $pluralModelLabel = 'recepciones de compra';

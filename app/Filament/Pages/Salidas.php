@@ -31,7 +31,7 @@ class Salidas extends Page implements Forms\Contracts\HasForms
     protected static ?string $navigationIcon = 'heroicon-o-arrow-up-tray';
     protected static ?string $navigationLabel = 'Salidas';
 
-    protected static ?int $navigationSort = 101;
+    protected static ?int $navigationSort = 10;
     protected static ?string $navigationGroup = 'Salidas';
 protected static ?string $title = 'Salidas';
     protected static string $view = 'filament.pages.salidas';

@@ -33,7 +33,7 @@ class StockMovementResource extends Resource
 
     protected static ?string $pluralModelLabel = 'transacciones de almacén';
 
-    protected static ?int $navigationSort = 55;
+    protected static ?int $navigationSort = 80;
 
     protected static bool $isScopedToTenant = false;
 

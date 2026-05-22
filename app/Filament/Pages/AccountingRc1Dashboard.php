@@ -18,7 +18,7 @@ class AccountingRc1Dashboard extends Page
 
     protected static ?string $title = 'Resumen contable';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 10;
 
     protected static string $view = 'filament.pages.accounting-rc1-dashboard';
     public function getMaxContentWidth(): MaxWidth|string|null

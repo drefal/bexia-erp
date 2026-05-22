@@ -17,15 +17,18 @@ use Spatie\Permission\PermissionRegistrar;
 
 class UserAccessResource extends Resource
 {
+    protected static ?int $navigationSort = 30;
     protected static ?string $model = User::class;
     protected static bool $isScopedToTenant = false;
     protected static ?string $navigationIcon = 'heroicon-o-identification';
     protected static ?string $tenantOwnershipRelationshipName = null;
     protected static ?string $navigationGroup = 'Seguridad';
 
-    public static function shouldRegisterNavigation(): bool
+        public static function shouldRegisterNavigation(): bool
     {
-        return false;
+        $user = auth()->user();
+
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function getNavigationLabel(): string
@@ -48,9 +51,11 @@ class UserAccessResource extends Resource
         return 'Usuarios';
     }
 
-    public static function canViewAny(): bool
+        public static function canViewAny(): bool
     {
-        return auth()->check() && auth()->user()->can('users.update');
+        $user = auth()->user();
+
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function canEdit(Model $record): bool

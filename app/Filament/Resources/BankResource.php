@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class BankResource extends Resource
 {
+    protected static ?string $navigationLabel = 'Bancos';
     protected static ?string $model = Bank::class;
 
     protected static ?string $tenantOwnershipRelationshipName = 'company';

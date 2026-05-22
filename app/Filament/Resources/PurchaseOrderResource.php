@@ -22,7 +22,7 @@ protected static ?string $model = PurchaseOrder::class;
 
     protected static ?string $navigationLabel = 'Órdenes de compra';
 
-    protected static ?int $navigationSort = 210;
+    protected static ?int $navigationSort = 30;
 
     protected static ?string $modelLabel = 'orden de compra';
 

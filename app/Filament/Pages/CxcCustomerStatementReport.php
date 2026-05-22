@@ -12,9 +12,9 @@ class CxcCustomerStatementReport extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-document-chart-bar';
     protected static ?string $navigationGroup = 'Cuentas por cobrar';
-    protected static ?string $navigationLabel = 'Estado de cuenta clientes';
+    protected static ?string $navigationLabel = 'Estados de cuenta clientes';
     protected static ?string $title = 'Estados de cuenta cliente';
-    protected static ?int $navigationSort = 31;
+    protected static ?int $navigationSort = 40;
     protected static ?string $slug = 'cxc/reportes/estado-clientes';
     protected static string $view = 'filament.pages.cxc-customer-statement-report';
 

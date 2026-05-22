@@ -41,6 +41,47 @@ class AdminPanelProvider extends PanelProvider
             ->authGuard('web')
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->sidebarCollapsibleOnDesktop()
+            // BEXIA_MENU_ORDER_V5_59_1B_START
+            ->navigationGroups([
+                \Filament\Navigation\NavigationGroup::make('Inicio'),
+                \Filament\Navigation\NavigationGroup::make('Contactos'),
+                \Filament\Navigation\NavigationGroup::make('Recursos Humanos'),
+                \Filament\Navigation\NavigationGroup::make('Productos'),
+                \Filament\Navigation\NavigationGroup::make('Compras'),
+                \Filament\Navigation\NavigationGroup::make('Cuentas por pagar'),
+                \Filament\Navigation\NavigationGroup::make('Ventas'),
+                \Filament\Navigation\NavigationGroup::make('Cuentas por cobrar'),
+                \Filament\Navigation\NavigationGroup::make('Punto de Venta'),
+                \Filament\Navigation\NavigationGroup::make('Inventario'),
+                \Filament\Navigation\NavigationGroup::make('Salidas'),
+                \Filament\Navigation\NavigationGroup::make('Tesorería'),
+                \Filament\Navigation\NavigationGroup::make('Facturación'),
+                \Filament\Navigation\NavigationGroup::make('Contabilidad'),
+                \Filament\Navigation\NavigationGroup::make('Catálogos'),
+                \Filament\Navigation\NavigationGroup::make('Configuración empresa'),
+                \Filament\Navigation\NavigationGroup::make('Configuración Bexia'),
+                \Filament\Navigation\NavigationGroup::make('Seguridad'),
+            ])
+            // BEXIA_MENU_ORDER_V5_59_1B_END
+            // BEXIA_SALES_NAV_ITEMS_V5_59_1F_START
+            ->navigationItems([
+                \Filament\Navigation\NavigationItem::make('Cotizaciones')
+                    ->group('Ventas')
+                    ->sort(10)
+                    ->icon('heroicon-o-document-text')
+                    ->url(fn (): string => \App\Filament\Resources\SaleOrderResource::getUrl('quotes'))
+                    ->isActiveWhen(fn (): bool => request()->routeIs('filament.admin.resources.sale-orders.quotes'))
+                    ->visible(fn (): bool => \App\Filament\Resources\SaleOrderResource::canViewAny()),
+
+                \Filament\Navigation\NavigationItem::make('Órdenes de venta')
+                    ->group('Ventas')
+                    ->sort(20)
+                    ->icon('heroicon-o-shopping-cart')
+                    ->url(fn (): string => \App\Filament\Resources\SaleOrderResource::getUrl('orders'))
+                    ->isActiveWhen(fn (): bool => request()->routeIs('filament.admin.resources.sale-orders.orders'))
+                    ->visible(fn (): bool => \App\Filament\Resources\SaleOrderResource::canViewAny()),
+            ])
+            // BEXIA_SALES_NAV_ITEMS_V5_59_1F_END
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
                 fn (): HtmlString => new HtmlString(<<<'HTML'

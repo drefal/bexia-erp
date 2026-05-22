@@ -15,7 +15,7 @@ class OrganizationResource extends Resource
 {
     protected static ?string $model = Organization::class;
     protected static ?string $navigationIcon = 'heroicon-o-building-library';
-    protected static ?string $navigationGroup = 'Configuración';
+    protected static ?string $navigationGroup = 'Configuración Bexia';
     protected static bool $isScopedToTenant = false;
     protected static ?string $tenantOwnershipRelationshipName = null;
     protected static ?int $navigationSort = 10;
@@ -25,24 +25,18 @@ public static function getNavigationLabel(): string
         return 'Clientes Bexia';
     }
 
-    public static function shouldRegisterNavigation(): bool
+        public static function shouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('settings.access')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
-    public static function canViewAny(): bool
+        public static function canViewAny(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('settings.access')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function form(Form $form): Form

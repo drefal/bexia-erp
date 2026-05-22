@@ -17,11 +17,11 @@ class TaxRateResource extends Resource
     protected static ?string $model = TaxRate::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-receipt-percent';
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
     protected static ?string $navigationLabel = 'Impuestos';
     protected static ?string $modelLabel = 'Impuesto';
     protected static ?string $pluralModelLabel = 'Impuestos';
-    protected static ?int $navigationSort = 42;
+    protected static ?int $navigationSort = 60;
 
     protected static ?string $tenantOwnershipRelationshipName = 'company';
 
