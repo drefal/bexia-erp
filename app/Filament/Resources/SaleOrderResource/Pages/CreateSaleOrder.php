@@ -33,4 +33,14 @@ class CreateSaleOrder extends CreateRecord
     }
 
 
+
+    protected function getRedirectUrl(): string
+    {
+        // V5.61.2d: despues de crear la cabecera, continuar directo en Editar
+        // para capturar productos y guardar cambios.
+        return static::getResource()::getUrl('edit', [
+            'record' => $this->record,
+        ]);
+    }
+
 }

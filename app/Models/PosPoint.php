@@ -49,5 +49,7 @@ class PosPoint extends Model
         'load_products_in_background' => 'boolean',
         'limited_customers_loading' => 'boolean',
         'load_customers_in_background' => 'boolean',
+        'currency_ids' => 'array',
+        'cash_denomination_ids' => 'array',
     ];
 }

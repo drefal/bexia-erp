@@ -188,7 +188,7 @@ class ViewSaleOrder extends ViewRecord
                 ->visible(fn (): bool => \App\Support\SalesApprovalWorkflow::currentUserCanActOnPendingRequest($this->record))
                 ->requiresConfirmation()
                 ->modalHeading('Aprobar cotización')
-                ->modalDescription('La cotización quedará aprobada y podrá confirmarse como orden de venta.')
+                ->modalDescription('La cotización se convertirá en orden de venta.')
                 ->action(function (): void {
                     \App\Support\SalesApprovalWorkflow::approvePendingRequestForOrder($this->record);
 
@@ -343,13 +343,15 @@ class ViewSaleOrder extends ViewRecord
 
             Actions\EditAction::make(),
 
+            SaleOrderResource::validateQuoteHeaderAction($this->record),
+            SaleOrderResource::sendQuoteToPosHeaderAction($this->record),
             Actions\Action::make('confirm')
-                ->label('Confirmar cotización')
+                ->label('Convertir a orden de venta')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->visible(fn (): bool => $this->record->status === 'draft' && \App\Filament\Resources\SaleOrderResource::userCanPermission('sales.confirm'))
+                ->visible(fn (): bool => $this->record->status === 'draft' && \App\Filament\Resources\SaleOrderResource::isQuoteValidatedForPos($this->record) && \App\Filament\Resources\SaleOrderResource::userCanPermission('sales.confirm'))
                 ->requiresConfirmation()
-                ->modalHeading('Confirmar cotización')
+                ->modalHeading('Convertir a orden de venta')
                 ->modalDescription('La cotización se convertirá en orden de venta. Este paso todavía no afecta inventario.')
                 ->action(function (): void {
                     if (! $this->record->lines()->exists()) {

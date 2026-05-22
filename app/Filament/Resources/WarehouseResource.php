@@ -88,6 +88,7 @@ public static function shouldRegisterNavigation(): bool
                             ->columnSpan(2),
 
                         Forms\Components\Textarea::make('description')
+                            ->dehydrated(false) // V5.61.2j: warehouses no tiene columna description.
                             ->label('Descripción')
                             ->rows(3)
                             ->columnSpanFull(),
