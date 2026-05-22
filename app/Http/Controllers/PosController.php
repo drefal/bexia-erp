@@ -298,31 +298,46 @@ abort_if(! $sessionRow, 404);
             ->all();
     }
 
-    protected function cashDenominationsForPos(object $pos): array
+    private function cashDenominationsForPos(object $pos): array
     {
-        if (! Schema::hasTable('cash_denominations')) {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('cash_denominations')) {
             return [];
         }
 
         $ids = $this->jsonArray($pos->cash_denomination_ids ?? null, []);
+        $ids = array_values(array_unique(array_filter(array_map('strval', $ids))));
 
-        $query = DB::table('cash_denominations')->where('is_active', true);
+        $query = \Illuminate\Support\Facades\DB::table('cash_denominations')
+            ->where('is_active', true);
 
-        if ($ids) {
+        if (! empty($ids)) {
             $query->whereIn('id', $ids);
+        } elseif (\Illuminate\Support\Facades\Schema::hasColumn('cash_denominations', 'company_id')) {
+            $query->where('company_id', (int) ($pos->company_id ?? 0));
         }
 
         return $query
+            ->orderByRaw("case when type = 'coin' then 0 else 1 end")
             ->orderBy('value')
+            ->orderBy('id')
             ->get()
-            ->map(fn ($row) => [
-                'id' => $row->id,
-                'name' => $row->name,
-                'value' => (float) $row->value,
-                'type' => $row->type,
-            ])
+            ->unique(fn ($row): string => (string) ($row->company_id ?? '') . '|' . (string) $row->value . '|' . (string) $row->type)
+            ->map(function ($row): array {
+                $name = trim((string) ($row->name ?? 'Denominación'));
+                $value = (float) ($row->value ?? 0);
+
+                return [
+                    'id' => (int) $row->id,
+                    'name' => $name,
+                    'label' => $name . ' - $' . number_format($value, 2),
+                    'value' => $value,
+                    'type' => (string) ($row->type ?? 'cash'),
+                ];
+            })
+            ->values()
             ->all();
     }
+
 
 
 
@@ -4648,7 +4663,41 @@ return response()->json([
         // V5.46.1 inventory poster: generar salida de inventario al cobrar.
         $v5461InventoryResult = app(\App\Support\PosInventoryPoster::class)->postPaidOrder((int) $order);
 
-        return response()->json([
+        
+        // V5.61.4e: sincronizar cotizacion despues de salida PDV.
+        try {
+            app(\App\Support\Sales\QuotePosTicketSyncService::class)
+                ->markPaidOnlyFromPosOrder((int) ((int) $order));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('No se pudo marcar cotizacion como cobrada en PDV despues de salida.', [
+                'pos_order_id' => (int) ((int) $order),
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+            // V5.61.2m: si este ticket viene de cotizacion, marcarla como Cobrado en PDV.
+            try {
+                $quotePosSyncOrderId = null;
+
+                if (isset($orderId)) {
+                    $quotePosSyncOrderId = (int) $orderId;
+                } elseif (isset($order) && is_object($order) && isset($order->id)) {
+                    $quotePosSyncOrderId = (int) $order->id;
+                } elseif (isset($posOrder) && is_object($posOrder) && isset($posOrder->id)) {
+                    $quotePosSyncOrderId = (int) $posOrder->id;
+                }
+
+                if ($quotePosSyncOrderId) {
+                    app(\App\Support\Sales\QuotePosTicketSyncService::class)
+                        ->markPaidFromPosOrder($quotePosSyncOrderId);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('No se pudo sincronizar cotizacion cobrada en PDV.', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+return response()->json([
             'ok' => true,
             'message' => 'Cobro registrado correctamente.',
             'order_id' => (int) $result['order']->id,

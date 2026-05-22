@@ -45,47 +45,95 @@ class ListSaleQuotes extends ListRecords
 
     public function getTabs(): array
     {
+        $notSentOrPaidInPos = function (\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder {
+            return $query->where(function (\Illuminate\Database\Eloquent\Builder $sub): void {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_pos_payment_status')) {
+                    $sub->whereNull('quote_pos_payment_status')
+                        ->orWhereNotIn('quote_pos_payment_status', ['sent', 'paid']);
+                }
+            });
+        };
+
         return [
-            'draft' => Tab::make('Borradores')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $query->whereIn('status', [
-                    'draft',
-                    'quotation',
-                    'quote',
-                ])),
+            'draft' => \Filament\Resources\Components\Tab::make('Borradores')
+                ->modifyQueryUsing(function (\Illuminate\Database\Eloquent\Builder $query) use ($notSentOrPaidInPos): \Illuminate\Database\Eloquent\Builder {
+                    return $notSentOrPaidInPos(
+                        $query->where('status', 'draft')
+                    );
+                }),
 
-            'approval_pending' => Tab::make('Pendientes de aprobación')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $this->quoteBaseQuery($query)
-                    ->where(function (Builder $query): void {
-                        $this->approvalStatusCondition($query, ['pending', 'required']);
-                    })
-                ),
+            'pending_approval' => \Filament\Resources\Components\Tab::make('Pendientes de aprobación')
+                ->modifyQueryUsing(function (\Illuminate\Database\Eloquent\Builder $query) use ($notSentOrPaidInPos): \Illuminate\Database\Eloquent\Builder {
+                    return $notSentOrPaidInPos(
+                        $query->where('margin_approval_status', 'pending')
+                    );
+                }),
 
-            'approval_approved' => Tab::make('Aprobadas')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $this->quoteBaseQuery($query)
-                    ->where(function (Builder $query): void {
-                        $this->approvalStatusCondition($query, ['approved']);
-                    })
-                ),
+            'approved' => \Filament\Resources\Components\Tab::make('Aprobadas')
+                ->modifyQueryUsing(function (\Illuminate\Database\Eloquent\Builder $query) use ($notSentOrPaidInPos): \Illuminate\Database\Eloquent\Builder {
+                    return $notSentOrPaidInPos(
+                        $query->where('margin_approval_status', 'approved')
+                    );
+                }),
 
-            'approval_rejected' => Tab::make('Rechazadas')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $this->quoteBaseQuery($query)
-                    ->where(function (Builder $query): void {
-                        $this->approvalStatusCondition($query, ['rejected', 'denied']);
-                    })
-                ),
+            'rejected' => \Filament\Resources\Components\Tab::make('Rechazadas')
+                ->modifyQueryUsing(function (\Illuminate\Database\Eloquent\Builder $query) use ($notSentOrPaidInPos): \Illuminate\Database\Eloquent\Builder {
+                    return $notSentOrPaidInPos(
+                        $query->where('margin_approval_status', 'rejected')
+                    );
+                }),
 
-            'cancelled' => Tab::make('Canceladas')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $this->quoteBaseQuery($query)
-                    ->whereIn('status', ['cancelled', 'canceled'])
-                ),
+            'cancelled' => \Filament\Resources\Components\Tab::make('Canceladas')
+                ->modifyQueryUsing(fn (\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder => $query
+                    ->where('status', 'cancelled')),
 
-            'all' => Tab::make('Todas')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $this->quoteBaseQuery($query)),
+            'sent_to_pos' => \Filament\Resources\Components\Tab::make('Enviadas a PDV')
+                ->modifyQueryUsing(function (\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder {
+                    return $query->where(function (\Illuminate\Database\Eloquent\Builder $sub): void {
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_pos_payment_status')) {
+                            $sub->where('quote_pos_payment_status', 'sent');
+                        }
+
+                        if (\Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+                            $sub->orWhereExists(function ($exists): void {
+                                $exists->select(\Illuminate\Support\Facades\DB::raw(1))
+                                    ->from('sales_quote_pos_tickets as sqpt')
+                                    ->whereColumn('sqpt.sales_order_id', 'sales_orders.id')
+                                    ->whereIn('sqpt.status', ['pending', 'sent']);
+                            });
+                        }
+                    });
+                }),
+
+            'paid_in_pos' => \Filament\Resources\Components\Tab::make('Cobradas en PDV')
+                ->modifyQueryUsing(function (\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder {
+                    return $query->where(function (\Illuminate\Database\Eloquent\Builder $sub): void {
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_pos_payment_status')) {
+                            $sub->where('quote_pos_payment_status', 'paid');
+                        }
+
+                        if (\Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+                            $sub->orWhereExists(function ($exists): void {
+                                $exists->select(\Illuminate\Support\Facades\DB::raw(1))
+                                    ->from('sales_quote_pos_tickets as sqpt')
+                                    ->whereColumn('sqpt.sales_order_id', 'sales_orders.id')
+                                    ->where('sqpt.status', 'paid');
+                            });
+                        }
+                    });
+                }),
+
+            'all' => \Filament\Resources\Components\Tab::make('Todas'),
         ];
     }
 
+
     protected function quoteBaseQuery(Builder $query): Builder
     {
+        // V5.61.2b: cotizaciones excluye ordenes confirmadas.
+        // Las ordenes de venta viven en su propia seccion.
+        $query->whereNotIn('status', ['confirmed', 'delivered', 'partially_delivered']);
+
         return $query->where(function (Builder $query): void {
             $query->whereIn('status', [
                 'draft',

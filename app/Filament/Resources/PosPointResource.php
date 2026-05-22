@@ -420,6 +420,7 @@ Forms\Components\TextInput::make('name')
                                             ->helperText('Se toman de catálogos de facturación si existen. Si no, se muestran métodos básicos.'),
 
                                         Forms\Components\Select::make('currency_ids')
+                                            ->dehydrated(true) // V5.61.3c dehydrated currency_ids
                                             ->label('Monedas permitidas')
                                             ->multiple()
                                             ->options(fn () => static::currencyOptions())
@@ -433,6 +434,12 @@ Forms\Components\TextInput::make('name')
                                             ->preload(),
 
                                         Forms\Components\Select::make('cash_denomination_ids')
+                                            ->dehydrated(true) // V5.61.3c dehydrated cash_denomination_ids
+                                            ->afterStateHydrated(function ($component, $state): void {
+                                                $state = is_array($state) ? $state : [];
+                                                $component->state(array_values(array_unique(array_map('strval', $state))));
+                                            })
+                                            ->dehydrateStateUsing(fn ($state): array => array_values(array_unique(array_map('strval', is_array($state) ? $state : [])))) // V5.61.3b: normalizar denominaciones seleccionadas.
                                             ->label('Denominaciones permitidas')
                                             ->multiple()
                                             ->options(fn () => static::cashDenominationOptions())
@@ -813,21 +820,63 @@ Forms\Components\TextInput::make('name')
 
     protected static function cashDenominationOptions(): array
     {
-        if (! Schema::hasTable('cash_denominations')) {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('cash_denominations')) {
             return [];
         }
 
-        $columns = Schema::getColumnListing('cash_denominations');
+        $companyId = null;
 
-        return DB::table('cash_denominations')
-            ->where('is_active', true)
+        try {
+            $tenant = class_exists(\Filament\Facades\Filament::class)
+                ? \Filament\Facades\Filament::getTenant()
+                : null;
+
+            if ($tenant && isset($tenant->id)) {
+                $companyId = (int) $tenant->id;
+            }
+        } catch (\Throwable $e) {
+            $companyId = null;
+        }
+
+        if (! $companyId) {
+            $routeTenant = request()->route('tenant')
+                ?? request()->route('company')
+                ?? request()->route('company_id')
+                ?? request()->segment(2);
+
+            if (is_object($routeTenant) && isset($routeTenant->id)) {
+                $companyId = (int) $routeTenant->id;
+            } elseif (is_numeric($routeTenant)) {
+                $companyId = (int) $routeTenant;
+            }
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table('cash_denominations')
+            ->where('is_active', true);
+
+        if ($companyId && \Illuminate\Support\Facades\Schema::hasColumn('cash_denominations', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        $rows = $query
+            ->orderByRaw("case when type = 'coin' then 0 else 1 end")
             ->orderBy('value')
-            ->get()
-            ->mapWithKeys(function ($row) {
-                return [$row->id => $row->name . ' - $' . number_format((float) $row->value, 2, '.', ',')];
+            ->orderBy('id')
+            ->get();
+
+        return $rows
+            ->unique(fn ($row): string => (string) ($row->company_id ?? $companyId) . '|' . (string) $row->value . '|' . (string) $row->type)
+            ->mapWithKeys(function ($row): array {
+                $name = trim((string) ($row->name ?? 'Denominación'));
+                $value = number_format((float) ($row->value ?? 0), 2);
+
+                return [
+                    (string) $row->id => $name . ' - $' . $value,
+                ];
             })
             ->all();
     }
+
 
 
     protected static function categoryOptions(): array
