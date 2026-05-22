@@ -72,29 +72,23 @@ class BexiaMenuBuilder extends Page
             ->map(fn ($label) => (string) $label)
             ->all();
     }
-
     public function saveGroupLabel(int $groupId): void
     {
-        $label = trim((string) ($this->groupLabels[$groupId] ?? ''));
-
-        if ($label === '') {
-            $this->loadLabels();
-
-            Notification::make()
-                ->title('El nombre del grupo no puede quedar vacío.')
-                ->danger()
-                ->send();
-
-            return;
-        }
-
-        BexiaMenuGroup::query()
-            ->whereKey($groupId)
-            ->update(['label' => $label]);
+        $this->loadLabels();
 
         Notification::make()
-            ->title('Grupo actualizado.')
-            ->success()
+            ->title('El nombre de los grupos está bloqueado por seguridad.')
+            ->body('Por ahora los grupos usan nombres internos fijos para no romper el orden del menú.')
+            ->warning()
+            ->send();
+    }
+
+    public function toggleGroupVisibility(int $groupId): void
+    {
+        Notification::make()
+            ->title('La visibilidad de grupos está bloqueada por ahora.')
+            ->body('Primero se debe integrar la visibilidad con todos los recursos automáticos de Filament.')
+            ->warning()
             ->send();
     }
 
@@ -122,21 +116,6 @@ class BexiaMenuBuilder extends Page
             ->success()
             ->send();
     }
-
-    public function toggleGroupVisibility(int $groupId): void
-    {
-        $group = BexiaMenuGroup::query()->findOrFail($groupId);
-
-        $group->update([
-            'is_visible' => ! $group->is_visible,
-        ]);
-
-        Notification::make()
-            ->title($group->is_visible ? 'Grupo visible.' : 'Grupo oculto.')
-            ->success()
-            ->send();
-    }
-
     public function toggleItemVisibility(int $itemId): void
     {
         $item = BexiaMenuItem::query()->findOrFail($itemId);

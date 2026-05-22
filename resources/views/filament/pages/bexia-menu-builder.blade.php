@@ -10,9 +10,8 @@
                         Estructura de 2 niveles: grupos y opciones.
                     </p>
                     <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                        Los botones subir/bajar, visible/oculto y mover de grupo guardan al instante.
-                        Para cambiar nombres, edita el campo y presiona el botón azul Guardar nombre.
-                        Esta configuración todavía no reemplaza el menú real.
+                        Por seguridad, los nombres de grupos están fijos. Puedes mover grupos arriba/abajo.
+                        Los nombres de opciones sí se pueden editar. Esta fase aplica especialmente a opciones manuales del menú.
                     </p>
                 </div>
 
@@ -30,7 +29,7 @@
         <div class="grid gap-4">
             @foreach($this->groups() as $group)
                 <div
-                    class="rounded-xl border bg-white shadow-sm dark:bg-gray-900 {{ $group->is_visible ? 'border-gray-200 dark:border-gray-700' : 'border-dashed border-gray-300 opacity-70 dark:border-gray-700' }}"
+                    class="rounded-xl border bg-white shadow-sm dark:bg-gray-900 border-gray-200 dark:border-gray-700"
                     wire:key="menu-group-{{ $group->id }}"
                 >
                     <div class="border-b border-gray-100 p-4 dark:border-gray-800">
@@ -56,12 +55,13 @@
 
                             <div>
                                 <label class="mb-1 block text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                    Nombre del grupo
+                                    Nombre del grupo fijo
                                 </label>
                                 <input
                                     type="text"
-                                    class="w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                    wire:model.defer="groupLabels.{{ $group->id }}"
+                                    class="w-full rounded-lg border-gray-300 bg-gray-100 text-sm text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                    value="{{ $group->default_label ?: $group->label }}"
+                                    disabled
                                 />
                                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                     Key: {{ $group->key }} · Orden: {{ $group->sort }} · Opciones: {{ $group->items->count() }}
@@ -69,29 +69,18 @@
                             </div>
 
                             <div class="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold shadow-sm" style="background-color:#2563eb;color:#ffffff;border:1px solid #1d4ed8;"
-                                    wire:click="saveGroupLabel({{ $group->id }})"
+                                <span
+                                    class="inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                                    title="Bloqueado por seguridad"
                                 >
-                                    Guardar nombre
-                                </button>
+                                    Nombre fijo
+                                </span>
 
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold shadow-sm {{ $group->is_visible ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-gray-500 text-white hover:bg-gray-400' }}"
-                                    wire:click="toggleGroupVisibility({{ $group->id }})"
+                                <span
+                                    class="inline-flex items-center justify-center rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white shadow-sm"
                                 >
-                                    {{ $group->is_visible ? 'Visible' : 'Oculto' }}
-                                </button>
-
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
-                                    wire:click="resetGroupLabel({{ $group->id }})"
-                                >
-                                    Restaurar nombre
-                                </button>
+                                    Grupo visible
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -139,7 +128,8 @@
                                     <div class="flex flex-wrap items-center gap-2">
                                         <button
                                             type="button"
-                                            class="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold shadow-sm" style="background-color:#2563eb;color:#ffffff;border:1px solid #1d4ed8;"
+                                            class="inline-flex items-center justify-center rounded-lg px-3 py-2 text-xs font-semibold shadow-sm"
+                                            style="background-color:#2563eb;color:#ffffff;border:1px solid #1d4ed8;"
                                             wire:click="saveItemLabel({{ $item->id }})"
                                         >
                                             Guardar nombre
@@ -151,7 +141,7 @@
                                         >
                                             @foreach($this->groups() as $targetGroup)
                                                 <option value="{{ $targetGroup->id }}" @selected($targetGroup->id === $group->id)>
-                                                    {{ $targetGroup->label }}
+                                                    {{ $targetGroup->default_label ?: $targetGroup->label }}
                                                 </option>
                                             @endforeach
                                         </select>
