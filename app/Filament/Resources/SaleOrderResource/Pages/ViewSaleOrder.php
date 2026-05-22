@@ -105,59 +105,27 @@ class ViewSaleOrder extends ViewRecord
                 ->color('danger')
                 ->visible(fn (): bool => $this->record->status === 'draft'
                     && \App\Filament\Resources\SaleOrderResource::userCanPermission('sales.cancel')
+                    && ! \App\Filament\Resources\SaleOrderResource::quoteHasPaidPosTicket($this->record)
                 )
                 ->requiresConfirmation()
                 ->modalHeading('Cancelar cotización')
-                ->modalDescription('La cotización quedará cancelada. No se borrará el historial.')
+                ->modalDescription(fn (): string => \App\Filament\Resources\SaleOrderResource::quoteHasPaidPosTicket($this->record)
+                    ? 'Esta cotización ya fue cobrada en PDV. Para revertirla usa devolución / nota de crédito.'
+                    : 'La cotización quedará cancelada. Si tiene un ticket PDV pendiente, también se cancelará.')
                 ->action(function (): void {
-                    \Illuminate\Support\Facades\DB::table('sales_orders')
-                        ->where('id', $this->record->id)
-                        ->update(\App\Filament\Resources\SaleOrderResource::filterSalesOrderColumns([
-                            'status' => 'cancelled',
-                            'margin_approval_status' => 'not_required',
-                            'margin_approval_required' => false,
-                            'margin_approval_requested_at' => null,
-                            'updated_at' => now(),
-                        ]));
 
-                    if (class_exists(\App\Support\SalesApprovalWorkflow::class)) {
-                        $order = \Illuminate\Support\Facades\DB::table('sales_orders')
-                            ->where('id', $this->record->id)
-                            ->first();
-
-                        if ($order) {
-                            \App\Support\SalesApprovalWorkflow::logEvent(
-                                $order,
-                                'cancelled',
-                                'Cotización cancelada',
-                                'La cotización fue cancelada.',
-                                null,
-                                auth()->id()
-                            );
-                        }
-                    }
-
-                    if (\Illuminate\Support\Facades\Schema::hasTable('approval_requests')) {
-                        \Illuminate\Support\Facades\DB::table('approval_requests')
-                            ->where('approvable_type', \App\Models\SaleOrder::class)
-                            ->where('approvable_id', $this->record->id)
-                            ->whereIn('document_type', ['sales_quote', 'sales_order', 'sales_margin_approval'])
-                            ->where('status', 'pending')
-                            ->update([
-                                'status' => 'cancelled',
-                                'completed_at' => now(),
-                                'last_decision_reason' => 'Cotización cancelada.',
-                                'updated_at' => now(),
-                            ]);
-                    }
+                    $result = \App\Filament\Resources\SaleOrderResource::cancelQuoteWithPendingPosTicket($this->record, auth()->id());
 
                     \Filament\Notifications\Notification::make()
-                        ->title('Cotización cancelada')
-                        ->success()
+                        ->title((string) ($result['title'] ?? ($result['ok'] ? 'Cotización cancelada' : 'No se puede cancelar')))
+                        ->body((string) ($result['message'] ?? ''))
+                        ->{($result['ok'] ?? false) ? 'success' : 'danger'}()
                         ->send();
 
-                    $this->redirect(\App\Filament\Resources\SaleOrderResource::listUrlForTab('canceladas'));
-                }),
+                    if ($result['ok'] ?? false) {
+                        $this->redirect(\App\Filament\Resources\SaleOrderResource::listUrlForTab('canceladas'));
+                    }
+}),
 
             Actions\Action::make('duplicate_sale_order')
                 ->label('Duplicar')
@@ -350,7 +318,7 @@ class ViewSaleOrder extends ViewRecord
                 ->label('Convertir a orden de venta')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->visible(fn (): bool => $this->record->status === 'draft' && \App\Filament\Resources\SaleOrderResource::isQuoteValidatedForPos($this->record) && \App\Filament\Resources\SaleOrderResource::userCanPermission('sales.confirm'))
+                ->visible(fn (): bool => \App\Filament\Resources\SaleOrderResource::canConvertQuoteToSalesOrder($this->record))
                 ->requiresConfirmation()
                 ->modalHeading('Convertir a orden de venta')
                 ->modalDescription('La cotización se convertirá en orden de venta. Este paso todavía no afecta inventario.')

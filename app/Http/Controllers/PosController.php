@@ -4187,6 +4187,86 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
         ];
     }
 
+    protected function releaseSalesQuoteAfterPendingTicketCancelled(int $posOrderId, ?int $userId = null): void
+    {
+        if ($posOrderId <= 0) {
+            return;
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+            return;
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('sales_orders')) {
+            return;
+        }
+
+        $bridge = \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets')
+            ->where('pos_order_id', $posOrderId)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $bridge) {
+            return;
+        }
+
+        if ((string) ($bridge->status ?? '') === 'paid' || ! empty($bridge->paid_at)) {
+            return;
+        }
+
+        $now = now();
+
+        $metadata = [];
+        if (! empty($bridge->metadata)) {
+            $decoded = json_decode((string) $bridge->metadata, true);
+            $metadata = is_array($decoded) ? $decoded : [];
+        }
+
+        $metadata['cancelled_from_pos'] = true;
+        $metadata['cancelled_from_pos_at'] = $now->toDateTimeString();
+        $metadata['cancelled_from_pos_by_user_id'] = $userId;
+        $metadata['quote_released'] = true;
+
+        $notes = trim((string) ($bridge->notes ?? ''));
+        $releaseNote = 'Ticket PDV cancelado desde PDV. Cotización liberada para reenviar a PDV o convertir a orden de venta.';
+        $notes = $notes !== '' ? trim($notes . "\n" . $releaseNote) : $releaseNote;
+
+        \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets')
+            ->where('id', (int) $bridge->id)
+            ->update([
+                'status' => 'cancelled',
+                'cancelled_at' => $now,
+                'notes' => $notes,
+                'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'updated_at' => $now,
+            ]);
+
+        $quoteUpdate = [
+            'updated_at' => $now,
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_pos_payment_status')) {
+            $quoteUpdate['quote_pos_payment_status'] = null;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_pos_order_id')) {
+            $quoteUpdate['quote_pos_order_id'] = null;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_pos_paid_at')) {
+            $quoteUpdate['quote_pos_paid_at'] = null;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_validation_message')) {
+            $quoteUpdate['quote_validation_message'] = $releaseNote;
+        }
+
+        \Illuminate\Support\Facades\DB::table('sales_orders')
+            ->where('id', (int) $bridge->sales_order_id)
+            ->update($quoteUpdate);
+    }
+
+
 
 
     public function cancelPendingOrder(\Illuminate\Http\Request $request, int $order)
@@ -4320,6 +4400,8 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 'message' => $result['message'] ?? 'No se pudo cancelar el ticket pendiente.',
             ], $result['status'] ?? 500);
         }
+
+                $this->releaseSalesQuoteAfterPendingTicketCancelled((int) $order, auth()->id());
 
                 // V5.51.5B - Audit éxito cancelar ticket pendiente con empresa/sesión.
         $this->v5515aWritePosAuditLog('pos.ticket.cancel_pending.success', [
