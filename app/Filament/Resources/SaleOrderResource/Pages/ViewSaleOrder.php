@@ -345,6 +345,7 @@ class ViewSaleOrder extends ViewRecord
 
             SaleOrderResource::validateQuoteHeaderAction($this->record),
             SaleOrderResource::sendQuoteToPosHeaderAction($this->record),
+            SaleOrderResource::quotePosTrackingHeaderAction($this->record),
             Actions\Action::make('confirm')
                 ->label('Convertir a orden de venta')
                 ->icon('heroicon-o-check-circle')

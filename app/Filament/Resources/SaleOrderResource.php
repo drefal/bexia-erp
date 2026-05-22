@@ -2625,6 +2625,245 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             ->exists();
     }
 
+    public static function quoteHasAnyPosTicket(SaleOrder $record): bool
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets')
+            ->where('sales_order_id', (int) $record->getKey())
+            ->exists();
+    }
+
+    public static function quotePosTrackingData(SaleOrder $record): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+            return [];
+        }
+
+        $ticket = \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets as sqpt')
+            ->leftJoin('pos_orders as po', 'po.id', '=', 'sqpt.pos_order_id')
+            ->leftJoin('pos_points as pp', 'pp.id', '=', 'sqpt.pos_point_id')
+            ->leftJoin('pos_sessions as ps', 'ps.id', '=', 'sqpt.pos_session_id')
+            ->leftJoin('users as sent_user', 'sent_user.id', '=', 'sqpt.sent_by_user_id')
+            ->where('sqpt.sales_order_id', (int) $record->getKey())
+            ->orderByDesc('sqpt.id')
+            ->select([
+                'sqpt.id as bridge_id',
+                'sqpt.status as bridge_status',
+                'sqpt.sent_at',
+                'sqpt.paid_at',
+                'sqpt.cancelled_at',
+                'sqpt.expired_at',
+                'sqpt.public_token',
+                'sqpt.metadata as bridge_metadata',
+                'po.id as pos_order_id',
+                'po.number as pos_order_number',
+                'po.status as pos_order_status',
+                'po.paid_at as pos_order_paid_at',
+                'po.total as pos_order_total',
+                'po.metadata as pos_order_metadata',
+                'pp.name as pos_point_name',
+                'pp.code as pos_point_code',
+                'ps.id as pos_session_id',
+                'ps.number as pos_session_number',
+                'sent_user.name as sent_by_name',
+            ])
+            ->first();
+
+        if (! $ticket) {
+            return [];
+        }
+
+        $posMetadata = [];
+        $bridgeMetadata = [];
+
+        if (! empty($ticket->pos_order_metadata)) {
+            $posMetadata = json_decode((string) $ticket->pos_order_metadata, true) ?: [];
+        }
+
+        if (! empty($ticket->bridge_metadata)) {
+            $bridgeMetadata = json_decode((string) $ticket->bridge_metadata, true) ?: [];
+        }
+
+        $inventoryStatus = (string) ($posMetadata['inventory_status'] ?? '');
+        $inventoryMessage = (string) ($posMetadata['inventory_message'] ?? '');
+        $stockMovementId = $posMetadata['stock_movement_id'] ?? null;
+        $stockMovementReference = (string) ($posMetadata['stock_movement_reference'] ?? '');
+
+        if ($stockMovementReference === '' && $stockMovementId && \Illuminate\Support\Facades\Schema::hasTable('stock_movements')) {
+            $movement = \Illuminate\Support\Facades\DB::table('stock_movements')
+                ->where('id', (int) $stockMovementId)
+                ->first();
+
+            if ($movement) {
+                $stockMovementReference = (string) ($movement->reference ?? '');
+            }
+        }
+
+        $status = (string) ($record->quote_pos_payment_status ?? '');
+
+        if ($status === '') {
+            $status = (string) ($ticket->bridge_status ?? '');
+        }
+
+        $statusLabel = match ($status) {
+            'paid' => 'Cobrado en PDV',
+            'sent', 'pending' => 'Enviado a PDV',
+            'cancelled' => 'Cancelado',
+            'expired' => 'Expirado',
+            default => \Illuminate\Support\Str::headline(str_replace('_', ' ', $status ?: 'sin estado')),
+        };
+
+        $inventoryLabel = match ($inventoryStatus) {
+            'delivered' => 'Salida generada',
+            'no_stock' => 'Sin existencia',
+            'not_required' => 'No requerida',
+            default => $inventoryStatus !== '' ? \Illuminate\Support\Str::headline(str_replace('_', ' ', $inventoryStatus)) : 'Pendiente',
+        };
+
+        $posPoint = trim((string) ($ticket->pos_point_name ?? ''));
+
+        if (! empty($ticket->pos_point_code)) {
+            $posPoint .= ' (' . (string) $ticket->pos_point_code . ')';
+        }
+
+        return [
+            'bridge_id' => (int) $ticket->bridge_id,
+            'status' => $status,
+            'status_label' => $statusLabel,
+            'ticket_number' => (string) ($ticket->pos_order_number ?? ''),
+            'pos_order_id' => $ticket->pos_order_id ? (int) $ticket->pos_order_id : null,
+            'pos_order_status' => (string) ($ticket->pos_order_status ?? ''),
+            'pos_order_total' => $ticket->pos_order_total,
+            'pos_point' => $posPoint !== '' ? $posPoint : 'PDV',
+            'pos_session' => $ticket->pos_session_number ?: ($ticket->pos_session_id ? '#' . $ticket->pos_session_id : ''),
+            'sent_by' => (string) ($ticket->sent_by_name ?? ''),
+            'sent_at' => $ticket->sent_at,
+            'paid_at' => $ticket->paid_at ?: $ticket->pos_order_paid_at,
+            'stock_movement_id' => $stockMovementId,
+            'stock_movement_reference' => $stockMovementReference,
+            'inventory_status' => $inventoryStatus,
+            'inventory_label' => $inventoryLabel,
+            'inventory_message' => $inventoryMessage,
+            'public_token' => (string) ($ticket->public_token ?? ''),
+            'bridge_metadata' => $bridgeMetadata,
+            'pos_metadata' => $posMetadata,
+        ];
+    }
+
+    public static function quotePosTrackingHtml(SaleOrder $record): \Illuminate\Support\HtmlString
+    {
+        $data = self::quotePosTrackingData($record);
+
+        if (empty($data)) {
+            return new \Illuminate\Support\HtmlString(
+                '<div style="padding:12px;border-radius:12px;background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;">'
+                . 'Esta cotización todavía no tiene ticket PDV generado.'
+                . '</div>'
+            );
+        }
+
+        $status = htmlspecialchars((string) ($data['status_label'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $ticket = htmlspecialchars((string) ($data['ticket_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $pos = htmlspecialchars((string) ($data['pos_point'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $session = htmlspecialchars((string) ($data['pos_session'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $sentBy = htmlspecialchars((string) ($data['sent_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $sentAt = htmlspecialchars((string) ($data['sent_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $paidAt = htmlspecialchars((string) ($data['paid_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $movement = htmlspecialchars((string) ($data['stock_movement_reference'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $inventory = htmlspecialchars((string) ($data['inventory_label'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $inventoryMessage = htmlspecialchars((string) ($data['inventory_message'] ?? ''), ENT_QUOTES, 'UTF-8');
+
+        $statusColor = ((string) ($data['status'] ?? '')) === 'paid'
+            ? '#065f46'
+            : '#92400e';
+
+        $statusBg = ((string) ($data['status'] ?? '')) === 'paid'
+            ? '#ecfdf5'
+            : '#fffbeb';
+
+        $html = '<div style="padding:14px;border-radius:14px;background:#ffffff;border:1px solid #e5e7eb;">';
+        $html .= '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px;">';
+        $html .= '<div>';
+        $html .= '<div style="font-size:13px;color:#64748b;">Seguimiento PDV</div>';
+        $html .= '<div style="font-size:18px;font-weight:700;color:#0f172a;">' . ($ticket !== '' ? $ticket : 'Ticket PDV') . '</div>';
+        $html .= '</div>';
+        $html .= '<div style="padding:5px 9px;border-radius:999px;background:' . $statusBg . ';color:' . $statusColor . ';font-weight:700;font-size:12px;">' . $status . '</div>';
+        $html .= '</div>';
+
+        $rows = [
+            'PDV destino' => $pos,
+            'Sesión PDV' => $session,
+            'Enviado por' => $sentBy,
+            'Fecha de envío' => $sentAt,
+            'Fecha de cobro' => $paidAt,
+            'Movimiento inventario' => $movement,
+            'Estado inventario' => $inventory,
+        ];
+
+        $html .= '<div style="display:grid;grid-template-columns:180px 1fr;gap:7px 12px;font-size:13px;">';
+
+        foreach ($rows as $label => $value) {
+            if ($value === '') {
+                $value = '—';
+            }
+
+            $html .= '<div style="color:#64748b;">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</div>';
+            $html .= '<div style="color:#0f172a;font-weight:600;">' . $value . '</div>';
+        }
+
+        $html .= '</div>';
+
+        if ($inventoryMessage !== '') {
+            $html .= '<div style="margin-top:10px;padding:9px;border-radius:10px;background:#f8fafc;color:#475569;font-size:12px;">';
+            $html .= $inventoryMessage;
+            $html .= '</div>';
+        }
+
+        $html .= '</div>';
+
+        return new \Illuminate\Support\HtmlString($html);
+    }
+
+    public static function quotePosTrackingHeaderAction(SaleOrder $record): \Filament\Actions\Action
+    {
+        return \Filament\Actions\Action::make('quote_pos_tracking')
+            ->label('Seguimiento PDV')
+            ->icon('heroicon-o-map')
+            ->color('gray')
+            ->visible(fn (): bool => self::quoteHasAnyPosTicket($record))
+            ->modalHeading('Seguimiento PDV')
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Cerrar')
+            ->modalWidth('2xl')
+            ->form([
+                \Filament\Forms\Components\Placeholder::make('quote_pos_tracking')
+                    ->label('')
+                    ->content(fn () => self::quotePosTrackingHtml($record)),
+            ]);
+    }
+
+    public static function quotePosTrackingTableAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('quote_pos_tracking')
+            ->label('Seguimiento PDV')
+            ->icon('heroicon-o-map')
+            ->color('gray')
+            ->visible(fn (SaleOrder $record): bool => self::quoteHasAnyPosTicket($record))
+            ->modalHeading('Seguimiento PDV')
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Cerrar')
+            ->modalWidth('2xl')
+            ->form(fn (SaleOrder $record): array => [
+                \Filament\Forms\Components\Placeholder::make('quote_pos_tracking')
+                    ->label('')
+                    ->content(fn () => self::quotePosTrackingHtml($record)),
+            ]);
+    }
+
+
     public static function quoteDisplayStatusLabel(SaleOrder $record): string
     {
         if (self::quoteIsPaidInPos($record)) {
