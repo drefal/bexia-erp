@@ -27,10 +27,21 @@ class BexiaMenuRuntime
         }
 
         try {
-            $label = BexiaMenuGroup::query()
+            $group = BexiaMenuGroup::query()
                 ->where('key', $key)
-                ->where('is_visible', true)
-                ->value('label');
+                ->first();
+
+            if (! $group) {
+                return $fallback;
+            }
+
+            /*
+             * Importante:
+             * Los nombres de grupos NO se toman de label editable.
+             * Filament todavía tiene muchos Resources con navigationGroup fijo.
+             * Si el grupo cambia de nombre, Filament puede crear/reacomodar grupos.
+             */
+            $label = $group->default_label ?: $fallback;
 
             return filled($label) ? (string) $label : $fallback;
         } catch (Throwable) {
@@ -87,17 +98,7 @@ class BexiaMenuRuntime
                 return $fallback;
             }
 
-            if (! $item->is_visible) {
-                return false;
-            }
-
-            $group = $item->group;
-
-            if ($group && ! $group->is_visible) {
-                return false;
-            }
-
-            return true;
+            return (bool) $item->is_visible;
         } catch (Throwable) {
             return $fallback;
         }
@@ -115,8 +116,12 @@ class BexiaMenuRuntime
                 ->where('key', $itemKey)
                 ->first();
 
-            if ($item && $item->group && $item->group->is_visible && filled($item->group->label)) {
-                return (string) $item->group->label;
+            if ($item && $item->group) {
+                $label = $item->group->default_label ?: $item->group->label;
+
+                if (filled($label)) {
+                    return (string) $label;
+                }
             }
 
             return static::groupLabel($fallbackGroupKey, $fallbackGroupLabel);
@@ -136,9 +141,8 @@ class BexiaMenuRuntime
 
         try {
             $groups = BexiaMenuGroup::query()
-                ->where('is_visible', true)
                 ->orderBy('sort')
-                ->orderBy('label')
+                ->orderBy('default_label')
                 ->get();
 
             if ($groups->isEmpty()) {
@@ -149,7 +153,11 @@ class BexiaMenuRuntime
             }
 
             return $groups
-                ->map(fn (BexiaMenuGroup $group) => NavigationGroup::make((string) $group->label))
+                ->map(function (BexiaMenuGroup $group): NavigationGroup {
+                    $label = $group->default_label ?: $group->label;
+
+                    return NavigationGroup::make((string) $label);
+                })
                 ->values()
                 ->all();
         } catch (Throwable) {
