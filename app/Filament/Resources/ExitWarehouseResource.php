@@ -21,7 +21,7 @@ class ExitWarehouseResource extends Resource
     protected static ?string $navigationGroup = 'Salidas';
     protected static ?string $navigationLabel = 'Almacenes de Salidas';
 
-    protected static ?int $navigationSort = 103;
+    protected static ?int $navigationSort = 30;
     protected static ?string $modelLabel = 'Almacén de salida';
     protected static ?string $pluralModelLabel = 'Almacenes de salidas';
 protected static ?string $tenantOwnershipRelationshipName = 'company';

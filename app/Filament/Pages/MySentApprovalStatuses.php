@@ -14,9 +14,9 @@ class MySentApprovalStatuses extends Page
 
     protected static ?string $title = 'Estatus de mis documentos enviados';
 
-    protected static ?string $navigationGroup = 'Aprobaciones';
+    protected static ?string $navigationGroup = 'Inicio';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 30;
 
     protected static string $view = 'filament.pages.my-sent-approval-statuses';
 

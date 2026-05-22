@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class TreasuryAccountResource extends Resource
 {
+    protected static ?string $navigationLabel = 'Cuentas / Cajas';
     protected static ?string $model = TreasuryAccount::class;
 
     protected static ?string $tenantOwnershipRelationshipName = 'company';

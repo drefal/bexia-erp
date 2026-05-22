@@ -18,7 +18,7 @@ class PosGlobalInvoicePage extends Page
 
     protected static ?string $navigationIcon = 'heroicon-o-document-plus';
 
-    protected static ?string $navigationGroup = 'Portal de facturación';
+    protected static ?string $navigationGroup = 'Facturación';
 
     protected static ?string $navigationLabel = 'Factura global PDV';
 

@@ -21,7 +21,7 @@ class BillingPacConfigurationResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-key';
 
-    protected static ?string $navigationGroup = 'Configuración';
+    protected static ?string $navigationGroup = 'Configuración Bexia';
 
     protected static ?string $navigationLabel = 'PAC por empresa';
 
@@ -31,7 +31,7 @@ class BillingPacConfigurationResource extends Resource
 
     protected static ?string $slug = 'billing-pac-configuration';
 
-    protected static ?int $navigationSort = 95;
+    protected static ?int $navigationSort = 40;
 
 public static function canAccess(): bool
     {
@@ -64,24 +64,18 @@ public static function canCreate(): bool
         return $query->orderBy('id');
     }
 
-    public static function shouldRegisterNavigation(): bool
+        public static function shouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('invoicing.view')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
-    public static function canViewAny(): bool
+        public static function canViewAny(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('invoicing.view')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function form(Form $form): Form

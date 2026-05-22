@@ -30,7 +30,7 @@ class AccountingInventoryValuationLayerResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Movimientos de inventario';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 40;
 
     public static function getEloquentQuery(): Builder
     {

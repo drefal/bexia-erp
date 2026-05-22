@@ -30,7 +30,7 @@ class AccountingPostingAuditResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Auditorías contables';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 50;
 
     public static function getEloquentQuery(): Builder
     {

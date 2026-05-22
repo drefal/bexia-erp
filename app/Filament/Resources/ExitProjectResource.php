@@ -21,7 +21,7 @@ class ExitProjectResource extends Resource
     protected static ?string $navigationGroup = 'Salidas';
     protected static ?string $navigationLabel = 'Proyectos de Salidas';
 
-    protected static ?int $navigationSort = 102;
+    protected static ?int $navigationSort = 20;
     protected static ?string $modelLabel = 'Proyecto de salida';
     protected static ?string $pluralModelLabel = 'Proyectos de salidas';
 protected static ?string $tenantOwnershipRelationshipName = 'company';

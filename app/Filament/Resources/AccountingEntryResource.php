@@ -35,7 +35,7 @@ class AccountingEntryResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Asientos contables';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 30;
 
     public static function getEloquentQuery(): Builder
     {

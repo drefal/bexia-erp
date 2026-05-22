@@ -36,8 +36,8 @@ class EmployeeResource extends Resource
     protected static ?string $navigationLabel = 'Empleados';
     protected static bool $isScopedToTenant = false;
     protected static ?string $navigationIcon = 'heroicon-o-identification';
-    protected static ?string $navigationGroup = 'Contactos';
-    protected static ?int $navigationSort = 20;
+    protected static ?string $navigationGroup = 'Recursos Humanos';
+    protected static ?int $navigationSort = 10;
     protected static ?string $tenantOwnershipRelationshipName = null;
 
 public static function canCreate(): bool

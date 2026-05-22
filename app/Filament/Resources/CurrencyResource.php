@@ -18,7 +18,7 @@ class CurrencyResource extends Resource
 {
     protected static ?string $model = Currency::class;
 
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
 
     protected static ?string $navigationLabel = 'Monedas';
 
@@ -28,7 +28,7 @@ class CurrencyResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
 
-    protected static ?int $navigationSort = 31;
+    protected static ?int $navigationSort = 30;
 
     protected static bool $isScopedToTenant = false;
 

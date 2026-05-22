@@ -29,7 +29,7 @@ class StockReplenishmentRuleResource extends Resource
 
     protected static ?string $pluralModelLabel = 'reglas de reabastecimiento';
 
-    protected static ?int $navigationSort = 70;
+    protected static ?int $navigationSort = 100;
 
     protected static bool $isScopedToTenant = false;
 

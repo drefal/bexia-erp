@@ -17,7 +17,7 @@ class CompanyGroupResource extends Resource
 {
     protected static ?string $model = CompanyGroup::class;
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-group';
-    protected static ?string $navigationGroup = 'Configuración';
+    protected static ?string $navigationGroup = 'Configuración Bexia';
     protected static bool $isScopedToTenant = false;
     protected static ?string $tenantOwnershipRelationshipName = null;
     protected static ?int $navigationSort = 20;
@@ -37,24 +37,18 @@ public static function canCreate(): bool
         return 'Grupos de empresas';
     }
 
-    public static function shouldRegisterNavigation(): bool
+        public static function shouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('settings.access')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
-    public static function canViewAny(): bool
+        public static function canViewAny(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('settings.access')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function form(Form $form): Form

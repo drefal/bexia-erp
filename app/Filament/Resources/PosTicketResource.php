@@ -28,7 +28,7 @@ class PosTicketResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-receipt-percent';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 20;
 
     protected static bool $isScopedToTenant = false;
 

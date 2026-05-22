@@ -20,11 +20,11 @@ class SatUnitCodeResource extends Resource
     protected static ?string $model = SatUnitCode::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
-    protected static ?string $navigationLabel = 'Unidades SAT';
+    protected static ?string $navigationGroup = 'Catálogos';
+    protected static ?string $navigationLabel = 'Códigos unidad SAT';
     protected static ?string $modelLabel = 'Unidad SAT';
     protected static ?string $pluralModelLabel = 'Unidades SAT';
-    protected static ?int $navigationSort = 41;
+    protected static ?int $navigationSort = 21;
 
     protected static function canManage(): bool
     {

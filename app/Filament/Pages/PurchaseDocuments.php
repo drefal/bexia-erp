@@ -15,18 +15,13 @@ class PurchaseDocuments extends Page
 
     protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
 
-    protected static ?int $navigationSort = 200;
+    protected static ?int $navigationSort = 20;
 
     protected static string $view = 'filament.pages.purchase-documents';
 
-public static function shouldRegisterNavigation(): bool
+        public static function shouldRegisterNavigation(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('purchases.view')
-            );
+        return false;
     }
 
     public static function canAccess(): bool

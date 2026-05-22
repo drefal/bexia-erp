@@ -28,12 +28,14 @@ class SaleOrderResource extends Resource
 
     protected static ?string $navigationGroup = 'Ventas';
 
-    protected static ?string $navigationLabel = 'Cotizaciones / Órdenes';
+    protected static ?string $navigationLabel = 'Ventas';
 
-    protected static ?int $navigationSort = 300;
-protected static ?string $modelLabel = 'cotización';
+    protected static ?int $navigationSort = 10;
+protected static ?string $modelLabel = 'venta';
 
-    protected static ?string $pluralModelLabel = 'cotizaciones / órdenes';
+    protected static ?string $pluralModelLabel = 'ventas';
+    protected static ?string $breadcrumb = 'Ventas';
+
 protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
     public static function userCanPermission(string $permission): bool
     {
@@ -54,9 +56,9 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
         return $user->can($permission);
     }
 
-    public static function shouldRegisterNavigation(): bool
+                    public static function shouldRegisterNavigation(): bool
     {
-        return static::canViewAny();
+        return false;
     }
 
     public static function canViewAny(): bool
@@ -105,7 +107,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Encabezado de cotización / orden')
+                Forms\Components\Section::make(fn ($record): string => in_array((string) ($record?->status ?? ''), ['confirmed', 'partially_delivered', 'delivered', 'invoiced', 'partially_invoiced', 'closed'], true) ? 'Encabezado de orden de venta' : 'Encabezado de cotización')
                     ->columns(4)
                     ->schema([
                         Forms\Components\ViewField::make('sales_order_status_notice')
@@ -2094,14 +2096,16 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
     }
 
 
-    public static function getPages(): array
+        public static function getPages(): array
     {
         return [
             'index' => Pages\ListSaleOrders::route('/'),
+            'quotes' => Pages\ListSaleQuotes::route('/quotes'),
+            'orders' => Pages\ListSaleOrdersOnly::route('/orders'),
             'create' => Pages\CreateSaleOrder::route('/create'),
             'view' => Pages\ViewSaleOrder::route('/{record}'),
-            'delivery' => Pages\DeliverSaleOrder::route('/{record}/delivery'),
             'edit' => Pages\EditSaleOrder::route('/{record}/edit'),
         ];
     }
+
 }

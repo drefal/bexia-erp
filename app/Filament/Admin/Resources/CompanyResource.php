@@ -13,10 +13,12 @@ use Filament\Tables\Table;
 
 class CompanyResource extends Resource
 {
+    protected static ?string $navigationLabel = 'Empresas';
+    protected static ?int $navigationSort = 30;
     protected static ?string $model = Company::class;
 
     protected static ?string $navigationIcon  = 'heroicon-o-building-office';
-    protected static ?string $navigationGroup = 'Catálogos';
+    protected static ?string $navigationGroup = 'Configuración Bexia';
     protected static ?string $recordTitleAttribute = 'name';
     protected static ?string $modelLabel = 'Empresa';
     protected static ?string $pluralModelLabel = 'Empresas';
@@ -127,6 +129,20 @@ class CompanyResource extends Resource
                     ->columns(12),
             ])
             ->columns(12);
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
+    }
+
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function table(Table $table): Table

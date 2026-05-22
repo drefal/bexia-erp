@@ -25,7 +25,7 @@ class PosSessionResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-clock';
 
-    protected static ?int $navigationSort = 80;
+    protected static ?int $navigationSort = 50;
 
     protected static bool $isScopedToTenant = false;
 

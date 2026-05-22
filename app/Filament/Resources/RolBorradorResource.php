@@ -29,7 +29,7 @@ class RolBorradorResource extends Resource
 
     protected static ?string $navigationLabel = 'Rol';
 
-    protected static ?int $navigationSort = 11;
+    protected static ?int $navigationSort = 20;
 
 public static function canCreate(): bool
     {
@@ -76,24 +76,18 @@ public static function canCreate(): bool
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
 
-    public static function shouldRegisterNavigation(): bool
+        public static function shouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('rol.view')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
-    public static function canViewAny(): bool
+        public static function canViewAny(): bool
     {
         $user = auth()->user();
 
-        return auth()->check()
-            && (
-                $user?->can('rol.view')
-            );
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
     public static function form(Form $form): Form

@@ -18,7 +18,7 @@ class SuggestedPurchaseList extends Page
 
     protected static ?string $title = 'Lista sugerida de compra';
 
-    protected static ?int $navigationSort = 76;
+    protected static ?int $navigationSort = 120;
 
     protected static string $view = 'filament.pages.suggested-purchase-list';
 

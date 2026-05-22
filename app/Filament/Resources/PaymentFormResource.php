@@ -18,7 +18,7 @@ class PaymentFormResource extends Resource
 {
     protected static ?string $model = PaymentForm::class;
 
-    protected static ?string $navigationGroup = 'Catálogos de facturación';
+    protected static ?string $navigationGroup = 'Catálogos';
 
     protected static ?string $navigationLabel = 'Formas de pago';
 
@@ -28,7 +28,7 @@ class PaymentFormResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-credit-card';
 
-    protected static ?int $navigationSort = 30;
+    protected static ?int $navigationSort = 10;
 
     protected static bool $isScopedToTenant = false;
 

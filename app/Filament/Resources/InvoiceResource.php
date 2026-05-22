@@ -38,7 +38,7 @@ class InvoiceResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
-    protected static ?string $navigationGroup = 'Portal de facturación';
+    protected static ?string $navigationGroup = 'Facturación';
 
     protected static ?string $navigationLabel = 'Facturas';
 
@@ -46,7 +46,7 @@ class InvoiceResource extends Resource
 
     protected static ?string $pluralModelLabel = 'facturas';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 10;
 public static function canEdit(Model $record): bool
     {
         // BEXIA_V5523R4_NO_EDIT_STAMPED

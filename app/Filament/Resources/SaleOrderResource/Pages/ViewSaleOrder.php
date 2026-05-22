@@ -10,6 +10,45 @@ use Filament\Resources\Pages\ViewRecord;
 class ViewSaleOrder extends ViewRecord
 {
     protected static string $resource = SaleOrderResource::class;
+    protected function salesSectionLabel(): string
+    {
+        $status = (string) ($this->record->status ?? '');
+
+        if (in_array($status, [
+            'confirmed',
+            'partially_delivered',
+            'delivered',
+            'invoiced',
+            'partially_invoiced',
+            'closed',
+        ], true)) {
+            return 'Órdenes de venta';
+        }
+
+        return 'Cotizaciones';
+    }
+
+    protected function salesSectionUrl(): string
+    {
+        return $this->salesSectionLabel() === 'Órdenes de venta'
+            ? SaleOrderResource::getUrl('orders')
+            : SaleOrderResource::getUrl('quotes');
+    }
+
+    public function getBreadcrumbs(): array
+    {
+        return [
+            $this->salesSectionUrl() => $this->salesSectionLabel(),
+            '#' => (string) ($this->record->number ?? $this->record->getKey()),
+        ];
+    }
+
+    public function getTitle(): string
+    {
+        return $this->salesSectionLabel() === 'Órdenes de venta'
+            ? 'Orden de venta'
+            : 'Cotización';
+    }
 
     protected function getHeaderActions(): array
     {
@@ -336,14 +375,4 @@ class ViewSaleOrder extends ViewRecord
                 }),
         ];
     }
-    public function getTitle(): string
-    {
-        $number = $this->record?->number ?: '';
-
-        return $this->record?->status === 'draft'
-            ? trim('Cotización ' . $number)
-            : trim('Orden de venta ' . $number);
-    }
-
-
 }

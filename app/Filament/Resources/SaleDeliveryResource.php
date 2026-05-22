@@ -20,7 +20,7 @@ class SaleDeliveryResource extends Resource
 
     protected static ?string $navigationLabel = 'Entregas de venta';
 
-    protected static ?int $navigationSort = 310;
+    protected static ?int $navigationSort = 20;
 protected static ?string $modelLabel = 'entrega de venta';
 
     protected static ?string $pluralModelLabel = 'entregas de venta';

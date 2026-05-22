@@ -25,7 +25,7 @@ class PosAuditLogResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Auditoría PDV';
 
-    protected static ?int $navigationSort = 99;
+    protected static ?int $navigationSort = 60;
 
     protected static ?string $tenantOwnershipRelationshipName = 'company';
 

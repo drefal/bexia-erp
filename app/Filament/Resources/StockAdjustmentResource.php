@@ -32,7 +32,7 @@ class StockAdjustmentResource extends Resource
 
     protected static ?string $pluralModelLabel = 'ajustes de inventario';
 
-    protected static ?int $navigationSort = 60;
+    protected static ?int $navigationSort = 90;
 
     protected static bool $isScopedToTenant = false;
 

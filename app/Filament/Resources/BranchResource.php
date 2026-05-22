@@ -19,8 +19,8 @@ class BranchResource extends Resource
     protected static ?string $model = Branch::class;
     protected static bool $isScopedToTenant = false;
     protected static ?string $navigationIcon = 'heroicon-o-building-office';
-    protected static ?string $navigationGroup = 'Configuración';
-    protected static ?int $navigationSort = 40;
+    protected static ?string $navigationGroup = 'Configuración empresa';
+    protected static ?int $navigationSort = 10;
     protected static ?string $tenantOwnershipRelationshipName = null;
 
 public static function canCreate(): bool

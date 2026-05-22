@@ -12,7 +12,7 @@ class CreatePurchaseOrderFromXml extends Page
 
     protected static ?string $navigationLabel = 'Crear OC desde XML';
 
-    protected static ?int $navigationSort = 240;
+    protected static ?int $navigationSort = 40;
 
     protected static ?string $title = 'Crear orden de compra desde XML';
 
