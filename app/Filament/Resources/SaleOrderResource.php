@@ -618,7 +618,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                     ->label('Convertir a orden de venta')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->visible(fn (SaleOrder $record): bool => $record->status === 'draft' && static::isQuoteValidatedForPos($record) && static::userCanPermission('sales.confirm'))
+                    ->visible(fn (SaleOrder $record): bool => self::canConvertQuoteToSalesOrder($record))
                     ->requiresConfirmation()
                     ->modalHeading('Convertir a orden de venta')
                     ->modalDescription('La cotización se convertirá en orden de venta. Este paso todavía no afecta inventario.')
@@ -720,23 +720,25 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                     ->label('Cancelar cotización')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
-                    ->visible(fn (SaleOrder $record): bool => $record->status === 'draft' && static::userCanPermission('sales.cancel'))
+                    ->visible(fn (SaleOrder $record): bool => $record->status === 'draft'
+                        && static::userCanPermission('sales.cancel')
+                        && ! self::quoteHasPaidPosTicket($record)
+                    )
                     ->requiresConfirmation()
                     ->modalHeading('Cancelar cotización')
-                    ->modalDescription('La cotización quedará cancelada. No se borrará el historial.')
+                    ->modalDescription(fn (SaleOrder $record): string => self::quoteHasPaidPosTicket($record)
+                        ? 'Esta cotización ya fue cobrada en PDV. Para revertirla usa devolución / nota de crédito.'
+                        : 'La cotización quedará cancelada. Si tiene un ticket PDV pendiente, también se cancelará.')
                     ->action(function (SaleOrder $record): void {
-                        DB::table('sales_orders')
-                            ->where('id', $record->id)
-                            ->update(static::filterSalesOrderColumns([
-                                'status' => 'cancelled',
-                                'updated_at' => now(),
-                            ]));
 
-                        Notification::make()
-                            ->title('Cotización cancelada')
-                            ->success()
+                        $result = self::cancelQuoteWithPendingPosTicket($record, auth()->id());
+
+                        \Filament\Notifications\Notification::make()
+                            ->title((string) ($result['title'] ?? ($result['ok'] ? 'Cotización cancelada' : 'No se puede cancelar')))
+                            ->body((string) ($result['message'] ?? ''))
+                            ->{($result['ok'] ?? false) ? 'success' : 'danger'}()
                             ->send();
-                    }),
+}),
 
 
 
@@ -2272,12 +2274,17 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             ->label('Validar cotización')
             ->icon('heroicon-o-check-badge')
             ->color('warning')
-            ->visible(fn (): bool => self::canValidateQuote($record))
+            ->visible(fn (): bool => self::canShowValidateQuoteForPos($record))
             ->requiresConfirmation()
             ->modalHeading('Validar cotización')
             ->modalDescription('Se validará la cotización antes de enviarla a PDV o convertirla en orden de venta. Si requiere aprobación, quedará pendiente.')
             ->modalSubmitActionLabel('Validar')
             ->action(function () use ($record): void {
+                if (self::quoteHasPosFlowMarkerWithoutTicket($record)) {
+                    self::cleanDuplicatedQuoteOperationalState($record);
+                    $record->refresh();
+                }
+
                 $result = self::validateQuoteForPos($record);
 
                 \Filament\Notifications\Notification::make()
@@ -2325,9 +2332,24 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             ->action(fn (array $data): mixed => self::sendQuoteToPosFromAction($record, $data));
     }
 
-
     public static function canSendQuoteToPos(SaleOrder $record): bool
     {
+        if ((string) ($record->status ?? '') !== 'draft') {
+            return false;
+        }
+
+        if (self::quoteHasBlockingPosTicket($record)) {
+            return false;
+        }
+
+        if (self::quoteHasPosFlowMarkerWithoutTicket($record)) {
+            return false;
+        }
+
+        if (! self::quoteApprovalAllowsPosFlow($record)) {
+            return false;
+        }
+
         if (! self::isQuoteValidatedForPos($record)) {
             return false;
         }
@@ -2340,19 +2362,10 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             return false;
         }
 
-        if (\Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
-            $hasPendingTicket = \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets')
-                ->where('sales_order_id', (int) $record->getKey())
-                ->whereIn('status', ['pending', 'sent'])
-                ->exists();
-
-            if ($hasPendingTicket) {
-                return false;
-            }
-        }
-
         return true;
     }
+
+
 
     public static function hasOpenPosSessionForQuote(SaleOrder $record): bool
     {
@@ -2625,6 +2638,667 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             ->exists();
     }
 
+    public static function quoteHasAnyPosTicket(SaleOrder $record): bool
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets')
+            ->where('sales_order_id', (int) $record->getKey())
+            ->exists();
+    }
+
+    public static function quoteHasRealPosTicket(SaleOrder $record): bool
+    {
+        return self::quoteHasAnyPosTicket($record);
+    }
+
+    public static function quoteHasBlockingPosTicket(SaleOrder $record): bool
+    {
+        if ((string) ($record->quote_pos_payment_status ?? '') === 'sent') {
+            return true;
+        }
+
+        if ((string) ($record->quote_pos_payment_status ?? '') === 'paid') {
+            return true;
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets as sqpt')
+            ->leftJoin('pos_orders as po', 'po.id', '=', 'sqpt.pos_order_id')
+            ->where('sqpt.sales_order_id', (int) $record->getKey())
+            ->where(function ($query): void {
+                $query->whereIn('sqpt.status', ['pending', 'sent', 'paid'])
+                    ->orWhereIn('po.status', ['pending_payment', 'paid'])
+                    ->orWhereNotNull('po.paid_at');
+            })
+            ->exists();
+    }
+
+
+
+    public static function quoteHasPosFlowMarkerWithoutTicket(SaleOrder $record): bool
+    {
+        if (self::quoteHasRealPosTicket($record)) {
+            return false;
+        }
+
+        return in_array((string) ($record->quote_pos_payment_status ?? ''), ['sent', 'paid', 'cancelled'], true)
+            || ! empty($record->quote_pos_order_id);
+    }
+
+    public static function cleanDuplicatedQuoteOperationalState(SaleOrder $record): void
+    {
+        $update = [
+            'payment_status' => 'unpaid',
+            'updated_at' => now(),
+        ];
+
+        $nullableColumns = [
+            'quote_validated_at',
+            'quote_validated_by_user_id',
+            'quote_validation_message',
+            'quote_pos_payment_status',
+            'quote_pos_paid_at',
+            'quote_pos_order_id',
+            'confirmed_at',
+            'confirmed_by_user_id',
+        ];
+
+        foreach ($nullableColumns as $column) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', $column)) {
+                $update[$column] = null;
+            }
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_validation_status')) {
+            $update['quote_validation_status'] = self::quoteValidationInitialStatus();
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'status')) {
+            $update['status'] = 'draft';
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'invoice_status')) {
+            $update['invoice_status'] = 'not_invoiced';
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'accounting_status')) {
+            $update['accounting_status'] = 'not_posted';
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'accounting_entry_id')) {
+            $update['accounting_entry_id'] = null;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'accounting_posted_at')) {
+            $update['accounting_posted_at'] = null;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'accounting_error_message')) {
+            $update['accounting_error_message'] = null;
+        }
+
+        // La aprobación debe recalcularse en la nueva cotización, no copiarse de la original.
+        foreach ([
+            'margin_approval_status' => 'not_required',
+            'margin_approval_required' => false,
+            'margin_approval_requested_at' => null,
+            'margin_approved_by_user_id' => null,
+            'margin_approved_at' => null,
+            'margin_rejected_by_user_id' => null,
+            'margin_rejected_at' => null,
+            'margin_rejection_reason' => null,
+            'approval_snapshot_hash' => null,
+            'approval_snapshot_at' => null,
+            'approval_changed_after_approval' => false,
+        ] as $column => $value) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', $column)) {
+                $update[$column] = $value;
+            }
+        }
+
+        \Illuminate\Support\Facades\DB::table('sales_orders')
+            ->where('id', (int) $record->getKey())
+            ->update(static::filterSalesOrderColumns($update));
+    }
+
+
+
+    public static function quoteHasPaidPosTicket(SaleOrder $record): bool
+    {
+        if ((string) ($record->quote_pos_payment_status ?? '') === 'paid') {
+            return true;
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets as sqpt')
+            ->leftJoin('pos_orders as po', 'po.id', '=', 'sqpt.pos_order_id')
+            ->where('sqpt.sales_order_id', (int) $record->getKey())
+            ->where(function ($query): void {
+                $query->where('sqpt.status', 'paid')
+                    ->orWhere('po.status', 'paid')
+                    ->orWhereNotNull('po.paid_at');
+            })
+            ->exists();
+    }
+
+    public static function canConvertQuoteToSalesOrder(SaleOrder $record): bool
+    {
+        if ((string) ($record->status ?? '') !== 'draft') {
+            return false;
+        }
+
+        if (self::quoteHasBlockingPosTicket($record)) {
+            return false;
+        }
+
+        if (self::quoteHasPosFlowMarkerWithoutTicket($record)) {
+            return false;
+        }
+
+        if (! self::quoteApprovalAllowsPosFlow($record)) {
+            return false;
+        }
+
+        if (! static::isQuoteValidatedForPos($record)) {
+            return false;
+        }
+
+        if (! static::userCanPermission('sales.confirm')) {
+            return false;
+        }
+
+        return true;
+    }
+
+
+
+    public static function quoteApprovalAllowsPosFlow(SaleOrder $record): bool
+    {
+        $approvalStatus = (string) ($record->margin_approval_status ?? '');
+        $approvalRequired = (bool) ($record->margin_approval_required ?? false);
+
+        if (in_array($approvalStatus, ['required', 'pending', 'rejected'], true)) {
+            return false;
+        }
+
+        if ($approvalRequired && ! in_array($approvalStatus, ['approved', 'not_required'], true)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static function canShowValidateQuoteForPos(SaleOrder $record): bool
+    {
+        if ((string) ($record->status ?? '') !== 'draft') {
+            return false;
+        }
+
+        if (! static::userCanPermission('sales.confirm')) {
+            return false;
+        }
+
+        if (self::quoteHasBlockingPosTicket($record)) {
+            return false;
+        }
+
+        if ((string) ($record->payment_status ?? '') === 'paid') {
+            return false;
+        }
+
+        if (self::quoteHasPosFlowMarkerWithoutTicket($record)) {
+            return true;
+        }
+
+        return ! self::isQuoteValidatedForPos($record) || ! self::quoteApprovalAllowsPosFlow($record);
+    }
+
+
+    protected static function quoteValidationInitialStatus(): string
+    {
+        try {
+            $column = \Illuminate\Support\Facades\DB::selectOne("
+                select column_default
+                from information_schema.columns
+                where table_name = 'sales_orders'
+                  and column_name = 'quote_validation_status'
+            ");
+
+            $default = (string) ($column->column_default ?? '');
+
+            if (preg_match("/^'([^']+)'::/", $default, $matches)) {
+                return (string) $matches[1];
+            }
+
+            if (preg_match("/^'([^']+)'$/", $default, $matches)) {
+                return (string) $matches[1];
+            }
+        } catch (\Throwable $e) {
+            // Si no se puede leer el default, usar fallback.
+        }
+
+        // Fallback usado para una cotización nueva/no validada.
+        return 'pending';
+    }
+
+
+
+
+
+
+    protected static function posOrderRowIsPaid(object $row): bool
+    {
+        $status = \Illuminate\Support\Str::lower((string) ($row->pos_order_status ?? $row->status ?? ''));
+
+        if (in_array($status, ['paid', 'completed', 'done', 'closed'], true)) {
+            return true;
+        }
+
+        return ! empty($row->pos_order_paid_at ?? $row->paid_at ?? null);
+    }
+
+    public static function cancelQuoteWithPendingPosTicket(SaleOrder $record, ?int $userId = null): array
+    {
+        if (self::quoteHasPaidPosTicket($record)) {
+            return [
+                'ok' => false,
+                'blocked' => true,
+                'title' => 'No se puede cancelar',
+                'message' => 'Esta cotización ya fue cobrada en PDV. Para revertirla usa devolución / nota de crédito.',
+            ];
+        }
+
+        $result = [
+            'ok' => true,
+            'blocked' => false,
+            'title' => 'Cotización cancelada',
+            'message' => 'La cotización fue cancelada.',
+            'cancelled_pos_ticket' => false,
+            'ticket_number' => null,
+        ];
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($record, $userId, &$result): void {
+            $now = now();
+
+            $ticket = null;
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+                $ticket = \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets as sqpt')
+                    ->leftJoin('pos_orders as po', 'po.id', '=', 'sqpt.pos_order_id')
+                    ->where('sqpt.sales_order_id', (int) $record->getKey())
+                    ->orderByDesc('sqpt.id')
+                    ->select([
+                        'sqpt.id as bridge_id',
+                        'sqpt.status as bridge_status',
+                        'sqpt.notes as bridge_notes',
+                        'sqpt.metadata as bridge_metadata',
+                        'po.id as pos_order_id',
+                        'po.number as pos_order_number',
+                        'po.status as pos_order_status',
+                        'po.paid_at as pos_order_paid_at',
+                        'po.metadata as pos_order_metadata',
+                    ])
+                    ->first();
+            }
+
+            if ($ticket && ! self::posOrderRowIsPaid($ticket)) {
+                $result['ticket_number'] = (string) ($ticket->pos_order_number ?? '');
+
+                if (! empty($ticket->pos_order_id) && \Illuminate\Support\Facades\Schema::hasTable('pos_orders')) {
+                    $posMetadata = [];
+
+                    if (! empty($ticket->pos_order_metadata)) {
+                        $decoded = json_decode((string) $ticket->pos_order_metadata, true);
+                        $posMetadata = is_array($decoded) ? $decoded : [];
+                    }
+
+                    $posMetadata['cancelled'] = true;
+                    $posMetadata['cancelled_at'] = $now->toDateTimeString();
+                    $posMetadata['cancelled_by_user_id'] = $userId;
+                    $posMetadata['cancelled_reason'] = 'Cotización cancelada.';
+
+                    $posUpdate = [
+                        'status' => 'cancelled',
+                        'metadata' => json_encode($posMetadata),
+                        'updated_at' => $now,
+                    ];
+
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'cancelled_at')) {
+                        $posUpdate['cancelled_at'] = $now;
+                    }
+
+                    \Illuminate\Support\Facades\DB::table('pos_orders')
+                        ->where('id', (int) $ticket->pos_order_id)
+                        ->update($posUpdate);
+                }
+
+                $bridgeMetadata = [];
+
+                if (! empty($ticket->bridge_metadata)) {
+                    $decoded = json_decode((string) $ticket->bridge_metadata, true);
+                    $bridgeMetadata = is_array($decoded) ? $decoded : [];
+                }
+
+                $bridgeMetadata['cancelled'] = true;
+                $bridgeMetadata['cancelled_at'] = $now->toDateTimeString();
+                $bridgeMetadata['cancelled_by_user_id'] = $userId;
+                $bridgeMetadata['cancelled_reason'] = 'Cotización cancelada.';
+
+                $notes = trim((string) ($ticket->bridge_notes ?? ''));
+                $notes = trim($notes . "\n" . 'Ticket PDV cancelado por cancelación de cotización.');
+
+                \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets')
+                    ->where('id', (int) $ticket->bridge_id)
+                    ->update([
+                        'status' => 'cancelled',
+                        'cancelled_at' => $now,
+                        'notes' => $notes,
+                        'metadata' => json_encode($bridgeMetadata),
+                        'updated_at' => $now,
+                    ]);
+
+                $result['cancelled_pos_ticket'] = true;
+                $result['message'] = 'La cotización fue cancelada y también se canceló el ticket PDV pendiente'
+                    . ($result['ticket_number'] ? ' ' . $result['ticket_number'] : '')
+                    . '.';
+            }
+
+            $quoteUpdate = [
+                'status' => 'cancelled',
+                'margin_approval_status' => 'not_required',
+                'margin_approval_required' => false,
+                'margin_approval_requested_at' => null,
+                'updated_at' => $now,
+            ];
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_pos_payment_status')) {
+                $quoteUpdate['quote_pos_payment_status'] = 'cancelled';
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('sales_orders', 'quote_validation_message')) {
+                $quoteUpdate['quote_validation_message'] = $result['message'];
+            }
+
+            \Illuminate\Support\Facades\DB::table('sales_orders')
+                ->where('id', (int) $record->getKey())
+                ->update(static::filterSalesOrderColumns($quoteUpdate));
+
+            if (class_exists(\App\Support\SalesApprovalWorkflow::class)) {
+                $order = \Illuminate\Support\Facades\DB::table('sales_orders')
+                    ->where('id', (int) $record->getKey())
+                    ->first();
+
+                if ($order) {
+                    \App\Support\SalesApprovalWorkflow::logEvent(
+                        $order,
+                        'cancelled',
+                        'Cotización cancelada',
+                        $result['message'],
+                        null,
+                        $userId
+                    );
+                }
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('approval_requests')) {
+                \Illuminate\Support\Facades\DB::table('approval_requests')
+                    ->where('approvable_type', \App\Models\SaleOrder::class)
+                    ->where('approvable_id', (int) $record->getKey())
+                    ->whereIn('document_type', ['sales_quote', 'sales_order', 'sales_margin_approval'])
+                    ->where('status', 'pending')
+                    ->update([
+                        'status' => 'cancelled',
+                        'completed_at' => $now,
+                        'last_decision_reason' => 'Cotización cancelada.',
+                        'updated_at' => $now,
+                    ]);
+            }
+        });
+
+        return $result;
+    }
+
+
+    public static function quotePosTrackingData(SaleOrder $record): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('sales_quote_pos_tickets')) {
+            return [];
+        }
+
+        $ticket = \Illuminate\Support\Facades\DB::table('sales_quote_pos_tickets as sqpt')
+            ->leftJoin('pos_orders as po', 'po.id', '=', 'sqpt.pos_order_id')
+            ->leftJoin('pos_points as pp', 'pp.id', '=', 'sqpt.pos_point_id')
+            ->leftJoin('pos_sessions as ps', 'ps.id', '=', 'sqpt.pos_session_id')
+            ->leftJoin('users as sent_user', 'sent_user.id', '=', 'sqpt.sent_by_user_id')
+            ->where('sqpt.sales_order_id', (int) $record->getKey())
+            ->orderByDesc('sqpt.id')
+            ->select([
+                'sqpt.id as bridge_id',
+                'sqpt.status as bridge_status',
+                'sqpt.sent_at',
+                'sqpt.paid_at',
+                'sqpt.cancelled_at',
+                'sqpt.expired_at',
+                'sqpt.public_token',
+                'sqpt.metadata as bridge_metadata',
+                'po.id as pos_order_id',
+                'po.number as pos_order_number',
+                'po.status as pos_order_status',
+                'po.paid_at as pos_order_paid_at',
+                'po.total as pos_order_total',
+                'po.metadata as pos_order_metadata',
+                'pp.name as pos_point_name',
+                'pp.code as pos_point_code',
+                'ps.id as pos_session_id',
+                'ps.number as pos_session_number',
+                'sent_user.name as sent_by_name',
+            ])
+            ->first();
+
+        if (! $ticket) {
+            return [];
+        }
+
+        $posMetadata = [];
+        $bridgeMetadata = [];
+
+        if (! empty($ticket->pos_order_metadata)) {
+            $posMetadata = json_decode((string) $ticket->pos_order_metadata, true) ?: [];
+        }
+
+        if (! empty($ticket->bridge_metadata)) {
+            $bridgeMetadata = json_decode((string) $ticket->bridge_metadata, true) ?: [];
+        }
+
+        $inventoryStatus = (string) ($posMetadata['inventory_status'] ?? '');
+        $inventoryMessage = (string) ($posMetadata['inventory_message'] ?? '');
+        $stockMovementId = $posMetadata['stock_movement_id'] ?? null;
+        $stockMovementReference = (string) ($posMetadata['stock_movement_reference'] ?? '');
+
+        if ($stockMovementReference === '' && $stockMovementId && \Illuminate\Support\Facades\Schema::hasTable('stock_movements')) {
+            $movement = \Illuminate\Support\Facades\DB::table('stock_movements')
+                ->where('id', (int) $stockMovementId)
+                ->first();
+
+            if ($movement) {
+                $stockMovementReference = (string) ($movement->reference ?? '');
+            }
+        }
+
+        $status = (string) ($record->quote_pos_payment_status ?? '');
+
+        if ($status === '') {
+            $status = (string) ($ticket->bridge_status ?? '');
+        }
+
+        $statusLabel = match ($status) {
+            'paid' => 'Cobrado en PDV',
+            'sent', 'pending' => 'Enviado a PDV',
+            'cancelled' => 'Cancelado',
+            'expired' => 'Expirado',
+            default => \Illuminate\Support\Str::headline(str_replace('_', ' ', $status ?: 'sin estado')),
+        };
+
+        $inventoryLabel = match ($inventoryStatus) {
+            'delivered' => 'Salida generada',
+            'no_stock' => 'Sin existencia',
+            'not_required' => 'No requerida',
+            default => $inventoryStatus !== '' ? \Illuminate\Support\Str::headline(str_replace('_', ' ', $inventoryStatus)) : 'Pendiente',
+        };
+
+        $posPoint = trim((string) ($ticket->pos_point_name ?? ''));
+
+        if (! empty($ticket->pos_point_code)) {
+            $posPoint .= ' (' . (string) $ticket->pos_point_code . ')';
+        }
+
+        return [
+            'bridge_id' => (int) $ticket->bridge_id,
+            'status' => $status,
+            'status_label' => $statusLabel,
+            'ticket_number' => (string) ($ticket->pos_order_number ?? ''),
+            'pos_order_id' => $ticket->pos_order_id ? (int) $ticket->pos_order_id : null,
+            'pos_order_status' => (string) ($ticket->pos_order_status ?? ''),
+            'pos_order_total' => $ticket->pos_order_total,
+            'pos_point' => $posPoint !== '' ? $posPoint : 'PDV',
+            'pos_session' => $ticket->pos_session_number ?: ($ticket->pos_session_id ? '#' . $ticket->pos_session_id : ''),
+            'sent_by' => (string) ($ticket->sent_by_name ?? ''),
+            'sent_at' => $ticket->sent_at,
+            'paid_at' => $ticket->paid_at ?: $ticket->pos_order_paid_at,
+            'cancelled_at' => $ticket->cancelled_at,
+            'stock_movement_id' => $stockMovementId,
+            'stock_movement_reference' => $stockMovementReference,
+            'inventory_status' => $inventoryStatus,
+            'inventory_label' => $inventoryLabel,
+            'inventory_message' => $inventoryMessage,
+            'public_token' => (string) ($ticket->public_token ?? ''),
+            'bridge_metadata' => $bridgeMetadata,
+            'pos_metadata' => $posMetadata,
+        ];
+    }
+
+    public static function quotePosTrackingHtml(SaleOrder $record): \Illuminate\Support\HtmlString
+    {
+        $data = self::quotePosTrackingData($record);
+
+        if (empty($data)) {
+            return new \Illuminate\Support\HtmlString(
+                '<div style="padding:12px;border-radius:12px;background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;">'
+                . 'Esta cotización todavía no tiene ticket PDV generado.'
+                . '</div>'
+            );
+        }
+
+        $status = htmlspecialchars((string) ($data['status_label'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $ticket = htmlspecialchars((string) ($data['ticket_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $pos = htmlspecialchars((string) ($data['pos_point'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $session = htmlspecialchars((string) ($data['pos_session'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $sentBy = htmlspecialchars((string) ($data['sent_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $sentAt = htmlspecialchars((string) ($data['sent_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $paidAt = htmlspecialchars((string) ($data['paid_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $cancelledAt = htmlspecialchars((string) ($data['cancelled_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $movement = htmlspecialchars((string) ($data['stock_movement_reference'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $inventory = htmlspecialchars((string) ($data['inventory_label'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $inventoryMessage = htmlspecialchars((string) ($data['inventory_message'] ?? ''), ENT_QUOTES, 'UTF-8');
+
+        $statusColor = ((string) ($data['status'] ?? '')) === 'paid'
+            ? '#065f46'
+            : '#92400e';
+
+        $statusBg = ((string) ($data['status'] ?? '')) === 'paid'
+            ? '#ecfdf5'
+            : '#fffbeb';
+
+        $html = '<div style="padding:14px;border-radius:14px;background:#ffffff;border:1px solid #e5e7eb;">';
+        $html .= '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px;">';
+        $html .= '<div>';
+        $html .= '<div style="font-size:13px;color:#64748b;">Seguimiento PDV</div>';
+        $html .= '<div style="font-size:18px;font-weight:700;color:#0f172a;">' . ($ticket !== '' ? $ticket : 'Ticket PDV') . '</div>';
+        $html .= '</div>';
+        $html .= '<div style="padding:5px 9px;border-radius:999px;background:' . $statusBg . ';color:' . $statusColor . ';font-weight:700;font-size:12px;">' . $status . '</div>';
+        $html .= '</div>';
+
+        $rows = [
+            'PDV destino' => $pos,
+            'Sesión PDV' => $session,
+            'Enviado por' => $sentBy,
+            'Fecha de envío' => $sentAt,
+            'Fecha de cobro' => $paidAt,
+            'Fecha de cancelación' => $cancelledAt,
+            'Movimiento inventario' => $movement,
+            'Estado inventario' => $inventory,
+        ];
+
+        $html .= '<div style="display:grid;grid-template-columns:180px 1fr;gap:7px 12px;font-size:13px;">';
+
+        foreach ($rows as $label => $value) {
+            if ($value === '') {
+                $value = '—';
+            }
+
+            $html .= '<div style="color:#64748b;">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</div>';
+            $html .= '<div style="color:#0f172a;font-weight:600;">' . $value . '</div>';
+        }
+
+        $html .= '</div>';
+
+        if ($inventoryMessage !== '') {
+            $html .= '<div style="margin-top:10px;padding:9px;border-radius:10px;background:#f8fafc;color:#475569;font-size:12px;">';
+            $html .= $inventoryMessage;
+            $html .= '</div>';
+        }
+
+        $html .= '</div>';
+
+        return new \Illuminate\Support\HtmlString($html);
+    }
+
+    public static function quotePosTrackingHeaderAction(SaleOrder $record): \Filament\Actions\Action
+    {
+        return \Filament\Actions\Action::make('quote_pos_tracking')
+            ->label('Seguimiento PDV')
+            ->icon('heroicon-o-map')
+            ->color('gray')
+            ->visible(fn (): bool => self::quoteHasAnyPosTicket($record))
+            ->modalHeading('Seguimiento PDV')
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Cerrar')
+            ->modalWidth('2xl')
+            ->form([
+                \Filament\Forms\Components\Placeholder::make('quote_pos_tracking')
+                    ->label('')
+                    ->content(fn () => self::quotePosTrackingHtml($record)),
+            ]);
+    }
+
+    public static function quotePosTrackingTableAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('quote_pos_tracking')
+            ->label('Seguimiento PDV')
+            ->icon('heroicon-o-map')
+            ->color('gray')
+            ->visible(fn (SaleOrder $record): bool => self::quoteHasAnyPosTicket($record))
+            ->modalHeading('Seguimiento PDV')
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Cerrar')
+            ->modalWidth('2xl')
+            ->form(fn (SaleOrder $record): array => [
+                \Filament\Forms\Components\Placeholder::make('quote_pos_tracking')
+                    ->label('')
+                    ->content(fn () => self::quotePosTrackingHtml($record)),
+            ]);
+    }
+
+
     public static function quoteDisplayStatusLabel(SaleOrder $record): string
     {
         if (self::quoteIsPaidInPos($record)) {
@@ -2841,14 +3515,15 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                     ->update($quoteUpdate);
             }
 
-            \Filament\Notifications\Notification::make()
-                ->title('Ticket pendiente generado')
-                ->body('Ticket ' . ($result['pos_order_number'] ?? '') . ' creado desde la cotización. También quedó visible dentro del modal.')
-                ->success()
-                ->send();
-
+            // V5.61.6k:
+            // El aviso correcto se muestra dentro del modal mediante quotePendingPosTicketNotice().
+            // No mandamos notificación superior para evitar mensajes duplicados.
             // V5.61.2l: mantener el modal abierto para mostrar liga del ticket generado.
             throw new \Filament\Support\Exceptions\Halt();
+        } catch (\Filament\Support\Exceptions\Halt $e) {
+            // Halt es control normal de Filament para mantener el modal abierto.
+            // No debe tratarse como error.
+            throw $e;
         } catch (\Throwable $e) {
             \Filament\Notifications\Notification::make()
                 ->title('No se pudo enviar a PDV')
