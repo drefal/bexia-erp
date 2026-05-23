@@ -2,6 +2,10 @@
 
 namespace App\Filament\Resources\StockSerialNumberResource\Pages;
 
+use App\Models\StockSerialNumber;
+use Filament\Actions;
+use Filament\Forms;
+
 use App\Filament\Resources\StockSerialNumberResource;
 use Filament\Resources\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -465,4 +469,96 @@ class ViewStockSerialNumber extends Page
 
         return 0;
     }
+    protected function getHeaderActions(): array
+    {
+        return [
+            Actions\Action::make('correctSerialNumber')
+                ->label('Corregir serie')
+                ->icon('heroicon-o-pencil-square')
+                ->color('warning')
+                ->modalHeading(fn (): string => 'Corregir número de serie: ' . $this->currentSerialRecord()->serial_number)
+                ->modalDescription('Solo se corregirá el texto del número de serie. No cambia estado, ubicación, existencias, ventas, PDV ni entregas.')
+                ->modalSubmitActionLabel('Confirmar corrección')
+                ->form([
+                    Forms\Components\TextInput::make('serial_number_before')
+                        ->label('Serie actual')
+                        ->default(fn (): ?string => $this->currentSerialRecord()->serial_number)
+                        ->disabled()
+                        ->dehydrated(false),
+
+                    Forms\Components\TextInput::make('serial_number_after')
+                        ->label('Nuevo número de serie')
+                        ->required()
+                        ->maxLength(160)
+                        ->helperText('No debe existir otro registro con este número de serie en la misma empresa.'),
+
+                    Forms\Components\Textarea::make('reason')
+                        ->label('Motivo de corrección')
+                        ->required()
+                        ->rows(3)
+                        ->helperText('El motivo quedará guardado en el historial especial.'),
+
+                    Forms\Components\TextInput::make('reference')
+                        ->label('Referencia / documento')
+                        ->maxLength(160)
+                        ->placeholder('Opcional'),
+
+                    Forms\Components\Textarea::make('notes')
+                        ->label('Notas')
+                        ->rows(2)
+                        ->placeholder('Opcional'),
+                ])
+                ->action(function (array $data): void {
+                    \App\Filament\Resources\StockSerialNumberResource::correctSerialNumberRecord($this->currentSerialRecord(), $data);
+                    $this->redirect(static::getResource()::getUrl('view', [
+                        'record' => $this->currentSerialRecord(),
+                    ]));
+                }),
+        ];
+    }
+
+
+    protected function currentSerialRecord(): StockSerialNumber
+    {
+        $record = request()->route('record');
+
+        if ($record instanceof StockSerialNumber) {
+            return $record;
+        }
+
+        if (is_numeric($record)) {
+            return StockSerialNumber::query()->findOrFail((int) $record);
+        }
+
+        if (property_exists($this, 'record')) {
+            $value = $this->record ?? null;
+
+            if ($value instanceof StockSerialNumber) {
+                return $value;
+            }
+
+            if (is_numeric($value)) {
+                return StockSerialNumber::query()->findOrFail((int) $value);
+            }
+        }
+
+        foreach (['recordId', 'recordKey', 'id'] as $property) {
+            if (property_exists($this, $property)) {
+                $value = $this->{$property} ?? null;
+
+                if (is_numeric($value)) {
+                    return StockSerialNumber::query()->findOrFail((int) $value);
+                }
+            }
+        }
+
+        $referer = (string) request()->headers->get('referer', '');
+
+        if ($referer !== '' && preg_match('~/stock-serial-numbers/([0-9]+)/view~', $referer, $matches)) {
+            return StockSerialNumber::query()->findOrFail((int) $matches[1]);
+        }
+
+        throw new \RuntimeException('No se pudo resolver el número de serie actual para esta acción.');
+    }
+
 }

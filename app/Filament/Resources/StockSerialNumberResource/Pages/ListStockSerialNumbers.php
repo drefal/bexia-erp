@@ -25,19 +25,6 @@ class ListStockSerialNumbers extends ListRecords
                     'summary' => $this->serialReconciliationSummary(),
                 ])),
 
-            Actions\Action::make('specialMovementsHistory')
-                ->label('Historial especial')
-                ->icon('heroicon-o-clock')
-                ->color('gray')
-                ->modalHeading('Historial especial de series')
-                ->modalSubmitAction(false)
-                ->modalCancelActionLabel('Cerrar')
-                ->modalWidth('7xl')
-                ->modalContent(fn () => view('filament.inventory.stock-serial-numbers.special-movements-history', [
-                    'rows' => $this->specialMovementsHistoryRows(),
-                    'typeLabels' => \App\Models\StockSerialSpecialMovement::typeLabels(),
-                ])),
-
             Actions\CreateAction::make()
                 ->label('Nuevo número de serie'),
         ];
@@ -251,79 +238,5 @@ class ListStockSerialNumbers extends ListRecords
         return $fallback;
     }
 
-    protected function specialMovementsHistoryRows(): array
-    {
-        if (! \Illuminate\Support\Facades\Schema::hasTable('stock_serial_special_movements')) {
-            return [];
-        }
-
-        $companyId = $this->currentCompanyId();
-        $typeLabels = \App\Models\StockSerialSpecialMovement::typeLabels();
-
-        $rows = \Illuminate\Support\Facades\DB::table('stock_serial_special_movements as m')
-            ->leftJoin('products as p', 'p.id', '=', 'm.product_id')
-            ->leftJoin('products as v', 'v.id', '=', 'm.product_variant_id')
-            ->leftJoin('warehouses as sw', 'sw.id', '=', 'm.source_warehouse_id')
-            ->leftJoin('stock_locations as sl', 'sl.id', '=', 'm.source_location_id')
-            ->leftJoin('warehouses as dw', 'dw.id', '=', 'm.destination_warehouse_id')
-            ->leftJoin('stock_locations as dl', 'dl.id', '=', 'm.destination_location_id')
-            ->leftJoin('users as u', 'u.id', '=', 'm.created_by')
-            ->select([
-                'm.id',
-                'm.movement_type',
-                'm.serial_number_before',
-                'm.serial_number_after',
-                'm.reason',
-                'm.created_at',
-                'p.name as product_name',
-                'p.sku as product_sku',
-                'p.internal_reference as product_reference',
-                'v.name as variant_name',
-                'v.sku as variant_sku',
-                'v.internal_reference as variant_reference',
-                'sw.name as source_warehouse_name',
-                'sl.name as source_location_name',
-                'dw.name as destination_warehouse_name',
-                'dl.name as destination_location_name',
-                'u.name as user_name',
-                'u.email as user_email',
-            ])
-            ->when($companyId, fn ($query) => $query->where('m.company_id', $companyId))
-            ->orderByDesc('m.id')
-            ->limit(50)
-            ->get();
-
-        return $rows->map(function ($row) use ($typeLabels): array {
-            $source = trim(implode(' / ', array_filter([
-                $row->source_warehouse_name ?? null,
-                $row->source_location_name ?? null,
-            ])));
-
-            $destination = trim(implode(' / ', array_filter([
-                $row->destination_warehouse_name ?? null,
-                $row->destination_location_name ?? null,
-            ])));
-
-            $user = trim((string) ($row->user_name ?? ''));
-
-            if ($user === '') {
-                $user = trim((string) ($row->user_email ?? ''));
-            }
-
-            return [
-                'created_at' => $row->created_at ? \Illuminate\Support\Carbon::parse($row->created_at)->format('d/m/Y H:i') : '—',
-                'movement_type' => (string) ($row->movement_type ?? ''),
-                'movement_type_label' => $typeLabels[$row->movement_type] ?? ($row->movement_type ?: '—'),
-                'serial_number_before' => $row->serial_number_before ?: '—',
-                'serial_number_after' => $row->serial_number_after ?: '—',
-                'product_label' => $this->entityLabel($row->product_reference ?? $row->product_sku ?? null, $row->product_name ?? null, '—'),
-                'variant_label' => $this->entityLabel($row->variant_reference ?? $row->variant_sku ?? null, $row->variant_name ?? null, '—'),
-                'source_label' => $source !== '' ? $source : '—',
-                'destination_label' => $destination !== '' ? $destination : '—',
-                'reason' => $row->reason ?: '—',
-                'created_by_label' => $user !== '' ? $user : '—',
-            ];
-        })->all();
-    }
 
 }

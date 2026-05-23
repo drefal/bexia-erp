@@ -4,9 +4,11 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\StockSerialNumberResource\Pages;
 use App\Models\StockSerialNumber;
+use App\Models\StockSerialSpecialMovement;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -220,7 +222,9 @@ class StockSerialNumberResource extends Resource
             ->actions([
 
                 \Filament\Tables\Actions\ViewAction::make()
-                    ->label('Ver detalle'),                Tables\Actions\EditAction::make()
+                    ->label('Ver detalle'),
+
+                Tables\Actions\EditAction::make()
                     ->label('Editar'),
             ])
             ->bulkActions([])
@@ -442,6 +446,148 @@ class StockSerialNumberResource extends Resource
         }
 
         return $name !== '' ? $name : ($code !== '' ? $code : ('Producto #' . $productId));
+    }
+
+    public static function correctSerialNumberRecord(StockSerialNumber $record, array $data): null
+    {
+        $newSerial = trim((string) ($data['serial_number_after'] ?? ''));
+        $reason = trim((string) ($data['reason'] ?? ''));
+        $reference = trim((string) ($data['reference'] ?? ''));
+        $notes = trim((string) ($data['notes'] ?? ''));
+
+        if ($newSerial === '') {
+            Notification::make()
+                ->title('Nuevo número requerido')
+                ->body('Captura el nuevo número de serie.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        if ($reason === '') {
+            Notification::make()
+                ->title('Motivo requerido')
+                ->body('Captura el motivo de corrección.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        $oldSerial = trim((string) $record->serial_number);
+
+        if (mb_strtolower($oldSerial) === mb_strtolower($newSerial)) {
+            Notification::make()
+                ->title('Sin cambios')
+                ->body('El nuevo número de serie es igual al actual.')
+                ->warning()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        $companyId = (int) ($record->company_id ?: static::currentCompanyId());
+
+        $duplicate = DB::table('stock_serial_numbers')
+            ->where('company_id', $companyId)
+            ->where('id', '!=', $record->getKey())
+            ->whereRaw('lower(serial_number) = ?', [mb_strtolower($newSerial)])
+            ->first();
+
+        if ($duplicate) {
+            Notification::make()
+                ->title('Número de serie duplicado')
+                ->body('Ya existe otro registro con ese número de serie en la misma empresa. Usa el flujo de duplicado/conflicto.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        DB::transaction(function () use ($record, $data, $oldSerial, $newSerial, $reason, $reference, $notes, $companyId): void {
+            /** @var StockSerialNumber $locked */
+            $locked = StockSerialNumber::query()
+                ->whereKey($record->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $duplicate = DB::table('stock_serial_numbers')
+                ->where('company_id', $companyId)
+                ->where('id', '!=', $locked->getKey())
+                ->whereRaw('lower(serial_number) = ?', [mb_strtolower($newSerial)])
+                ->first();
+
+            if ($duplicate) {
+                Notification::make()
+                    ->title('Número de serie duplicado')
+                    ->body('Ya existe otro registro con ese número de serie en la misma empresa. Usa el flujo de duplicado/conflicto.')
+                    ->danger()
+                    ->send();
+
+                throw new \Filament\Support\Exceptions\Halt();
+            }
+
+            $beforeSnapshot = [
+                'id' => $locked->getKey(),
+                'serial_number' => $locked->serial_number,
+                'status' => $locked->status,
+                'company_id' => $locked->company_id,
+                'product_id' => $locked->product_id,
+                'product_variant_id' => $locked->product_variant_id,
+                'lot_id' => $locked->lot_id,
+                'current_warehouse_id' => $locked->current_warehouse_id,
+                'current_location_id' => $locked->current_location_id,
+            ];
+
+            $locked->serial_number = $newSerial;
+            $locked->save();
+
+            if (Schema::hasTable('stock_serial_special_movements')) {
+                $insert = [
+                    'company_id' => $locked->company_id,
+                    'stock_serial_number_id' => $locked->getKey(),
+                    'product_id' => $locked->product_id,
+                    'product_variant_id' => $locked->product_variant_id,
+                    'lot_id' => $locked->lot_id,
+                    'movement_type' => StockSerialSpecialMovement::TYPE_SERIAL_CORRECTION,
+                    'status' => 'confirmed',
+                    'serial_number_before' => $oldSerial,
+                    'serial_number_after' => $newSerial,
+                    'source_warehouse_id' => $locked->current_warehouse_id,
+                    'source_location_id' => $locked->current_location_id,
+                    'destination_warehouse_id' => $locked->current_warehouse_id,
+                    'destination_location_id' => $locked->current_location_id,
+                    'reason' => $reason,
+                    'reference' => $reference !== '' ? $reference : null,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'created_by' => auth()->id(),
+                    'confirmed_by' => auth()->id(),
+                    'confirmed_at' => now(),
+                    'metadata' => json_encode([
+                        'before' => $beforeSnapshot,
+                        'after' => [
+                            'serial_number' => $newSerial,
+                        ],
+                        'source' => 'StockSerialNumberResource.correctSerialNumber',
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                $insert = array_intersect_key($insert, array_flip(Schema::getColumnListing('stock_serial_special_movements')));
+
+                DB::table('stock_serial_special_movements')->insert($insert);
+            }
+        });
+
+        Notification::make()
+            ->title('Número de serie corregido')
+            ->body('Se corrigió de "' . $oldSerial . '" a "' . $newSerial . '" y quedó registrado en el historial especial.')
+            ->success()
+            ->send();
+
+        return null;
     }
 
     protected static function currentCompanyId(): ?int
