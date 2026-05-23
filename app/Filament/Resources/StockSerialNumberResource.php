@@ -448,6 +448,158 @@ class StockSerialNumberResource extends Resource
         return $name !== '' ? $name : ($code !== '' ? $code : ('Producto #' . $productId));
     }
 
+    public static function markSerialDuplicateConflictRecord(StockSerialNumber $record, array $data): null
+    {
+        $relatedSerialId = (int) ($data['related_stock_serial_number_id'] ?? 0);
+        $conflictSerial = trim((string) ($data['conflict_serial_number'] ?? ''));
+        $reason = trim((string) ($data['reason'] ?? ''));
+        $reference = trim((string) ($data['reference'] ?? ''));
+        $notes = trim((string) ($data['notes'] ?? ''));
+        $blockSerial = (bool) ($data['block_serial'] ?? true);
+
+        if ($reason === '') {
+            Notification::make()
+                ->title('Motivo requerido')
+                ->body('Captura el motivo del conflicto.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        DB::transaction(function () use ($record, $conflictSerial, $reason, $reference, $notes, $blockSerial, $relatedSerialId): void {
+            /** @var StockSerialNumber $locked */
+            $locked = StockSerialNumber::query()
+                ->whereKey($record->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $beforeSnapshot = [
+                'id' => $locked->getKey(),
+                'serial_number' => $locked->serial_number,
+                'status' => $locked->status,
+                'company_id' => $locked->company_id,
+                'product_id' => $locked->product_id,
+                'product_variant_id' => $locked->product_variant_id,
+                'lot_id' => $locked->lot_id,
+                'current_warehouse_id' => $locked->current_warehouse_id,
+                'current_location_id' => $locked->current_location_id,
+            ];
+
+            $statusBefore = (string) ($locked->status ?? '');
+
+            $relatedSerial = null;
+
+            if ($relatedSerialId > 0) {
+                $relatedSerial = StockSerialNumber::query()
+                    ->where('company_id', $locked->company_id)
+                    ->where('id', '!=', $locked->getKey())
+                    ->whereKey($relatedSerialId)
+                    ->first();
+
+                if (! $relatedSerial) {
+                    Notification::make()
+                        ->title('Serie relacionada inválida')
+                        ->body('La serie relacionada seleccionada no existe o no pertenece a la misma empresa.')
+                        ->danger()
+                        ->send();
+
+                    throw new \Filament\Support\Exceptions\Halt();
+                }
+
+                $conflictSerial = (string) $relatedSerial->serial_number;
+            }
+
+            if ($blockSerial && $locked->status !== 'blocked') {
+                $locked->status = 'blocked';
+                $locked->save();
+            }
+
+            $relatedMatches = [];
+
+            if ($conflictSerial !== '' && Schema::hasTable('stock_serial_numbers')) {
+                $relatedMatches = DB::table('stock_serial_numbers')
+                    ->select([
+                        'id',
+                        'company_id',
+                        'product_id',
+                        'product_variant_id',
+                        'serial_number',
+                        'status',
+                        'current_warehouse_id',
+                        'current_location_id',
+                    ])
+                    ->where('company_id', $locked->company_id)
+                    ->whereRaw('lower(serial_number) = ?', [mb_strtolower($conflictSerial)])
+                    ->where('id', '!=', $locked->getKey())
+                    ->limit(20)
+                    ->get()
+                    ->map(fn ($row): array => (array) $row)
+                    ->all();
+            }
+
+            if (Schema::hasTable('stock_serial_special_movements')) {
+                $insert = [
+                    'company_id' => $locked->company_id,
+                    'stock_serial_number_id' => $locked->getKey(),
+                    'product_id' => $locked->product_id,
+                    'product_variant_id' => $locked->product_variant_id,
+                    'lot_id' => $locked->lot_id,
+                    'movement_type' => StockSerialSpecialMovement::TYPE_DUPLICATE_CONFLICT,
+                    'status' => 'confirmed',
+                    'serial_number_before' => $locked->serial_number,
+                    'serial_number_after' => $conflictSerial !== '' ? $conflictSerial : null,
+                    'source_warehouse_id' => $locked->current_warehouse_id,
+                    'source_location_id' => $locked->current_location_id,
+                    'destination_warehouse_id' => $locked->current_warehouse_id,
+                    'destination_location_id' => $locked->current_location_id,
+                    'reason' => $reason,
+                    'reference' => $reference !== '' ? $reference : null,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'created_by' => auth()->id(),
+                    'confirmed_by' => auth()->id(),
+                    'confirmed_at' => now(),
+                    'metadata' => json_encode([
+                        'before' => $beforeSnapshot,
+                        'after' => [
+                            'status' => $locked->status,
+                            'blocked' => $blockSerial,
+                        ],
+                        'conflict_serial_number' => $conflictSerial,
+                        'related_stock_serial_number_id' => $relatedSerialId ?: null,
+                        'related_selected' => $relatedSerial ? [
+                            'id' => $relatedSerial->getKey(),
+                            'serial_number' => $relatedSerial->serial_number,
+                            'status' => $relatedSerial->status,
+                            'product_id' => $relatedSerial->product_id,
+                            'product_variant_id' => $relatedSerial->product_variant_id,
+                            'current_warehouse_id' => $relatedSerial->current_warehouse_id,
+                            'current_location_id' => $relatedSerial->current_location_id,
+                        ] : null,
+                        'related_matches' => $relatedMatches,
+                        'status_before' => $statusBefore,
+                        'status_after' => (string) ($locked->status ?? ''),
+                        'source' => 'StockSerialNumberResource.markSerialDuplicateConflict',
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                $insert = array_intersect_key($insert, array_flip(Schema::getColumnListing('stock_serial_special_movements')));
+
+                DB::table('stock_serial_special_movements')->insert($insert);
+            }
+        });
+
+        Notification::make()
+            ->title('Conflicto de serie registrado')
+            ->body($blockSerial ? 'La serie quedó marcada como Bloqueada y se registró en auditoría.' : 'El conflicto quedó registrado en auditoría.')
+            ->success()
+            ->send();
+
+        return null;
+    }
+
     public static function correctSerialNumberRecord(StockSerialNumber $record, array $data): null
     {
         $newSerial = trim((string) ($data['serial_number_after'] ?? ''));

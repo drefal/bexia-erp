@@ -106,11 +106,17 @@ class StockSerialSpecialMovementResource extends Resource
                             ->disabled(),
 
                         Forms\Components\TextInput::make('serial_number_before')
-                            ->label('Serie anterior')
+                            ->label('Serie original / actual')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('serial_number_after')
-                            ->label('Serie nueva')
+                            ->label(fn (?StockSerialSpecialMovement $record): string => match ($record?->movement_type) {
+                                StockSerialSpecialMovement::TYPE_SERIAL_CORRECTION => 'Serie nueva',
+                                StockSerialSpecialMovement::TYPE_DUPLICATE_CONFLICT => 'Serie relacionada / conflictiva',
+                                StockSerialSpecialMovement::TYPE_EXTERNAL_RELOCATION_IN => 'Serie recibida',
+                                StockSerialSpecialMovement::TYPE_EXTERNAL_RELOCATION_OUT => 'Serie enviada / relacionada',
+                                default => 'Serie relacionada / nueva',
+                            })
                             ->disabled(),
 
                         Forms\Components\Textarea::make('reason')
@@ -144,13 +150,13 @@ class StockSerialSpecialMovementResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('serial_number_before')
-                    ->label('Serie anterior')
+                    ->label('Serie original')
                     ->placeholder('—')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('serial_number_after')
-                    ->label('Serie nueva')
+                    ->label('Serie relacionada / nueva')
                     ->placeholder('—')
                     ->searchable()
                     ->sortable(),

@@ -472,6 +472,57 @@ class ViewStockSerialNumber extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('markSerialDuplicateConflict')
+                ->label('Marcar duplicado / conflicto')
+                ->icon('heroicon-o-exclamation-triangle')
+                ->color('danger')
+                ->modalHeading(fn (): string => 'Marcar conflicto de serie: ' . $this->currentSerialRecord()->serial_number)
+                ->modalDescription('Registra un conflicto o duplicado para esta serie. Puede bloquearla para evitar venta accidental. No cambia existencias, ventas, PDV ni entregas.')
+                ->modalSubmitActionLabel('Registrar conflicto')
+                ->form([
+                    Forms\Components\TextInput::make('serial_number_before')
+                        ->label('Serie actual')
+                        ->default(fn (): ?string => $this->currentSerialRecord()->serial_number)
+                        ->disabled()
+                        ->dehydrated(false),
+
+                    Forms\Components\Select::make('related_stock_serial_number_id')
+                        ->label('Serie relacionada / duplicada')
+                        ->searchable()
+                        ->getSearchResultsUsing(fn (string $search): array => $this->serialConflictOptions($search))
+                        ->getOptionLabelUsing(fn ($value): ?string => $this->serialConflictOptionLabel($value))
+                        ->native(false)
+                        ->placeholder('Escribe para buscar una serie existente')
+                        ->helperText('Opcional. Busca por número de serie, producto, variante, almacén o ubicación.'),
+
+                    Forms\Components\Toggle::make('block_serial')
+                        ->label('Bloquear esta serie para evitar venta accidental')
+                        ->helperText('Recomendado cuando hay duda sobre si esta serie es válida.')
+                        ->default(true),
+
+                    Forms\Components\Textarea::make('reason')
+                        ->label('Motivo del conflicto')
+                        ->required()
+                        ->rows(3)
+                        ->helperText('Explica qué ocurrió y por qué se marca el conflicto.'),
+
+                    Forms\Components\TextInput::make('reference')
+                        ->label('Referencia / documento')
+                        ->maxLength(160)
+                        ->placeholder('Opcional'),
+
+                    Forms\Components\Textarea::make('notes')
+                        ->label('Notas')
+                        ->rows(2)
+                        ->placeholder('Opcional'),
+                ])
+                ->action(function (array $data): void {
+                    \App\Filament\Resources\StockSerialNumberResource::markSerialDuplicateConflictRecord($this->currentSerialRecord(), $data);
+                    $this->redirect(static::getResource()::getUrl('view', [
+                        'record' => $this->currentSerialRecord(),
+                    ]));
+                }),
+
             Actions\Action::make('correctSerialNumber')
                 ->label('Corregir serie')
                 ->icon('heroicon-o-pencil-square')
@@ -517,6 +568,106 @@ class ViewStockSerialNumber extends Page
         ];
     }
 
+
+    protected function serialConflictOptions(?string $search = null): array
+    {
+        $current = $this->currentSerialRecord();
+        $search = trim((string) $search);
+
+        $query = StockSerialNumber::query()
+            ->leftJoin('products as p', 'p.id', '=', 'stock_serial_numbers.product_id')
+            ->leftJoin('products as v', 'v.id', '=', 'stock_serial_numbers.product_variant_id')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'stock_serial_numbers.current_warehouse_id')
+            ->leftJoin('stock_locations as sl', 'sl.id', '=', 'stock_serial_numbers.current_location_id')
+            ->where('stock_serial_numbers.company_id', $current->company_id)
+            ->where('stock_serial_numbers.id', '!=', $current->getKey())
+            ->select([
+                'stock_serial_numbers.id',
+                'stock_serial_numbers.serial_number',
+                'stock_serial_numbers.status',
+                'p.name as product_name',
+                'p.sku as product_sku',
+                'p.internal_reference as product_reference',
+                'v.name as variant_name',
+                'v.sku as variant_sku',
+                'v.internal_reference as variant_reference',
+                'w.name as warehouse_name',
+                'sl.name as location_name',
+            ]);
+
+        if ($search !== '') {
+            $query->where(function ($inner) use ($search): void {
+                $inner->where('stock_serial_numbers.serial_number', 'ilike', '%' . $search . '%')
+                    ->orWhere('p.name', 'ilike', '%' . $search . '%')
+                    ->orWhere('p.sku', 'ilike', '%' . $search . '%')
+                    ->orWhere('p.internal_reference', 'ilike', '%' . $search . '%')
+                    ->orWhere('v.name', 'ilike', '%' . $search . '%')
+                    ->orWhere('v.sku', 'ilike', '%' . $search . '%')
+                    ->orWhere('v.internal_reference', 'ilike', '%' . $search . '%')
+                    ->orWhere('w.name', 'ilike', '%' . $search . '%')
+                    ->orWhere('sl.name', 'ilike', '%' . $search . '%');
+            });
+        }
+
+        return $query
+            ->orderBy('stock_serial_numbers.serial_number')
+            ->limit(50)
+            ->get()
+            ->mapWithKeys(fn ($row): array => [
+                (int) $row->id => $this->serialConflictLabelFromRow($row),
+            ])
+            ->all();
+    }
+
+    protected function serialConflictOptionLabel($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        $row = StockSerialNumber::query()
+            ->leftJoin('products as p', 'p.id', '=', 'stock_serial_numbers.product_id')
+            ->leftJoin('products as v', 'v.id', '=', 'stock_serial_numbers.product_variant_id')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'stock_serial_numbers.current_warehouse_id')
+            ->leftJoin('stock_locations as sl', 'sl.id', '=', 'stock_serial_numbers.current_location_id')
+            ->where('stock_serial_numbers.id', (int) $value)
+            ->select([
+                'stock_serial_numbers.id',
+                'stock_serial_numbers.serial_number',
+                'stock_serial_numbers.status',
+                'p.name as product_name',
+                'p.sku as product_sku',
+                'p.internal_reference as product_reference',
+                'v.name as variant_name',
+                'v.sku as variant_sku',
+                'v.internal_reference as variant_reference',
+                'w.name as warehouse_name',
+                'sl.name as location_name',
+            ])
+            ->first();
+
+        return $row ? $this->serialConflictLabelFromRow($row) : null;
+    }
+
+    protected function serialConflictLabelFromRow(object $row): string
+    {
+        $product = trim((string) ($row->product_reference ?? $row->product_sku ?? $row->product_name ?? ''));
+        $variant = trim((string) ($row->variant_reference ?? $row->variant_sku ?? $row->variant_name ?? ''));
+        $location = trim(implode(' / ', array_filter([
+            $row->warehouse_name ?? null,
+            $row->location_name ?? null,
+        ])));
+
+        $parts = [
+            (string) ($row->serial_number ?? 'Serie sin número'),
+            $product !== '' ? $product : null,
+            $variant !== '' ? $variant : null,
+            $row->status ? ('Estado: ' . $row->status) : null,
+            $location !== '' ? $location : null,
+        ];
+
+        return implode(' · ', array_filter($parts));
+    }
 
     protected function currentSerialRecord(): StockSerialNumber
     {
