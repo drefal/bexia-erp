@@ -144,6 +144,31 @@
     </style>
 </head>
 <body>
+@php
+    // V5623G_LOT_PDF_HELPERS
+    $record->loadMissing('lines');
+
+    $pdfRecordLines = $record->lines->values();
+    $showLotColumn = $pdfRecordLines->contains(fn ($line): bool => ! empty($line->lot_id));
+    $lotLabels = [];
+
+    if ($showLotColumn && \Illuminate\Support\Facades\Schema::hasTable('stock_lots')) {
+        $lotIds = $pdfRecordLines
+            ->pluck('lot_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (! empty($lotIds)) {
+            $lotLabels = \Illuminate\Support\Facades\DB::table('stock_lots')
+                ->whereIn('id', $lotIds)
+                ->pluck('lot_number', 'id')
+                ->all();
+        }
+    }
+@endphp
 <table class="header">
     <tr>
         <td style="width: 35%;">
@@ -187,8 +212,12 @@
 <table class="lines">
     <thead>
         <tr>
-            <th style="width: 30%;">Producto</th>
-            <th style="width: 24%;">Variante</th>
+            <th style="width: 27%;">Producto</th>
+            <th style="width: 18%;">Variante</th>
+            {{-- V5623G_LOT_HEADER --}}
+            @if($showLotColumn)
+                <th style="width: 16%;">Lote</th>
+            @endif
             <th class="right">Actual</th>
             <th class="right">Contada</th>
             <th class="right">Diferencia</th>
@@ -196,10 +225,20 @@
         </tr>
     </thead>
     <tbody>
-        @forelse($lines as $line)
+        @forelse($lines as $lineIndex => $line)
             <tr>
                 <td>{{ $line['product'] }}</td>
                 <td>{{ $line['variant'] }}</td>
+                {{-- V5623G_LOT_CELL --}}
+                @if($showLotColumn)
+                    @php
+                        $pdfSourceLine = $pdfRecordLines->get($lineIndex);
+                        $pdfLotId = $pdfSourceLine && ! empty($pdfSourceLine->lot_id) ? (int) $pdfSourceLine->lot_id : null;
+                    @endphp
+                    <td>
+                        {{ $pdfLotId ? ($lotLabels[$pdfLotId] ?? ('Lote #' . $pdfLotId)) : '—' }}
+                    </td>
+                @endif
                 <td class="right">{{ number_format($line['current_quantity'], 2) }}</td>
                 <td class="right">{{ number_format($line['counted_quantity'], 2) }}</td>
                 <td class="right">{{ number_format($line['difference_quantity'], 2) }}</td>
@@ -207,7 +246,7 @@
             </tr>
         @empty
             <tr>
-                <td colspan="6">Sin líneas.</td>
+                <td colspan="{{ $showLotColumn ? 7 : 6 }}">Sin líneas.</td>
             </tr>
         @endforelse
     </tbody>

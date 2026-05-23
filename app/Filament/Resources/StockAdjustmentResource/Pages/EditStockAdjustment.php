@@ -16,7 +16,7 @@ class EditStockAdjustment extends EditRecord
     {
         return [
             Actions\Action::make('pdf')
-                ->label('PDF')
+                ->label('Imprimir PDF')
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('gray')
                 ->url(fn (): string => route('inventory.stock-adjustments.pdf', $this->record))
