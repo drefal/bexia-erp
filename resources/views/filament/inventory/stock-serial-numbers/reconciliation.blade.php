@@ -14,7 +14,7 @@
                     Conciliación de series vs existencias
                 </h3>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Esta vista es solo lectura. Compara las series disponibles contra la existencia registrada en el sistema.
+                    Esta vista compara las series disponibles contra la existencia registrada en el sistema. Es solo diagnóstico; las correcciones de series deben hacerse con movimientos especiales de serie.
                 </p>
             </div>
 
