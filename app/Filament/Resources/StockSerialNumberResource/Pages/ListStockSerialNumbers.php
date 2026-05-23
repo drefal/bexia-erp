@@ -15,6 +15,7 @@ class ListStockSerialNumbers extends ListRecords
         return [
             Actions\Action::make('serialReconciliation')
                 ->label('Conciliación de series')
+                ->visible(false)
                 ->icon('heroicon-o-clipboard-document-check')
                 ->color('gray')
                 ->modalHeading('Conciliación de series vs existencias')
