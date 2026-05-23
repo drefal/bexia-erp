@@ -12,6 +12,16 @@ class CreateStockAdjustment extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        $reason = trim((string) ($data['reason'] ?? ''));
+
+        if ($reason === '') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'reason' => 'Captura el motivo del ajuste antes de guardarlo.',
+            ]);
+        }
+
+        $data['reason'] = $reason;
+
         StockAdjustmentResource::assertAdjustmentLinesCanBeSaved(
             isset($data['location_id']) ? (int) $data['location_id'] : null,
             $data['lines'] ?? []

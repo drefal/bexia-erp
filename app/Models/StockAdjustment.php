@@ -21,15 +21,19 @@ class StockAdjustment extends Model
         'status',
         'reason',
         'notes',
+        'cancellation_reason',
         'created_by',
         'confirmed_by',
         'confirmed_at',
+        'cancelled_by',
+        'cancelled_at',
     ];
 
     protected $casts = [
         'adjustment_date' => 'date',
         'adjustment_at' => 'datetime',
         'confirmed_at' => 'datetime',
+        'cancelled_at' => 'datetime',
     ];
 
     protected static function booted(): void

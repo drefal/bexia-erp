@@ -137,6 +137,8 @@ class StockAdjustmentResource extends Resource
                             ->label('Motivo')
                             ->placeholder('Ej. Inventario inicial, conteo físico, corrección por diferencia.')
                             ->rows(2)
+                            ->required()
+                            ->helperText('El motivo es obligatorio para ajustes nuevos.')
                             ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
                             ->columnSpan(9),
 
@@ -164,6 +166,7 @@ class StockAdjustmentResource extends Resource
                                     ->live()
                                     ->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
                                         $set('product_variant_id', null);
+                                        $set('lot_id', null);
                                         static::refreshAdjustmentLineComputedFields($set, $get);
                                     })
                                     ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
@@ -178,10 +181,36 @@ class StockAdjustmentResource extends Resource
                                     ->placeholder('Sin variante')
                                     ->live()
                                     ->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
+                                        // V5623D_RESET_LOT_ON_VARIANT
+                                        $set('lot_id', null);
                                         static::refreshAdjustmentLineComputedFields($set, $get);
                                     })
                                     ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
                                     ->columnSpan(3),
+
+                                Forms\Components\Select::make('lot_id')
+                                    ->label('Lote')
+                                    ->placeholder('Selecciona lote')
+                                    ->searchable()
+                                    ->preload()
+                                    ->options(fn (Forms\Get $get): array => static::lotOptions(
+                                        $get('product_id'),
+                                        $get('product_variant_id'),
+                                        $get('../../warehouse_id') ?: $get('warehouse_id'),
+                                        $get('../../location_id') ?: $get('location_id')
+                                    ))
+                                    ->visible(fn (Forms\Get $get): bool => static::productRequiresLot($get('product_id'), $get('product_variant_id')))
+                                    ->required(fn (Forms\Get $get): bool => static::productRequiresLot($get('product_id'), $get('product_variant_id')))
+                                    ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
+                                    ->live()
+                                    ->afterStateUpdated(fn (Forms\Set $set, Forms\Get $get): null => static::refreshAdjustmentLineComputedFields($set, $get))
+                                    ->columnSpan(3),
+
+                                Forms\Components\Placeholder::make('serial_adjustment_notice')
+                                    ->label('Número de serie')
+                                    ->content('Este producto maneja números de serie. El ajuste por serie se hará en una pantalla especial para mantener la trazabilidad individual.')
+                                    ->visible(fn (Forms\Get $get): bool => static::productRequiresSerial($get('product_id'), $get('product_variant_id')))
+                                    ->columnSpan(6),
 
                                 Forms\Components\TextInput::make('counted_quantity')
                                     ->label('Cantidad contada')
@@ -340,6 +369,16 @@ class StockAdjustmentResource extends Resource
             return;
         }
 
+        if (trim((string) $adjustment->reason) === '') {
+            \Filament\Notifications\Notification::make()
+                ->title('Motivo requerido')
+                ->body('El ajuste necesita un motivo antes de confirmar.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
         $adjustment->load('lines');
 
         if ($adjustment->lines->isEmpty()) {
@@ -353,9 +392,33 @@ class StockAdjustmentResource extends Resource
         }
 
         DB::transaction(function () use ($adjustment): void {
+            $previousStatus = (string) $adjustment->status;
+
             foreach ($adjustment->lines as $line) {
                 if (! $line->product_id) {
                     continue;
+                }
+
+                $lineLotId = ! empty($line->lot_id) ? (int) $line->lot_id : null;
+
+                if (static::productRequiresSerial((int) $line->product_id, $line->product_variant_id ? (int) $line->product_variant_id : null)) {
+                    \Filament\Notifications\Notification::make()
+                        ->title('Ajuste por serie pendiente')
+                        ->body('Los productos con numero de serie se ajustaran en una pantalla especial para no romper la trazabilidad por serie.')
+                        ->danger()
+                        ->send();
+
+                    throw new \Filament\Support\Exceptions\Halt();
+                }
+
+                if (static::productRequiresLot((int) $line->product_id, $line->product_variant_id ? (int) $line->product_variant_id : null) && ! $lineLotId) {
+                    \Filament\Notifications\Notification::make()
+                        ->title('Lote requerido')
+                        ->body('Selecciona el lote para cada producto que maneja lote.')
+                        ->danger()
+                        ->send();
+
+                    throw new \Filament\Support\Exceptions\Halt();
                 }
 
                 $current = static::currentQuantity(
@@ -363,7 +426,8 @@ class StockAdjustmentResource extends Resource
                     (int) $adjustment->warehouse_id,
                     (int) $adjustment->location_id,
                     (int) $line->product_id,
-                    $line->product_variant_id ? (int) $line->product_variant_id : null
+                    $line->product_variant_id ? (int) $line->product_variant_id : null,
+                    $lineLotId
                 );
 
                 $counted = (float) $line->counted_quantity;
@@ -385,7 +449,8 @@ class StockAdjustmentResource extends Resource
                     (int) $adjustment->warehouse_id,
                     (int) $adjustment->location_id,
                     (int) $line->product_id,
-                    $line->product_variant_id ? (int) $line->product_variant_id : null
+                    $line->product_variant_id ? (int) $line->product_variant_id : null,
+                    $lineLotId
                 );
 
                 $unitCost = $averageCost;
@@ -407,7 +472,8 @@ class StockAdjustmentResource extends Resource
                     (int) $line->product_id,
                     $line->product_variant_id ? (int) $line->product_variant_id : null,
                     $counted,
-                    $unitCost
+                    $unitCost,
+                    $lineLotId
                 );
             }
 
@@ -416,6 +482,15 @@ class StockAdjustmentResource extends Resource
                 'confirmed_by' => auth()->id(),
                 'confirmed_at' => now(),
             ]);
+
+            static::recordAdjustmentStatusLog(
+                $adjustment,
+                $previousStatus,
+                'done',
+                'confirm',
+                (string) $adjustment->reason,
+                ['confirmed_by' => auth()->id()]
+            );
         });
     }
 
@@ -458,6 +533,7 @@ class StockAdjustmentResource extends Resource
     {
         $productId = $get('product_id');
         $variantId = $get('product_variant_id');
+        $lotId = $get('lot_id');
 
         $warehouseId = $get('../../warehouse_id') ?: $get('warehouse_id');
         $locationId = $get('../../location_id') ?: $get('location_id');
@@ -473,7 +549,8 @@ class StockAdjustmentResource extends Resource
                 (int) $warehouseId,
                 (int) $locationId,
                 (int) $productId,
-                $variantId ? (int) $variantId : null
+                $variantId ? (int) $variantId : null,
+                $lotId ? (int) $lotId : null
             );
 
             $average = static::averageCost(
@@ -481,7 +558,8 @@ class StockAdjustmentResource extends Resource
                 (int) $warehouseId,
                 (int) $locationId,
                 (int) $productId,
-                $variantId ? (int) $variantId : null
+                $variantId ? (int) $variantId : null,
+                $lotId ? (int) $lotId : null
             );
 
             $averageCost = $average !== null ? (float) $average : 0.0;
@@ -497,7 +575,151 @@ class StockAdjustmentResource extends Resource
 
 
 
-    protected static function averageCost(int $companyId, int $warehouseId, int $locationId, int $productId, ?int $variantId = null): ?float
+        protected static function lotOptions(mixed $productId, mixed $variantId = null, mixed $warehouseId = null, mixed $locationId = null): array
+    {
+        $productId = (int) ($productId ?: 0);
+        $variantId = $variantId ? (int) $variantId : null;
+        $warehouseId = $warehouseId ? (int) $warehouseId : null;
+        $locationId = $locationId ? (int) $locationId : null;
+
+        if (! $productId || ! Schema::hasTable('stock_lots')) {
+            return [];
+        }
+
+        $query = DB::table('stock_lots as l')
+            ->where('l.product_id', $productId);
+
+        $companyId = static::currentCompanyId();
+
+        if ($companyId && Schema::hasColumn('stock_lots', 'company_id')) {
+            $query->where('l.company_id', $companyId);
+        }
+
+        if ($variantId && Schema::hasColumn('stock_lots', 'product_variant_id')) {
+            $query->where(function ($inner) use ($variantId): void {
+                $inner->where('l.product_variant_id', $variantId)
+                    ->orWhereNull('l.product_variant_id');
+            });
+        }
+
+        if (Schema::hasTable('stock_quants') && Schema::hasColumn('stock_quants', 'lot_id')) {
+            $query->leftJoin('stock_quants as q', function ($join) use ($companyId, $warehouseId, $locationId, $productId, $variantId): void {
+                $join->on('q.lot_id', '=', 'l.id')
+                    ->where('q.product_id', '=', $productId);
+
+                if ($companyId) {
+                    $join->where('q.company_id', '=', $companyId);
+                }
+
+                if ($warehouseId) {
+                    $join->where('q.warehouse_id', '=', $warehouseId);
+                }
+
+                if ($locationId) {
+                    $join->where('q.location_id', '=', $locationId);
+                }
+
+                if ($variantId) {
+                    $join->where(function ($inner) use ($variantId): void {
+                        $inner->where('q.product_variant_id', '=', $variantId)
+                            ->orWhereNull('q.product_variant_id');
+                    });
+                } else {
+                    $join->whereNull('q.product_variant_id');
+                }
+            });
+
+            $query->selectRaw('l.id, l.lot_number, l.expiration_date, COALESCE(SUM(q.quantity - COALESCE(q.reserved_quantity, 0)), 0) as available_quantity')
+                ->groupBy('l.id', 'l.lot_number', 'l.expiration_date');
+        } else {
+            $query->select('l.id', 'l.lot_number', 'l.expiration_date');
+        }
+
+        return $query
+            ->orderBy('l.lot_number')
+            ->limit(100)
+            ->get()
+            ->mapWithKeys(function ($lot): array {
+                $label = trim((string) ($lot->lot_number ?? ''));
+
+                if ($label === '') {
+                    $label = 'Lote #' . $lot->id;
+                }
+
+                if (! empty($lot->expiration_date)) {
+                    $label .= ' · vence ' . $lot->expiration_date;
+                }
+
+                if (property_exists($lot, 'available_quantity')) {
+                    $label .= ' · disp. ' . number_format((float) $lot->available_quantity, 2);
+                }
+
+                return [(int) $lot->id => $label];
+            })
+            ->all();
+    }
+
+    protected static function productRequiresLot(mixed $productId, mixed $variantId = null): bool
+    {
+        return static::productTrackingMatches($productId, $variantId, ['lot', 'lote']);
+    }
+
+    protected static function productRequiresSerial(mixed $productId, mixed $variantId = null): bool
+    {
+        return static::productTrackingMatches($productId, $variantId, ['serial', 'serie']);
+    }
+
+    protected static function productTrackingMatches(mixed $productId, mixed $variantId, array $needles): bool
+    {
+        if (! Schema::hasTable('products')) {
+            return false;
+        }
+
+        $ids = array_values(array_filter(array_unique([
+            (int) ($variantId ?: 0),
+            (int) ($productId ?: 0),
+        ])));
+
+        if (empty($ids)) {
+            return false;
+        }
+
+        $rows = DB::table('products')
+            ->whereIn('id', $ids)
+            ->get();
+
+        foreach ($rows as $row) {
+            foreach (['tracking', 'advanced_tracking_mode', 'tracking_type', 'inventory_tracking', 'lot_serial_tracking'] as $column) {
+                if (Schema::hasColumn('products', $column)) {
+                    $value = strtolower(trim((string) ($row->{$column} ?? '')));
+
+                    foreach ($needles as $needle) {
+                        if ($value !== '' && str_contains($value, $needle)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            if (Schema::hasColumn('products', 'advanced_tracking_fields')) {
+                $fields = $row->advanced_tracking_fields ?? null;
+
+                if ($fields !== null && $fields !== '') {
+                    $flat = strtolower(is_string($fields) ? $fields : json_encode($fields));
+
+                    foreach ($needles as $needle) {
+                        if (str_contains($flat, $needle)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    protected static function averageCost(int $companyId, int $warehouseId, int $locationId, int $productId, ?int $variantId = null, ?int $lotId = null): ?float
     {
         if (Schema::hasTable('stock_quants') && Schema::hasColumn('stock_quants', 'average_cost')) {
             $query = DB::table('stock_quants')
@@ -512,6 +734,14 @@ class StockAdjustmentResource extends Resource
                 $query->whereNull('product_variant_id');
             }
 
+            if (Schema::hasColumn('stock_quants', 'lot_id')) {
+                if ($lotId) {
+                    $query->where('lot_id', $lotId);
+                } else {
+                    $query->whereNull('lot_id');
+                }
+            }
+
             $value = $query->value('average_cost');
 
             if ($value !== null) {
@@ -519,11 +749,8 @@ class StockAdjustmentResource extends Resource
             }
         }
 
-        // Si todavía no hay existencia, usamos costo de la variante.
         if ($variantId && Schema::hasTable('products')) {
-            $variant = DB::table('products')
-                ->where('id', $variantId)
-                ->first();
+            $variant = DB::table('products')->where('id', $variantId)->first();
 
             if ($variant) {
                 foreach (['standard_cost', 'purchase_price', 'last_purchase_cost'] as $column) {
@@ -538,11 +765,8 @@ class StockAdjustmentResource extends Resource
             }
         }
 
-        // Si no hay variante o la variante no tiene costo, usamos el producto padre.
         if (Schema::hasTable('products')) {
-            $product = DB::table('products')
-                ->where('id', $productId)
-                ->first();
+            $product = DB::table('products')->where('id', $productId)->first();
 
             if ($product) {
                 foreach (['standard_cost', 'purchase_price', 'last_purchase_cost'] as $column) {
@@ -577,7 +801,7 @@ class StockAdjustmentResource extends Resource
             ->value('allow_negative_stock');
     }
 
-    protected static function currentQuantity(int $companyId, int $warehouseId, int $locationId, int $productId, ?int $variantId = null): float
+        protected static function currentQuantity(int $companyId, int $warehouseId, int $locationId, int $productId, ?int $variantId = null, ?int $lotId = null): float
     {
         if (! Schema::hasTable('stock_quants')) {
             return 0;
@@ -595,10 +819,18 @@ class StockAdjustmentResource extends Resource
             $query->whereNull('product_variant_id');
         }
 
+        if (Schema::hasColumn('stock_quants', 'lot_id')) {
+            if ($lotId) {
+                $query->where('lot_id', $lotId);
+            } else {
+                $query->whereNull('lot_id');
+            }
+        }
+
         return (float) $query->sum('quantity');
     }
 
-    protected static function setQuantQuantity(int $companyId, int $warehouseId, int $locationId, int $productId, ?int $variantId, float $quantity, ?float $unitCost = null): void
+        protected static function setQuantQuantity(int $companyId, int $warehouseId, int $locationId, int $productId, ?int $variantId, float $quantity, ?float $unitCost = null, ?int $lotId = null): void
     {
         $query = StockQuant::query()
             ->where('company_id', $companyId)
@@ -612,17 +844,31 @@ class StockAdjustmentResource extends Resource
             $query->whereNull('product_variant_id');
         }
 
+        if (Schema::hasColumn('stock_quants', 'lot_id')) {
+            if ($lotId) {
+                $query->where('lot_id', $lotId);
+            } else {
+                $query->whereNull('lot_id');
+            }
+        }
+
         $quant = $query->first();
 
         if (! $quant) {
-            $quant = new StockQuant([
+            $data = [
                 'company_id' => $companyId,
                 'warehouse_id' => $warehouseId,
                 'location_id' => $locationId,
                 'product_id' => $productId,
                 'product_variant_id' => $variantId,
                 'reserved_quantity' => 0,
-            ]);
+            ];
+
+            if (Schema::hasColumn('stock_quants', 'lot_id')) {
+                $data['lot_id'] = $lotId;
+            }
+
+            $quant = new StockQuant($data);
         }
 
         $quant->quantity = $quantity;
@@ -931,6 +1177,183 @@ class StockAdjustmentResource extends Resource
         }
 
         return $name ?: ($code ?: ('#' . $id));
+    }
+
+    public static function auditLogRows(StockAdjustment $adjustment): array
+    {
+        $userIds = collect([
+            $adjustment->created_by ?? null,
+            $adjustment->confirmed_by ?? null,
+            $adjustment->cancelled_by ?? null,
+        ])->filter()->map(fn ($id): int => (int) $id);
+
+        $logs = collect();
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('stock_adjustment_status_logs')) {
+            $logs = \Illuminate\Support\Facades\DB::table('stock_adjustment_status_logs')
+                ->where('stock_adjustment_id', $adjustment->getKey())
+                ->orderBy('id')
+                ->get();
+
+            $userIds = $userIds
+                ->merge($logs->pluck('user_id')->filter()->map(fn ($id): int => (int) $id));
+        }
+
+        $userLabels = static::auditUserLabels($userIds->unique()->values()->all());
+
+        return [
+            'summary' => [
+                [
+                    'label' => 'Estado actual',
+                    'value' => static::auditStatusLabel((string) $adjustment->status),
+                ],
+                [
+                    'label' => 'Motivo del ajuste',
+                    'value' => trim((string) ($adjustment->reason ?? '')) !== '' ? (string) $adjustment->reason : '—',
+                ],
+                [
+                    'label' => 'Creado por',
+                    'value' => static::auditUserLabel($adjustment->created_by ?? null, $userLabels),
+                ],
+                [
+                    'label' => 'Confirmado',
+                    'value' => trim(implode("\n", array_filter([
+                        static::auditUserLabel($adjustment->confirmed_by ?? null, $userLabels),
+                        static::auditDate($adjustment->confirmed_at ?? null),
+                    ]))) ?: '—',
+                ],
+                [
+                    'label' => 'Cancelado',
+                    'value' => trim(implode("\n", array_filter([
+                        static::auditUserLabel($adjustment->cancelled_by ?? null, $userLabels),
+                        static::auditDate($adjustment->cancelled_at ?? null),
+                    ]))) ?: '—',
+                ],
+                [
+                    'label' => 'Motivo de cancelación',
+                    'value' => trim((string) ($adjustment->cancellation_reason ?? '')) !== '' ? (string) $adjustment->cancellation_reason : '—',
+                ],
+            ],
+            'logs' => $logs->map(function ($log) use ($userLabels): array {
+                $from = static::auditStatusLabel((string) ($log->from_status ?? ''));
+                $to = static::auditStatusLabel((string) ($log->to_status ?? ''));
+
+                return [
+                    'created_at' => static::auditDate($log->created_at ?? null),
+                    'action' => (string) ($log->action ?? ''),
+                    'action_label' => static::auditActionLabel((string) ($log->action ?? '')),
+                    'from_status' => $from,
+                    'to_status' => $to,
+                    'status_label' => trim($from . ' → ' . $to, ' →'),
+                    'user_label' => static::auditUserLabel($log->user_id ?? null, $userLabels),
+                    'reason' => trim((string) ($log->reason ?? '')) !== '' ? (string) $log->reason : '—',
+                ];
+            })->all(),
+        ];
+    }
+
+    protected static function auditUserLabels(array $userIds): array
+    {
+        $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds))));
+
+        if (empty($userIds) || ! \Illuminate\Support\Facades\Schema::hasTable('users')) {
+            return [];
+        }
+
+        $select = ['id'];
+
+        foreach (['name', 'email'] as $column) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('users', $column)) {
+                $select[] = $column;
+            }
+        }
+
+        return \Illuminate\Support\Facades\DB::table('users')
+            ->select($select)
+            ->whereIn('id', $userIds)
+            ->get()
+            ->mapWithKeys(function ($user): array {
+                $label = trim((string) ($user->name ?? ''));
+
+                if ($label === '') {
+                    $label = trim((string) ($user->email ?? ''));
+                }
+
+                if ($label === '') {
+                    $label = 'Usuario #' . $user->id;
+                }
+
+                return [(int) $user->id => $label];
+            })
+            ->all();
+    }
+
+    protected static function auditUserLabel($userId, array $userLabels): string
+    {
+        if (! $userId) {
+            return '—';
+        }
+
+        return $userLabels[(int) $userId] ?? ('Usuario #' . (int) $userId);
+    }
+
+    protected static function auditDate($value): string
+    {
+        if (! $value) {
+            return '';
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($value)
+                ->timezone(config('app.timezone', 'UTC'))
+                ->format('d/m/Y H:i');
+        } catch (\Throwable $exception) {
+            return (string) $value;
+        }
+    }
+
+    protected static function auditStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'draft' => 'Borrador',
+            'done' => 'Hecho',
+            'cancelled' => 'Cancelado',
+            default => $status !== '' ? $status : '—',
+        };
+    }
+
+    protected static function auditActionLabel(string $action): string
+    {
+        return match ($action) {
+            'confirm' => 'Confirmación',
+            'cancel' => 'Cancelación',
+            default => $action !== '' ? $action : '—',
+        };
+    }
+
+    public static function recordAdjustmentStatusLog(StockAdjustment $adjustment, ?string $fromStatus, string $toStatus, string $action, ?string $reason = null, ?array $metadata = null): void
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('stock_adjustment_status_logs')) {
+                return;
+            }
+
+            \Illuminate\Support\Facades\DB::table('stock_adjustment_status_logs')->insert([
+                'stock_adjustment_id' => $adjustment->getKey(),
+                'company_id' => $adjustment->company_id,
+                'from_status' => $fromStatus,
+                'to_status' => $toStatus,
+                'action' => $action,
+                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
+                'notes' => null,
+                'user_id' => auth()->id(),
+                'metadata' => $metadata ? json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     protected static function currentCompanyId(): ?int
