@@ -956,6 +956,158 @@ class StockAdjustmentResource extends Resource
         return $name ?: ($code ?: ('#' . $id));
     }
 
+    public static function auditLogRows(StockAdjustment $adjustment): array
+    {
+        $userIds = collect([
+            $adjustment->created_by ?? null,
+            $adjustment->confirmed_by ?? null,
+            $adjustment->cancelled_by ?? null,
+        ])->filter()->map(fn ($id): int => (int) $id);
+
+        $logs = collect();
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('stock_adjustment_status_logs')) {
+            $logs = \Illuminate\Support\Facades\DB::table('stock_adjustment_status_logs')
+                ->where('stock_adjustment_id', $adjustment->getKey())
+                ->orderBy('id')
+                ->get();
+
+            $userIds = $userIds
+                ->merge($logs->pluck('user_id')->filter()->map(fn ($id): int => (int) $id));
+        }
+
+        $userLabels = static::auditUserLabels($userIds->unique()->values()->all());
+
+        return [
+            'summary' => [
+                [
+                    'label' => 'Estado actual',
+                    'value' => static::auditStatusLabel((string) $adjustment->status),
+                ],
+                [
+                    'label' => 'Motivo del ajuste',
+                    'value' => trim((string) ($adjustment->reason ?? '')) !== '' ? (string) $adjustment->reason : '—',
+                ],
+                [
+                    'label' => 'Creado por',
+                    'value' => static::auditUserLabel($adjustment->created_by ?? null, $userLabels),
+                ],
+                [
+                    'label' => 'Confirmado',
+                    'value' => trim(implode("\n", array_filter([
+                        static::auditUserLabel($adjustment->confirmed_by ?? null, $userLabels),
+                        static::auditDate($adjustment->confirmed_at ?? null),
+                    ]))) ?: '—',
+                ],
+                [
+                    'label' => 'Cancelado',
+                    'value' => trim(implode("\n", array_filter([
+                        static::auditUserLabel($adjustment->cancelled_by ?? null, $userLabels),
+                        static::auditDate($adjustment->cancelled_at ?? null),
+                    ]))) ?: '—',
+                ],
+                [
+                    'label' => 'Motivo de cancelación',
+                    'value' => trim((string) ($adjustment->cancellation_reason ?? '')) !== '' ? (string) $adjustment->cancellation_reason : '—',
+                ],
+            ],
+            'logs' => $logs->map(function ($log) use ($userLabels): array {
+                $from = static::auditStatusLabel((string) ($log->from_status ?? ''));
+                $to = static::auditStatusLabel((string) ($log->to_status ?? ''));
+
+                return [
+                    'created_at' => static::auditDate($log->created_at ?? null),
+                    'action' => (string) ($log->action ?? ''),
+                    'action_label' => static::auditActionLabel((string) ($log->action ?? '')),
+                    'from_status' => $from,
+                    'to_status' => $to,
+                    'status_label' => trim($from . ' → ' . $to, ' →'),
+                    'user_label' => static::auditUserLabel($log->user_id ?? null, $userLabels),
+                    'reason' => trim((string) ($log->reason ?? '')) !== '' ? (string) $log->reason : '—',
+                ];
+            })->all(),
+        ];
+    }
+
+    protected static function auditUserLabels(array $userIds): array
+    {
+        $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds))));
+
+        if (empty($userIds) || ! \Illuminate\Support\Facades\Schema::hasTable('users')) {
+            return [];
+        }
+
+        $select = ['id'];
+
+        foreach (['name', 'email'] as $column) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('users', $column)) {
+                $select[] = $column;
+            }
+        }
+
+        return \Illuminate\Support\Facades\DB::table('users')
+            ->select($select)
+            ->whereIn('id', $userIds)
+            ->get()
+            ->mapWithKeys(function ($user): array {
+                $label = trim((string) ($user->name ?? ''));
+
+                if ($label === '') {
+                    $label = trim((string) ($user->email ?? ''));
+                }
+
+                if ($label === '') {
+                    $label = 'Usuario #' . $user->id;
+                }
+
+                return [(int) $user->id => $label];
+            })
+            ->all();
+    }
+
+    protected static function auditUserLabel($userId, array $userLabels): string
+    {
+        if (! $userId) {
+            return '—';
+        }
+
+        return $userLabels[(int) $userId] ?? ('Usuario #' . (int) $userId);
+    }
+
+    protected static function auditDate($value): string
+    {
+        if (! $value) {
+            return '';
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($value)
+                ->timezone(config('app.timezone', 'UTC'))
+                ->format('d/m/Y H:i');
+        } catch (\Throwable $exception) {
+            return (string) $value;
+        }
+    }
+
+    protected static function auditStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'draft' => 'Borrador',
+            'done' => 'Hecho',
+            'cancelled' => 'Cancelado',
+            default => $status !== '' ? $status : '—',
+        };
+    }
+
+    protected static function auditActionLabel(string $action): string
+    {
+        return match ($action) {
+            'confirm' => 'Confirmación',
+            'cancel' => 'Cancelación',
+            default => $action !== '' ? $action : '—',
+        };
+    }
+
     public static function recordAdjustmentStatusLog(StockAdjustment $adjustment, ?string $fromStatus, string $toStatus, string $action, ?string $reason = null, ?array $metadata = null): void
     {
         try {

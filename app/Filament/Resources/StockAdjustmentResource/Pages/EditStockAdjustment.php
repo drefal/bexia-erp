@@ -22,6 +22,19 @@ class EditStockAdjustment extends EditRecord
                 ->url(fn (): string => route('inventory.stock-adjustments.pdf', $this->record))
                 ->openUrlInNewTab(),
 
+            Actions\Action::make('auditLog')
+                ->label('Auditoría')
+                ->icon('heroicon-o-clipboard-document-list')
+                ->color('gray')
+                ->modalHeading(fn (): string => 'Auditoría del ajuste ' . ($this->record?->reference ?: ('#' . $this->record?->id)))
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Cerrar')
+                ->modalWidth('5xl')
+                ->modalContent(fn (): \Illuminate\Contracts\View\View => view('filament.inventory.stock-adjustments.audit-log', [
+                    'record' => $this->record,
+                    'audit' => StockAdjustmentResource::auditLogRows($this->record),
+                ])),
+
             Actions\Action::make('confirm')
                 ->label('Confirmar ajuste')
                 ->icon('heroicon-o-check-circle')
