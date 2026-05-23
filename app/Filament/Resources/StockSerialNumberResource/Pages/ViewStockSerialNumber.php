@@ -401,6 +401,24 @@ class ViewStockSerialNumber extends Page
         }
     }
 
+    public function statusLabel(mixed $state): string
+    {
+        $state = (string) ($state ?? '');
+
+        return match ($state) {
+            'available' => 'Disponible',
+            'reserved' => 'Reservado',
+            'sold' => 'Vendido',
+            'delivered' => 'Entregado',
+            'consumed' => 'Consumido',
+            'returned' => 'Devuelto',
+            'blocked' => 'Bloqueado',
+            'scrapped' => 'Merma / desecho',
+            'lost' => 'Perdido',
+            default => $state !== '' ? ucfirst(str_replace('_', ' ', $state)) : 'Sin estado',
+        };
+    }
+
     public function formatNumber(mixed $value): string
     {
         if ($value === null || $value === '') {
@@ -472,6 +490,55 @@ class ViewStockSerialNumber extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('scrapSerial')
+                ->label('Baja por merma / destrucción')
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->visible(fn (): bool => in_array((string) $this->currentSerialRecord()->status, ['available', 'blocked'], true))
+                ->modalHeading(fn (): string => 'Baja por merma: ' . $this->currentSerialRecord()->serial_number)
+                ->modalDescription('La serie cambiará a estado Merma / desecho y se moverá a una ubicación de pérdida. No toca ventas, PDV ni entregas.')
+                ->modalSubmitActionLabel('Confirmar baja por merma')
+                ->form([
+                    Forms\Components\TextInput::make('serial_number_before')
+                        ->label('Serie')
+                        ->default(fn (): ?string => $this->currentSerialRecord()->serial_number)
+                        ->disabled()
+                        ->dehydrated(false),
+
+                    Forms\Components\Select::make('destination_location_id')
+                        ->label('Ubicación de merma / pérdida')
+                        ->required()
+                        ->searchable()
+                        ->preload()
+                        ->options(fn (): array => $this->scrapLocationOptions())
+                        ->getOptionLabelUsing(fn ($value): ?string => $this->scrapLocationOptionLabel($value))
+                        ->native(false)
+                        ->placeholder('Selecciona ubicación de merma')
+                        ->helperText('La serie se moverá a esta ubicación y quedará como Merma / desecho.'),
+
+                    Forms\Components\Textarea::make('reason')
+                        ->label('Motivo de baja')
+                        ->required()
+                        ->rows(3)
+                        ->helperText('Explica por qué la serie se da de baja por merma o destrucción.'),
+
+                    Forms\Components\TextInput::make('reference')
+                        ->label('Referencia / documento')
+                        ->maxLength(160)
+                        ->placeholder('Opcional'),
+
+                    Forms\Components\Textarea::make('notes')
+                        ->label('Notas')
+                        ->rows(2)
+                        ->placeholder('Opcional'),
+                ])
+                ->action(function (array $data): void {
+                    \App\Filament\Resources\StockSerialNumberResource::scrapSerialRecord($this->currentSerialRecord(), $data);
+                    $this->redirect(static::getResource()::getUrl('view', [
+                        'record' => $this->currentSerialRecord(),
+                    ]));
+                }),
+
             Actions\Action::make('markSerialDuplicateConflict')
                 ->label('Marcar duplicado / conflicto')
                 ->icon('heroicon-o-exclamation-triangle')
@@ -568,6 +635,78 @@ class ViewStockSerialNumber extends Page
         ];
     }
 
+
+    protected function scrapLocationOptions(): array
+    {
+        $current = $this->currentSerialRecord();
+
+        return \Illuminate\Support\Facades\DB::table('stock_locations as l')
+            ->leftJoin('stock_location_types as t', 't.id', '=', 'l.stock_location_type_id')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'l.warehouse_id')
+            ->select([
+                'l.id',
+                'l.code',
+                'l.name',
+                'w.name as warehouse_name',
+                't.code as type_code',
+                't.name as type_name',
+            ])
+            ->where('l.company_id', $current->company_id)
+            ->where('l.is_active', true)
+            ->where(function ($query): void {
+                $query->where('t.code', 'LOSS')
+                    ->orWhere('t.name', 'ilike', '%merma%')
+                    ->orWhere('t.name', 'ilike', '%pérdida%')
+                    ->orWhere('t.name', 'ilike', '%perdida%')
+                    ->orWhere('t.name', 'ilike', '%scrap%')
+                    ->orWhere('l.name', 'ilike', '%merma%')
+                    ->orWhere('l.name', 'ilike', '%pérdida%')
+                    ->orWhere('l.name', 'ilike', '%perdida%')
+                    ->orWhere('l.name', 'ilike', '%scrap%');
+            })
+            ->orderBy('w.name')
+            ->orderBy('l.name')
+            ->get()
+            ->mapWithKeys(fn ($row): array => [
+                (int) $row->id => $this->scrapLocationLabelFromRow($row),
+            ])
+            ->all();
+    }
+
+    protected function scrapLocationOptionLabel($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        $row = \Illuminate\Support\Facades\DB::table('stock_locations as l')
+            ->leftJoin('stock_location_types as t', 't.id', '=', 'l.stock_location_type_id')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'l.warehouse_id')
+            ->select([
+                'l.id',
+                'l.code',
+                'l.name',
+                'w.name as warehouse_name',
+                't.code as type_code',
+                't.name as type_name',
+            ])
+            ->where('l.id', (int) $value)
+            ->first();
+
+        return $row ? $this->scrapLocationLabelFromRow($row) : null;
+    }
+
+    protected function scrapLocationLabelFromRow(object $row): string
+    {
+        $warehouse = trim((string) ($row->warehouse_name ?? ''));
+        $name = trim((string) ($row->name ?? ''));
+        $code = trim((string) ($row->code ?? ''));
+        $type = trim((string) ($row->type_name ?? $row->type_code ?? ''));
+
+        $main = $warehouse !== '' ? ($warehouse . ' / ' . $name) : $name;
+
+        return trim($main . ($code !== '' ? ' · ' . $code : '') . ($type !== '' ? ' · ' . $type : ''));
+    }
 
     protected function serialConflictOptions(?string $search = null): array
     {

@@ -448,6 +448,237 @@ class StockSerialNumberResource extends Resource
         return $name !== '' ? $name : ($code !== '' ? $code : ('Producto #' . $productId));
     }
 
+    public static function scrapSerialRecord(StockSerialNumber $record, array $data): null
+    {
+        $destinationLocationId = (int) ($data['destination_location_id'] ?? 0);
+        $reason = trim((string) ($data['reason'] ?? ''));
+        $reference = trim((string) ($data['reference'] ?? ''));
+        $notes = trim((string) ($data['notes'] ?? ''));
+
+        if ($destinationLocationId <= 0) {
+            Notification::make()
+                ->title('Ubicación de merma requerida')
+                ->body('Selecciona la ubicación de merma o pérdida.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        if ($reason === '') {
+            Notification::make()
+                ->title('Motivo requerido')
+                ->body('Captura el motivo de la baja por merma.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        DB::transaction(function () use ($record, $destinationLocationId, $reason, $reference, $notes): void {
+            /** @var StockSerialNumber $locked */
+            $locked = StockSerialNumber::query()
+                ->whereKey($record->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $allowedStatuses = ['available', 'blocked'];
+
+            if (! in_array((string) $locked->status, $allowedStatuses, true)) {
+                Notification::make()
+                    ->title('La serie no se puede dar de baja por merma')
+                    ->body('Solo se permiten series disponibles o bloqueadas. Estado actual: ' . static::statusLabel($locked->status))
+                    ->danger()
+                    ->send();
+
+                throw new \Filament\Support\Exceptions\Halt();
+            }
+
+            $destination = DB::table('stock_locations as l')
+                ->leftJoin('stock_location_types as t', 't.id', '=', 'l.stock_location_type_id')
+                ->select([
+                    'l.id',
+                    'l.company_id',
+                    'l.warehouse_id',
+                    'l.name',
+                    'l.code',
+                    'l.is_active',
+                    't.code as type_code',
+                    't.name as type_name',
+                ])
+                ->where('l.id', $destinationLocationId)
+                ->where('l.company_id', $locked->company_id)
+                ->where('l.is_active', true)
+                ->where(function ($query): void {
+                    $query->where('t.code', 'LOSS')
+                        ->orWhere('t.name', 'ilike', '%merma%')
+                        ->orWhere('t.name', 'ilike', '%pérdida%')
+                        ->orWhere('t.name', 'ilike', '%perdida%')
+                        ->orWhere('t.name', 'ilike', '%scrap%')
+                        ->orWhere('l.name', 'ilike', '%merma%')
+                        ->orWhere('l.name', 'ilike', '%pérdida%')
+                        ->orWhere('l.name', 'ilike', '%perdida%')
+                        ->orWhere('l.name', 'ilike', '%scrap%');
+                })
+                ->first();
+
+            if (! $destination) {
+                Notification::make()
+                    ->title('Ubicación inválida')
+                    ->body('La ubicación seleccionada no es una ubicación activa de merma o pérdida de esta empresa.')
+                    ->danger()
+                    ->send();
+
+                throw new \Filament\Support\Exceptions\Halt();
+            }
+
+            $beforeSnapshot = [
+                'id' => $locked->getKey(),
+                'serial_number' => $locked->serial_number,
+                'status' => $locked->status,
+                'company_id' => $locked->company_id,
+                'product_id' => $locked->product_id,
+                'product_variant_id' => $locked->product_variant_id,
+                'lot_id' => $locked->lot_id,
+                'current_warehouse_id' => $locked->current_warehouse_id,
+                'current_location_id' => $locked->current_location_id,
+            ];
+
+            $sourceWarehouseId = $locked->current_warehouse_id;
+            $sourceLocationId = $locked->current_location_id;
+            $statusBefore = (string) ($locked->status ?? '');
+
+            $quantAdjustment = [
+                'attempted' => false,
+                'action' => null,
+                'quant_id' => null,
+                'before_quantity' => null,
+                'after_quantity' => null,
+                'message' => null,
+            ];
+
+            if (
+                Schema::hasTable('stock_quants')
+                && $locked->company_id
+                && $sourceWarehouseId
+                && $sourceLocationId
+                && $locked->product_id
+            ) {
+                $quantQuery = DB::table('stock_quants')
+                    ->where('company_id', $locked->company_id)
+                    ->where('warehouse_id', $sourceWarehouseId)
+                    ->where('location_id', $sourceLocationId)
+                    ->where('product_id', $locked->product_id);
+
+                if (! empty($locked->product_variant_id)) {
+                    $quantQuery->where('product_variant_id', $locked->product_variant_id);
+                } else {
+                    $quantQuery->whereNull('product_variant_id');
+                }
+
+                if (Schema::hasColumn('stock_quants', 'lot_id')) {
+                    if (! empty($locked->lot_id)) {
+                        $quantQuery->where('lot_id', $locked->lot_id);
+                    } else {
+                        $quantQuery->whereNull('lot_id');
+                    }
+                }
+
+                $quant = $quantQuery->lockForUpdate()->first();
+                $quantAdjustment['attempted'] = true;
+
+                if ($quant) {
+                    $beforeQuantity = (float) ($quant->quantity ?? 0);
+                    $afterQuantity = max(0, $beforeQuantity - 1);
+
+                    DB::table('stock_quants')
+                        ->where('id', $quant->id)
+                        ->update(array_intersect_key([
+                            'quantity' => $afterQuantity,
+                            'updated_at' => now(),
+                        ], array_flip(Schema::getColumnListing('stock_quants'))));
+
+                    $quantAdjustment = [
+                        'attempted' => true,
+                        'action' => 'decrement_source_quant',
+                        'quant_id' => (int) $quant->id,
+                        'before_quantity' => $beforeQuantity,
+                        'after_quantity' => $afterQuantity,
+                        'message' => 'Se restó 1 de la existencia origen.',
+                    ];
+                } else {
+                    $quantAdjustment['message'] = 'No se encontró stock_quant origen para descontar.';
+                }
+            } else {
+                $quantAdjustment['message'] = 'No se intentó ajuste de stock_quant por datos incompletos.';
+            }
+
+            $locked->status = 'scrapped';
+            $locked->current_warehouse_id = $destination->warehouse_id;
+            $locked->current_location_id = $destination->id;
+            $locked->save();
+
+            if (Schema::hasTable('stock_serial_special_movements')) {
+                $insert = [
+                    'company_id' => $locked->company_id,
+                    'stock_serial_number_id' => $locked->getKey(),
+                    'product_id' => $locked->product_id,
+                    'product_variant_id' => $locked->product_variant_id,
+                    'lot_id' => $locked->lot_id,
+                    'movement_type' => StockSerialSpecialMovement::TYPE_SCRAP_LOSS,
+                    'status' => 'confirmed',
+                    'serial_number_before' => $locked->serial_number,
+                    'serial_number_after' => null,
+                    'source_warehouse_id' => $sourceWarehouseId,
+                    'source_location_id' => $sourceLocationId,
+                    'destination_warehouse_id' => $destination->warehouse_id,
+                    'destination_location_id' => $destination->id,
+                    'reason' => $reason,
+                    'reference' => $reference !== '' ? $reference : null,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'created_by' => auth()->id(),
+                    'confirmed_by' => auth()->id(),
+                    'confirmed_at' => now(),
+                    'metadata' => json_encode([
+                        'before' => $beforeSnapshot,
+                        'after' => [
+                            'serial_number' => $locked->serial_number,
+                            'status' => $locked->status,
+                            'current_warehouse_id' => $locked->current_warehouse_id,
+                            'current_location_id' => $locked->current_location_id,
+                        ],
+                        'status_before' => $statusBefore,
+                        'status_after' => 'scrapped',
+                        'destination_location' => [
+                            'id' => $destination->id,
+                            'warehouse_id' => $destination->warehouse_id,
+                            'name' => $destination->name,
+                            'code' => $destination->code,
+                            'type_code' => $destination->type_code,
+                            'type_name' => $destination->type_name,
+                        ],
+                        'quant_adjustment' => $quantAdjustment,
+                        'source' => 'StockSerialNumberResource.scrapSerialRecord',
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                $insert = array_intersect_key($insert, array_flip(Schema::getColumnListing('stock_serial_special_movements')));
+
+                DB::table('stock_serial_special_movements')->insert($insert);
+            }
+        });
+
+        Notification::make()
+            ->title('Serie dada de baja por merma')
+            ->body('La serie quedó en estado Merma / desecho y se registró en auditoría.')
+            ->success()
+            ->send();
+
+        return null;
+    }
+
     public static function markSerialDuplicateConflictRecord(StockSerialNumber $record, array $data): null
     {
         $relatedSerialId = (int) ($data['related_stock_serial_number_id'] ?? 0);
@@ -914,5 +1145,31 @@ class StockSerialNumberResource extends Resource
         ]);
     }
 
+
+    public static function serialStatusLabel(?string $state): string
+    {
+        return match ((string) $state) {
+            'available' => 'Disponible',
+            'sold' => 'Vendido',
+            'blocked' => 'Bloqueado',
+            'scrapped' => 'Merma / desecho',
+            'reserved' => 'Reservado',
+            'returned' => 'Devuelto',
+            default => $state ? ucfirst(str_replace('_', ' ', (string) $state)) : 'Sin estado',
+        };
+    }
+
+    public static function serialStatusColor(?string $state): string
+    {
+        return match ((string) $state) {
+            'available' => 'success',
+            'sold' => 'gray',
+            'blocked' => 'warning',
+            'scrapped' => 'danger',
+            'reserved' => 'info',
+            'returned' => 'info',
+            default => 'gray',
+        };
+    }
 
 }

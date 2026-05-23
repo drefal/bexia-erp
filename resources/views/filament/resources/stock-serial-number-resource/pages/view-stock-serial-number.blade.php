@@ -35,7 +35,11 @@
             'expired' => 'Caducado',
             'done' => 'Hecho',
             'draft' => 'Borrador',
-            'pending' => 'Pendiente',
+            'pending' => 'Pendiente',            'delivered' => 'Entregado',            'returned' => 'Devuelto',            'scrapped' => 'Merma / desecho',            'lost' => 'Perdido',
+
+
+
+
         ];
 
         $statusText = function ($status) use ($statusLabels): string {
@@ -45,7 +49,7 @@
                 return '—';
             }
 
-            return $statusLabels[$key] ?? ucfirst(str_replace('_', ' ', $key));
+            return $statusLabels[$key] ?? ($key !== '' ? ucfirst(str_replace('_', ' ', $key)) : 'Sin estado');
         };
 
         $productLabel = trim(implode(' - ', array_filter([
