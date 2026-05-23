@@ -137,6 +137,8 @@ class StockAdjustmentResource extends Resource
                             ->label('Motivo')
                             ->placeholder('Ej. Inventario inicial, conteo físico, corrección por diferencia.')
                             ->rows(2)
+                            ->required()
+                            ->helperText('El motivo es obligatorio para ajustes nuevos.')
                             ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
                             ->columnSpan(9),
 
@@ -340,6 +342,16 @@ class StockAdjustmentResource extends Resource
             return;
         }
 
+        if (trim((string) $adjustment->reason) === '') {
+            \Filament\Notifications\Notification::make()
+                ->title('Motivo requerido')
+                ->body('El ajuste necesita un motivo antes de confirmar.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
         $adjustment->load('lines');
 
         if ($adjustment->lines->isEmpty()) {
@@ -353,6 +365,8 @@ class StockAdjustmentResource extends Resource
         }
 
         DB::transaction(function () use ($adjustment): void {
+            $previousStatus = (string) $adjustment->status;
+
             foreach ($adjustment->lines as $line) {
                 if (! $line->product_id) {
                     continue;
@@ -416,6 +430,15 @@ class StockAdjustmentResource extends Resource
                 'confirmed_by' => auth()->id(),
                 'confirmed_at' => now(),
             ]);
+
+            static::recordAdjustmentStatusLog(
+                $adjustment,
+                $previousStatus,
+                'done',
+                'confirm',
+                (string) $adjustment->reason,
+                ['confirmed_by' => auth()->id()]
+            );
         });
     }
 
@@ -931,6 +954,31 @@ class StockAdjustmentResource extends Resource
         }
 
         return $name ?: ($code ?: ('#' . $id));
+    }
+
+    public static function recordAdjustmentStatusLog(StockAdjustment $adjustment, ?string $fromStatus, string $toStatus, string $action, ?string $reason = null, ?array $metadata = null): void
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('stock_adjustment_status_logs')) {
+                return;
+            }
+
+            \Illuminate\Support\Facades\DB::table('stock_adjustment_status_logs')->insert([
+                'stock_adjustment_id' => $adjustment->getKey(),
+                'company_id' => $adjustment->company_id,
+                'from_status' => $fromStatus,
+                'to_status' => $toStatus,
+                'action' => $action,
+                'reason' => $reason !== null && trim($reason) !== '' ? trim($reason) : null,
+                'notes' => null,
+                'user_id' => auth()->id(),
+                'metadata' => $metadata ? json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 
     protected static function currentCompanyId(): ?int
