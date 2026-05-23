@@ -448,6 +448,301 @@ class StockSerialNumberResource extends Resource
         return $name !== '' ? $name : ($code !== '' ? $code : ('Producto #' . $productId));
     }
 
+    public static function relocateSerialRecord(StockSerialNumber $record, array $data): null
+    {
+        $destinationLocationId = (int) ($data['destination_location_id'] ?? 0);
+        $reason = trim((string) ($data['reason'] ?? ''));
+        $reference = trim((string) ($data['reference'] ?? ''));
+        $notes = trim((string) ($data['notes'] ?? ''));
+
+        if ($destinationLocationId <= 0) {
+            Notification::make()
+                ->title('Ubicación destino requerida')
+                ->body('Selecciona la ubicación interna destino.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        if ($reason === '') {
+            Notification::make()
+                ->title('Motivo requerido')
+                ->body('Captura el motivo de la reubicación.')
+                ->danger()
+                ->send();
+
+            throw new \Filament\Support\Exceptions\Halt();
+        }
+
+        DB::transaction(function () use ($record, $destinationLocationId, $reason, $reference, $notes): void {
+            /** @var StockSerialNumber $locked */
+            $locked = StockSerialNumber::query()
+                ->whereKey($record->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $allowedStatuses = ['available', 'blocked'];
+
+            if (! in_array((string) $locked->status, $allowedStatuses, true)) {
+                Notification::make()
+                    ->title('La serie no se puede reubicar')
+                    ->body('Solo se permiten series disponibles o bloqueadas. Estado actual: ' . static::statusLabel($locked->status))
+                    ->danger()
+                    ->send();
+
+                throw new \Filament\Support\Exceptions\Halt();
+            }
+
+            $sourceWarehouseId = $locked->current_warehouse_id;
+            $sourceLocationId = $locked->current_location_id;
+
+            if (! $sourceWarehouseId || ! $sourceLocationId) {
+                Notification::make()
+                    ->title('Origen incompleto')
+                    ->body('La serie no tiene almacén o ubicación origen válida.')
+                    ->danger()
+                    ->send();
+
+                throw new \Filament\Support\Exceptions\Halt();
+            }
+
+            if ((int) $sourceLocationId === $destinationLocationId) {
+                Notification::make()
+                    ->title('Destino igual al origen')
+                    ->body('Selecciona una ubicación destino diferente.')
+                    ->warning()
+                    ->send();
+
+                throw new \Filament\Support\Exceptions\Halt();
+            }
+
+            $destination = DB::table('stock_locations as l')
+                ->leftJoin('stock_location_types as t', 't.id', '=', 'l.stock_location_type_id')
+                ->leftJoin('warehouses as w', 'w.id', '=', 'l.warehouse_id')
+                ->select([
+                    'l.id',
+                    'l.company_id',
+                    'l.warehouse_id',
+                    'l.name',
+                    'l.code',
+                    'l.is_active',
+                    't.code as type_code',
+                    't.name as type_name',
+                    'w.name as warehouse_name',
+                ])
+                ->where('l.id', $destinationLocationId)
+                ->where('l.company_id', $locked->company_id)
+                ->where('l.is_active', true)
+                ->where('t.code', 'INTERNAL')
+                ->whereNotNull('l.warehouse_id')
+                ->first();
+
+            if (! $destination) {
+                Notification::make()
+                    ->title('Ubicación destino inválida')
+                    ->body('La ubicación destino debe ser interna, activa y de la misma empresa.')
+                    ->danger()
+                    ->send();
+
+                throw new \Filament\Support\Exceptions\Halt();
+            }
+
+            $beforeSnapshot = [
+                'id' => $locked->getKey(),
+                'serial_number' => $locked->serial_number,
+                'status' => $locked->status,
+                'company_id' => $locked->company_id,
+                'product_id' => $locked->product_id,
+                'product_variant_id' => $locked->product_variant_id,
+                'lot_id' => $locked->lot_id,
+                'current_warehouse_id' => $locked->current_warehouse_id,
+                'current_location_id' => $locked->current_location_id,
+            ];
+
+            $quantAdjustment = [
+                'source' => null,
+                'destination' => null,
+            ];
+
+            if (Schema::hasTable('stock_quants') && $locked->product_id) {
+                $originQuery = DB::table('stock_quants')
+                    ->where('company_id', $locked->company_id)
+                    ->where('warehouse_id', $sourceWarehouseId)
+                    ->where('location_id', $sourceLocationId)
+                    ->where('product_id', $locked->product_id);
+
+                if (! empty($locked->product_variant_id)) {
+                    $originQuery->where('product_variant_id', $locked->product_variant_id);
+                } else {
+                    $originQuery->whereNull('product_variant_id');
+                }
+
+                if (Schema::hasColumn('stock_quants', 'lot_id')) {
+                    if (! empty($locked->lot_id)) {
+                        $originQuery->where('lot_id', $locked->lot_id);
+                    } else {
+                        $originQuery->whereNull('lot_id');
+                    }
+                }
+
+                $originQuant = $originQuery->lockForUpdate()->first();
+
+                if ($originQuant) {
+                    $originBefore = (float) ($originQuant->quantity ?? 0);
+                    $originAfter = max(0, $originBefore - 1);
+
+                    DB::table('stock_quants')
+                        ->where('id', $originQuant->id)
+                        ->update(array_intersect_key([
+                            'quantity' => $originAfter,
+                            'updated_at' => now(),
+                        ], array_flip(Schema::getColumnListing('stock_quants'))));
+
+                    $quantAdjustment['source'] = [
+                        'action' => 'decrement',
+                        'quant_id' => (int) $originQuant->id,
+                        'before_quantity' => $originBefore,
+                        'after_quantity' => $originAfter,
+                    ];
+                } else {
+                    $quantAdjustment['source'] = [
+                        'action' => 'not_found',
+                        'message' => 'No se encontró stock_quant origen para descontar.',
+                    ];
+                }
+
+                $destinationQuery = DB::table('stock_quants')
+                    ->where('company_id', $locked->company_id)
+                    ->where('warehouse_id', $destination->warehouse_id)
+                    ->where('location_id', $destination->id)
+                    ->where('product_id', $locked->product_id);
+
+                if (! empty($locked->product_variant_id)) {
+                    $destinationQuery->where('product_variant_id', $locked->product_variant_id);
+                } else {
+                    $destinationQuery->whereNull('product_variant_id');
+                }
+
+                if (Schema::hasColumn('stock_quants', 'lot_id')) {
+                    if (! empty($locked->lot_id)) {
+                        $destinationQuery->where('lot_id', $locked->lot_id);
+                    } else {
+                        $destinationQuery->whereNull('lot_id');
+                    }
+                }
+
+                $destinationQuant = $destinationQuery->lockForUpdate()->first();
+
+                if ($destinationQuant) {
+                    $destinationBefore = (float) ($destinationQuant->quantity ?? 0);
+                    $destinationAfter = $destinationBefore + 1;
+
+                    DB::table('stock_quants')
+                        ->where('id', $destinationQuant->id)
+                        ->update(array_intersect_key([
+                            'quantity' => $destinationAfter,
+                            'updated_at' => now(),
+                        ], array_flip(Schema::getColumnListing('stock_quants'))));
+
+                    $quantAdjustment['destination'] = [
+                        'action' => 'increment',
+                        'quant_id' => (int) $destinationQuant->id,
+                        'before_quantity' => $destinationBefore,
+                        'after_quantity' => $destinationAfter,
+                    ];
+                } else {
+                    $insert = [
+                        'company_id' => $locked->company_id,
+                        'warehouse_id' => $destination->warehouse_id,
+                        'location_id' => $destination->id,
+                        'product_id' => $locked->product_id,
+                        'product_variant_id' => $locked->product_variant_id,
+                        'lot_id' => $locked->lot_id,
+                        'quantity' => 1,
+                        'reserved_quantity' => 0,
+                        'average_cost' => null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+
+                    $insert = array_intersect_key($insert, array_flip(Schema::getColumnListing('stock_quants')));
+
+                    $newQuantId = DB::table('stock_quants')->insertGetId($insert);
+
+                    $quantAdjustment['destination'] = [
+                        'action' => 'create',
+                        'quant_id' => (int) $newQuantId,
+                        'before_quantity' => 0,
+                        'after_quantity' => 1,
+                    ];
+                }
+            }
+
+            $locked->current_warehouse_id = $destination->warehouse_id;
+            $locked->current_location_id = $destination->id;
+            $locked->save();
+
+            if (Schema::hasTable('stock_serial_special_movements')) {
+                $insert = [
+                    'company_id' => $locked->company_id,
+                    'stock_serial_number_id' => $locked->getKey(),
+                    'product_id' => $locked->product_id,
+                    'product_variant_id' => $locked->product_variant_id,
+                    'lot_id' => $locked->lot_id,
+                    'movement_type' => StockSerialSpecialMovement::TYPE_INTERNAL_RELOCATION,
+                    'status' => 'confirmed',
+                    'serial_number_before' => $locked->serial_number,
+                    'serial_number_after' => $locked->serial_number,
+                    'source_warehouse_id' => $sourceWarehouseId,
+                    'source_location_id' => $sourceLocationId,
+                    'destination_warehouse_id' => $destination->warehouse_id,
+                    'destination_location_id' => $destination->id,
+                    'reason' => $reason,
+                    'reference' => $reference !== '' ? $reference : null,
+                    'notes' => $notes !== '' ? $notes : null,
+                    'created_by' => auth()->id(),
+                    'confirmed_by' => auth()->id(),
+                    'confirmed_at' => now(),
+                    'metadata' => json_encode([
+                        'before' => $beforeSnapshot,
+                        'after' => [
+                            'serial_number' => $locked->serial_number,
+                            'status' => $locked->status,
+                            'current_warehouse_id' => $locked->current_warehouse_id,
+                            'current_location_id' => $locked->current_location_id,
+                        ],
+                        'destination_location' => [
+                            'id' => $destination->id,
+                            'warehouse_id' => $destination->warehouse_id,
+                            'warehouse_name' => $destination->warehouse_name,
+                            'name' => $destination->name,
+                            'code' => $destination->code,
+                            'type_code' => $destination->type_code,
+                            'type_name' => $destination->type_name,
+                        ],
+                        'quant_adjustment' => $quantAdjustment,
+                        'source' => 'StockSerialNumberResource.relocateSerialRecord',
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                $insert = array_intersect_key($insert, array_flip(Schema::getColumnListing('stock_serial_special_movements')));
+
+                DB::table('stock_serial_special_movements')->insert($insert);
+            }
+        });
+
+        Notification::make()
+            ->title('Serie reubicada')
+            ->body('La serie cambió de ubicación y se registró en auditoría.')
+            ->success()
+            ->send();
+
+        return null;
+    }
+
     public static function scrapSerialRecord(StockSerialNumber $record, array $data): null
     {
         $destinationLocationId = (int) ($data['destination_location_id'] ?? 0);

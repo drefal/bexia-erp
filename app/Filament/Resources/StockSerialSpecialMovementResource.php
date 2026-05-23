@@ -113,6 +113,7 @@ class StockSerialSpecialMovementResource extends Resource
                             ->label(fn (?StockSerialSpecialMovement $record): string => match ($record?->movement_type) {
                                 StockSerialSpecialMovement::TYPE_SERIAL_CORRECTION => 'Serie nueva',
                                 StockSerialSpecialMovement::TYPE_DUPLICATE_CONFLICT => 'Serie relacionada / conflictiva',
+                                StockSerialSpecialMovement::TYPE_INTERNAL_RELOCATION => 'Misma serie reubicada',
                                 StockSerialSpecialMovement::TYPE_EXTERNAL_RELOCATION_IN => 'Serie recibida',
                                 StockSerialSpecialMovement::TYPE_EXTERNAL_RELOCATION_OUT => 'Serie enviada / relacionada',
                                 default => 'Serie relacionada / nueva',

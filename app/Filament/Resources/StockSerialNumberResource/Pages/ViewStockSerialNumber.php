@@ -490,6 +490,61 @@ class ViewStockSerialNumber extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('relocateSerial')
+                ->label('Reubicar serie')
+                ->icon('heroicon-o-arrows-right-left')
+                ->color('info')
+                ->visible(fn (): bool => in_array((string) $this->currentSerialRecord()->status, ['available', 'blocked'], true))
+                ->modalHeading(fn (): string => 'Reubicar serie: ' . $this->currentSerialRecord()->serial_number)
+                ->modalDescription('La serie se moverá a otra ubicación interna. No toca ventas, PDV ni entregas.')
+                ->modalSubmitActionLabel('Confirmar reubicación')
+                ->form([
+                    Forms\Components\TextInput::make('serial_number_before')
+                        ->label('Serie')
+                        ->default(fn (): ?string => $this->currentSerialRecord()->serial_number)
+                        ->disabled()
+                        ->dehydrated(false),
+
+                    Forms\Components\TextInput::make('current_location_label')
+                        ->label('Ubicación actual')
+                        ->default(fn (): string => $this->currentLocationLabel())
+                        ->disabled()
+                        ->dehydrated(false),
+
+                    Forms\Components\Select::make('destination_location_id')
+                        ->label('Ubicación interna destino')
+                        ->required()
+                        ->searchable()
+                        ->preload()
+                        ->options(fn (): array => $this->internalRelocationLocationOptions())
+                        ->getOptionLabelUsing(fn ($value): ?string => $this->internalRelocationLocationOptionLabel($value))
+                        ->native(false)
+                        ->placeholder('Selecciona ubicación destino')
+                        ->helperText('Solo se muestran ubicaciones internas activas de la misma empresa.'),
+
+                    Forms\Components\Textarea::make('reason')
+                        ->label('Motivo de reubicación')
+                        ->required()
+                        ->rows(3)
+                        ->helperText('Explica por qué se reubica la serie.'),
+
+                    Forms\Components\TextInput::make('reference')
+                        ->label('Referencia / documento')
+                        ->maxLength(160)
+                        ->placeholder('Opcional'),
+
+                    Forms\Components\Textarea::make('notes')
+                        ->label('Notas')
+                        ->rows(2)
+                        ->placeholder('Opcional'),
+                ])
+                ->action(function (array $data): void {
+                    \App\Filament\Resources\StockSerialNumberResource::relocateSerialRecord($this->currentSerialRecord(), $data);
+                    $this->redirect(static::getResource()::getUrl('view', [
+                        'record' => $this->currentSerialRecord(),
+                    ]));
+                }),
+
             Actions\Action::make('scrapSerial')
                 ->label('Baja por merma / destrucción')
                 ->icon('heroicon-o-trash')
@@ -635,6 +690,82 @@ class ViewStockSerialNumber extends Page
         ];
     }
 
+
+    protected function currentLocationLabel(): string
+    {
+        $warehouse = $this->warehouse();
+        $location = $this->location();
+
+        $parts = array_filter([
+            $warehouse?->name ?? null,
+            $location?->name ?? null,
+        ]);
+
+        return $parts ? implode(' / ', $parts) : '—';
+    }
+
+    protected function internalRelocationLocationOptions(): array
+    {
+        $current = $this->currentSerialRecord();
+
+        return \Illuminate\Support\Facades\DB::table('stock_locations as l')
+            ->leftJoin('stock_location_types as t', 't.id', '=', 'l.stock_location_type_id')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'l.warehouse_id')
+            ->select([
+                'l.id',
+                'l.code',
+                'l.name',
+                'l.warehouse_id',
+                'w.name as warehouse_name',
+                't.code as type_code',
+                't.name as type_name',
+            ])
+            ->where('l.company_id', $current->company_id)
+            ->where('l.is_active', true)
+            ->where('t.code', 'INTERNAL')
+            ->whereNotNull('l.warehouse_id')
+            ->where('l.id', '!=', $current->current_location_id)
+            ->orderBy('w.name')
+            ->orderBy('l.name')
+            ->get()
+            ->mapWithKeys(fn ($row): array => [
+                (int) $row->id => $this->internalLocationLabelFromRow($row),
+            ])
+            ->all();
+    }
+
+    protected function internalRelocationLocationOptionLabel($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        $row = \Illuminate\Support\Facades\DB::table('stock_locations as l')
+            ->leftJoin('stock_location_types as t', 't.id', '=', 'l.stock_location_type_id')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'l.warehouse_id')
+            ->select([
+                'l.id',
+                'l.code',
+                'l.name',
+                'l.warehouse_id',
+                'w.name as warehouse_name',
+                't.code as type_code',
+                't.name as type_name',
+            ])
+            ->where('l.id', (int) $value)
+            ->first();
+
+        return $row ? $this->internalLocationLabelFromRow($row) : null;
+    }
+
+    protected function internalLocationLabelFromRow(object $row): string
+    {
+        $warehouse = trim((string) ($row->warehouse_name ?? ''));
+        $name = trim((string) ($row->name ?? ''));
+        $code = trim((string) ($row->code ?? ''));
+
+        return trim(($warehouse !== '' ? ($warehouse . ' / ' . $name) : $name) . ($code !== '' ? ' · ' . $code : ''));
+    }
 
     protected function scrapLocationOptions(): array
     {
