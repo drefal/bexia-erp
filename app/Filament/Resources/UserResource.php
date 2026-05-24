@@ -127,19 +127,31 @@ public static function canCreate(): bool
         return $query;
     }
 
-        public static function shouldRegisterNavigation(): bool
-    {
-        $user = auth()->user();
+public static function shouldRegisterNavigation(): bool
+{
+    $user = auth()->user();
 
-        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
-    }
+    return (bool) (
+        $user &&
+        (
+            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) ||
+            $user->can('users.view')
+        )
+    );
+}
 
-        public static function canViewAny(): bool
-    {
-        $user = auth()->user();
+public static function canViewAny(): bool
+{
+    $user = auth()->user();
 
-        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
-    }
+    return (bool) (
+        $user &&
+        (
+            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) ||
+            $user->can('users.view')
+        )
+    );
+}
 
     public static function form(Form $form): Form
     {

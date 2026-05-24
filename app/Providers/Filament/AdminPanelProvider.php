@@ -121,7 +121,8 @@ HTML),
                 ownershipRelationship: 'companies'
             )
             ->tenantMiddleware([
-                \App\Http\Middleware\SetSpatieCompanyFromTenant::class,
+            \App\Http\Middleware\SetSpatieCompanyFromTenant::class,
+            \App\Http\Middleware\SetPermissionTeamFromUserCompany::class,
             ], isPersistent: true)
             ->discoverPages(
                 in: app_path('Filament/Pages'),
@@ -146,17 +147,19 @@ HTML),
                 fn (): string => view('filament.topbar.approval-links')->render()
             ) // BEXIA_TOPBAR_APPROVAL_LINKS_V5_13_8
 
-            ->middleware([
-                EncryptCookies::class,
-                AddQueuedCookiesToResponse::class,
-                StartSession::class,
-                ShareErrorsFromSession::class,
-                VerifyCsrfToken::class,
-                SubstituteBindings::class,
-                \App\Http\Middleware\SetLocale::class,
-            ])
-            ->authMiddleware([
-                Authenticate::class,
-            ]);
+->middleware([
+    EncryptCookies::class,
+    AddQueuedCookiesToResponse::class,
+    StartSession::class,
+    ShareErrorsFromSession::class,
+    VerifyCsrfToken::class,
+    SubstituteBindings::class,
+    \App\Http\Middleware\SetLocale::class,
+    \App\Http\Middleware\SetPermissionTeamFromUserCompany::class,
+])
+->authMiddleware([
+    Authenticate::class,
+    \App\Http\Middleware\SetPermissionTeamFromUserCompany::class,
+]);
     }
 }

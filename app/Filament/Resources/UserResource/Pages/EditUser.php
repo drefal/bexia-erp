@@ -5,8 +5,9 @@ namespace App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 
 class EditUser extends EditRecord
 {
@@ -14,8 +15,15 @@ class EditUser extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $data['role_ids'] = $this->record->roles()->pluck('roles.id')->all();
-        $data['permission_ids'] = $this->record->permissions()->pluck('permissions.id')->all();
+        $data['role_ids'] = DB::table('model_has_roles')
+            ->where('model_type', $this->record->getMorphClass())
+            ->where('model_id', $this->record->getKey())
+            ->pluck('role_id')
+            ->all();
+
+        $data['permission_ids'] = $this->record->permissions()
+            ->pluck('permissions.id')
+            ->all();
 
         return $data;
     }
@@ -25,16 +33,48 @@ class EditUser extends EditRecord
         return UserResource::normalizeOperationalDefaults($data);
     }
 
-    protected function afterSave(): void
+    protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        $roleIds = $this->data['role_ids'] ?? [];
-        $permissionIds = $this->data['permission_ids'] ?? [];
+        $roleIds = $data['role_ids'] ?? [];
+        $permissionIds = $data['permission_ids'] ?? [];
 
-        $roles = Role::query()->whereIn('id', $roleIds)->pluck('name')->all();
-        $permissions = Permission::query()->whereIn('id', $permissionIds)->pluck('name')->all();
+        unset($data['role_ids'], $data['permission_ids']);
 
-        $this->record->syncRoles($roles);
-        $this->record->syncPermissions($permissions);
+        $data = UserResource::normalizeOperationalDefaults($data);
+
+        $record->fill($data);
+        $record->save();
+
+        $companyId = $record->company_id
+            ?? filament()->getTenant()?->getKey()
+            ?? DB::table('company_user')
+                ->where('user_id', $record->getKey())
+                ->value('company_id');
+
+        DB::table('model_has_roles')
+            ->where('model_type', $record->getMorphClass())
+            ->where('model_id', $record->getKey())
+            ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
+            ->delete();
+
+        foreach ($roleIds as $roleId) {
+            DB::table('model_has_roles')->insert([
+                'role_id' => $roleId,
+                'model_type' => $record->getMorphClass(),
+                'model_id' => $record->getKey(),
+                'company_id' => $companyId,
+            ]);
+        }
+
+        $permissions = Permission::query()
+            ->whereIn('id', $permissionIds)
+            ->get();
+
+        $record->syncPermissions($permissions);
+
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return $record;
     }
 
     protected function getHeaderActions(): array

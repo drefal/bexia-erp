@@ -76,20 +76,31 @@ public static function canCreate(): bool
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
 
-        public static function shouldRegisterNavigation(): bool
-    {
-        $user = auth()->user();
+public static function shouldRegisterNavigation(): bool
+{
+    $user = auth()->user();
 
-        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
-    }
+    return (bool) (
+        $user &&
+        (
+            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) ||
+            $user->can('rol.view')
+        )
+    );
+}
 
-        public static function canViewAny(): bool
-    {
-        $user = auth()->user();
+public static function canViewAny(): bool
+{
+    $user = auth()->user();
 
-        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
-    }
-
+    return (bool) (
+        $user &&
+        (
+            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) ||
+            $user->can('rol.view')
+        )
+    );
+}
     public static function form(Form $form): Form
     {
         $tenantId = Filament::getTenant()?->getKey();

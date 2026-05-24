@@ -68,19 +68,32 @@ public static function canCreate(): bool
             ->withCount('permissions')
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
-        public static function shouldRegisterNavigation(): bool
-    {
-        $user = auth()->user();
+public static function shouldRegisterNavigation(): bool
+{
+    $user = auth()->user();
 
-        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
-    }
+    return (bool) (
+        $user &&
+        (
+            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) ||
+            $user->can('roles.view') ||
+            $user->can('rol.view')
+        )
+    );
+}
 
-        public static function canViewAny(): bool
-    {
-        $user = auth()->user();
+public static function canViewAny(): bool
+{
+    $user = auth()->user();
 
-        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
-    }
+    return (bool) (
+        $user &&
+        (
+            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) ||
+$user->can('roles.view')
+        )
+    );
+}
 
     public static function form(Form $form): Form
     {

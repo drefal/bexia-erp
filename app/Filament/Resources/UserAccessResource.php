@@ -24,12 +24,19 @@ class UserAccessResource extends Resource
     protected static ?string $tenantOwnershipRelationshipName = null;
     protected static ?string $navigationGroup = 'Seguridad';
 
-        public static function shouldRegisterNavigation(): bool
-    {
-        $user = auth()->user();
+public static function shouldRegisterNavigation(): bool
+{
+    $user = auth()->user();
 
-        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
-    }
+    return (bool) (
+        $user &&
+        (
+            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) ||
+            $user->can('users.view') ||
+            $user->can('user_access.view')
+        )
+    );
+}
 
     public static function getNavigationLabel(): string
     {
@@ -51,12 +58,19 @@ class UserAccessResource extends Resource
         return 'Usuarios';
     }
 
-        public static function canViewAny(): bool
-    {
-        $user = auth()->user();
+public static function canViewAny(): bool
+{
+    $user = auth()->user();
 
-        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
-    }
+    return (bool) (
+        $user &&
+        (
+            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) ||
+            $user->can('users.view') ||
+            $user->can('user_access.view')
+        )
+    );
+}
 
     public static function canEdit(Model $record): bool
     {
