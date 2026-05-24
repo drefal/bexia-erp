@@ -308,13 +308,59 @@ public static function canCreate(): bool
                         ->image(),
                 ])
                 ->columns(3),
-        ]);
+        
+                \Filament\Forms\Components\Section::make('Costeo de inventario')
+                    ->description('Configuración base del método de costeo para esta empresa.')
+                    ->schema([
+                        \Filament\Forms\Components\Select::make('default_costing_method')
+                            ->label('Método de costeo por defecto')
+                            ->options([
+                                'average' => 'Promedio',
+                                'fifo' => 'FIFO',
+                                'standard' => 'Costo estándar',
+                            ])
+                            ->default('average')
+                            ->required()
+                            ->helperText('Se usa cuando el producto y la categoría están en Heredar.'),
+
+                        \Filament\Forms\Components\Select::make('costing_scope')
+                            ->label('Alcance de costeo')
+                            ->options([
+                                'company' => 'Por empresa',
+                                'warehouse' => 'Por almacén (preparado para versión futura)',
+                            ])
+                            ->default('company')
+                            ->required()
+                            ->helperText('Por ahora debe permanecer Por empresa. Por almacén se activará en una fase posterior.'),
+                    ])
+                    ->columns(2)
+                    ->columnSpanFull(),
+]);
     }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
+                \Filament\Tables\Columns\TextColumn::make('default_costing_method')
+                    ->label('Costeo default')
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'fifo' => 'FIFO',
+                        'standard' => 'Costo estándar',
+                        default => 'Promedio',
+                    })
+                    ->badge()
+                    ->sortable(),
+
+                \Filament\Tables\Columns\TextColumn::make('costing_scope')
+                    ->label('Alcance costeo')
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'warehouse' => 'Por almacén',
+                        default => 'Por empresa',
+                    })
+                    ->badge()
+                    ->sortable(),
+
                 ImageColumn::make('logo_compact_path')
                     ->label('Logo')
                     ->disk('public')

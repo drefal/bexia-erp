@@ -448,3 +448,14 @@ Route::middleware(['web', 'auth'])->group(function (): void {
         ->name('accounting.entries.print');
 });
 // END BEXIA V5.56.10e accounting entry PDF
+
+
+use App\Http\Controllers\InventoryProductKardexExportController;
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/inventario/kardex-producto/imprimir', [InventoryProductKardexExportController::class, 'print'])
+        ->name('inventory.kardex.print');
+
+    Route::get('/inventario/kardex-producto/excel', [InventoryProductKardexExportController::class, 'excel'])
+        ->name('inventory.kardex.excel');
+});

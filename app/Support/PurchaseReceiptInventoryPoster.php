@@ -168,7 +168,11 @@ class PurchaseReceiptInventoryPoster
         $this->set($data, $columns, 'created_at', now());
         $this->set($data, $columns, 'updated_at', now());
 
-        return DB::table('stock_movement_lines')->insertGetId($data);
+        $movementLineId = DB::table('stock_movement_lines')->insertGetId($data);
+
+        $this->applyCostToMovementLine($movementLineId, 'purchase_receipt.unit_cost_without_tax');
+
+        return $movementLineId;
     }
 
     protected function updateStockMovementLine(int $movementLineId, object $line, float $quantity): void
@@ -189,6 +193,8 @@ class PurchaseReceiptInventoryPoster
         DB::table('stock_movement_lines')
             ->where('id', $movementLineId)
             ->update($updates);
+
+        $this->applyCostToMovementLine($movementLineId, 'purchase_receipt.unit_cost_without_tax');
     }
 
     protected function increaseStockQuant(object $receipt, object $line, float $quantity): void
@@ -683,4 +689,14 @@ class PurchaseReceiptInventoryPoster
             $array[$column] = $value;
         }
     }
+    protected function applyCostToMovementLine(int $movementLineId, string $costSource): void
+    {
+        try {
+            app(\App\Support\Inventory\StockMovementLineCostBackfiller::class)
+                ->applyToLineId($movementLineId, $costSource);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
 }

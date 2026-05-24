@@ -393,6 +393,7 @@ class StockAdjustmentResource extends Resource
 
         DB::transaction(function () use ($adjustment): void {
             $previousStatus = (string) $adjustment->status;
+            $adjustmentMovementId = null;
 
             foreach ($adjustment->lines as $line) {
                 if (! $line->product_id) {
@@ -475,6 +476,21 @@ class StockAdjustmentResource extends Resource
                     $unitCost,
                     $lineLotId
                 );
+
+                if (abs((float) $difference) > 0.000001) {
+                    if ($adjustmentMovementId === null) {
+                        $adjustmentMovementId = static::v5632gCreateAdjustmentStockMovement($adjustment);
+                    }
+
+                    static::v5632gCreateAdjustmentStockMovementLine(
+                        (int) $adjustmentMovementId,
+                        $adjustment,
+                        $line,
+                        (float) $difference,
+                        $unitCost,
+                        $lineLotId
+                    );
+                }
             }
 
             $adjustment->update([
@@ -1416,4 +1432,175 @@ public static function canCreate(): bool
 
         return false;
     }
+    protected static function v5632gCreateAdjustmentStockMovement(StockAdjustment $adjustment): int
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('stock_movements')) {
+            throw new \RuntimeException('No existe la tabla stock_movements.');
+        }
+
+        $companyId = (int) $adjustment->company_id;
+        $warehouseId = (int) $adjustment->warehouse_id;
+        $locationId = (int) $adjustment->location_id;
+
+        $operationTypeId = static::v5632gAdjustmentOperationTypeId($companyId, $warehouseId, $locationId);
+
+        $referenceBase = trim((string) ($adjustment->reference ?: ('AJU-' . $adjustment->id)));
+        $movementReference = 'MOV-' . $referenceBase;
+
+        $data = static::v5632gFilterColumns('stock_movements', [
+            'company_id' => $companyId,
+            'warehouse_id' => $warehouseId,
+            'stock_operation_type_id' => $operationTypeId,
+            'source_location_id' => $locationId,
+            'destination_location_id' => $locationId,
+            'reference' => $movementReference,
+            'movement_at' => $adjustment->adjustment_at ?? now(),
+            'status' => 'done',
+            'origin_document' => 'stock_adjustment:' . $referenceBase,
+            'contact_id' => null,
+            'notes' => 'Movimiento generado por ajuste de inventario. Ajuste: ' . $referenceBase . '. Motivo: ' . trim((string) ($adjustment->reason ?? '')),
+            'created_by' => auth()->id(),
+            'confirmed_by' => auth()->id(),
+            'confirmed_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return (int) \Illuminate\Support\Facades\DB::table('stock_movements')->insertGetId($data);
+    }
+
+    protected static function v5632gAdjustmentOperationTypeId(int $companyId, int $warehouseId, int $locationId): ?int
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('stock_operation_types')) {
+            return null;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table('stock_operation_types');
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_operation_types', 'company_id')) {
+            $query->where(function ($q) use ($companyId): void {
+                $q->where('company_id', $companyId)->orWhereNull('company_id');
+            });
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_operation_types', 'warehouse_id')) {
+            $query->where(function ($q) use ($warehouseId): void {
+                $q->where('warehouse_id', $warehouseId)->orWhereNull('warehouse_id');
+            });
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_operation_types', 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        $query->where(function ($q): void {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('stock_operation_types', 'operation_kind')) {
+                $q->orWhere('operation_kind', 'inventory_adjustment');
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('stock_operation_types', 'code')) {
+                $q->orWhere('code', 'AJU_INV')
+                    ->orWhere('code', 'AJUSTE_INV')
+                    ->orWhere('code', 'AJUSTE');
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('stock_operation_types', 'name')) {
+                $q->orWhere('name', 'ilike', '%ajuste%');
+            }
+        });
+
+        $existing = $query
+            ->orderByRaw("case when code = 'AJU_INV' then 0 else 1 end")
+            ->orderBy('id')
+            ->value('id');
+
+        if ($existing) {
+            return (int) $existing;
+        }
+
+        $data = static::v5632gFilterColumns('stock_operation_types', [
+            'company_id' => $companyId,
+            'warehouse_id' => $warehouseId,
+            'name' => 'Ajuste de inventario',
+            'code' => 'AJU_INV',
+            'operation_kind' => 'inventory_adjustment',
+            'type' => 'internal',
+            'direction' => 'internal',
+            'source_location_id' => $locationId,
+            'destination_location_id' => $locationId,
+            'is_active' => true,
+            'sequence' => 90,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        try {
+            return (int) \Illuminate\Support\Facades\DB::table('stock_operation_types')->insertGetId($data);
+        } catch (\Throwable $e) {
+            $fallback = \Illuminate\Support\Facades\DB::table('stock_operation_types')
+                ->orderBy('id')
+                ->value('id');
+
+            if ($fallback) {
+                return (int) $fallback;
+            }
+
+            throw $e;
+        }
+    }
+
+    protected static function v5632gCreateAdjustmentStockMovementLine(
+        int $movementId,
+        StockAdjustment $adjustment,
+        StockAdjustmentLine $line,
+        float $difference,
+        ?float $unitCost,
+        ?int $lotId
+    ): void {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('stock_movement_lines')) {
+            throw new \RuntimeException('No existe la tabla stock_movement_lines.');
+        }
+
+        $quantity = round($difference, 6);
+        $cost = $unitCost !== null ? round((float) $unitCost, 6) : 0.0;
+
+        $data = static::v5632gFilterColumns('stock_movement_lines', [
+            'stock_movement_id' => $movementId,
+            'product_id' => (int) $line->product_id,
+            'product_variant_id' => $line->product_variant_id ? (int) $line->product_variant_id : null,
+            'lot_id' => $lotId,
+            'source_type' => 'stock_adjustment',
+            'source_id' => (int) $adjustment->id,
+            'source_line_type' => 'stock_adjustment_line',
+            'source_line_id' => (int) $line->id,
+            'requested_quantity' => $quantity,
+            'done_quantity' => $quantity,
+            'unit_cost' => $cost,
+            'total_cost' => round(abs($quantity) * $cost, 6),
+            'notes' => 'Ajuste de inventario. Diferencia: ' . number_format($quantity, 6, '.', ''),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $movementLineId = (int) \Illuminate\Support\Facades\DB::table('stock_movement_lines')->insertGetId($data);
+
+        try {
+            app(\App\Support\Inventory\StockMovementLineCostBackfiller::class)
+                ->applyToLineId($movementLineId, 'stock_adjustment.unit_cost');
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    protected static function v5632gFilterColumns(string $table, array $data): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return $data;
+        }
+
+        $columns = \Illuminate\Support\Facades\Schema::getColumnListing($table);
+
+        return array_intersect_key($data, array_flip($columns));
+    }
+
 }
