@@ -1152,18 +1152,39 @@ return (int) $refundId;
             : json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
-    public static function v5506gRefundForOrder(int $orderId): ?object
+        public static function v5506gRefundForOrder(int $orderId): ?object
     {
-        if (! \Illuminate\Support\Facades\Schema::hasTable('pos_order_refunds')) {
+        if (
+            ! \Illuminate\Support\Facades\Schema::hasTable('pos_order_refunds')
+            || ! \Illuminate\Support\Facades\Schema::hasTable('pos_order_refund_lines')
+        ) {
             return null;
         }
 
-        return \Illuminate\Support\Facades\DB::table('pos_order_refunds')
-            ->where('pos_order_id', $orderId)
-            ->where('status', 'done')
+        $query = \Illuminate\Support\Facades\DB::table('pos_order_refunds')
+            ->where('pos_order_id', $orderId);
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('pos_order_refunds', 'status')) {
+            $query->where('status', 'done');
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('pos_order_refunds', 'stock_movement_id')) {
+            $query->orderByRaw('case when stock_movement_id is null then 0 else 1 end');
+        }
+
+        $refunds = $query
             ->orderByDesc('id')
-            ->first();
+            ->get();
+
+        foreach ($refunds as $refund) {
+            if (static::v5632fRefundHasStockableLines((int) $refund->id)) {
+                return $refund;
+            }
+        }
+
+        return $refunds->first();
     }
+
 
     public static function v5506gShouldShowInventoryReturn(object $record): bool
     {
@@ -1541,10 +1562,18 @@ return (int) $refundId;
                     'stock_movement_id' => $movementId,
                     'product_id' => $item['product_id'],
                     'product_variant_id' => $item['product_variant_id'],
-                    'lot_id' => null,
+                    'lot_id' => static::v5632fOriginalRefundLotId($line),
+                    'stock_serial_number_id' => static::v5632fOriginalRefundSerialId($line),
+                    'source_type' => 'pos_order_refund',
+                    'source_id' => $refund->id,
+                    'source_line_type' => 'pos_order_refund_line',
+                    'source_line_id' => $line->id ?? null,
                     'requested_quantity' => $qty,
                     'done_quantity' => $qty,
-                    'unit_cost' => $product->average_cost_without_tax ?? $product->standard_cost ?? null,
+                    'unit_cost' => static::v5632fOriginalRefundUnitCost($line),
+                    'total_cost' => round(abs((float) $qty) * static::v5632fOriginalRefundUnitCost($line), 6),
+                    'costing_method' => static::v5632fOriginalRefundCostingMethod($line),
+                    'cost_source' => 'pos_order_refund.original_sale_cost',
                     'notes' => trim((string) ($line->product_name ?? $product->name ?? ('Producto #' . $item['product_id']))),
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -2127,4 +2156,80 @@ return (int) $refundId;
 
         return auth()->user()?->company_id ? (int) auth()->user()->company_id : null;
     }
+    protected static function v5632fOriginalRefundMovementLine(object $line): ?object
+    {
+        $posOrderLineId = (int) ($line->pos_order_line_id ?? 0);
+
+        if ($posOrderLineId <= 0 || ! \Illuminate\Support\Facades\Schema::hasTable('stock_movement_lines')) {
+            return null;
+        }
+
+        return \Illuminate\Support\Facades\DB::table('stock_movement_lines')
+            ->where('source_type', 'pos_order')
+            ->where('source_line_type', 'pos_order_line')
+            ->where('source_line_id', $posOrderLineId)
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    protected static function v5632fOriginalRefundUnitCost(object $line): float
+    {
+        $original = static::v5632fOriginalRefundMovementLine($line);
+
+        if ($original && $original->unit_cost !== null) {
+            return round((float) $original->unit_cost, 6);
+        }
+
+        throw new \RuntimeException(
+            'No se encontró costo original de venta para la línea de devolución #' . (int) ($line->id ?? 0) .
+            '. No se registra la entrada para evitar usar costo promedio actual.'
+        );
+    }
+
+    protected static function v5632fOriginalRefundCostingMethod(object $line): string
+    {
+        $original = static::v5632fOriginalRefundMovementLine($line);
+
+        return (string) (($original->costing_method ?? null) ?: 'average');
+    }
+
+    protected static function v5632fOriginalRefundLotId(object $line): ?int
+    {
+        $original = static::v5632fOriginalRefundMovementLine($line);
+        $id = $original->lot_id ?? null;
+
+        return $id ? (int) $id : null;
+    }
+
+    protected static function v5632fOriginalRefundSerialId(object $line): ?int
+    {
+        $original = static::v5632fOriginalRefundMovementLine($line);
+        $id = $original->stock_serial_number_id ?? null;
+
+        return $id ? (int) $id : null;
+    }
+
+    protected static function v5632fRefundHasStockableLines(int $refundId): bool
+    {
+        if (
+            $refundId <= 0
+            || ! \Illuminate\Support\Facades\Schema::hasTable('pos_order_refund_lines')
+        ) {
+            return false;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table('pos_order_refund_lines as rl')
+            ->leftJoin('products as p', 'p.id', '=', 'rl.product_id')
+            ->where('rl.pos_order_refund_id', $refundId)
+            ->whereNotNull('rl.product_id')
+            ->where('rl.product_id', '>', 0)
+            ->where('rl.quantity', '>', 0)
+            ->where(function ($q): void {
+                $q->whereNull('p.product_type')
+                    ->orWhere('p.product_type', '<>', 'service');
+            });
+
+        return $query->exists();
+    }
+
 }

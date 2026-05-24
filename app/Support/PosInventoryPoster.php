@@ -277,6 +277,8 @@ class PosInventoryPoster
                         'updated_at' => now(),
                     ]));
 
+                    $this->applyCostToMovementLine((int) $movementLineId, 'pos_order.average_cost_at_sale');
+
                     if ($lotId) {
                         $this->markPosLineLotTracking($line, (int) $lotId, $order, (int) $movementLineId);
                     }
@@ -707,4 +709,14 @@ class PosInventoryPoster
 
         return array_intersect_key($data, array_flip($columns));
     }
+    protected function applyCostToMovementLine(int $movementLineId, string $costSource): void
+    {
+        try {
+            app(\App\Support\Inventory\StockMovementLineCostBackfiller::class)
+                ->applyToLineId($movementLineId, $costSource);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
 }

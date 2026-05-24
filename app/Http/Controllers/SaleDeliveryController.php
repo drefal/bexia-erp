@@ -237,6 +237,8 @@ class SaleDeliveryController extends Controller
 
                     $movementLineId = DB::table('stock_movement_lines')->insertGetId($movementLineData);
 
+                    $this->applyCostToMovementLine((int) $movementLineId, 'sale_delivery.unit_cost');
+
                     if ($serialNumberId) {
                         app(OutboundSerialNumberService::class)->markSold(
                             $serialNumberId,
@@ -1354,6 +1356,16 @@ class SaleDeliveryController extends Controller
         }
 
         return $query->exists();
+    }
+
+    protected function applyCostToMovementLine(int $movementLineId, string $costSource): void
+    {
+        try {
+            app(\App\Support\Inventory\StockMovementLineCostBackfiller::class)
+                ->applyToLineId($movementLineId, $costSource);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
 }

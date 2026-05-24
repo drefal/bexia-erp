@@ -232,6 +232,18 @@ public static function shouldRegisterNavigation(): bool
     {
         return $form
             ->schema([
+                \Filament\Forms\Components\Select::make('costing_method')
+                    ->label('Método de costeo')
+                    ->options([
+                        'inherit' => 'Heredar de empresa',
+                        'average' => 'Promedio',
+                        'fifo' => 'FIFO',
+                        'standard' => 'Costo estándar',
+                    ])
+                    ->default('inherit')
+                    ->required()
+                    ->helperText('Solo configura este campo si esta categoría debe dominar el método de costeo de sus productos.'),
+
                 Forms\Components\Section::make('Categoría')
                     ->schema([
                         Forms\Components\Hidden::make('company_id')
@@ -282,6 +294,17 @@ public static function shouldRegisterNavigation(): bool
     {
         return $table
             ->columns([
+                \Filament\Tables\Columns\TextColumn::make('costing_method')
+                    ->label('Costeo')
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'average' => 'Promedio',
+                        'fifo' => 'FIFO',
+                        'standard' => 'Costo estándar',
+                        default => 'Heredar',
+                    })
+                    ->badge()
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('code')
                     ->label('Código')
                     ->searchable()
