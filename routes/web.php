@@ -468,3 +468,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/inventario/valorizacion/excel', [\App\Http\Controllers\InventoryValuationExportController::class, 'excel'])
         ->name('inventory.valuation.excel');
 });
+
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/inventario/trazabilidad/imprimir', [\App\Http\Controllers\InventoryProductTraceabilityExportController::class, 'print'])
+        ->name('inventory.traceability.print');
+
+    Route::get('/inventario/trazabilidad/excel', [\App\Http\Controllers\InventoryProductTraceabilityExportController::class, 'excel'])
+        ->name('inventory.traceability.excel');
+});
