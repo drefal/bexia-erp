@@ -74,7 +74,47 @@ class StockMovementLineCostBackfiller
         return $result;
     }
 
-    protected function updatesForLine(object $line): array
+    public function applyToLineId(int $lineId, ?string $costSourceOverride = null): array
+    {
+        if (! Schema::hasTable('stock_movement_lines')) {
+            return [
+                'line_id' => $lineId,
+                'updated' => false,
+                'updates' => [],
+                'error' => 'No existe stock_movement_lines.',
+            ];
+        }
+
+        $line = DB::table('stock_movement_lines')
+            ->where('id', $lineId)
+            ->first();
+
+        if (! $line) {
+            return [
+                'line_id' => $lineId,
+                'updated' => false,
+                'updates' => [],
+                'error' => 'No existe la linea de movimiento.',
+            ];
+        }
+
+        $updates = $this->updatesForLine($line, $costSourceOverride, true);
+
+        if ($updates !== []) {
+            DB::table('stock_movement_lines')
+                ->where('id', $lineId)
+                ->update($updates);
+        }
+
+        return [
+            'line_id' => $lineId,
+            'updated' => $updates !== [],
+            'updates' => $updates,
+            'error' => null,
+        ];
+    }
+
+    protected function updatesForLine(object $line, ?string $costSourceOverride = null, bool $force = false): array
     {
         $columns = Schema::getColumnListing('stock_movement_lines');
         $updates = [];
@@ -106,7 +146,7 @@ class StockMovementLineCostBackfiller
         if (
             in_array('total_cost', $columns, true)
             && property_exists($line, 'total_cost')
-            && $line->total_cost === null
+            && ($force || $line->total_cost === null)
             && $unitCost !== null
             && $quantity !== null
         ) {
@@ -116,7 +156,7 @@ class StockMovementLineCostBackfiller
         if (
             in_array('costing_method', $columns, true)
             && property_exists($line, 'costing_method')
-            && empty($line->costing_method)
+            && ($force || empty($line->costing_method))
         ) {
             $updates['costing_method'] = $resolved['method'] ?? InventoryCostingMethodResolver::FALLBACK_METHOD;
         }
@@ -124,9 +164,9 @@ class StockMovementLineCostBackfiller
         if (
             in_array('cost_source', $columns, true)
             && property_exists($line, 'cost_source')
-            && empty($line->cost_source)
+            && ($force || empty($line->cost_source))
         ) {
-            $updates['cost_source'] = $this->costSource($line, $resolved);
+            $updates['cost_source'] = $costSourceOverride ?: $this->costSource($line, $resolved);
         }
 
         return $updates;
