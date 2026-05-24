@@ -1486,11 +1486,12 @@ Forms\Components\Section::make('Atributos de catálogo')
                                         Forms\Components\Select::make('costing_method')
                                             ->label('Método de costeo')
                                             ->options([
+                                                'inherit' => 'Heredar',
                                                 'average' => 'Promedio',
                                                 'fifo' => 'FIFO',
                                                 'standard' => 'Costo estándar',
                                             ])
-                                            ->default('average')
+                                            ->default('inherit')
                                             ->native(false)
                                             ->columnSpan(4),
 
