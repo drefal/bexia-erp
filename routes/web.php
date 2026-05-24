@@ -459,3 +459,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/inventario/kardex-producto/excel', [InventoryProductKardexExportController::class, 'excel'])
         ->name('inventory.kardex.excel');
 });
+
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/inventario/valorizacion/imprimir', [\App\Http\Controllers\InventoryValuationExportController::class, 'print'])
+        ->name('inventory.valuation.print');
+
+    Route::get('/inventario/valorizacion/excel', [\App\Http\Controllers\InventoryValuationExportController::class, 'excel'])
+        ->name('inventory.valuation.excel');
+});
