@@ -799,72 +799,31 @@ class SuggestedPurchaseList extends Page
 
     protected static function latestPurchaseSupplierLabel(object $rule): string
     {
-        $candidateTables = [
-            ['lines' => 'purchase_order_lines', 'header' => 'purchase_orders'],
-            ['lines' => 'purchase_lines', 'header' => 'purchases'],
-            ['lines' => 'purchase_items', 'header' => 'purchases'],
-        ];
+        $supplierId = $rule->preferred_supplier_id ?? null;
 
-        foreach ($candidateTables as $candidate) {
-            $lineTable = $candidate['lines'];
-            $headerTable = $candidate['header'];
+        if ($supplierId && Schema::hasTable('contacts')) {
+            $supplier = DB::table('contacts')->where('id', $supplierId)->first();
 
-            if (! Schema::hasTable($lineTable) || ! Schema::hasTable($headerTable)) {
-                continue;
+            if ($supplier) {
+                return trim(($supplier->commercial_name ?: $supplier->name) . ($supplier->rfc ? ' - ' . $supplier->rfc : ''));
+            }
+        }
+
+        $productId = $rule->product_variant_id ?: $rule->product_id;
+
+        if ($productId && Schema::hasTable('products')) {
+            $product = DB::table('products')->where('id', $productId)->first();
+
+            if ($product && isset($product->preferred_supplier_id) && $product->preferred_supplier_id && Schema::hasTable('contacts')) {
+                $supplier = DB::table('contacts')->where('id', $product->preferred_supplier_id)->first();
+
+                if ($supplier) {
+                    return trim(($supplier->commercial_name ?: $supplier->name) . ($supplier->rfc ? ' - ' . $supplier->rfc : ''));
+                }
             }
 
-            if (! Schema::hasColumn($lineTable, 'product_id')) {
-                continue;
-            }
-
-            $foreign = static::firstColumn($lineTable, ['purchase_order_id', 'purchase_id', 'order_id']);
-
-            if (! $foreign) {
-                continue;
-            }
-
-            $dateColumn = static::firstColumn($headerTable, ['purchase_date', 'order_date', 'date', 'created_at']);
-            $supplierIdColumn = static::firstColumn($headerTable, ['supplier_id', 'vendor_id', 'contact_id', 'partner_id']);
-            $supplierNameColumn = static::firstColumn($headerTable, ['supplier_name', 'vendor_name', 'partner_name']);
-
-            $query = DB::table($lineTable)
-                ->join($headerTable, $headerTable . '.id', '=', $lineTable . '.' . $foreign)
-                ->where($lineTable . '.product_id', $rule->product_id);
-
-            if ($rule->product_variant_id && Schema::hasColumn($lineTable, 'product_variant_id')) {
-                $query->where($lineTable . '.product_variant_id', $rule->product_variant_id);
-            }
-
-            $dateColumn
-                ? $query->orderByDesc($headerTable . '.' . $dateColumn)
-                : $query->orderByDesc($lineTable . '.id');
-
-            $select = [];
-
-            if ($supplierIdColumn) {
-                $select[] = $headerTable . '.' . $supplierIdColumn . ' as supplier_id';
-            }
-
-            if ($supplierNameColumn) {
-                $select[] = $headerTable . '.' . $supplierNameColumn . ' as supplier_name';
-            }
-
-            if (empty($select)) {
-                continue;
-            }
-
-            $row = $query->first($select);
-
-            if (! $row) {
-                continue;
-            }
-
-            if (! empty($row->supplier_name)) {
-                return (string) $row->supplier_name;
-            }
-
-            if (! empty($row->supplier_id)) {
-                return static::supplierLabel((int) $row->supplier_id);
+            if ($product && isset($product->last_supplier_name) && $product->last_supplier_name) {
+                return (string) $product->last_supplier_name;
             }
         }
 

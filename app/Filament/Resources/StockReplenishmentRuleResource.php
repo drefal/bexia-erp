@@ -164,6 +164,26 @@ class StockReplenishmentRuleResource extends Resource
                             ->native(false)
                             ->required()
                             ->columnSpan(3),
+                        Forms\Components\Select::make('preferred_supplier_id')
+                            ->label('Proveedor preferido')
+                            ->options(fn (): array => static::supplierOptions())
+                            ->searchable()
+                            ->preload()
+                            ->native(false)
+                            ->placeholder('Sin proveedor preferido')
+                            ->helperText('Si se define, la lista sugerida de compra usará este proveedor antes que el proveedor del producto.')
+                            ->columnSpan(5),
+
+
+                        Forms\Components\TextInput::make('lead_time_days')
+                            ->label('Días de entrega')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step(1)
+                            ->placeholder('Ej. 7')
+                            ->suffix('días')
+                            ->helperText('Plazo estimado del proveedor para esta regla. Dejar vacío si no aplica.')
+                            ->columnSpan(4),
 
                         Forms\Components\Toggle::make('is_active')
                             ->label('Activa')
@@ -232,7 +252,18 @@ class StockReplenishmentRuleResource extends Resource
                         $record->product_variant_id ? (int) $record->product_variant_id : null,
                     ), 2)),
 
-                Tables\Columns\TextColumn::make('priority')
+                
+                Tables\Columns\TextColumn::make('preferred_supplier_display')
+                    ->label('Proveedor')
+                    ->state(fn (StockReplenishmentRule $record): string => static::supplierLabel($record->preferred_supplier_id))
+                    ->searchable(false)
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('lead_time_days')
+                    ->label('Entrega')
+                    ->formatStateUsing(fn ($state): string => $state ? $state . ' días' : '—')
+                    ->sortable()
+                    ->toggleable(),Tables\Columns\TextColumn::make('priority')
                     ->label('Prioridad')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
