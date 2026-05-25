@@ -477,3 +477,13 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/inventario/trazabilidad/excel', [\App\Http\Controllers\InventoryProductTraceabilityExportController::class, 'excel'])
         ->name('inventory.traceability.excel');
 });
+
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/inventario/a-fecha/imprimir', [\App\Http\Controllers\InventoryAsOfDateExportController::class, 'print'])
+        ->name('inventory.as-of-date.print');
+
+    Route::get('/inventario/a-fecha/excel', [\App\Http\Controllers\InventoryAsOfDateExportController::class, 'excel'])
+        ->name('inventory.as-of-date.excel');
+});
+
