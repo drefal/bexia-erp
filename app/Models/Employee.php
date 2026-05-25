@@ -20,6 +20,11 @@ class Employee extends Model
         'employee_number',
         'position',
         'department',
+        'hr_department_id',
+        'hr_job_position_id',
+        'hr_work_schedule_id',
+        'payroll_periodicity_id',
+        'payroll_employer_registration_id',
 
         'email',
         'phone',
@@ -92,6 +97,11 @@ class Employee extends Model
         'hourly_cost' => 'decimal:2',
         'distance_home_work' => 'decimal:2',
         'dependent_children' => 'integer',
+        'hr_department_id' => 'integer',
+        'hr_job_position_id' => 'integer',
+        'hr_work_schedule_id' => 'integer',
+        'payroll_periodicity_id' => 'integer',
+        'payroll_employer_registration_id' => 'integer',
     ];
 
     public function company()
@@ -118,6 +128,39 @@ class Employee extends Model
     {
         return $this->belongsTo(\App\Models\Branch::class);
     }
+
+
+    /*
+     * V5.64.2c-start
+     * Relaciones RRHH/Nomina para empleados.
+     */
+    public function hrDepartment()
+    {
+        return $this->belongsTo(\App\Models\HrDepartment::class, 'hr_department_id');
+    }
+
+    public function hrJobPosition()
+    {
+        return $this->belongsTo(\App\Models\HrJobPosition::class, 'hr_job_position_id');
+    }
+
+    public function hrWorkSchedule()
+    {
+        return $this->belongsTo(\App\Models\HrWorkSchedule::class, 'hr_work_schedule_id');
+    }
+
+    public function payrollPeriodicity()
+    {
+        return $this->belongsTo(\App\Models\PayrollPeriodicity::class, 'payroll_periodicity_id');
+    }
+
+    public function payrollEmployerRegistration()
+    {
+        return $this->belongsTo(\App\Models\PayrollEmployerRegistration::class, 'payroll_employer_registration_id');
+    }
+    /*
+     * V5.64.2c-end
+     */
 
     public function getAvatarUrlAttribute(): ?string
     {

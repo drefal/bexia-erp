@@ -5,6 +5,11 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\EmployeeResource\Pages;
 use App\Models\Branch;
 use App\Models\Employee;
+use App\Models\PayrollPeriodicity;
+use App\Models\PayrollEmployerRegistration;
+use App\Models\HrWorkSchedule;
+use App\Models\HrJobPosition;
+use App\Models\HrDepartment;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Filament\Forms;
@@ -80,7 +85,7 @@ public static function canCreate(): bool
         $tenantId = Filament::getTenant()?->getKey();
 
         return parent::getEloquentQuery()
-            ->with(['user', 'manager', 'coach', 'branch'])
+            ->with(['user', 'manager', 'coach', 'branch', 'hrDepartment', 'hrJobPosition', 'hrWorkSchedule', 'payrollPeriodicity', 'payrollEmployerRegistration'])
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
 
@@ -154,9 +159,17 @@ public static function canCreate(): bool
                                                 ->required()
                                                 ->maxLength(255),
 
+                                            Select::make('hr_job_position_id')
+                                                ->label('Puesto (catálogo RRHH)')
+                                                ->options(fn () => self::hrJobPositionOptions())
+                                                ->searchable()
+                                                ->preload()
+                                                ->helperText('Puesto ligado al catálogo de RRHH.'),
+
                                             TextInput::make('position')
-                                                ->label('Puesto de trabajo')
-                                                ->maxLength(255),
+                                                ->label('Puesto libre / legado')
+                                                ->maxLength(255)
+                                                ->helperText('Campo anterior. Úsalo solo si el puesto no está en catálogo.'),
 
                                             TextInput::make('phone')
                                                 ->label('Teléfono de trabajo')
@@ -171,9 +184,17 @@ public static function canCreate(): bool
                                                 ->email()
                                                 ->maxLength(255),
 
+                                            Select::make('hr_department_id')
+                                                ->label('Departamento (catálogo RRHH)')
+                                                ->options(fn () => self::hrDepartmentOptions())
+                                                ->searchable()
+                                                ->preload()
+                                                ->helperText('Departamento ligado al catálogo de RRHH.'),
+
                                             TextInput::make('department')
-                                                ->label('Departamento')
-                                                ->maxLength(255),
+                                                ->label('Departamento libre / legado')
+                                                ->maxLength(255)
+                                                ->helperText('Campo anterior. Úsalo solo si el departamento no está en catálogo.'),
 
                                             Select::make('manager_employee_id')
                                                 ->label('Gerente')
@@ -230,12 +251,18 @@ public static function canCreate(): bool
 
                                     Section::make('Programar')
                                         ->schema([
+                                            Select::make('hr_work_schedule_id')
+                                                ->label('Horario laboral (catálogo RRHH)')
+                                                ->options(fn () => self::hrWorkScheduleOptions())
+                                                ->searchable()
+                                                ->preload(),
+
                                             Toggle::make('flexible_hours')
                                                 ->label('Horas flexibles')
                                                 ->default(false),
 
                                             TextInput::make('working_schedule')
-                                                ->label('Horas laborables')
+                                                ->label('Horas laborables / legado')
                                                 ->placeholder('Ej. Estándar de 40 horas a la semana')
                                                 ->maxLength(255),
 
@@ -421,6 +448,19 @@ public static function canCreate(): bool
                                                 ])
                                                 ->default('employee'),
 
+                                            Select::make('payroll_periodicity_id')
+                                                ->label('Periodicidad de nómina')
+                                                ->options(fn () => self::payrollPeriodicityOptions())
+                                                ->searchable()
+                                                ->preload(),
+
+                                            Select::make('payroll_employer_registration_id')
+                                                ->label('Registro patronal')
+                                                ->options(fn () => self::payrollEmployerRegistrationOptions())
+                                                ->searchable()
+                                                ->preload()
+                                                ->helperText('Si no aparece información, primero captura el registro patronal en Nómina.'),
+
                                             Select::make('user_id')
                                                 ->label('Usuario relacionado')
                                                 ->options(fn () => self::userOptions())
@@ -511,6 +551,74 @@ public static function canCreate(): bool
             ->toArray();
     }
 
+
+    /*
+     * V5.64.2c-start
+     * Opciones de catalogos RRHH/Nomina por tenant.
+     */
+    protected static function hrDepartmentOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return HrDepartment::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function hrJobPositionOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return HrJobPosition::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function hrWorkScheduleOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return HrWorkSchedule::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function payrollPeriodicityOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return PayrollPeriodicity::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function payrollEmployerRegistrationOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return PayrollEmployerRegistration::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+    /*
+     * V5.64.2c-end
+     */
+
     public static function table(Table $table): Table
     {
         return $table
@@ -540,6 +648,24 @@ public static function canCreate(): bool
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('hrJobPosition.name')
+                    ->label('Puesto RRHH')
+                    ->searchable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('hrDepartment.name')
+                    ->label('Departamento RRHH')
+                    ->searchable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('hrWorkSchedule.name')
+                    ->label('Horario')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('payrollPeriodicity.name')
+                    ->label('Periodicidad')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('position')
                     ->label('Puesto')
