@@ -138,11 +138,22 @@ class StockAdjustmentResource extends Resource
                             ->placeholder('Ej. Inventario inicial, conteo físico, corrección por diferencia.')
                             ->rows(2)
                             ->required()
+                            ->minLength(5)
+                            ->validationMessages([
+                                'required' => 'El motivo del ajuste es obligatorio.',
+                                'min' => 'El motivo del ajuste debe tener al menos 5 caracteres.',
+                            ])
                             ->helperText('El motivo es obligatorio para ajustes nuevos.')
                             ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
                             ->columnSpan(9),
 
                         Forms\Components\Textarea::make('notes')
+                            ->required()
+                            ->minLength(5)
+                            ->validationMessages([
+                                'required' => 'Las notas del ajuste es obligatorio.',
+                                'min' => 'Las notas del ajuste debe tener al menos 5 caracteres.',
+                            ])
                             ->label('Notas')
                             ->rows(2)
                             ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))

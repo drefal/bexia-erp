@@ -19,6 +19,15 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+
+        if (class_exists(\App\Models\StockAdjustment::class) && class_exists(\App\Observers\StockAdjustmentObserver::class)) {
+            \App\Models\StockAdjustment::observe(\App\Observers\StockAdjustmentObserver::class);
+        }
+
+        if (class_exists(\App\Models\StockAdjustmentLine::class) && class_exists(\App\Observers\StockAdjustmentLineObserver::class)) {
+            \App\Models\StockAdjustmentLine::observe(\App\Observers\StockAdjustmentLineObserver::class);
+        }
+
         // BEXIA_V5550G_INTERNAL_REFERENCE_MODAL_RENDER_HOOK
         if (
             class_exists(\Filament\Support\Facades\FilamentView::class)
