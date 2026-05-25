@@ -765,6 +765,10 @@ public static function canCreate(): bool
                     'pos_order_line_id' => $line->id ?? null,
                     'product_id' => $line->product_id ?? null,
                     'product_variant_id' => $line->product_variant_id ?? null,
+                    'stock_lot_id' => $line->stock_lot_id ?? null,
+                    'lot_tracking_metadata' => $line->lot_tracking_metadata ?? null,
+                    'stock_serial_number_id' => $line->stock_serial_number_id ?? null,
+                    'serial_tracking_metadata' => $line->serial_tracking_metadata ?? null,
                     'product_name' => $line->product_name ?? ($line->name ?? null),
                     'product_reference' => $line->product_reference ?? ($line->reference ?? null),
                     'quantity' => $amounts['quantity'],
@@ -1042,6 +1046,10 @@ return (int) $refundId;
                     'pos_order_line_id' => $line->id ?? null,
                     'product_id' => $line->product_id ?? null,
                     'product_variant_id' => $line->product_variant_id ?? null,
+                    'stock_lot_id' => $line->stock_lot_id ?? null,
+                    'lot_tracking_metadata' => $line->lot_tracking_metadata ?? null,
+                    'stock_serial_number_id' => $line->stock_serial_number_id ?? null,
+                    'serial_tracking_metadata' => $line->serial_tracking_metadata ?? null,
                     'product_name' => $line->product_name ?? ($line->name ?? null),
                     'product_reference' => $line->product_reference ?? ($line->reference ?? null),
                     'quantity' => $item['quantity'],
@@ -1349,7 +1357,9 @@ return (int) $refundId;
         int $locationId,
         int $productId,
         ?int $productVariantId,
-        float $quantity
+        float $quantity,
+        ?int $lotId = null,
+        ?float $averageCost = null
     ): void {
         if ($quantity <= 0 || $productId <= 0) {
             return;
@@ -1367,7 +1377,11 @@ return (int) $refundId;
             $query->whereNull('product_variant_id');
         }
 
-        $query->whereNull('lot_id');
+        if ($lotId) {
+            $query->where('lot_id', $lotId);
+        } else {
+            $query->whereNull('lot_id');
+        }
 
         $quant = $query->lockForUpdate()->first();
 
@@ -1388,10 +1402,10 @@ return (int) $refundId;
             'location_id' => $locationId,
             'product_id' => $productId,
             'product_variant_id' => $productVariantId,
-            'lot_id' => null,
+            'lot_id' => $lotId,
             'quantity' => round($quantity, 6),
             'reserved_quantity' => 0,
-            'average_cost' => null,
+            'average_cost' => $averageCost,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -1558,21 +1572,26 @@ return (int) $refundId;
                 $qty = (float) $item['quantity'];
                 $product = $item['product'];
 
-                \Illuminate\Support\Facades\DB::table('stock_movement_lines')->insert([
+                $returnLotId = static::v5632fOriginalRefundLotId($line);
+                $returnSerialId = static::v5632fOriginalRefundSerialId($line);
+                $returnUnitCost = static::v5632fOriginalRefundUnitCost($line);
+                $returnCostingMethod = static::v5632fOriginalRefundCostingMethod($line);
+
+                $movementLineId = \Illuminate\Support\Facades\DB::table('stock_movement_lines')->insertGetId([
                     'stock_movement_id' => $movementId,
                     'product_id' => $item['product_id'],
                     'product_variant_id' => $item['product_variant_id'],
-                    'lot_id' => static::v5632fOriginalRefundLotId($line),
-                    'stock_serial_number_id' => static::v5632fOriginalRefundSerialId($line),
+                    'lot_id' => $returnLotId,
+                    'stock_serial_number_id' => $returnSerialId,
                     'source_type' => 'pos_order_refund',
                     'source_id' => $refund->id,
                     'source_line_type' => 'pos_order_refund_line',
-                    'source_line_id' => $line->id ?? null,
+                    'source_line_id' => $line->id,
                     'requested_quantity' => $qty,
                     'done_quantity' => $qty,
-                    'unit_cost' => static::v5632fOriginalRefundUnitCost($line),
-                    'total_cost' => round(abs((float) $qty) * static::v5632fOriginalRefundUnitCost($line), 6),
-                    'costing_method' => static::v5632fOriginalRefundCostingMethod($line),
+                    'unit_cost' => $returnUnitCost,
+                    'total_cost' => round(abs((float) $qty) * $returnUnitCost, 6),
+                    'costing_method' => $returnCostingMethod,
                     'cost_source' => 'pos_order_refund.original_sale_cost',
                     'notes' => trim((string) ($line->product_name ?? $product->name ?? ('Producto #' . $item['product_id']))),
                     'created_at' => now(),
@@ -1585,7 +1604,19 @@ return (int) $refundId;
                     $destinationLocationId,
                     $item['product_id'],
                     $item['product_variant_id'],
-                    $qty
+                    $qty,
+                    $returnLotId,
+                    $returnUnitCost
+                );
+
+                static::v56310cMarkReturnedSerial(
+                    $returnSerialId,
+                    $companyId,
+                    $warehouseId,
+                    $destinationLocationId,
+                    (int) $movementLineId,
+                    $refund,
+                    $line
                 );
             }
 
@@ -2156,6 +2187,87 @@ return (int) $refundId;
 
         return auth()->user()?->company_id ? (int) auth()->user()->company_id : null;
     }
+
+    protected static function v56310cMarkReturnedSerial(
+        ?int $serialId,
+        int $companyId,
+        int $warehouseId,
+        int $locationId,
+        int $movementLineId,
+        object $refund,
+        object $refundLine
+    ): void {
+        if (! $serialId || ! \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')) {
+            return;
+        }
+
+        $serial = \Illuminate\Support\Facades\DB::table('stock_serial_numbers')
+            ->where('id', $serialId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $serial) {
+            throw new \RuntimeException('No se encontró el número de serie a devolver: #' . $serialId);
+        }
+
+        if ((string) ($serial->status ?? '') === 'available') {
+            throw new \RuntimeException('El número de serie ' . ($serial->serial_number ?? ('#' . $serialId)) . ' ya está disponible. No se puede devolver dos veces.');
+        }
+
+        $updates = [];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'status')) {
+            $updates['status'] = 'available';
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'current_warehouse_id')) {
+            $updates['current_warehouse_id'] = $warehouseId;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'current_location_id')) {
+            $updates['current_location_id'] = $locationId;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'returned_at')) {
+            $updates['returned_at'] = now();
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'returned_by')) {
+            $updates['returned_by'] = auth()->id();
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'updated_at')) {
+            $updates['updated_at'] = now();
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'metadata')) {
+            $metadata = [];
+
+            if (! empty($serial->metadata)) {
+                $decoded = json_decode((string) $serial->metadata, true);
+                $metadata = is_array($decoded) ? $decoded : [];
+            }
+
+            $metadata['last_return'] = [
+                'source_type' => 'pos_order_refund',
+                'source_id' => (int) ($refund->id ?? 0),
+                'source_line_type' => 'pos_order_refund_line',
+                'source_line_id' => (int) ($refundLine->id ?? 0),
+                'stock_movement_line_id' => $movementLineId,
+                'returned_at' => now()->toDateTimeString(),
+                'returned_by' => auth()->id(),
+            ];
+
+            $updates['metadata'] = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        if ($updates !== []) {
+            \Illuminate\Support\Facades\DB::table('stock_serial_numbers')
+                ->where('id', $serialId)
+                ->update($updates);
+        }
+    }
+
     protected static function v5632fOriginalRefundMovementLine(object $line): ?object
     {
         $posOrderLineId = (int) ($line->pos_order_line_id ?? 0);
