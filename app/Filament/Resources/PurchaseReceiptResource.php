@@ -174,6 +174,42 @@ public static function canCreate(): bool
                     ->url(fn (PurchaseReceipt $record): string => static::receiptUrl($record, true))
                     ->openUrlInNewTab(),
 
+                Tables\Actions\Action::make('return_to_supplier')
+                    ->label('Devolver a proveedor')
+                    ->icon('heroicon-o-arrow-uturn-right')
+                    ->color('warning')
+                    ->visible(fn (PurchaseReceipt $record): bool => (string) $record->status === 'done' && ! empty($record->stock_movement_id))
+                    ->form([
+                        \Filament\Forms\Components\Textarea::make('reason')
+                            ->label('Motivo de la devolución')
+                            ->required()
+                            ->maxLength(500),
+                    ])
+                    ->requiresConfirmation()
+                    ->modalHeading('Devolver a proveedor')
+                    ->modalDescription('Se creará una salida de inventario hacia proveedor con costo original de recepción y lote/serie cuando aplique.')
+                    ->modalSubmitActionLabel('Registrar devolución')
+                    ->action(function (PurchaseReceipt $record, array $data): void {
+                        try {
+                            $returnId = app(\App\Support\PurchaseReturnInventoryPoster::class)
+                                ->createFromReceipt((int) $record->id, (string) ($data['reason'] ?? ''));
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('Devolución a proveedor registrada')
+                                ->body('Se registró la devolución a proveedor #' . $returnId . ' y se descontó el inventario disponible.')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            report($e);
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('No se pudo registrar la devolución')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
                 Tables\Actions\Action::make('open_order')
                     ->label('Abrir OC')
                     ->icon('heroicon-o-arrow-top-right-on-square')
