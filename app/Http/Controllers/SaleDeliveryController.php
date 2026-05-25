@@ -320,6 +320,301 @@ class SaleDeliveryController extends Controller
         }
     }
 
+
+    public function returnDelivery(Request $request, SaleDelivery $saleDelivery): RedirectResponse
+    {
+        if (! $this->userCanUpdateSales()) {
+            abort(403);
+        }
+
+        try {
+            $reason = trim((string) $request->input('reason', ''));
+
+            if ($reason === '') {
+                return back()->with('error', 'Captura el motivo de la devolución.');
+            }
+
+            $returnId = $this->createSaleReturnFromDelivery($saleDelivery, $reason, $request->input('notes'));
+
+            return back()->with('success', 'Devolución de venta registrada #' . $returnId . '. El inventario fue reingresado.');
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function createSaleReturnFromDelivery(SaleDelivery $saleDelivery, string $reason, ?string $notes = null): int
+    {
+        if ((string) $saleDelivery->status !== 'done') {
+            throw new \RuntimeException('Solo se pueden devolver entregas validadas.');
+        }
+
+        foreach (['sale_returns', 'sale_return_lines', 'stock_movements', 'stock_movement_lines', 'stock_quants'] as $table) {
+            if (! Schema::hasTable($table)) {
+                throw new \RuntimeException('Falta la tabla requerida: ' . $table . '. Ejecuta migraciones.');
+            }
+        }
+
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw new \RuntimeException('El motivo de la devolución es obligatorio.');
+        }
+
+        return DB::transaction(function () use ($saleDelivery, $reason, $notes): int {
+            $now = now();
+
+            $lines = DB::table('sale_delivery_lines')
+                ->where('sale_delivery_id', $saleDelivery->id)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($lines->isEmpty()) {
+                throw new \RuntimeException('La entrega no tiene líneas para devolver.');
+            }
+
+            $returnableLines = [];
+            $processedReturnKeys = [];
+
+            foreach ($lines as $line) {
+                $deliveredQty = $this->decimal($line->quantity ?? 0);
+
+                if ($deliveredQty <= 0) {
+                    continue;
+                }
+
+                $alreadyReturned = (float) DB::table('sale_return_lines as l')
+                    ->join('sale_returns as r', 'r.id', '=', 'l.sale_return_id')
+                    ->where('l.sale_delivery_line_id', $line->id)
+                    ->where('r.status', 'done')
+                    ->sum('l.quantity');
+
+                $remainingQty = $this->decimal($deliveredQty - $alreadyReturned);
+
+                if ($remainingQty <= 0) {
+                    continue;
+                }
+
+                $originalMovementLine = $this->originalSaleDeliveryMovementLine($line);
+
+                if (! $originalMovementLine) {
+                    throw new \RuntimeException('No se encontró el movimiento original de salida para ' . ($line->product_label ?? ('línea #' . $line->id)) . '.');
+                }
+
+                if (! empty($originalMovementLine->stock_serial_number_id) && abs($remainingQty - 1.0) > 0.000001) {
+                    throw new \RuntimeException('La devolución de una serie debe ser por cantidad 1.');
+                }
+
+                $returnLotId = ! empty($originalMovementLine->lot_id)
+                    ? (int) $originalMovementLine->lot_id
+                    : (! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null);
+
+                $returnSerialId = ! empty($originalMovementLine->stock_serial_number_id)
+                    ? (int) $originalMovementLine->stock_serial_number_id
+                    : (! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null);
+
+                $returnSerialNumber = null;
+
+                if ($returnSerialId && Schema::hasTable('stock_serial_numbers')) {
+                    $returnSerialNumber = DB::table('stock_serial_numbers')
+                        ->where('id', $returnSerialId)
+                        ->value('serial_number');
+                }
+
+                /*
+                 * Protección contra datos legacy duplicados:
+                 * algunas entregas antiguas pueden tener más de una línea apuntando
+                 * al mismo número de serie. Solo debe reingresar una vez.
+                 */
+                $returnKey = $returnSerialId
+                    ? ('serial:' . (trim((string) $returnSerialNumber) !== '' ? trim((string) $returnSerialNumber) : (string) $returnSerialId))
+                    : implode('|', [
+                        'line',
+                        (string) ($line->sales_order_line_id ?? ''),
+                        (string) ($line->product_id ?? ''),
+                        (string) ($line->product_variant_id ?? ''),
+                        (string) ($returnLotId ?? ''),
+                        number_format($remainingQty, 6, '.', ''),
+                    ]);
+
+                if (isset($processedReturnKeys[$returnKey])) {
+                    continue;
+                }
+
+                $processedReturnKeys[$returnKey] = true;
+
+                $returnableLines[] = [
+                    'line' => $line,
+                    'quantity' => $remainingQty,
+                    'original_movement_line' => $originalMovementLine,
+                ];
+            }
+
+            if ($returnableLines === []) {
+                throw new \RuntimeException('Esta entrega ya fue devuelta completamente.');
+            }
+
+            $order = Schema::hasTable('sales_orders')
+                ? DB::table('sales_orders')->where('id', $saleDelivery->sales_order_id)->first()
+                : null;
+
+            $number = $this->nextSaleReturnNumber((int) $saleDelivery->company_id);
+
+            $returnId = DB::table('sale_returns')->insertGetId($this->filterTableColumns('sale_returns', [
+                'company_id' => $saleDelivery->company_id,
+                'sale_delivery_id' => $saleDelivery->id,
+                'sales_order_id' => $saleDelivery->sales_order_id,
+                'number' => $number,
+                'status' => 'done',
+                'return_type' => 'total',
+                'warehouse_id' => $saleDelivery->warehouse_id,
+                'source_location_id' => $saleDelivery->destination_location_id,
+                'destination_location_id' => $saleDelivery->source_location_id,
+                'reason' => $reason,
+                'notes' => $notes,
+                'created_by_user_id' => auth()->id(),
+                'returned_at' => $now,
+                'metadata' => json_encode([
+                    'source_type' => 'sale_delivery',
+                    'source_id' => (int) $saleDelivery->id,
+                    'sales_order_id' => (int) ($saleDelivery->sales_order_id ?? 0),
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]));
+
+            $movementId = DB::table('stock_movements')->insertGetId($this->filterTableColumns('stock_movements', [
+                'company_id' => $saleDelivery->company_id,
+                'warehouse_id' => $saleDelivery->warehouse_id,
+                'stock_operation_type_id' => $this->saleReturnOperationTypeId($saleDelivery),
+                'source_location_id' => $saleDelivery->destination_location_id,
+                'destination_location_id' => $saleDelivery->source_location_id,
+                'reference' => $number,
+                'movement_at' => $now,
+                'status' => 'done',
+                'origin_document' => 'sale_return:' . $returnId,
+                'contact_id' => $order->customer_contact_id ?? null,
+                'notes' => 'Entrada por devolución de entrega ' . ($saleDelivery->number ?: ('#' . $saleDelivery->id)) . '. Motivo: ' . $reason,
+                'created_by' => auth()->id(),
+                'confirmed_by' => auth()->id(),
+                'confirmed_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]));
+
+            if (class_exists(\App\Support\Inventory\StockMovementNormalizer::class)) {
+                \App\Support\Inventory\StockMovementNormalizer::normalizeMovement((int) $movementId);
+            }
+
+            foreach ($returnableLines as $item) {
+                $line = $item['line'];
+                $qty = (float) $item['quantity'];
+                $original = $item['original_movement_line'];
+
+                $lotId = ! empty($original->lot_id)
+                    ? (int) $original->lot_id
+                    : (! empty($line->stock_lot_id) ? (int) $line->stock_lot_id : null);
+
+                $serialId = ! empty($original->stock_serial_number_id)
+                    ? (int) $original->stock_serial_number_id
+                    : (! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null);
+
+                $unitCost = $original->unit_cost !== null
+                    ? (float) $original->unit_cost
+                    : (float) ($line->unit_cost ?? 0);
+
+                $costingMethod = $original->costing_method ?? 'average';
+
+                $returnLineId = DB::table('sale_return_lines')->insertGetId($this->filterTableColumns('sale_return_lines', [
+                    'sale_return_id' => $returnId,
+                    'sale_delivery_id' => $saleDelivery->id,
+                    'sale_delivery_line_id' => $line->id,
+                    'sales_order_id' => $line->sales_order_id ?? $saleDelivery->sales_order_id,
+                    'sales_order_line_id' => $line->sales_order_line_id ?? null,
+                    'company_id' => $saleDelivery->company_id,
+                    'product_id' => $line->product_id,
+                    'product_variant_id' => $line->product_variant_id,
+                    'product_label' => $line->product_label ?? null,
+                    'variant_label' => $line->variant_label ?? null,
+                    'quantity' => $qty,
+                    'unit_cost' => $unitCost,
+                    'total_cost' => round($qty * $unitCost, 6),
+                    'stock_lot_id' => $lotId,
+                    'lot_tracking_metadata' => $lotId ? json_encode($this->saleReturnLotTrackingMetadata($saleDelivery, $line, $lotId), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+                    'stock_serial_number_id' => $serialId,
+                    'serial_tracking_metadata' => $serialId ? json_encode($this->saleReturnSerialTrackingMetadata($saleDelivery, $line, $serialId), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+                    'notes' => $reason,
+                    'metadata' => json_encode([
+                        'original_stock_movement_line_id' => (int) $original->id,
+                        'original_cost_source' => $original->cost_source ?? null,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]));
+
+                $movementLineId = DB::table('stock_movement_lines')->insertGetId($this->filterTableColumns('stock_movement_lines', [
+                    'stock_movement_id' => $movementId,
+                    'product_id' => $line->product_id,
+                    'product_variant_id' => $line->product_variant_id,
+                    'lot_id' => $lotId,
+                    'stock_serial_number_id' => $serialId,
+                    'requested_quantity' => $qty,
+                    'done_quantity' => $qty,
+                    'unit_cost' => $unitCost,
+                    'total_cost' => round($qty * $unitCost, 6),
+                    'costing_method' => $costingMethod,
+                    'cost_source' => 'sale_return.original_delivery_cost',
+                    'source_type' => 'sale_return',
+                    'source_id' => $returnId,
+                    'source_line_type' => 'sale_return_line',
+                    'source_line_id' => $returnLineId,
+                    'notes' => 'Devolución de ' . ($line->product_label ?? ('producto #' . $line->product_id)),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]));
+
+                DB::table('sale_return_lines')
+                    ->where('id', $returnLineId)
+                    ->update($this->filterTableColumns('sale_return_lines', [
+                        'stock_movement_line_id' => $movementLineId,
+                        'updated_at' => $now,
+                    ]));
+
+                $this->incrementReturnedSaleQuant(
+                    (int) $saleDelivery->company_id,
+                    (int) $saleDelivery->warehouse_id,
+                    (int) $saleDelivery->source_location_id,
+                    (int) $line->product_id,
+                    ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
+                    $qty,
+                    $lotId,
+                    $unitCost
+                );
+
+                $this->markSaleReturnSerialAvailable(
+                    $serialId,
+                    (int) $saleDelivery->company_id,
+                    (int) $saleDelivery->warehouse_id,
+                    (int) $saleDelivery->source_location_id,
+                    (int) $movementLineId,
+                    $returnId,
+                    $returnLineId
+                );
+            }
+
+            DB::table('sale_returns')
+                ->where('id', $returnId)
+                ->update($this->filterTableColumns('sale_returns', [
+                    'stock_movement_id' => $movementId,
+                    'updated_at' => $now,
+                ]));
+
+            return (int) $returnId;
+        });
+    }
+
     public function cancel(Request $request, SaleDelivery $saleDelivery): RedirectResponse
     {
         if (! $this->userCanUpdateSales()) {
@@ -1124,6 +1419,244 @@ class SaleDeliveryController extends Controller
                 'reserved_quantity' => max(0, $this->decimal($oldQuant->reserved_quantity ?? 0) - $qty),
                 'updated_at' => $now,
             ]));
+    }
+
+
+    protected function originalSaleDeliveryMovementLine(object $line): ?object
+    {
+        if (! Schema::hasTable('stock_movement_lines')) {
+            return null;
+        }
+
+        if (! empty($line->stock_movement_line_id)) {
+            $found = DB::table('stock_movement_lines')
+                ->where('id', (int) $line->stock_movement_line_id)
+                ->first();
+
+            if ($found) {
+                return $found;
+            }
+        }
+
+        return DB::table('stock_movement_lines')
+            ->where('source_type', 'sale_delivery')
+            ->where('source_line_type', 'sale_delivery_line')
+            ->where('source_line_id', $line->id)
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    protected function saleReturnOperationTypeId(SaleDelivery $saleDelivery): ?int
+    {
+        if (! Schema::hasTable('stock_operation_types')) {
+            return null;
+        }
+
+        $existing = DB::table('stock_operation_types')
+            ->where('company_id', $saleDelivery->company_id)
+            ->where('warehouse_id', $saleDelivery->warehouse_id)
+            ->where('code', 'DEV_VENTA')
+            ->value('id');
+
+        if ($existing) {
+            return (int) $existing;
+        }
+
+        return (int) DB::table('stock_operation_types')->insertGetId($this->filterTableColumns('stock_operation_types', [
+            'company_id' => $saleDelivery->company_id,
+            'warehouse_id' => $saleDelivery->warehouse_id,
+            'code' => 'DEV_VENTA',
+            'name' => 'Entrada por devolución de venta',
+            'operation_kind' => 'receipt',
+            'source_location_id' => $saleDelivery->destination_location_id,
+            'destination_location_id' => $saleDelivery->source_location_id,
+            'reference_prefix' => 'DEVVTA',
+            'next_number' => 1,
+            'sequence' => 95,
+            'description' => 'Entrada automática de inventario por devolución de entrega de venta.',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]));
+    }
+
+    protected function nextSaleReturnNumber(int $companyId): string
+    {
+        $prefix = 'DEV-VTA-' . now()->format('Ymd') . '-';
+
+        $last = DB::table('sale_returns')
+            ->where('company_id', $companyId)
+            ->where('number', 'like', $prefix . '%')
+            ->orderByDesc('number')
+            ->value('number');
+
+        $next = 1;
+
+        if ($last && preg_match('/(\d+)$/', (string) $last, $matches)) {
+            $next = ((int) $matches[1]) + 1;
+        }
+
+        return $prefix . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+    }
+
+    protected function incrementReturnedSaleQuant(
+        int $companyId,
+        int $warehouseId,
+        int $locationId,
+        int $productId,
+        ?int $productVariantId,
+        float $quantity,
+        ?int $lotId,
+        ?float $unitCost
+    ): void {
+        $query = DB::table('stock_quants')
+            ->where('company_id', $companyId)
+            ->where('warehouse_id', $warehouseId)
+            ->where('location_id', $locationId)
+            ->where('product_id', $productId);
+
+        if ($productVariantId) {
+            $query->where('product_variant_id', $productVariantId);
+        } else {
+            $query->whereNull('product_variant_id');
+        }
+
+        if ($lotId) {
+            $query->where('lot_id', $lotId);
+        } else {
+            $query->whereNull('lot_id');
+        }
+
+        $quant = $query->lockForUpdate()->first();
+
+        if ($quant) {
+            $oldQty = $this->decimal($quant->quantity ?? 0);
+            $oldAverageCost = $quant->average_cost !== null ? (float) $quant->average_cost : null;
+            $newQty = $this->decimal($oldQty + $quantity);
+
+            $newAverageCost = $oldAverageCost;
+
+            if ($unitCost !== null && $newQty > 0) {
+                $newAverageCost = $oldAverageCost !== null && $oldQty > 0
+                    ? round((($oldQty * $oldAverageCost) + ($quantity * $unitCost)) / $newQty, 6)
+                    : round($unitCost, 6);
+            }
+
+            DB::table('stock_quants')
+                ->where('id', $quant->id)
+                ->update($this->filterTableColumns('stock_quants', [
+                    'quantity' => $newQty,
+                    'average_cost' => $newAverageCost,
+                    'updated_at' => now(),
+                ]));
+
+            return;
+        }
+
+        DB::table('stock_quants')->insert($this->filterTableColumns('stock_quants', [
+            'company_id' => $companyId,
+            'warehouse_id' => $warehouseId,
+            'location_id' => $locationId,
+            'product_id' => $productId,
+            'product_variant_id' => $productVariantId,
+            'lot_id' => $lotId,
+            'quantity' => $this->decimal($quantity),
+            'reserved_quantity' => 0,
+            'average_cost' => $unitCost !== null ? round($unitCost, 6) : null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]));
+    }
+
+    protected function markSaleReturnSerialAvailable(
+        ?int $serialId,
+        int $companyId,
+        int $warehouseId,
+        int $locationId,
+        int $movementLineId,
+        int $saleReturnId,
+        int $saleReturnLineId
+    ): void {
+        if (! $serialId || ! Schema::hasTable('stock_serial_numbers')) {
+            return;
+        }
+
+        $serial = DB::table('stock_serial_numbers')
+            ->where('id', $serialId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $serial) {
+            throw new \RuntimeException('No se encontró la serie a devolver: #' . $serialId);
+        }
+
+        if ((string) ($serial->status ?? '') === 'available') {
+            throw new \RuntimeException('La serie ' . ($serial->serial_number ?? ('#' . $serialId)) . ' ya está disponible. No se puede devolver dos veces.');
+        }
+
+        $updates = [
+            'status' => 'available',
+            'current_warehouse_id' => $warehouseId,
+            'current_location_id' => $locationId,
+            'returned_at' => now(),
+            'returned_by' => auth()->id(),
+            'updated_at' => now(),
+        ];
+
+        if (Schema::hasColumn('stock_serial_numbers', 'metadata')) {
+            $metadata = [];
+
+            if (! empty($serial->metadata)) {
+                $decoded = json_decode((string) $serial->metadata, true);
+                $metadata = is_array($decoded) ? $decoded : [];
+            }
+
+            $metadata['last_sale_return'] = [
+                'source_type' => 'sale_return',
+                'source_id' => $saleReturnId,
+                'source_line_type' => 'sale_return_line',
+                'source_line_id' => $saleReturnLineId,
+                'stock_movement_line_id' => $movementLineId,
+                'returned_at' => now()->toDateTimeString(),
+                'returned_by' => auth()->id(),
+            ];
+
+            $updates['metadata'] = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        DB::table('stock_serial_numbers')
+            ->where('id', $serialId)
+            ->update($this->filterTableColumns('stock_serial_numbers', $updates));
+    }
+
+    protected function saleReturnLotTrackingMetadata(SaleDelivery $saleDelivery, object $line, int $lotId): array
+    {
+        $lot = Schema::hasTable('stock_lots')
+            ? DB::table('stock_lots')->where('id', $lotId)->first()
+            : null;
+
+        return [
+            'stock_lot_id' => $lotId,
+            'lot_number' => $lot->lot_number ?? null,
+            'source_type' => 'sale_return',
+            'sale_delivery_id' => (int) $saleDelivery->id,
+            'sale_delivery_line_id' => (int) $line->id,
+        ];
+    }
+
+    protected function saleReturnSerialTrackingMetadata(SaleDelivery $saleDelivery, object $line, int $serialId): array
+    {
+        $serial = Schema::hasTable('stock_serial_numbers')
+            ? DB::table('stock_serial_numbers')->where('id', $serialId)->first()
+            : null;
+
+        return [
+            'stock_serial_number_id' => $serialId,
+            'serial_number' => $serial->serial_number ?? null,
+            'source_type' => 'sale_return',
+            'sale_delivery_id' => (int) $saleDelivery->id,
+            'sale_delivery_line_id' => (int) $line->id,
+        ];
     }
 
     protected function stockOperationTypeId(int $companyId): ?int

@@ -169,6 +169,42 @@ protected static ?string $modelLabel = 'entrega de venta';
                     ->url(fn (SaleDelivery $record): string => route('sales.deliveries.print', ['saleDelivery' => $record->id]))
                     ->openUrlInNewTab(),
 
+                Tables\Actions\Action::make('return_delivery')
+                    ->label('Devolver')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('warning')
+                    ->visible(fn (SaleDelivery $record): bool => (string) $record->status === 'done' && ! empty($record->stock_movement_id))
+                    ->form([
+                        \Filament\Forms\Components\Textarea::make('reason')
+                            ->label('Motivo de la devolución')
+                            ->required()
+                            ->maxLength(500),
+                    ])
+                    ->requiresConfirmation()
+                    ->modalHeading('Devolver entrega')
+                    ->modalDescription('Se creará una devolución total de esta entrega y el inventario regresará al almacén con lote/serie/costo original.')
+                    ->modalSubmitActionLabel('Registrar devolución')
+                    ->action(function (SaleDelivery $record, array $data): void {
+                        try {
+                            $returnId = app(\App\Http\Controllers\SaleDeliveryController::class)
+                                ->createSaleReturnFromDelivery($record, (string) ($data['reason'] ?? ''));
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('Devolución registrada')
+                                ->body('Se registró la devolución de venta #' . $returnId . ' y se reingresó el inventario.')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            report($e);
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('No se pudo registrar la devolución')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
                 Tables\Actions\Action::make('validate_delivery')
                     ->label('Validar')
                     ->icon('heroicon-o-check-circle')

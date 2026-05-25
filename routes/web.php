@@ -242,6 +242,12 @@ if (class_exists(\App\Http\Controllers\SaleDeliveryController::class)) {
 }
 // END BEXIA V5.29.4 sales delivery validate route
 
+// BEXIA V5.63.11c sales delivery return route
+Route::post('/sales-deliveries/{saleDelivery}/return', [\App\Http\Controllers\SaleDeliveryController::class, 'returnDelivery'])
+    ->middleware(['web', 'auth'])
+    ->name('sales.deliveries.return');
+// END BEXIA V5.63.11c sales delivery return route
+
 
 // BEXIA V5.29.4 sales delivery show route
 if (class_exists(\App\Http\Controllers\SaleDeliveryController::class)) {
