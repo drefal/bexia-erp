@@ -8,6 +8,7 @@ use App\Models\EmployeeContract;
 use App\Models\EmployeeIncident;
 use App\Models\PayrollRun;
 use App\Models\PayrollRunLine;
+use App\Models\PayrollPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +22,8 @@ class PayrollRunCalculator
 
         return DB::transaction(function () use ($run, $userId): PayrollRun {
             $run->lines()->delete();
+
+            $policy = static::activePolicy((int) $run->company_id);
 
             $employees = static::employeesForRun($run);
             $summary = [
@@ -36,7 +39,7 @@ class PayrollRunCalculator
             ];
 
             foreach ($employees as $employee) {
-                $line = static::calculateEmployee($run, $employee);
+                $line = static::calculateEmployee($run, $employee, $policy);
                 $line->save();
 
                 $summary['employees']++;
@@ -92,8 +95,10 @@ class PayrollRunCalculator
             ->get();
     }
 
-    public static function calculateEmployee(PayrollRun $run, Employee $employee): PayrollRunLine
+    public static function calculateEmployee(PayrollRun $run, Employee $employee, array $policy = []): PayrollRunLine
     {
+        $policy = $policy ?: static::activePolicy((int) $run->company_id);
+
         $periodStart = CarbonImmutable::parse($run->period_start)->startOfDay();
         $periodEnd = CarbonImmutable::parse($run->period_end)->startOfDay();
         $periodDays = $periodStart->diffInDays($periodEnd) + 1;
@@ -120,14 +125,20 @@ class PayrollRunCalculator
             'rest_day_worked_days' => (float) $attendances->where('status', 'rest_day_worked')->count(),
         ];
 
+        $attendancePolicy = static::applyAttendancePolicy($attendanceSummary, $salary, $policy);
+        $attendanceSummary = $attendancePolicy['attendance'];
+
         $incidents = static::approvedPayrollIncidents($run, $employee);
         $incidentAmounts = static::incidentAmounts($incidents, $salary);
+        $policyDeductions = static::attendancePolicyDeductions($attendancePolicy, $salary, $policy);
 
         $baseAmount = static::baseAmount($salary, $periodDays, $attendanceSummary);
-        $overtimeAmount = round($salary['hourly_rate'] * 2 * $attendanceSummary['overtime_hours'], 2);
+
+        $overtimeMultiplier = (float) ($policy['overtime_multiplier'] ?? 2);
+        $overtimeAmount = round($salary['hourly_rate'] * $overtimeMultiplier * $attendanceSummary['overtime_hours'], 2);
 
         $grossAmount = round($baseAmount + $overtimeAmount + $incidentAmounts['perceptions'], 2);
-        $deductionsAmount = round($incidentAmounts['deductions'], 2);
+        $deductionsAmount = round($incidentAmounts['deductions'] + $policyDeductions['amount'], 2);
         $netAmount = round(max(0, $grossAmount - $deductionsAmount), 2);
 
         return new PayrollRunLine([
@@ -166,9 +177,22 @@ class PayrollRunCalculator
                 'period_end' => $periodEnd->toDateString(),
                 'attendance_ids' => $attendances->pluck('id')->values()->all(),
                 'approved_incident_ids' => $incidents->pluck('id')->values()->all(),
+                'payroll_policy' => [
+                    'id' => $policy['id'] ?? null,
+                    'name' => $policy['name'] ?? 'Defaults internos',
+                    'overtime_multiplier' => $overtimeMultiplier ?? (float) ($policy['overtime_multiplier'] ?? 2),
+                    'late_tolerance_minutes' => (int) ($policy['late_tolerance_minutes'] ?? 0),
+                    'late_discount_mode' => $policy['late_discount_mode'] ?? 'none',
+                    'late_minutes_to_absence' => (int) ($policy['late_minutes_to_absence'] ?? 0),
+                    'early_leave_discount_mode' => $policy['early_leave_discount_mode'] ?? 'none',
+                    'absence_discount_mode' => $policy['absence_discount_mode'] ?? 'incident_only',
+                    'policy_deductions' => $policyDeductions ?? ['amount' => 0, 'items' => []],
+                    'raw_attendance' => $attendancePolicy['raw'] ?? [],
+                    'effective_attendance' => $attendancePolicy['effective'] ?? [],
+                ],
                 'formula' => [
                     'base_amount' => 'salary basis by salary_type',
-                    'overtime_amount' => 'hourly_rate * 2 * overtime_hours',
+                    'overtime_amount' => 'hourly_rate * ' . ($overtimeMultiplier ?? (float) ($policy['overtime_multiplier'] ?? 2)) . ' * overtime_hours',
                     'net_amount' => 'gross_amount - deductions_amount',
                 ],
             ],
@@ -235,6 +259,148 @@ class PayrollRunCalculator
         }
 
         return round($salary['daily_salary'] * $periodDays, 2);
+    }
+
+
+    protected static function activePolicy(int $companyId): array
+    {
+        if (! class_exists(PayrollPolicy::class)) {
+            return static::defaultPolicy();
+        }
+
+        try {
+            $policy = PayrollPolicy::query()
+                ->where('company_id', $companyId)
+                ->where('is_active', true)
+                ->where('status', 'active')
+                ->orderByDesc('id')
+                ->first();
+        } catch (\Throwable) {
+            $policy = null;
+        }
+
+        if (! $policy) {
+            return static::defaultPolicy();
+        }
+
+        return [
+            'id' => $policy->id,
+            'name' => $policy->name,
+            'overtime_multiplier' => (float) $policy->overtime_multiplier,
+            'rest_day_overtime_multiplier' => (float) $policy->rest_day_overtime_multiplier,
+            'holiday_overtime_multiplier' => (float) $policy->holiday_overtime_multiplier,
+            'late_tolerance_minutes' => (int) $policy->late_tolerance_minutes,
+            'late_discount_mode' => (string) $policy->late_discount_mode,
+            'late_minutes_to_absence' => (int) $policy->late_minutes_to_absence,
+            'early_leave_discount_mode' => (string) $policy->early_leave_discount_mode,
+            'absence_discount_mode' => (string) $policy->absence_discount_mode,
+            'rest_day_worked_mode' => (string) $policy->rest_day_worked_mode,
+            'holiday_worked_mode' => (string) $policy->holiday_worked_mode,
+        ];
+    }
+
+    protected static function defaultPolicy(): array
+    {
+        return [
+            'id' => null,
+            'name' => 'Defaults internos',
+            'overtime_multiplier' => 2.0,
+            'rest_day_overtime_multiplier' => 2.0,
+            'holiday_overtime_multiplier' => 2.0,
+            'late_tolerance_minutes' => 0,
+            'late_discount_mode' => 'none',
+            'late_minutes_to_absence' => 0,
+            'early_leave_discount_mode' => 'none',
+            'absence_discount_mode' => 'incident_only',
+            'rest_day_worked_mode' => 'informational',
+            'holiday_worked_mode' => 'informational',
+        ];
+    }
+
+    protected static function applyAttendancePolicy(array $attendanceSummary, array $salary, array $policy): array
+    {
+        $raw = [
+            'late_minutes' => (int) ($attendanceSummary['late_minutes'] ?? 0),
+            'early_leave_minutes' => (int) ($attendanceSummary['early_leave_minutes'] ?? 0),
+            'absence_days' => (float) ($attendanceSummary['absence_days'] ?? 0),
+            'overtime_minutes' => (int) ($attendanceSummary['overtime_minutes'] ?? 0),
+            'overtime_hours' => (float) ($attendanceSummary['overtime_hours'] ?? 0),
+        ];
+
+        $lateTolerance = max(0, (int) ($policy['late_tolerance_minutes'] ?? 0));
+        $attendanceSummary['late_minutes'] = max(0, $raw['late_minutes'] - $lateTolerance);
+
+        return [
+            'attendance' => $attendanceSummary,
+            'raw' => $raw,
+            'effective' => [
+                'late_minutes' => (int) $attendanceSummary['late_minutes'],
+                'early_leave_minutes' => (int) ($attendanceSummary['early_leave_minutes'] ?? 0),
+                'absence_days' => (float) ($attendanceSummary['absence_days'] ?? 0),
+                'overtime_minutes' => (int) ($attendanceSummary['overtime_minutes'] ?? 0),
+                'overtime_hours' => (float) ($attendanceSummary['overtime_hours'] ?? 0),
+            ],
+        ];
+    }
+
+    protected static function attendancePolicyDeductions(array $attendancePolicy, array $salary, array $policy): array
+    {
+        $effective = $attendancePolicy['effective'] ?? [];
+        $lateMinutes = (int) ($effective['late_minutes'] ?? 0);
+        $earlyLeaveMinutes = (int) ($effective['early_leave_minutes'] ?? 0);
+        $absenceDays = (float) ($effective['absence_days'] ?? 0);
+
+        $amount = 0.0;
+        $items = [];
+
+        $lateMode = (string) ($policy['late_discount_mode'] ?? 'none');
+        $lateMinutesToAbsence = (int) ($policy['late_minutes_to_absence'] ?? 0);
+
+        if ($lateMode === 'minutes' && $lateMinutes > 0) {
+            $lateAmount = round(($salary['hourly_rate'] / 60) * $lateMinutes, 2);
+            $amount += $lateAmount;
+            $items[] = [
+                'type' => 'late_minutes',
+                'quantity' => $lateMinutes,
+                'amount' => $lateAmount,
+            ];
+        }
+
+        if ($lateMode === 'accumulate_to_absence' && $lateMinutesToAbsence > 0 && $lateMinutes >= $lateMinutesToAbsence) {
+            $days = floor($lateMinutes / $lateMinutesToAbsence);
+            $lateAbsenceAmount = round($salary['daily_salary'] * $days, 2);
+            $amount += $lateAbsenceAmount;
+            $items[] = [
+                'type' => 'late_accumulated_absence',
+                'quantity' => $days,
+                'amount' => $lateAbsenceAmount,
+            ];
+        }
+
+        if (($policy['early_leave_discount_mode'] ?? 'none') === 'minutes' && $earlyLeaveMinutes > 0) {
+            $earlyAmount = round(($salary['hourly_rate'] / 60) * $earlyLeaveMinutes, 2);
+            $amount += $earlyAmount;
+            $items[] = [
+                'type' => 'early_leave_minutes',
+                'quantity' => $earlyLeaveMinutes,
+                'amount' => $earlyAmount,
+            ];
+        }
+
+        if (($policy['absence_discount_mode'] ?? 'incident_only') === 'attendance_days' && $absenceDays > 0) {
+            $absenceAmount = round($salary['daily_salary'] * $absenceDays, 2);
+            $amount += $absenceAmount;
+            $items[] = [
+                'type' => 'attendance_absence_days',
+                'quantity' => $absenceDays,
+                'amount' => $absenceAmount,
+            ];
+        }
+
+        return [
+            'amount' => round($amount, 2),
+            'items' => $items,
+        ];
     }
 
     protected static function approvedPayrollIncidents(PayrollRun $run, Employee $employee)
