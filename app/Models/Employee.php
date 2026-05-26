@@ -265,6 +265,19 @@ class Employee extends Model
      * V5.64.12b-end
      */
 
+
+    /*
+     * V5.64.15b-start
+     * Asistencias / checador del empleado.
+     */
+    public function attendances()
+    {
+        return $this->hasMany(\App\Models\EmployeeAttendance::class);
+    }
+    /*
+     * V5.64.15b-end
+     */
+
     public function getAvatarUrlAttribute(): ?string
     {
         if (blank($this->avatar_path)) {

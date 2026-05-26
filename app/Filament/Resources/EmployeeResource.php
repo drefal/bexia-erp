@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\EmployeeResource\Pages;
 use App\Filament\Resources\EmployeeResource\RelationManagers\DocumentsRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\AttendancesRelationManager;
 use App\Filament\Resources\EmployeeResource\RelationManagers\ContractsRelationManager;
 use App\Filament\Resources\EmployeeResource\RelationManagers\IncidentsRelationManager;
 use App\Filament\Resources\EmployeeResource\RelationManagers\TerminationsRelationManager;
@@ -729,6 +730,7 @@ public static function canCreate(): bool
             DocumentsRelationManager::class,
             ContractsRelationManager::class,
             TerminationsRelationManager::class,
+            AttendancesRelationManager::class,
             IncidentsRelationManager::class,
             VacationBalancesRelationManager::class,
         ];
