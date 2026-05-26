@@ -6,6 +6,7 @@ use App\Filament\Resources\PayrollRunResource\Pages;
 use App\Filament\Resources\PayrollRunResource\RelationManagers\LinesRelationManager;
 use App\Models\PayrollRun;
 use App\Support\PayrollRunCalculator;
+use App\Support\PayrollRunExportService;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -15,6 +16,8 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PayrollRunResource extends Resource
 {
@@ -88,6 +91,63 @@ class PayrollRunResource extends Resource
     public static function canDeleteAny(): bool
     {
         return static::bexiaCanPayrollPermission('nomina.prenomina.eliminar');
+    }
+
+
+    public static function exportExcel(PayrollRun $record): BinaryFileResponse
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'bexia_payroll_run_');
+
+        if ($tmp === false) {
+            throw new \RuntimeException('No se pudo crear archivo temporal para Excel.');
+        }
+
+        $path = $tmp . '.xlsx';
+        @rename($tmp, $path);
+
+        PayrollRunExportService::writeExcel($path, $record);
+
+        return response()
+            ->download($path, static::exportFilename($record, 'xlsx'), [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])
+            ->deleteFileAfterSend(true);
+    }
+
+    public static function exportPdf(PayrollRun $record): StreamedResponse
+    {
+        if (! app()->bound('dompdf.wrapper')) {
+            throw new \RuntimeException('No hay motor PDF instalado (barryvdh/laravel-dompdf).');
+        }
+
+        $data = PayrollRunExportService::data($record);
+
+        $pdf = app('dompdf.wrapper')
+            ->loadView('reports.hr.payroll-run-pdf', $data)
+            ->setPaper('letter', 'landscape');
+
+        return response()->streamDownload(function () use ($pdf): void {
+            echo $pdf->output();
+        }, static::exportFilename($record, 'pdf'), [
+            'Content-Type' => 'application/pdf',
+        ]);
+    }
+
+    protected static function exportFilename(PayrollRun $record, string $extension): string
+    {
+        $from = $record->period_start?->format('Ymd') ?: 'sin_inicio';
+        $to = $record->period_end?->format('Ymd') ?: 'sin_fin';
+        $name = preg_replace('/[^A-Za-z0-9_-]+/', '_', (string) $record->name) ?: 'prenomina';
+
+        return "prenomina_{$record->id}_{$from}_{$to}_{$name}.{$extension}";
+    }
+
+    protected static function updateStatus(PayrollRun $record, string $status): void
+    {
+        $record->forceFill([
+            'status' => $status,
+            'updated_by_user_id' => auth()->id(),
+        ])->save();
     }
 
     public static function getEloquentQuery(): Builder
@@ -237,6 +297,65 @@ class PayrollRunResource extends Resource
                                 ->danger()
                                 ->send();
                         }
+                    }),
+
+                Tables\Actions\Action::make('export_excel')
+                    ->label('Excel')
+                    ->icon('heroicon-o-table-cells')
+                    ->color('success')
+                    ->visible(fn (PayrollRun $record): bool => $record->lines()->exists())
+                    ->action(fn (PayrollRun $record): BinaryFileResponse => static::exportExcel($record)),
+
+                Tables\Actions\Action::make('export_pdf')
+                    ->label('PDF')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('gray')
+                    ->visible(fn (PayrollRun $record): bool => $record->lines()->exists())
+                    ->action(fn (PayrollRun $record): StreamedResponse => static::exportPdf($record)),
+
+                Tables\Actions\Action::make('approve')
+                    ->label('Aprobar')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('info')
+                    ->requiresConfirmation()
+                    ->visible(fn (PayrollRun $record): bool => static::bexiaCanPayrollPermission('nomina.prenomina.aprobar') && $record->status === 'calculated')
+                    ->action(function (PayrollRun $record): void {
+                        static::updateStatus($record, 'approved');
+
+                        Notification::make()
+                            ->title('Pre-nómina aprobada')
+                            ->success()
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('close')
+                    ->label('Cerrar')
+                    ->icon('heroicon-o-lock-closed')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->visible(fn (PayrollRun $record): bool => static::bexiaCanPayrollPermission('nomina.prenomina.cerrar') && $record->status === 'approved')
+                    ->action(function (PayrollRun $record): void {
+                        static::updateStatus($record, 'closed');
+
+                        Notification::make()
+                            ->title('Pre-nómina cerrada')
+                            ->success()
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('cancel')
+                    ->label('Cancelar')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->visible(fn (PayrollRun $record): bool => static::bexiaCanPayrollPermission('nomina.prenomina.editar') && ! in_array($record->status, ['closed', 'cancelled'], true))
+                    ->action(function (PayrollRun $record): void {
+                        static::updateStatus($record, 'cancelled');
+
+                        Notification::make()
+                            ->title('Pre-nómina cancelada')
+                            ->warning()
+                            ->send();
                     }),
 
                 Tables\Actions\EditAction::make(),
