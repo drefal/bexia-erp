@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use App\Support\EmployeeOrganizationResolver;
 
 class Employee extends Model
 {
@@ -107,6 +108,29 @@ class Employee extends Model
         'payroll_periodicity_id' => 'integer',
         'payroll_employer_registration_id' => 'integer',
     ];
+
+
+    /*
+     * V5.64.13b-start
+     * Validación básica de organigrama.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Employee $employee): void {
+            if (
+                $employee->exists
+                && ! $employee->isDirty('manager_employee_id')
+                && ! $employee->isDirty('coach_employee_id')
+            ) {
+                return;
+            }
+
+            EmployeeOrganizationResolver::validateHierarchy($employee);
+        });
+    }
+    /*
+     * V5.64.13b-end
+     */
 
     public function company()
     {

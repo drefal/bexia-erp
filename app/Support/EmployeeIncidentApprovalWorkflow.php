@@ -303,6 +303,14 @@ class EmployeeIncidentApprovalWorkflow
 
     protected static function requesterManagerId(EmployeeIncident $incident): ?int
     {
+        if (class_exists(EmployeeOrganizationResolver::class)) {
+            $employeeManagerUserId = EmployeeOrganizationResolver::approvalManagerUserIdForIncident($incident);
+
+            if ($employeeManagerUserId) {
+                return $employeeManagerUserId;
+            }
+        }
+
         if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'approval_manager_user_id')) {
             return null;
         }

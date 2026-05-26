@@ -16,6 +16,7 @@ use App\Models\HrWorkSchedule;
 use App\Models\HrJobPosition;
 use App\Models\HrDepartment;
 use App\Models\User;
+use App\Support\EmployeeOrganizationResolver;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
@@ -29,6 +30,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -112,6 +114,15 @@ public static function canCreate(): bool
             && (
                 $user?->can('contacts.view')
             );
+    }
+
+
+    public static function employeeHierarchyOptions(?Employee $record = null): array
+    {
+        $companyId = (int) (Filament::getTenant()?->getKey() ?? $record?->company_id ?? 0);
+        $excludeId = $record?->id ? (int) $record->id : null;
+
+        return EmployeeOrganizationResolver::activeEmployeeOptions($companyId ?: null, $excludeId);
     }
 
     public static function form(Form $form): Form
@@ -203,32 +214,22 @@ public static function canCreate(): bool
                                                 ->helperText('Campo anterior. Úsalo solo si el departamento no está en catálogo.'),
 
                                             Select::make('manager_employee_id')
-                                                ->label('Gerente')
-                                                ->options(fn () => self::employeeOptions())
-                                                ->searchable()
-                                                ->preload(),
+                                            ->label('Jefe directo')
+                                            ->options(fn (?Employee $record): array => self::employeeHierarchyOptions($record))
+                                            ->searchable()
+                                            ->preload()
+                                            ->live()
+                                            ->nullable()
+                                            ->helperText('Solo se muestran empleados activos de la misma empresa. No se permite seleccionar al mismo empleado ni generar ciclos de jerarquía.'),
 
                                             Select::make('coach_employee_id')
-                                                ->label('Instructor')
-                                                ->options(fn () => self::employeeOptions())
-                                                ->searchable()
-                                                ->preload(),
-
-                                            TextInput::make('ssn')
-                                                ->label('Número de seguro social')
-                                                ->maxLength(255),
-
-                                            TextInput::make('curp')
-                                                ->label('Clave CURP')
-                                                ->maxLength(255),
-
-                                            TextInput::make('rfc')
-                                                ->label('Clave RFC')
-                                                ->maxLength(255),
-
-                                            Placeholder::make('empresa_actual')
-                                                ->label('Empresa')
-                                                ->content(fn () => Filament::getTenant()?->name ?? '-'),
+                                            ->label('Instructor / coach')
+                                            ->options(fn (?Employee $record): array => self::employeeHierarchyOptions($record))
+                                            ->searchable()
+                                            ->preload()
+                                            ->live()
+                                            ->nullable()
+                                            ->helperText('Opcional. Usa este campo para mentor, capacitador o responsable funcional.'),
                                         ])
                                         ->columns(2)
                                         ->columnSpan(10),
