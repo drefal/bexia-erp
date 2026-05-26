@@ -139,6 +139,12 @@ class PayrollCfdiReceiptResource extends Resource
                     ->copyable()
                     ->toggleable(),
 
+                Tables\Columns\TextColumn::make('xml_path')
+                    ->label('XML')
+                    ->formatStateUsing(fn (?string $state): string => filled($state) ? 'Generado' : 'Pendiente')
+                    ->badge()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('validated_at')
                     ->label('Validado')
                     ->dateTime('Y-m-d H:i')
@@ -162,6 +168,39 @@ class PayrollCfdiReceiptResource extends Resource
                     ->options(self::statusOptions()),
             ])
             ->actions([
+                Tables\Actions\Action::make('prepare_receipt_xml_draft')
+                    ->label('Generar XML')
+                    ->icon('heroicon-o-document-text')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Generar XML CFDI nomina')
+                    ->modalDescription('Generara XML CFDI de nomina en borrador para la corrida de este recibo. No timbra ni envia datos al PAC/SAT.')
+                    ->visible(fn ($record): bool => ! in_array((string) $record->status, ['stamped', 'cancelled'], true))
+                    ->action(function ($record): void {
+                        $result = app(\App\Support\PayrollCfdi\PayrollCfdiXmlDraftService::class)->prepareForRun(
+                            companyId: (int) $record->company_id,
+                            payrollRunId: (int) $record->payroll_run_id,
+                            userId: auth()->id(),
+                            force: false,
+                        );
+
+                        if (! ($result['success'] ?? false)) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('No se pudo generar XML CFDI')
+                                ->body(collect($result['errors'] ?? [])->take(5)->implode(PHP_EOL) ?: ($result['message'] ?? 'Revisa los datos del recibo.'))
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('XML CFDI generado')
+                            ->body('Generados/actualizados: ' . ($result['updated'] ?? 0) . '. Omitidos: ' . ($result['skipped'] ?? 0) . '.')
+                            ->success()
+                            ->send();
+                    }),
+
                 Tables\Actions\ViewAction::make()->label('Ver'),
             ])
             ->bulkActions([])

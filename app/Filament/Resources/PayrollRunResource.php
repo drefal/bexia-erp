@@ -335,6 +335,39 @@ class PayrollRunResource extends Resource
                             ->send();
                     }),
 
+                Tables\Actions\Action::make('prepare_payroll_cfdi_xml_drafts')
+                    ->label('Generar XML')
+                    ->icon('heroicon-o-document-text')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Generar XML CFDI nomina')
+                    ->modalDescription('Generara XML CFDI de nomina en borrador para los recibos de esta corrida. No timbra, no genera UUID y no envia datos al PAC/SAT.')
+                    ->visible(fn ($record): bool => filled($record->payroll_cfdi_status) && ((int) ($record->payroll_cfdi_ready_lines_count ?? 0) > 0))
+                    ->action(function ($record): void {
+                        $result = app(\App\Support\PayrollCfdi\PayrollCfdiXmlDraftService::class)->prepareForRun(
+                            companyId: (int) $record->company_id,
+                            payrollRunId: (int) $record->id,
+                            userId: auth()->id(),
+                            force: false,
+                        );
+
+                        if (! ($result['success'] ?? false)) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('No se pudo generar XML CFDI')
+                                ->body(collect($result['errors'] ?? [])->take(5)->implode(PHP_EOL) ?: ($result['message'] ?? 'Revisa los recibos CFDI de la nomina.'))
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('XML CFDI generado')
+                            ->body('Generados/actualizados: ' . ($result['updated'] ?? 0) . '. Omitidos: ' . ($result['skipped'] ?? 0) . '.')
+                            ->success()
+                            ->send();
+                    }),
+
                 Tables\Actions\Action::make('view_payroll_cfdi_receipts')
                     ->label('Ver CFDI')
                     ->icon('heroicon-o-eye')
