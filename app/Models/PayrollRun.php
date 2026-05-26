@@ -23,6 +23,15 @@ class PayrollRun extends Model
         'deductions_total',
         'net_total',
         'summary',
+        'approval_status',
+        'approval_request_id',
+        'approval_requested_by_user_id',
+        'approval_requested_at',
+        'approved_by_user_id',
+        'approved_at',
+        'rejected_by_user_id',
+        'rejected_at',
+        'rejection_reason',
         'notes',
         'created_by_user_id',
         'updated_by_user_id',
@@ -31,6 +40,9 @@ class PayrollRun extends Model
     ];
 
     protected $casts = [
+        'rejected_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'approval_requested_at' => 'datetime',
         'period_start' => 'date',
         'period_end' => 'date',
         'payment_date' => 'date',
@@ -90,6 +102,7 @@ class PayrollRun extends Model
         return [
             'draft' => 'Borrador',
             'calculated' => 'Calculada',
+            'pending_approval' => 'Pendiente de aprobación',
             'approved' => 'Aprobada',
             'closed' => 'Cerrada',
             'cancelled' => 'Cancelada',

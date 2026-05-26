@@ -183,6 +183,10 @@ class ApprovalInbox
         $id = (int) ($row->approvable_id ?? 0);
         $number = (string) ($row->document_number ?? '');
 
+        if ($type === 'payroll_run' && $id > 0 && Schema::hasTable('payroll_runs')) {
+            return (int) DB::table('payroll_runs')->where('id', $id)->value('company_id');
+        }
+
         if ($type === 'employee_incident' && $id > 0 && Schema::hasTable('employee_incidents')) {
             return (int) DB::table('employee_incidents')->where('id', $id)->value('company_id');
         }

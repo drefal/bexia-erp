@@ -7,6 +7,7 @@ use App\Filament\Resources\PayrollRunResource\RelationManagers\LinesRelationMana
 use App\Models\PayrollRun;
 use App\Support\PayrollRunCalculator;
 use App\Support\PayrollRunExportService;
+use App\Support\PayrollRunApprovalWorkflow;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -313,19 +314,78 @@ class PayrollRunResource extends Resource
                     ->visible(fn (PayrollRun $record): bool => $record->lines()->exists())
                     ->action(fn (PayrollRun $record): StreamedResponse => static::exportPdf($record)),
 
-                Tables\Actions\Action::make('approve')
-                    ->label('Aprobar')
-                    ->icon('heroicon-o-check-circle')
+                Tables\Actions\Action::make('request_approval')
+                    ->label('Solicitar aprobación')
+                    ->icon('heroicon-o-paper-airplane')
                     ->color('info')
                     ->requiresConfirmation()
-                    ->visible(fn (PayrollRun $record): bool => static::bexiaCanPayrollPermission('nomina.prenomina.aprobar') && $record->status === 'calculated')
+                    ->visible(fn (PayrollRun $record): bool => static::bexiaCanPayrollPermission('nomina.prenomina.solicitar_aprobacion') && $record->status === 'calculated')
                     ->action(function (PayrollRun $record): void {
-                        static::updateStatus($record, 'approved');
+                        try {
+                            PayrollRunApprovalWorkflow::sendToApproval($record, auth()->id());
 
-                        Notification::make()
-                            ->title('Pre-nómina aprobada')
-                            ->success()
-                            ->send();
+                            Notification::make()
+                                ->title('Pre-nómina enviada a aprobación')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('No se pudo solicitar aprobación')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
+                Tables\Actions\Action::make('approve_pending_approval')
+                    ->label('Aprobar')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->visible(fn (PayrollRun $record): bool => PayrollRunApprovalWorkflow::currentUserCanActOnPendingRequest($record))
+                    ->action(function (PayrollRun $record): void {
+                        try {
+                            PayrollRunApprovalWorkflow::approvePendingRequestForRun($record, auth()->id());
+
+                            Notification::make()
+                                ->title('Pre-nómina aprobada')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('No se pudo aprobar')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
+                Tables\Actions\Action::make('reject_pending_approval')
+                    ->label('Rechazar')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->form([
+                        Forms\Components\Textarea::make('reason')
+                            ->label('Motivo del rechazo')
+                            ->required()
+                            ->rows(3),
+                    ])
+                    ->visible(fn (PayrollRun $record): bool => PayrollRunApprovalWorkflow::currentUserCanActOnPendingRequest($record))
+                    ->action(function (PayrollRun $record, array $data): void {
+                        try {
+                            PayrollRunApprovalWorkflow::rejectPendingRequestForRun($record, auth()->id(), (string) ($data['reason'] ?? ''));
+
+                            Notification::make()
+                                ->title('Pre-nómina rechazada')
+                                ->warning()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('No se pudo rechazar')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
                     }),
 
                 Tables\Actions\Action::make('close')

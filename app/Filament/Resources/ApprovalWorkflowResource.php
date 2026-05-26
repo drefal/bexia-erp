@@ -317,6 +317,7 @@ public static function documentTypeOptions(): array
             'sales_order' => 'Orden de venta',
             'sales_margin_approval' => 'Aprobación de margen de venta',
             'employee_incident' => 'Incidencia RRHH',
+            'payroll_run' => 'Aprobación de pre-nómina',
         ];
     }
 

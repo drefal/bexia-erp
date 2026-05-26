@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Support\EmployeeIncidentApprovalWorkflow;
+use App\Support\PayrollRunApprovalWorkflow;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -89,6 +90,7 @@ class MySentApprovalStatuses extends Page
                 'from_tab' => in_array($type, ['sales_quote', 'sales_:quote', 'sale_quote', 'sales_margin_approval'], true) ? 'por_aprobar' : 'ordenes',
             ]),
             'employee_incident' => EmployeeIncidentApprovalWorkflow::documentUrl($row),
+            'payroll_run' => PayrollRunApprovalWorkflow::documentUrl($row),
             default => '#',
         };
     }
