@@ -41,7 +41,7 @@ class EmployeeResource extends Resource
     protected static ?string $navigationLabel = 'Empleados';
     protected static bool $isScopedToTenant = false;
     protected static ?string $navigationIcon = 'heroicon-o-identification';
-    protected static ?string $navigationGroup = 'Recursos Humanos';
+    protected static ?string $navigationGroup = 'RRHH';
     protected static ?int $navigationSort = 10;
     protected static ?string $tenantOwnershipRelationshipName = null;
 
@@ -113,8 +113,8 @@ public static function canCreate(): bool
     {
         return $form->schema([
 
-                Forms\Components\Section::make('Punto de Venta')
-                    ->description('Define la capacidad general del empleado para PDV. Los permisos específicos por caja se asignan en Punto de Venta > Personal de cajas.')
+                Forms\Components\Section::make('Accesos operativos / PDV')
+                    ->description('Define si el empleado puede operar como cajero o vendedor en PDV. Los permisos específicos por caja se asignan en Punto de Venta > Personal de cajas.')
                     ->columns(3)
                     ->schema([
                         Forms\Components\Toggle::make('pos_active')
@@ -139,7 +139,8 @@ public static function canCreate(): bool
 
             Grid::make(12)
                 ->schema([
-                    Section::make()
+                    Section::make('Ficha laboral')
+                        ->description('Datos principales del empleado dentro de la empresa actual.')
                         ->schema([
                             Grid::make(12)
                                 ->schema([
@@ -164,7 +165,7 @@ public static function canCreate(): bool
                                                 ->options(fn () => self::hrJobPositionOptions())
                                                 ->searchable()
                                                 ->preload()
-                                                ->helperText('Puesto ligado al catálogo de RRHH.'),
+                                                ->helperText('Catálogo activo de puestos de la empresa actual.'),
 
                                             TextInput::make('position')
                                                 ->label('Puesto libre / legado')
@@ -189,7 +190,7 @@ public static function canCreate(): bool
                                                 ->options(fn () => self::hrDepartmentOptions())
                                                 ->searchable()
                                                 ->preload()
-                                                ->helperText('Departamento ligado al catálogo de RRHH.'),
+                                                ->helperText('Catálogo activo de departamentos de la empresa actual.'),
 
                                             TextInput::make('department')
                                                 ->label('Departamento libre / legado')
@@ -232,7 +233,7 @@ public static function canCreate(): bool
 
                     Tabs::make('EmpleadoTabs')
                         ->tabs([
-                            Tabs\Tab::make('Información del trabajo')
+                            Tabs\Tab::make('Trabajo y horario')
                                 ->schema([
                                     Section::make('Ubicación')
                                         ->schema([
@@ -281,7 +282,7 @@ public static function canCreate(): bool
                                         ->content('Módulo pendiente. Aquí se podrán mostrar insignias y reconocimientos del empleado.'),
                                 ]),
 
-                            Tabs\Tab::make('Información privada')
+                            Tabs\Tab::make('Datos personales')
                                 ->schema([
                                     Section::make('Contacto privado')
                                         ->schema([
@@ -434,9 +435,10 @@ public static function canCreate(): bool
                                         ->columns(2),
                                 ]),
 
-                            Tabs\Tab::make('Ajustes de RR. HH.')
+                            Tabs\Tab::make('Contrato y nómina')
                                 ->schema([
-                                    Section::make('Estado')
+                                    Section::make('Relación laboral')
+                                        ->description('Clasificación del empleado, relación con usuario del sistema y parámetros de nómina.')
                                         ->schema([
                                             Select::make('employee_type')
                                                 ->label('Tipo de empleado')
@@ -459,7 +461,7 @@ public static function canCreate(): bool
                                                 ->options(fn () => self::payrollEmployerRegistrationOptions())
                                                 ->searchable()
                                                 ->preload()
-                                                ->helperText('Si no aparece información, primero captura el registro patronal en Nómina.'),
+                                                ->helperText('Para demo puedes usar DEMO-0000000. Para nómina real captura el registro patronal oficial del IMSS.'),
 
                                             Select::make('user_id')
                                                 ->label('Usuario relacionado')
@@ -473,7 +475,7 @@ public static function canCreate(): bool
                                         ])
                                         ->columns(2),
 
-                                    Section::make('Ajustes de la aplicación')
+                                    Section::make('Control interno')
                                         ->schema([
                                             TextInput::make('hourly_cost')
                                                 ->label('Costo por hora')
@@ -667,15 +669,19 @@ public static function canCreate(): bool
                     ->label('Periodicidad')
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                Tables\Columns\TextColumn::make('payrollEmployerRegistration.name')
+                    ->label('Registro patronal')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('position')
-                    ->label('Puesto')
+                    ->label('Puesto legado')
                     ->searchable()
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('department')
-                    ->label('Departamento')
+                    ->label('Departamento legado')
                     ->searchable()
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('branch.name')
                     ->label('Ubicación')
