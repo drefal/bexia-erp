@@ -144,6 +144,156 @@ class ViewPayrollCfdiReceipt extends ViewRecord
                         ->success()
                         ->send();
                 }),
+
+            Actions\Action::make('alternate_mark_internal_only')
+                ->label('Recibo interno')
+                ->icon('heroicon-o-document-text')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Marcar como recibo interno')
+                ->modalDescription('El recibo quedará como control interno sin CFDI fiscal. No se enviará al PAC/SAT.')
+                ->modalSubmitActionLabel('Sí, marcar interno')
+                ->visible(fn (): bool => in_array((string) ($this->record->status ?? ''), ['draft', 'validated', 'stamp_error', 'error'], true))
+                ->form([
+                    \Filament\Forms\Components\Textarea::make('reason')
+                        ->label('Motivo')
+                        ->rows(3)
+                        ->maxLength(500)
+                        ->required(),
+                ])
+                ->action(function (array $data): void {
+                    app(\App\Support\PayrollCfdi\PayrollCfdiAlternateFlowService::class)->markInternalOnly(
+                        companyId: (int) $this->record->company_id,
+                        receiptId: (int) $this->record->id,
+                        reason: (string) ($data['reason'] ?? ''),
+                        userId: auth()->id(),
+                    );
+
+                    $this->record->refresh();
+
+                    Notification::make()
+                        ->title('Recibo marcado como interno')
+                        ->body('No se enviará al PAC/SAT.')
+                        ->success()
+                        ->send();
+                }),
+
+            Actions\Action::make('alternate_mark_not_required')
+                ->label('CFDI no requerido')
+                ->icon('heroicon-o-minus-circle')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Marcar CFDI como no requerido')
+                ->modalDescription('El recibo quedará fuera de los pendientes fiscales. No se enviará al PAC/SAT.')
+                ->modalSubmitActionLabel('Sí, marcar no requerido')
+                ->visible(fn (): bool => in_array((string) ($this->record->status ?? ''), ['draft', 'validated', 'stamp_error', 'error'], true))
+                ->form([
+                    \Filament\Forms\Components\Textarea::make('reason')
+                        ->label('Motivo')
+                        ->rows(3)
+                        ->maxLength(500)
+                        ->required(),
+                ])
+                ->action(function (array $data): void {
+                    app(\App\Support\PayrollCfdi\PayrollCfdiAlternateFlowService::class)->markCfdiNotRequired(
+                        companyId: (int) $this->record->company_id,
+                        receiptId: (int) $this->record->id,
+                        reason: (string) ($data['reason'] ?? ''),
+                        userId: auth()->id(),
+                    );
+
+                    $this->record->refresh();
+
+                    Notification::make()
+                        ->title('CFDI marcado como no requerido')
+                        ->body('El recibo ya no aparecerá como pendiente fiscal.')
+                        ->success()
+                        ->send();
+                }),
+
+            Actions\Action::make('alternate_external_stamp')
+                ->label('Timbrado externo')
+                ->icon('heroicon-o-arrow-up-tray')
+                ->color('info')
+                ->modalHeading('Registrar timbrado externo')
+                ->modalDescription('Registra un UUID timbrado fuera de Bexia. Esta acción no envía nada al PAC/SAT.')
+                ->modalSubmitActionLabel('Registrar externo')
+                ->visible(fn (): bool => in_array((string) ($this->record->status ?? ''), ['draft', 'validated', 'stamp_error', 'error'], true) && blank($this->record->uuid ?? null))
+                ->form([
+                    \Filament\Forms\Components\TextInput::make('uuid')
+                        ->label('UUID externo')
+                        ->required()
+                        ->maxLength(36),
+                    \Filament\Forms\Components\TextInput::make('xml_path')
+                        ->label('Ruta XML en storage local')
+                        ->maxLength(255)
+                        ->helperText('Opcional. Si se informa, debe existir en storage/app.'),
+                    \Filament\Forms\Components\Textarea::make('notes')
+                        ->label('Notas')
+                        ->rows(3)
+                        ->maxLength(500),
+                ])
+                ->action(function (array $data): void {
+                    try {
+                        app(\App\Support\PayrollCfdi\PayrollCfdiAlternateFlowService::class)->registerExternalStamp(
+                            companyId: (int) $this->record->company_id,
+                            receiptId: (int) $this->record->id,
+                            uuid: (string) ($data['uuid'] ?? ''),
+                            xmlPath: filled($data['xml_path'] ?? null) ? (string) $data['xml_path'] : null,
+                            notes: filled($data['notes'] ?? null) ? (string) $data['notes'] : null,
+                            userId: auth()->id(),
+                        );
+
+                        $this->record->refresh();
+
+                        Notification::make()
+                            ->title('Timbrado externo registrado')
+                            ->body('UUID: ' . (string) ($data['uuid'] ?? ''))
+                            ->success()
+                            ->send();
+                    } catch (\Illuminate\Validation\ValidationException $exception) {
+                        Notification::make()
+                            ->title('No se pudo registrar')
+                            ->body(collect($exception->errors())->flatten()->take(5)->implode(PHP_EOL))
+                            ->danger()
+                            ->send();
+                    }
+                }),
+
+            Actions\Action::make('alternate_revert')
+                ->label('Revertir alterno')
+                ->icon('heroicon-o-arrow-uturn-left')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Revertir estado alterno')
+                ->modalDescription('Regresa el recibo a pendiente/validado CFDI. Para timbrado externo se usará reversa forzada.')
+                ->modalSubmitActionLabel('Sí, revertir')
+                ->visible(fn (): bool => in_array((string) ($this->record->status ?? ''), ['internal_only', 'cfdi_not_required', 'external_stamped'], true))
+                ->form([
+                    \Filament\Forms\Components\Textarea::make('reason')
+                        ->label('Motivo')
+                        ->rows(3)
+                        ->maxLength(500)
+                        ->required(),
+                ])
+                ->action(function (array $data): void {
+                    app(\App\Support\PayrollCfdi\PayrollCfdiAlternateFlowService::class)->revertAlternate(
+                        companyId: (int) $this->record->company_id,
+                        receiptId: (int) $this->record->id,
+                        reason: (string) ($data['reason'] ?? ''),
+                        force: (string) ($this->record->status ?? '') === 'external_stamped',
+                        userId: auth()->id(),
+                    );
+
+                    $this->record->refresh();
+
+                    Notification::make()
+                        ->title('Estado alterno revertido')
+                        ->body('El recibo regresó a flujo CFDI.')
+                        ->success()
+                        ->send();
+                }),
+
         ];
     }
 }
