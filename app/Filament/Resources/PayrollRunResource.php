@@ -232,6 +232,31 @@ class PayrollRunResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('payroll_cfdi_status')
+                    ->label('CFDI nomina')
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'drafts_prepared' => 'Borradores listos',
+                        'drafts_error' => 'Error CFDI',
+                        'validated' => 'Validado',
+                        'stamped' => 'Timbrado',
+                        null, '' => 'Sin preparar',
+                        default => $state,
+                    })
+                    ->badge()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('payroll_cfdi_ready_lines_count')
+                    ->label('CFDI listos')
+                    ->numeric()
+                    ->sortable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('payroll_cfdi_error_lines_count')
+                    ->label('Errores CFDI')
+                    ->numeric()
+                    ->sortable()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('name')
                     ->label('Pre-nómina')
                     ->searchable()
@@ -277,6 +302,48 @@ class PayrollRunResource extends Resource
                     ->sortable(),
             ])
             ->actions([
+                Tables\Actions\Action::make('prepare_payroll_cfdi_receipts')
+                    ->label('Preparar CFDI')
+                    ->icon('heroicon-o-document-plus')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Preparar recibos CFDI nomina')
+                    ->modalDescription('Creara recibos CFDI de nomina en borrador para esta corrida cerrada. No timbra, no genera XML y no envia datos al PAC/SAT.')
+                    ->visible(fn ($record): bool => (bool) ($record->is_locked ?? false) && filled($record->closed_at))
+                    ->action(function ($record): void {
+                        $result = app(\App\Support\PayrollCfdi\PayrollCfdiReceiptPreparationService::class)->prepare(
+                            companyId: (int) $record->company_id,
+                            payrollRunId: (int) $record->id,
+                            userId: auth()->id(),
+                            force: false,
+                        );
+
+                        if (! ($result['success'] ?? false)) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('No se pudieron preparar los CFDI')
+                                ->body(collect($result['errors'] ?? [])->take(5)->implode(PHP_EOL) ?: ($result['message'] ?? 'Revisa los datos fiscales de la nomina.'))
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('Recibos CFDI preparados')
+                            ->body('Creados: ' . ($result['created'] ?? 0) . '. Actualizados: ' . ($result['updated'] ?? 0) . '. Omitidos: ' . ($result['skipped'] ?? 0) . '.')
+                            ->success()
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('view_payroll_cfdi_receipts')
+                    ->label('Ver CFDI')
+                    ->icon('heroicon-o-eye')
+                    ->color('gray')
+                    ->visible(fn ($record): bool => filled($record->payroll_cfdi_status) || ((int) ($record->payroll_cfdi_ready_lines_count ?? 0) > 0))
+                    ->url(fn (): string => \App\Filament\Resources\PayrollCfdiReceiptResource::getUrl('index', [
+                        'tenant' => \Filament\Facades\Filament::getTenant(),
+                    ])),
+
                 Tables\Actions\Action::make('calculate')
                     ->label('Calcular')
                     ->icon('heroicon-o-calculator')
