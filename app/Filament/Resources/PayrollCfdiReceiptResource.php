@@ -139,6 +139,12 @@ class PayrollCfdiReceiptResource extends Resource
                     ->copyable()
                     ->toggleable(),
 
+                Tables\Columns\TextColumn::make('pdf_path')
+                    ->label('PDF')
+                    ->formatStateUsing(fn (?string $state): string => filled($state) ? 'Generado' : 'Pendiente')
+                    ->badge()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('xml_path')
                     ->label('XML')
                     ->formatStateUsing(fn (?string $state): string => filled($state) ? 'Generado' : 'Pendiente')
@@ -168,6 +174,44 @@ class PayrollCfdiReceiptResource extends Resource
                     ->options(self::statusOptions()),
             ])
             ->actions([
+                Tables\Actions\Action::make('generate_payroll_cfdi_pdf')
+                    ->label('Generar PDF')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('success')
+                    ->visible(fn ($record): bool => in_array((string) $record->status, ['validated', 'stamped'], true))
+                    ->action(function ($record): void {
+                        $result = app(\App\Support\PayrollCfdi\PayrollCfdiReceiptPdfService::class)->generate(
+                            companyId: (int) $record->company_id,
+                            receiptId: (int) $record->id,
+                            userId: auth()->id(),
+                            force: true,
+                        );
+
+                        if (! ($result['success'] ?? false)) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('No se pudo generar PDF')
+                                ->body($result['message'] ?? 'Revisa el recibo CFDI nómina.')
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('PDF generado')
+                            ->body((string) ($result['summary']['pdf_path'] ?? 'PDF listo.'))
+                            ->success()
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('view_payroll_cfdi_pdf')
+                    ->label('Ver PDF')
+                    ->icon('heroicon-o-eye')
+                    ->color('gray')
+                    ->visible(fn ($record): bool => filled($record->pdf_path))
+                    ->url(fn ($record): string => route('payroll-cfdi-receipts.pdf', ['receipt' => $record->id]))
+                    ->openUrlInNewTab(),
+
                 Tables\Actions\Action::make('stamp_payroll_cfdi')
                     ->label('Timbrar CFDI')
                     ->icon('heroicon-o-shield-check')

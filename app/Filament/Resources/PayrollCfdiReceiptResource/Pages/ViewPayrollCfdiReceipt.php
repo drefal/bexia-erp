@@ -15,6 +15,46 @@ class ViewPayrollCfdiReceipt extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('generate_payroll_cfdi_pdf')
+                ->label('Generar PDF')
+                ->icon('heroicon-o-document-arrow-down')
+                ->color('success')
+                ->visible(fn (): bool => in_array((string) ($this->record->status ?? ''), ['validated', 'stamped'], true))
+                ->action(function (): void {
+                    $result = app(\App\Support\PayrollCfdi\PayrollCfdiReceiptPdfService::class)->generate(
+                        companyId: (int) $this->record->company_id,
+                        receiptId: (int) $this->record->id,
+                        userId: auth()->id(),
+                        force: true,
+                    );
+
+                    if (! ($result['success'] ?? false)) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('No se pudo generar PDF')
+                            ->body($result['message'] ?? 'Revisa el recibo CFDI nómina.')
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    $this->record->refresh();
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('PDF generado')
+                        ->body((string) ($result['summary']['pdf_path'] ?? 'PDF listo.'))
+                        ->success()
+                        ->send();
+                }),
+
+            Actions\Action::make('view_payroll_cfdi_pdf')
+                ->label('Ver PDF')
+                ->icon('heroicon-o-eye')
+                ->color('gray')
+                ->visible(fn (): bool => filled($this->record->pdf_path ?? null))
+                ->url(fn (): string => route('payroll-cfdi-receipts.pdf', ['receipt' => $this->record->id]))
+                ->openUrlInNewTab(),
+
             Actions\Action::make('stamp_payroll_cfdi')
                 ->label('Timbrar CFDI')
                 ->icon('heroicon-o-shield-check')
