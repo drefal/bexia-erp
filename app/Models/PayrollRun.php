@@ -55,6 +55,11 @@ class PayrollRun extends Model
         return $this->hasMany(\App\Models\PayrollRunLine::class);
     }
 
+    public function perceptionApplications()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollPerceptionApplication::class);
+    }
+
     public function deductionApplications()
     {
         return $this->hasMany(\App\Models\EmployeePayrollDeductionApplication::class);

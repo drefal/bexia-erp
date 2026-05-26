@@ -8,6 +8,8 @@ use App\Models\EmployeeContract;
 use App\Models\EmployeeIncident;
 use App\Models\EmployeePayrollDeductionApplication;
 use App\Models\EmployeePayrollDeduction;
+use App\Models\EmployeePayrollPerceptionApplication;
+use App\Models\EmployeePayrollPerception;
 use App\Models\PayrollRun;
 use App\Models\PayrollRunLine;
 use App\Models\PayrollPolicy;
@@ -27,6 +29,7 @@ class PayrollRunCalculator
 
         return DB::transaction(function () use ($run, $userId): PayrollRun {
             static::reverseEmployeeDeductionApplications($run);
+            static::reverseEmployeePerceptionApplications($run);
 
             if (class_exists(PayrollRunLineConcept::class) && Schema::hasTable('payroll_run_line_concepts')) {
                 PayrollRunLineConcept::query()
@@ -67,11 +70,21 @@ class PayrollRunCalculator
                 $summary['approved_incidents_count'] += (int) $line->approved_incidents_count;
             }
 
+            $perceptionsTotal = (float) $run->lines()->sum('incident_perceptions');
+
+            if (class_exists(PayrollRunLineConcept::class) && Schema::hasTable('payroll_run_line_concepts')) {
+                $perceptionsTotal = (float) PayrollRunLineConcept::query()
+                    ->where('payroll_run_id', $run->id)
+                    ->where('type', 'perception')
+                    ->whereNotIn('code', ['SUELDO_BASE', 'HORAS_EXTRA'])
+                    ->sum('amount');
+            }
+
             $totals = [
                 'employees_count' => $employees->count(),
                 'base_total' => (float) $run->lines()->sum('base_amount'),
                 'overtime_total' => (float) $run->lines()->sum('overtime_amount'),
-                'perceptions_total' => (float) $run->lines()->sum('incident_perceptions'),
+                'perceptions_total' => $perceptionsTotal,
                 'deductions_total' => (float) $run->lines()->sum('deductions_amount'),
                 'gross_total' => (float) $run->lines()->sum('gross_amount'),
                 'net_total' => (float) $run->lines()->sum('net_amount'),
@@ -146,13 +159,14 @@ class PayrollRunCalculator
         $incidentAmounts = static::incidentAmounts($incidents, $salary);
         $policyDeductions = static::attendancePolicyDeductions($attendancePolicy, $salary, $policy);
         $employeeDeductions = static::employeePayrollDeductions($run, $employee);
+        $employeePerceptions = static::employeePayrollPerceptions($run, $employee);
 
         $baseAmount = static::baseAmount($salary, $periodDays, $attendanceSummary);
 
         $overtimeMultiplier = (float) ($policy['overtime_multiplier'] ?? 2);
         $overtimeAmount = round($salary['hourly_rate'] * $overtimeMultiplier * $attendanceSummary['overtime_hours'], 2);
 
-        $grossAmount = round($baseAmount + $overtimeAmount + $incidentAmounts['perceptions'], 2);
+        $grossAmount = round($baseAmount + $overtimeAmount + $incidentAmounts['perceptions'] + $employeePerceptions['amount'], 2);
         $deductionsAmount = round($incidentAmounts['deductions'] + $policyDeductions['amount'] + $employeeDeductions['amount'], 2);
         $netAmount = round(max(0, $grossAmount - $deductionsAmount), 2);
 
@@ -206,6 +220,7 @@ class PayrollRunCalculator
                     'effective_attendance' => $attendancePolicy['effective'] ?? [],
                 ],
                 'employee_payroll_deductions' => $employeeDeductions ?? ['amount' => 0, 'items' => []],
+                'employee_payroll_perceptions' => $employeePerceptions ?? ['amount' => 0, 'items' => []],
                 'formula' => [
                     'base_amount' => 'salary basis by salary_type',
                     'overtime_amount' => 'hourly_rate * ' . ($overtimeMultiplier ?? (float) ($policy['overtime_multiplier'] ?? 2)) . ' * overtime_hours',
@@ -421,6 +436,191 @@ class PayrollRunCalculator
 
 
 
+
+    protected static function reverseEmployeePerceptionApplications(PayrollRun $run): void
+    {
+        if (
+            ! class_exists(EmployeePayrollPerceptionApplication::class)
+            || ! class_exists(EmployeePayrollPerception::class)
+            || ! Schema::hasTable('employee_payroll_perception_applications')
+            || ! Schema::hasTable('employee_payroll_perceptions')
+        ) {
+            return;
+        }
+
+        $applications = EmployeePayrollPerceptionApplication::query()
+            ->where('payroll_run_id', $run->id)
+            ->get();
+
+        foreach ($applications as $application) {
+            $perception = EmployeePayrollPerception::query()
+                ->whereKey($application->employee_payroll_perception_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $perception) {
+                continue;
+            }
+
+            $perception->remaining_amount = round((float) $perception->remaining_amount + (float) $application->amount, 2);
+            $perception->applied_periods = max(0, (int) $perception->applied_periods - 1);
+
+            if ((string) $perception->status === 'paid' && (float) $perception->remaining_amount > 0) {
+                $perception->status = 'active';
+            }
+
+            $perception->save();
+        }
+
+        EmployeePayrollPerceptionApplication::query()
+            ->where('payroll_run_id', $run->id)
+            ->delete();
+    }
+
+    protected static function employeePayrollPerceptions(PayrollRun $run, Employee $employee): array
+    {
+        if (
+            ! class_exists(EmployeePayrollPerception::class)
+            || ! Schema::hasTable('employee_payroll_perceptions')
+        ) {
+            return [
+                'amount' => 0.0,
+                'items' => [],
+            ];
+        }
+
+        $periodStart = CarbonImmutable::parse($run->period_start)->toDateString();
+        $periodEnd = CarbonImmutable::parse($run->period_end)->toDateString();
+        $paymentDate = $run->payment_date
+            ? CarbonImmutable::parse($run->payment_date)->toDateString()
+            : $periodEnd;
+
+        $perceptions = EmployeePayrollPerception::query()
+            ->with('concept')
+            ->where('company_id', $run->company_id)
+            ->where('employee_id', $employee->id)
+            ->where('status', 'active')
+            ->where('remaining_amount', '>', 0)
+            ->where('period_amount', '>', 0)
+            ->where(function ($query) use ($paymentDate) {
+                $query->whereNull('start_date')
+                    ->orWhereDate('start_date', '<=', $paymentDate);
+            })
+            ->where(function ($query) use ($periodStart) {
+                $query->whereNull('end_date')
+                    ->orWhereDate('end_date', '>=', $periodStart);
+            })
+            ->where(function ($query) {
+                $query->whereNull('max_periods')
+                    ->orWhereColumn('applied_periods', '<', 'max_periods');
+            })
+            ->orderBy('id')
+            ->get();
+
+        $items = [];
+        $amount = 0.0;
+
+        foreach ($perceptions as $perception) {
+            $balanceBefore = (float) $perception->remaining_amount;
+            $periodAmount = (float) $perception->period_amount;
+            $applyAmount = round(min($balanceBefore, $periodAmount), 2);
+
+            if ($applyAmount <= 0) {
+                continue;
+            }
+
+            $code = $perception->code ?: EmployeePayrollPerception::defaultCodeForType((string) $perception->type);
+            $concept = $perception->concept;
+
+            $items[] = [
+                'id' => $perception->id,
+                'type' => $perception->type,
+                'code' => $concept?->code ?: $code,
+                'name' => $concept?->name ?: $perception->name,
+                'payroll_concept_id' => $concept?->id,
+                'amount' => $applyAmount,
+                'balance_before' => $balanceBefore,
+                'balance_after' => round($balanceBefore - $applyAmount, 2),
+                'period_amount' => $periodAmount,
+                'sort_order' => $concept?->sort_order ?: match ((string) $perception->type) {
+                    'bonus' => 40,
+                    'commission' => 50,
+                    'gratification' => 60,
+                    'transport_allowance' => 70,
+                    'meal_allowance' => 80,
+                    default => 90,
+                },
+            ];
+
+            $amount += $applyAmount;
+        }
+
+        return [
+            'amount' => round($amount, 2),
+            'items' => $items,
+        ];
+    }
+
+    protected static function applyEmployeePayrollPerception(PayrollRunLine $line, PayrollRunLineConcept $concept, array $row): void
+    {
+        if (
+            ! class_exists(EmployeePayrollPerception::class)
+            || ! class_exists(EmployeePayrollPerceptionApplication::class)
+            || ! Schema::hasTable('employee_payroll_perceptions')
+            || ! Schema::hasTable('employee_payroll_perception_applications')
+        ) {
+            return;
+        }
+
+        $metadata = $row['metadata'] ?? [];
+        $item = $metadata['employee_payroll_perception'] ?? null;
+
+        if (! is_array($item) || empty($item['id'])) {
+            return;
+        }
+
+        $perception = EmployeePayrollPerception::query()
+            ->whereKey($item['id'])
+            ->lockForUpdate()
+            ->first();
+
+        if (! $perception || (string) $perception->status !== 'active') {
+            return;
+        }
+
+        $amount = round(min((float) $concept->amount, (float) $perception->remaining_amount), 2);
+
+        if ($amount <= 0) {
+            return;
+        }
+
+        $balanceBefore = (float) $perception->remaining_amount;
+        $balanceAfter = round(max(0, $balanceBefore - $amount), 2);
+
+        $perception->remaining_amount = $balanceAfter;
+        $perception->applied_periods = (int) $perception->applied_periods + 1;
+        $perception->status = $balanceAfter <= 0 ? 'paid' : 'active';
+        $perception->save();
+
+        EmployeePayrollPerceptionApplication::create([
+            'company_id' => $line->company_id,
+            'employee_payroll_perception_id' => $perception->id,
+            'payroll_run_id' => $line->payroll_run_id,
+            'payroll_run_line_id' => $line->id,
+            'payroll_run_line_concept_id' => $concept->id,
+            'employee_id' => $line->employee_id,
+            'amount' => $amount,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $balanceAfter,
+            'applied_at' => now(),
+            'metadata' => [
+                'code' => $concept->code,
+                'name' => $concept->name,
+                'type' => $perception->type,
+            ],
+        ]);
+    }
+
     protected static function reverseEmployeeDeductionApplications(PayrollRun $run): void
     {
         if (
@@ -616,6 +816,7 @@ class PayrollRunCalculator
         $policy = $details['payroll_policy'] ?? [];
         $policyDeductions = $policy['policy_deductions']['items'] ?? [];
         $employeeDeductions = $details['employee_payroll_deductions']['items'] ?? [];
+        $employeePerceptions = $details['employee_payroll_perceptions']['items'] ?? [];
 
         $rows = [];
 
@@ -739,6 +940,31 @@ class PayrollRunCalculator
             );
         }
 
+        foreach ($employeePerceptions as $item) {
+            $amount = (float) ($item['amount'] ?? 0);
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $rows[] = static::conceptPayload(
+                line: $line,
+                code: (string) ($item['code'] ?? 'BONO_PRODUCTIVIDAD'),
+                name: (string) ($item['name'] ?? 'Percepción de empleado'),
+                type: 'perception',
+                category: 'manual',
+                source: 'manual',
+                unit: 'amount',
+                quantity: 1,
+                rate: $amount,
+                amount: $amount,
+                metadata: [
+                    'employee_payroll_perception' => $item,
+                ],
+                sortOrder: (int) ($item['sort_order'] ?? 40),
+            );
+        }
+
         foreach ($employeeDeductions as $item) {
             $amount = (float) ($item['amount'] ?? 0);
 
@@ -767,6 +993,7 @@ class PayrollRunCalculator
         foreach ($rows as $row) {
             $concept = PayrollRunLineConcept::create($row);
             static::applyEmployeePayrollDeduction($line, $concept, $row);
+            static::applyEmployeePayrollPerception($line, $concept, $row);
         }
     }
 

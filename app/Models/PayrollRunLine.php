@@ -69,6 +69,11 @@ class PayrollRunLine extends Model
         'details' => 'array',
     ];
 
+    public function perceptionApplications()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollPerceptionApplication::class);
+    }
+
     public function deductionApplications()
     {
         return $this->hasMany(\App\Models\EmployeePayrollDeductionApplication::class);

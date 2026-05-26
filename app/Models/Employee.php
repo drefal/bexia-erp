@@ -132,6 +132,16 @@ class Employee extends Model
      * V5.64.13b-end
      */
 
+    public function payrollPerceptions()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollPerception::class);
+    }
+
+    public function payrollPerceptionApplications()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollPerceptionApplication::class);
+    }
+
     public function payrollDeductions()
     {
         return $this->hasMany(\App\Models\EmployeePayrollDeduction::class);
