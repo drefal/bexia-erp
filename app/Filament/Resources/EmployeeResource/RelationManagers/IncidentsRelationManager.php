@@ -8,12 +8,14 @@ use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
@@ -22,6 +24,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\HtmlString;
 
 class IncidentsRelationManager extends RelationManager
 {
@@ -70,6 +73,7 @@ class IncidentsRelationManager extends RelationManager
                             ->schema([
                                 Select::make('hr_incident_type_id')
                                     ->label('Tipo de incidencia')
+                                    ->live()
                                     ->options(fn () => $this->incidentTypeOptions())
                                     ->searchable()
                                     ->preload()
@@ -94,11 +98,13 @@ class IncidentsRelationManager extends RelationManager
 
                                 DatePicker::make('start_date')
                                     ->label('Fecha inicio')
+                                    ->live()
                                     ->native(false)
                                     ->required(),
 
                                 DatePicker::make('end_date')
                                     ->label('Fecha fin')
+                                    ->live()
                                     ->native(false),
 
                                 TextInput::make('start_time')
@@ -111,16 +117,31 @@ class IncidentsRelationManager extends RelationManager
 
                                 TextInput::make('quantity')
                                     ->label('Cantidad')
+                                    ->live(debounce: 500)
                                     ->numeric(),
 
                                 Select::make('quantity_unit')
                                     ->label('Unidad')
+                                    ->live()
                                     ->options([
                                         'minutes' => 'Minutos',
                                         'hours' => 'Horas',
                                         'days' => 'Días',
                                         'events' => 'Eventos',
                                     ]),
+
+                                Placeholder::make('vacation_balance_summary')
+                                    ->label('Resumen de vacaciones')
+                                    ->content(fn (Get $get): HtmlString => \App\Filament\Resources\EmployeeIncidentResource::vacationBalanceSummary(
+                                        $this->getOwnerRecord()->id,
+                                        $get('hr_incident_type_id'),
+                                        $get('quantity'),
+                                        $get('quantity_unit'),
+                                        $get('start_date'),
+                                        $get('end_date'),
+                                    ))
+                                    ->visible(fn (Get $get): bool => \App\Filament\Resources\EmployeeIncidentResource::isVacationTypeId($get('hr_incident_type_id')))
+                                    ->columnSpanFull(),
 
                                 Toggle::make('requires_approval')
                                     ->label('Requiere aprobación'),
