@@ -6,6 +6,8 @@ use App\Models\Employee;
 use App\Models\EmployeeAttendance;
 use App\Models\EmployeeContract;
 use App\Models\EmployeeIncident;
+use App\Models\EmployeePayrollDeductionApplication;
+use App\Models\EmployeePayrollDeduction;
 use App\Models\PayrollRun;
 use App\Models\PayrollRunLine;
 use App\Models\PayrollPolicy;
@@ -24,6 +26,8 @@ class PayrollRunCalculator
         }
 
         return DB::transaction(function () use ($run, $userId): PayrollRun {
+            static::reverseEmployeeDeductionApplications($run);
+
             if (class_exists(PayrollRunLineConcept::class) && Schema::hasTable('payroll_run_line_concepts')) {
                 PayrollRunLineConcept::query()
                     ->where('payroll_run_id', $run->id)
@@ -141,6 +145,7 @@ class PayrollRunCalculator
         $incidents = static::approvedPayrollIncidents($run, $employee);
         $incidentAmounts = static::incidentAmounts($incidents, $salary);
         $policyDeductions = static::attendancePolicyDeductions($attendancePolicy, $salary, $policy);
+        $employeeDeductions = static::employeePayrollDeductions($run, $employee);
 
         $baseAmount = static::baseAmount($salary, $periodDays, $attendanceSummary);
 
@@ -148,7 +153,7 @@ class PayrollRunCalculator
         $overtimeAmount = round($salary['hourly_rate'] * $overtimeMultiplier * $attendanceSummary['overtime_hours'], 2);
 
         $grossAmount = round($baseAmount + $overtimeAmount + $incidentAmounts['perceptions'], 2);
-        $deductionsAmount = round($incidentAmounts['deductions'] + $policyDeductions['amount'], 2);
+        $deductionsAmount = round($incidentAmounts['deductions'] + $policyDeductions['amount'] + $employeeDeductions['amount'], 2);
         $netAmount = round(max(0, $grossAmount - $deductionsAmount), 2);
 
         return new PayrollRunLine([
@@ -200,6 +205,7 @@ class PayrollRunCalculator
                     'raw_attendance' => $attendancePolicy['raw'] ?? [],
                     'effective_attendance' => $attendancePolicy['effective'] ?? [],
                 ],
+                'employee_payroll_deductions' => $employeeDeductions ?? ['amount' => 0, 'items' => []],
                 'formula' => [
                     'base_amount' => 'salary basis by salary_type',
                     'overtime_amount' => 'hourly_rate * ' . ($overtimeMultiplier ?? (float) ($policy['overtime_multiplier'] ?? 2)) . ' * overtime_hours',
@@ -414,6 +420,188 @@ class PayrollRunCalculator
     }
 
 
+
+    protected static function reverseEmployeeDeductionApplications(PayrollRun $run): void
+    {
+        if (
+            ! class_exists(EmployeePayrollDeductionApplication::class)
+            || ! class_exists(EmployeePayrollDeduction::class)
+            || ! Schema::hasTable('employee_payroll_deduction_applications')
+            || ! Schema::hasTable('employee_payroll_deductions')
+        ) {
+            return;
+        }
+
+        $applications = EmployeePayrollDeductionApplication::query()
+            ->where('payroll_run_id', $run->id)
+            ->get();
+
+        foreach ($applications as $application) {
+            $deduction = EmployeePayrollDeduction::query()
+                ->whereKey($application->employee_payroll_deduction_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $deduction) {
+                continue;
+            }
+
+            $deduction->outstanding_amount = round((float) $deduction->outstanding_amount + (float) $application->amount, 2);
+            $deduction->applied_periods = max(0, (int) $deduction->applied_periods - 1);
+
+            if ((string) $deduction->status === 'paid' && (float) $deduction->outstanding_amount > 0) {
+                $deduction->status = 'active';
+            }
+
+            $deduction->save();
+        }
+
+        EmployeePayrollDeductionApplication::query()
+            ->where('payroll_run_id', $run->id)
+            ->delete();
+    }
+
+    protected static function employeePayrollDeductions(PayrollRun $run, Employee $employee): array
+    {
+        if (
+            ! class_exists(EmployeePayrollDeduction::class)
+            || ! Schema::hasTable('employee_payroll_deductions')
+        ) {
+            return [
+                'amount' => 0.0,
+                'items' => [],
+            ];
+        }
+
+        $periodStart = CarbonImmutable::parse($run->period_start)->toDateString();
+        $periodEnd = CarbonImmutable::parse($run->period_end)->toDateString();
+        $paymentDate = $run->payment_date
+            ? CarbonImmutable::parse($run->payment_date)->toDateString()
+            : $periodEnd;
+
+        $deductions = EmployeePayrollDeduction::query()
+            ->with('concept')
+            ->where('company_id', $run->company_id)
+            ->where('employee_id', $employee->id)
+            ->where('status', 'active')
+            ->where('outstanding_amount', '>', 0)
+            ->where('period_amount', '>', 0)
+            ->where(function ($query) use ($paymentDate) {
+                $query->whereNull('start_date')
+                    ->orWhereDate('start_date', '<=', $paymentDate);
+            })
+            ->where(function ($query) use ($periodStart) {
+                $query->whereNull('end_date')
+                    ->orWhereDate('end_date', '>=', $periodStart);
+            })
+            ->where(function ($query) {
+                $query->whereNull('max_periods')
+                    ->orWhereColumn('applied_periods', '<', 'max_periods');
+            })
+            ->orderBy('id')
+            ->get();
+
+        $items = [];
+        $amount = 0.0;
+
+        foreach ($deductions as $deduction) {
+            $balanceBefore = (float) $deduction->outstanding_amount;
+            $periodAmount = (float) $deduction->period_amount;
+            $applyAmount = round(min($balanceBefore, $periodAmount), 2);
+
+            if ($applyAmount <= 0) {
+                continue;
+            }
+
+            $code = $deduction->code ?: EmployeePayrollDeduction::defaultCodeForType((string) $deduction->type);
+            $concept = $deduction->concept;
+
+            $items[] = [
+                'id' => $deduction->id,
+                'type' => $deduction->type,
+                'code' => $concept?->code ?: $code,
+                'name' => $concept?->name ?: $deduction->name,
+                'payroll_concept_id' => $concept?->id,
+                'amount' => $applyAmount,
+                'balance_before' => $balanceBefore,
+                'balance_after' => round($balanceBefore - $applyAmount, 2),
+                'period_amount' => $periodAmount,
+                'sort_order' => $concept?->sort_order ?: match ((string) $deduction->type) {
+                    'loan' => 210,
+                    'advance' => 220,
+                    default => 230,
+                },
+            ];
+
+            $amount += $applyAmount;
+        }
+
+        return [
+            'amount' => round($amount, 2),
+            'items' => $items,
+        ];
+    }
+
+    protected static function applyEmployeePayrollDeduction(PayrollRunLine $line, PayrollRunLineConcept $concept, array $row): void
+    {
+        if (
+            ! class_exists(EmployeePayrollDeduction::class)
+            || ! class_exists(EmployeePayrollDeductionApplication::class)
+            || ! Schema::hasTable('employee_payroll_deductions')
+            || ! Schema::hasTable('employee_payroll_deduction_applications')
+        ) {
+            return;
+        }
+
+        $metadata = $row['metadata'] ?? [];
+        $item = $metadata['employee_payroll_deduction'] ?? null;
+
+        if (! is_array($item) || empty($item['id'])) {
+            return;
+        }
+
+        $deduction = EmployeePayrollDeduction::query()
+            ->whereKey($item['id'])
+            ->lockForUpdate()
+            ->first();
+
+        if (! $deduction || (string) $deduction->status !== 'active') {
+            return;
+        }
+
+        $amount = round(min((float) $concept->amount, (float) $deduction->outstanding_amount), 2);
+
+        if ($amount <= 0) {
+            return;
+        }
+
+        $balanceBefore = (float) $deduction->outstanding_amount;
+        $balanceAfter = round(max(0, $balanceBefore - $amount), 2);
+
+        $deduction->outstanding_amount = $balanceAfter;
+        $deduction->applied_periods = (int) $deduction->applied_periods + 1;
+        $deduction->status = $balanceAfter <= 0 ? 'paid' : 'active';
+        $deduction->save();
+
+        EmployeePayrollDeductionApplication::create([
+            'company_id' => $line->company_id,
+            'employee_payroll_deduction_id' => $deduction->id,
+            'payroll_run_id' => $line->payroll_run_id,
+            'payroll_run_line_id' => $line->id,
+            'payroll_run_line_concept_id' => $concept->id,
+            'employee_id' => $line->employee_id,
+            'amount' => $amount,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $balanceAfter,
+            'applied_at' => now(),
+            'metadata' => [
+                'code' => $concept->code,
+                'name' => $concept->name,
+                'type' => $deduction->type,
+            ],
+        ]);
+    }
+
     protected static function createLineConcepts(PayrollRunLine $line): void
     {
         if (! class_exists(PayrollRunLineConcept::class) || ! Schema::hasTable('payroll_run_line_concepts')) {
@@ -427,6 +615,7 @@ class PayrollRunCalculator
         $details = $line->details ?: [];
         $policy = $details['payroll_policy'] ?? [];
         $policyDeductions = $policy['policy_deductions']['items'] ?? [];
+        $employeeDeductions = $details['employee_payroll_deductions']['items'] ?? [];
 
         $rows = [];
 
@@ -550,8 +739,34 @@ class PayrollRunCalculator
             );
         }
 
+        foreach ($employeeDeductions as $item) {
+            $amount = (float) ($item['amount'] ?? 0);
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $rows[] = static::conceptPayload(
+                line: $line,
+                code: (string) ($item['code'] ?? 'DESCUENTO_RECURRENTE'),
+                name: (string) ($item['name'] ?? 'Descuento de empleado'),
+                type: 'deduction',
+                category: 'manual',
+                source: 'manual',
+                unit: 'amount',
+                quantity: 1,
+                rate: $amount,
+                amount: $amount,
+                metadata: [
+                    'employee_payroll_deduction' => $item,
+                ],
+                sortOrder: (int) ($item['sort_order'] ?? 210),
+            );
+        }
+
         foreach ($rows as $row) {
-            PayrollRunLineConcept::create($row);
+            $concept = PayrollRunLineConcept::create($row);
+            static::applyEmployeePayrollDeduction($line, $concept, $row);
         }
     }
 

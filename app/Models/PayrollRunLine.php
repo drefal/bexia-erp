@@ -69,6 +69,11 @@ class PayrollRunLine extends Model
         'details' => 'array',
     ];
 
+    public function deductionApplications()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollDeductionApplication::class);
+    }
+
     public function concepts()
     {
         return $this->hasMany(\App\Models\PayrollRunLineConcept::class)->orderBy('sort_order')->orderBy('id');
