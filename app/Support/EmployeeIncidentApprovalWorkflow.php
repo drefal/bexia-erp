@@ -2,9 +2,11 @@
 
 namespace App\Support;
 
+use App\Models\Employee;
 use App\Models\EmployeeIncident;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Support\EmployeeVacationBalanceCalculator;
 
 class EmployeeIncidentApprovalWorkflow
 {
@@ -31,6 +33,8 @@ class EmployeeIncidentApprovalWorkflow
         if (in_array((string) $incident->status, ['pending', 'approved'], true)) {
             throw new \RuntimeException('La incidencia ya está pendiente o aprobada.');
         }
+
+        static::validateVacationBalanceBeforeSend($incident);
 
         $workflow = static::findWorkflow($incident);
 
@@ -330,6 +334,8 @@ class EmployeeIncidentApprovalWorkflow
                 'updated_by_user_id' => $userId ?: auth()->id(),
                 'updated_at' => now(),
             ]));
+
+        static::recalculateVacationBalanceIfNeeded($request);
     }
 
     public static function markRejected(object $request, ?int $userId = null, ?string $reason = null): void
@@ -346,6 +352,102 @@ class EmployeeIncidentApprovalWorkflow
                 'updated_by_user_id' => $userId ?: auth()->id(),
                 'updated_at' => now(),
             ]));
+    }
+
+    protected static function validateVacationBalanceBeforeSend(EmployeeIncident $incident): void
+    {
+        if (! static::isVacationIncident($incident)) {
+            return;
+        }
+
+        if (! class_exists(EmployeeVacationBalanceCalculator::class)) {
+            throw new \RuntimeException('El calculador de vacaciones no está disponible.');
+        }
+
+        $employee = $incident->employee ?: Employee::query()->find($incident->employee_id);
+
+        if (! $employee) {
+            throw new \RuntimeException('No se encontró el empleado de la incidencia.');
+        }
+
+        if (blank($employee->hire_date)) {
+            throw new \RuntimeException('El empleado no tiene fecha de ingreso. Captúrala en Empleados > Contrato y nómina antes de solicitar vacaciones.');
+        }
+
+        $requestedDays = static::requestedVacationDays($incident);
+
+        if ($requestedDays <= 0) {
+            throw new \RuntimeException('La solicitud de vacaciones debe tener una cantidad de días mayor a cero.');
+        }
+
+        $balance = EmployeeVacationBalanceCalculator::generateCurrentBalance($employee, auth()->id());
+        $availableDays = (float) $balance->pending_days;
+
+        if ($requestedDays > ($availableDays + 0.0001)) {
+            throw new \RuntimeException(
+                'Días de vacaciones insuficientes. Solicitados: '
+                . number_format($requestedDays, 2)
+                . ', disponibles: '
+                . number_format($availableDays, 2)
+                . '.'
+            );
+        }
+    }
+
+    protected static function recalculateVacationBalanceIfNeeded(object $request): void
+    {
+        if (($request->document_type ?? null) !== self::DOCUMENT_TYPE) {
+            return;
+        }
+
+        if (! class_exists(EmployeeVacationBalanceCalculator::class) || ! Schema::hasTable('employee_incidents')) {
+            return;
+        }
+
+        $incident = EmployeeIncident::query()->find($request->approvable_id ?? null);
+
+        if (! $incident || ! static::isVacationIncident($incident)) {
+            return;
+        }
+
+        $employee = $incident->employee ?: Employee::query()->find($incident->employee_id);
+
+        if (! $employee || blank($employee->hire_date)) {
+            return;
+        }
+
+        EmployeeVacationBalanceCalculator::generateCurrentBalance($employee, auth()->id());
+    }
+
+    protected static function isVacationIncident(EmployeeIncident $incident): bool
+    {
+        if (! Schema::hasTable('hr_incident_types') || blank($incident->hr_incident_type_id)) {
+            return false;
+        }
+
+        $code = DB::table('hr_incident_types')
+            ->where('id', $incident->hr_incident_type_id)
+            ->value('code');
+
+        return strtoupper((string) $code) === EmployeeVacationBalanceCalculator::VACATION_INCIDENT_CODE;
+    }
+
+    protected static function requestedVacationDays(EmployeeIncident $incident): float
+    {
+        if ($incident->quantity !== null && $incident->quantity_unit === 'days') {
+            return round((float) $incident->quantity, 2);
+        }
+
+        if (blank($incident->start_date)) {
+            return 0.0;
+        }
+
+        $start = \Carbon\CarbonImmutable::parse($incident->start_date);
+        $end = $incident->end_date
+            ? \Carbon\CarbonImmutable::parse($incident->end_date)
+            : $start;
+
+        return round((float) ($start->diffInDays($end) + 1), 2);
     }
 
     public static function documentUrl(object $row): string
