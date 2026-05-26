@@ -18,4 +18,18 @@ return [
     'stamping_enabled' => env('PAYROLL_CFDI_STAMPING_ENABLED', false),
 
     'stamping_allowed_env' => env('PAYROLL_CFDI_STAMPING_ALLOWED_ENV', 'production'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | CFDI nomina - cancelacion real
+    |--------------------------------------------------------------------------
+    |
+    | Igual que el timbrado, la cancelacion real requiere candado por ambiente
+    | y una variable explicita. En DEV debe permanecer false.
+    |
+    */
+
+    'cancellation_enabled' => env('PAYROLL_CFDI_CANCELLATION_ENABLED', false),
+
+    'cancellation_allowed_env' => env('PAYROLL_CFDI_CANCELLATION_ALLOWED_ENV', 'production'),
 ];
