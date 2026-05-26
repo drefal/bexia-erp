@@ -223,6 +223,24 @@ class Employee extends Model
      * V5.64.11b-end
      */
 
+
+    /*
+     * V5.64.12b-start
+     * Bajas laborales del empleado.
+     */
+    public function terminations()
+    {
+        return $this->hasMany(\App\Models\EmployeeTermination::class);
+    }
+
+    public function latestTermination()
+    {
+        return $this->hasOne(\App\Models\EmployeeTermination::class)->latestOfMany();
+    }
+    /*
+     * V5.64.12b-end
+     */
+
     public function getAvatarUrlAttribute(): ?string
     {
         if (blank($this->avatar_path)) {
