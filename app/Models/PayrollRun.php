@@ -32,6 +32,13 @@ class PayrollRun extends Model
         'rejected_by_user_id',
         'rejected_at',
         'rejection_reason',
+        'lock_reason',
+        'locked_by_user_id',
+        'locked_at',
+        'is_locked',
+        'close_reason',
+        'closed_by_user_id',
+        'closed_at',
         'notes',
         'created_by_user_id',
         'updated_by_user_id',
@@ -40,6 +47,9 @@ class PayrollRun extends Model
     ];
 
     protected $casts = [
+        'is_locked' => 'boolean',
+        'locked_at' => 'datetime',
+        'closed_at' => 'datetime',
         'rejected_at' => 'datetime',
         'approved_at' => 'datetime',
         'approval_requested_at' => 'datetime',

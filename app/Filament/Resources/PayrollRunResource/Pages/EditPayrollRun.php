@@ -5,6 +5,7 @@ namespace App\Filament\Resources\PayrollRunResource\Pages;
 use App\Filament\Resources\PayrollRunResource;
 use App\Support\PayrollRunCalculator;
 use App\Support\PayrollRunApprovalWorkflow;
+use App\Support\PayrollRunCloseService;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Notifications\Notification;
@@ -16,6 +17,8 @@ class EditPayrollRun extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        PayrollRunCloseService::ensureCanEdit($this->record);
+
         $data['updated_by_user_id'] = auth()->id();
 
         return $data;
@@ -144,23 +147,45 @@ class EditPayrollRun extends EditRecord
                 }),
 
             Actions\Action::make('close')
-                ->label('Cerrar')
+                ->label('Cerrar nómina')
                 ->icon('heroicon-o-lock-closed')
                 ->color('warning')
-                ->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->status === 'approved')
-                ->action(function (): void {
-                    $this->record->forceFill([
-                        'status' => 'closed',
-                        'updated_by_user_id' => auth()->id(),
-                    ])->save();
+                ->form([
+                    Forms\Components\Textarea::make('reason')
+                        ->label('Motivo del cierre')
+                        ->required()
+                        ->rows(3)
+                        ->default('Cierre definitivo de nómina aprobado.'),
+                ])
+                ->visible(function (): bool {
+                    $user = auth()->user();
 
-                    Notification::make()
-                        ->title('Pre-nómina cerrada')
-                        ->success()
-                        ->send();
+                    if (! $user || $this->record->status !== 'approved') {
+                        return false;
+                    }
 
-                    $this->redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
+                    return (bool) ($user->is_system_admin ?? false)
+                        || ($user->email ?? null) === 'admin@bexiaerp.com'
+                        || $user->can('nomina.prenomina.cerrar')
+                        || $user->can('company.update');
+                })
+                ->action(function (array $data): void {
+                    try {
+                        PayrollRunCloseService::close($this->record, auth()->id(), (string) ($data['reason'] ?? ''));
+
+                        Notification::make()
+                            ->title('Nómina cerrada y bloqueada')
+                            ->success()
+                            ->send();
+
+                        $this->redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->title('No se pudo cerrar la nómina')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
                 }),
 
             Actions\Action::make('cancel')
@@ -168,7 +193,7 @@ class EditPayrollRun extends EditRecord
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
                 ->requiresConfirmation()
-                ->visible(fn (): bool => ! in_array($this->record->status, ['closed', 'cancelled'], true))
+                ->visible(fn (): bool => in_array($this->record->status, ['draft', 'calculated'], true))
                 ->action(function (): void {
                     $this->record->forceFill([
                         'status' => 'cancelled',

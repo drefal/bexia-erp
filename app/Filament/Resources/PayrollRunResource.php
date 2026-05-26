@@ -8,6 +8,7 @@ use App\Models\PayrollRun;
 use App\Support\PayrollRunCalculator;
 use App\Support\PayrollRunExportService;
 use App\Support\PayrollRunApprovalWorkflow;
+use App\Support\PayrollRunCloseService;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -389,18 +390,43 @@ class PayrollRunResource extends Resource
                     }),
 
                 Tables\Actions\Action::make('close')
-                    ->label('Cerrar')
+                    ->label('Cerrar nómina')
                     ->icon('heroicon-o-lock-closed')
                     ->color('warning')
-                    ->requiresConfirmation()
-                    ->visible(fn (PayrollRun $record): bool => static::bexiaCanPayrollPermission('nomina.prenomina.cerrar') && $record->status === 'approved')
-                    ->action(function (PayrollRun $record): void {
-                        static::updateStatus($record, 'closed');
+                    ->form([
+                        Forms\Components\Textarea::make('reason')
+                            ->label('Motivo del cierre')
+                            ->required()
+                            ->rows(3)
+                            ->default('Cierre definitivo de nómina aprobado.'),
+                    ])
+                    ->visible(function (PayrollRun $record): bool {
+                        $user = auth()->user();
 
-                        Notification::make()
-                            ->title('Pre-nómina cerrada')
-                            ->success()
-                            ->send();
+                        if (! $user || $record->status !== 'approved') {
+                            return false;
+                        }
+
+                        return (bool) ($user->is_system_admin ?? false)
+                            || ($user->email ?? null) === 'admin@bexiaerp.com'
+                            || static::bexiaCanPayrollPermission('nomina.prenomina.cerrar')
+                            || $user->can('company.update');
+                    })
+                    ->action(function (PayrollRun $record, array $data): void {
+                        try {
+                            PayrollRunCloseService::close($record, auth()->id(), (string) ($data['reason'] ?? ''));
+
+                            Notification::make()
+                                ->title('Nómina cerrada y bloqueada')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('No se pudo cerrar la nómina')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
                     }),
 
                 Tables\Actions\Action::make('cancel')
@@ -408,7 +434,7 @@ class PayrollRunResource extends Resource
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->visible(fn (PayrollRun $record): bool => static::bexiaCanPayrollPermission('nomina.prenomina.editar') && ! in_array($record->status, ['closed', 'cancelled'], true))
+                    ->visible(fn (PayrollRun $record): bool => static::bexiaCanPayrollPermission('nomina.prenomina.editar') && in_array($record->status, ['draft', 'calculated'], true))
                     ->action(function (PayrollRun $record): void {
                         static::updateStatus($record, 'cancelled');
 

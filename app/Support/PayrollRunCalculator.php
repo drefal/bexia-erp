@@ -18,12 +18,15 @@ use App\Models\PayrollConcept;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Support\PayrollRunCloseService;
 
 class PayrollRunCalculator
 {
     public static function calculate(PayrollRun $run, ?int $userId = null): PayrollRun
     {
-        if (in_array((string) $run->status, ['approved', 'closed', 'cancelled'], true)) {
+        PayrollRunCloseService::ensureCanRecalculate($run);
+
+        if (in_array((string) $run->status, ['pending_approval', 'approved', 'closed', 'cancelled'], true)) {
             throw new \RuntimeException('Solo se puede recalcular una pre-nómina en borrador o calculada.');
         }
 
