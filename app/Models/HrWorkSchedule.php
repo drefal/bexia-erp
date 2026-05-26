@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class HrWorkSchedule extends Model
 {
@@ -26,6 +27,20 @@ class HrWorkSchedule extends Model
         'hours_per_week' => 'decimal:2',
         'is_active' => 'boolean',
     ];
+
+
+    /*
+     * V5.64.14b-start
+     * Detalle operativo por día del horario.
+     */
+    public function days(): HasMany
+    {
+        return $this->hasMany(HrWorkScheduleDay::class, 'hr_work_schedule_id')
+            ->orderBy('day_index');
+    }
+    /*
+     * V5.64.14b-end
+     */
 
     public function company(): BelongsTo
     {

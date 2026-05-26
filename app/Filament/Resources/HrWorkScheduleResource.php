@@ -6,6 +6,7 @@ namespace App\Filament\Resources;
 use Illuminate\Database\Eloquent\Model;
 use App\Filament\Resources\Concerns\UsesTenantCompany;
 use App\Filament\Resources\HrWorkScheduleResource\Pages;
+use App\Filament\Resources\HrWorkScheduleResource\RelationManagers\DaysRelationManager;
 use App\Models\HrWorkSchedule;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -114,6 +115,14 @@ class HrWorkScheduleResource extends Resource
                 ]),
             ])
             ->defaultSort('name');
+    }
+
+
+    public static function getRelations(): array
+    {
+        return [
+            DaysRelationManager::class,
+        ];
     }
 
     public static function getPages(): array
