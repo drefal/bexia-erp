@@ -174,6 +174,57 @@ class PayrollCfdiReceiptResource extends Resource
                     ->options(self::statusOptions()),
             ])
             ->actions([
+                Tables\Actions\Action::make('cancel_payroll_cfdi')
+                    ->label('Cancelar CFDI')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Cancelar CFDI nómina')
+                    ->modalDescription('Esto intentará cancelar el CFDI nómina ante el PAC/SAT. En DEV debe quedar bloqueado por seguridad. La cancelación real solo está permitida en PROD.')
+                    ->modalSubmitActionLabel('Sí, intentar cancelar')
+                    ->visible(fn ($record): bool => (string) $record->status === 'stamped' && filled($record->uuid))
+                    ->form([
+                        \Filament\Forms\Components\Select::make('reason')
+                            ->label('Motivo SAT de cancelación')
+                            ->options([
+                                '01' => '01 - Comprobante emitido con errores con relación',
+                                '02' => '02 - Comprobante emitido con errores sin relación',
+                                '03' => '03 - No se llevó a cabo la operación',
+                                '04' => '04 - Operación nominativa relacionada en factura global',
+                            ])
+                            ->default('02')
+                            ->required(),
+                        \Filament\Forms\Components\TextInput::make('replacement_uuid')
+                            ->label('UUID relacionado')
+                            ->helperText('Solo aplica normalmente para motivo 01.')
+                            ->maxLength(36),
+                    ])
+                    ->action(function ($record, array $data): void {
+                        $result = app(\App\Support\PayrollCfdi\PayrollCfdiCancelService::class)->cancel(
+                            companyId: (int) $record->company_id,
+                            receiptId: (int) $record->id,
+                            reason: (string) ($data['reason'] ?? '02'),
+                            replacementUuid: filled($data['replacement_uuid'] ?? null) ? (string) $data['replacement_uuid'] : null,
+                            userId: auth()->id(),
+                        );
+
+                        if (! ($result['success'] ?? false)) {
+                            \Filament\Notifications\Notification::make()
+                                ->title(($result['blocked'] ?? false) ? 'Cancelación bloqueada' : 'No se pudo cancelar')
+                                ->body(collect($result['errors'] ?? [])->take(6)->implode(PHP_EOL) ?: ($result['message'] ?? 'Revisa el detalle del recibo CFDI nómina.'))
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('CFDI nómina cancelado')
+                            ->body('UUID: ' . (($result['summary']['uuid'] ?? null) ?: 'N/D'))
+                            ->success()
+                            ->send();
+                    }),
+
                 Tables\Actions\Action::make('generate_payroll_cfdi_pdf')
                     ->label('Generar PDF')
                     ->icon('heroicon-o-document-arrow-down')

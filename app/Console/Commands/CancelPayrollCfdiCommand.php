@@ -56,7 +56,7 @@ class CancelPayrollCfdiCommand extends Command
         }
 
         $this->line('');
-        $this->info('V5.65.7a - Cancelacion CFDI nomina');
+        $this->info('V5.65.7c - Cancelacion CFDI nomina');
         $this->line('Empresa: ' . $companyId);
         $this->line('Recibo: ' . $receiptId);
         $this->line('Motivo: ' . $reason);
