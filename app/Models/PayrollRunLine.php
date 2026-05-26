@@ -69,6 +69,11 @@ class PayrollRunLine extends Model
         'details' => 'array',
     ];
 
+    public function concepts()
+    {
+        return $this->hasMany(\App\Models\PayrollRunLineConcept::class)->orderBy('sort_order')->orderBy('id');
+    }
+
     public function company()
     {
         return $this->belongsTo(\App\Models\Company::class);

@@ -75,6 +75,17 @@ class LinesRelationManager extends RelationManager
                     ->weight('bold'),
             ])
             ->actions([
+                Tables\Actions\Action::make('line_concepts')
+                    ->label('Conceptos')
+                    ->icon('heroicon-o-list-bullet')
+                    ->color('info')
+                    ->modalHeading(fn (PayrollRunLine $record): string => 'Conceptos - ' . ($record->employee?->name ?? 'Empleado'))
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Cerrar')
+                    ->modalContent(fn (PayrollRunLine $record) => view('filament.payroll.line-concepts-modal', [
+                        'line' => $record->load(['concepts', 'employee']),
+                    ])),
+
                 Tables\Actions\Action::make('receipt_pdf')
                     ->label('Recibo PDF')
                     ->icon('heroicon-o-document-text')

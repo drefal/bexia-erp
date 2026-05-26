@@ -234,6 +234,31 @@
         </tr>
     </table>
 
+
+    @if ($line->concepts && $line->concepts->isNotEmpty())
+        <h2>Desglose por conceptos</h2>
+        <table>
+            <tr>
+                <th>Código</th>
+                <th>Concepto</th>
+                <th>Tipo</th>
+                <th class="right">Cantidad</th>
+                <th class="right">Tarifa</th>
+                <th class="right">Importe</th>
+            </tr>
+            @foreach ($line->concepts as $concept)
+                <tr>
+                    <td>{{ $concept->code }}</td>
+                    <td>{{ $concept->name }}</td>
+                    <td>{{ $concept->type === 'deduction' ? 'Deducción' : ($concept->type === 'perception' ? 'Percepción' : 'Informativo') }}</td>
+                    <td class="right">{{ number_format((float) $concept->quantity, 4) }} {{ $concept->unit }}</td>
+                    <td class="right">{{ \App\Support\PayrollRunExportService::money($concept->rate) }}</td>
+                    <td class="right">{{ \App\Support\PayrollRunExportService::money($concept->amount) }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+
     @if ($line->approved_incidents_count > 0)
         <h2>Incidencias consideradas</h2>
         <table>

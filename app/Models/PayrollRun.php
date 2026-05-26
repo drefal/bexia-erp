@@ -55,6 +55,11 @@ class PayrollRun extends Model
         return $this->hasMany(\App\Models\PayrollRunLine::class);
     }
 
+    public function lineConcepts()
+    {
+        return $this->hasMany(\App\Models\PayrollRunLineConcept::class);
+    }
+
     public function createdBy()
     {
         return $this->belongsTo(\App\Models\User::class, 'created_by_user_id');

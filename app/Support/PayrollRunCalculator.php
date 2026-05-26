@@ -9,8 +9,11 @@ use App\Models\EmployeeIncident;
 use App\Models\PayrollRun;
 use App\Models\PayrollRunLine;
 use App\Models\PayrollPolicy;
+use App\Models\PayrollRunLineConcept;
+use App\Models\PayrollConcept;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class PayrollRunCalculator
 {
@@ -21,6 +24,12 @@ class PayrollRunCalculator
         }
 
         return DB::transaction(function () use ($run, $userId): PayrollRun {
+            if (class_exists(PayrollRunLineConcept::class) && Schema::hasTable('payroll_run_line_concepts')) {
+                PayrollRunLineConcept::query()
+                    ->where('payroll_run_id', $run->id)
+                    ->delete();
+            }
+
             $run->lines()->delete();
 
             $policy = static::activePolicy((int) $run->company_id);
@@ -41,6 +50,7 @@ class PayrollRunCalculator
             foreach ($employees as $employee) {
                 $line = static::calculateEmployee($run, $employee, $policy);
                 $line->save();
+                static::createLineConcepts($line);
 
                 $summary['employees']++;
                 $summary['attendance_records'] += (int) $line->attendance_records;
@@ -401,6 +411,224 @@ class PayrollRunCalculator
             'amount' => round($amount, 2),
             'items' => $items,
         ];
+    }
+
+
+    protected static function createLineConcepts(PayrollRunLine $line): void
+    {
+        if (! class_exists(PayrollRunLineConcept::class) || ! Schema::hasTable('payroll_run_line_concepts')) {
+            return;
+        }
+
+        PayrollRunLineConcept::query()
+            ->where('payroll_run_line_id', $line->id)
+            ->delete();
+
+        $details = $line->details ?: [];
+        $policy = $details['payroll_policy'] ?? [];
+        $policyDeductions = $policy['policy_deductions']['items'] ?? [];
+
+        $rows = [];
+
+        if ((float) $line->base_amount !== 0.0) {
+            $rows[] = static::conceptPayload(
+                line: $line,
+                code: 'SUELDO_BASE',
+                name: 'Sueldo base',
+                type: 'perception',
+                category: 'base_salary',
+                source: 'system',
+                unit: 'days',
+                quantity: (float) $line->period_days,
+                rate: (float) $line->daily_salary,
+                amount: (float) $line->base_amount,
+                metadata: [
+                    'salary_type' => $line->salary_type,
+                    'base_salary' => (float) $line->base_salary,
+                ],
+                sortOrder: 10,
+            );
+        }
+
+        if ((float) $line->overtime_amount !== 0.0) {
+            $overtimeMultiplier = (float) ($policy['overtime_multiplier'] ?? 2);
+            $rows[] = static::conceptPayload(
+                line: $line,
+                code: 'HORAS_EXTRA',
+                name: 'Horas extra',
+                type: 'perception',
+                category: 'overtime',
+                source: 'system',
+                unit: 'hours',
+                quantity: (float) $line->overtime_hours,
+                rate: round((float) $line->hourly_rate * $overtimeMultiplier, 4),
+                amount: (float) $line->overtime_amount,
+                metadata: [
+                    'overtime_minutes' => (int) $line->overtime_minutes,
+                    'hourly_rate' => (float) $line->hourly_rate,
+                    'multiplier' => $overtimeMultiplier,
+                ],
+                sortOrder: 20,
+            );
+        }
+
+        if ((float) $line->incident_perceptions !== 0.0) {
+            $rows[] = static::conceptPayload(
+                line: $line,
+                code: 'INCIDENCIAS_PERCEPCION',
+                name: 'Percepciones por incidencias',
+                type: 'perception',
+                category: 'incident',
+                source: 'incident',
+                unit: 'amount',
+                quantity: (float) $line->approved_incidents_count,
+                rate: 0,
+                amount: (float) $line->incident_perceptions,
+                metadata: [
+                    'approved_incident_ids' => $details['approved_incident_ids'] ?? [],
+                ],
+                sortOrder: 30,
+            );
+        }
+
+        if ((float) $line->incident_deductions !== 0.0) {
+            $rows[] = static::conceptPayload(
+                line: $line,
+                code: 'INCIDENCIAS_DEDUCCION',
+                name: 'Deducciones por incidencias',
+                type: 'deduction',
+                category: 'incident',
+                source: 'incident',
+                unit: 'amount',
+                quantity: (float) $line->approved_incidents_count,
+                rate: 0,
+                amount: (float) $line->incident_deductions,
+                metadata: [
+                    'approved_incident_ids' => $details['approved_incident_ids'] ?? [],
+                    'deduction_days' => (float) $line->approved_incident_deduction_days,
+                    'deduction_minutes' => (int) $line->approved_incident_deduction_minutes,
+                ],
+                sortOrder: 110,
+            );
+        }
+
+        foreach ($policyDeductions as $item) {
+            $type = (string) ($item['type'] ?? 'policy');
+            $quantity = (float) ($item['quantity'] ?? 0);
+            $amount = (float) ($item['amount'] ?? 0);
+
+            if ($amount === 0.0) {
+                continue;
+            }
+
+            [$code, $name, $unit, $sortOrder] = match ($type) {
+                'late_minutes' => ['POLITICA_RETARDO', 'Descuento por retardo', 'minutes', 120],
+                'early_leave_minutes' => ['POLITICA_SALIDA_TEMPRANA', 'Descuento por salida temprana', 'minutes', 130],
+                'attendance_absence_days', 'late_accumulated_absence' => ['POLITICA_FALTA', 'Descuento por falta', 'days', 140],
+                default => ['POLITICA_RETARDO', 'Descuento por política de asistencia', 'units', 150],
+            };
+
+            $rows[] = static::conceptPayload(
+                line: $line,
+                code: $code,
+                name: $name,
+                type: 'deduction',
+                category: 'attendance',
+                source: 'policy',
+                unit: $unit,
+                quantity: $quantity,
+                rate: $quantity > 0 ? round($amount / $quantity, 4) : 0,
+                amount: $amount,
+                metadata: [
+                    'policy_item' => $item,
+                    'policy' => [
+                        'id' => $policy['id'] ?? null,
+                        'name' => $policy['name'] ?? null,
+                    ],
+                ],
+                sortOrder: $sortOrder,
+            );
+        }
+
+        foreach ($rows as $row) {
+            PayrollRunLineConcept::create($row);
+        }
+    }
+
+    protected static function conceptPayload(
+        PayrollRunLine $line,
+        string $code,
+        string $name,
+        string $type,
+        string $category,
+        string $source,
+        string $unit,
+        float $quantity,
+        float $rate,
+        float $amount,
+        array $metadata,
+        int $sortOrder,
+    ): array {
+        $concept = static::ensurePayrollConcept(
+            companyId: (int) $line->company_id,
+            code: $code,
+            name: $name,
+            type: $type,
+            category: $category,
+            source: $source,
+            unit: $unit,
+            sortOrder: $sortOrder,
+        );
+
+        return [
+            'company_id' => $line->company_id,
+            'payroll_run_id' => $line->payroll_run_id,
+            'payroll_run_line_id' => $line->id,
+            'employee_id' => $line->employee_id,
+            'payroll_concept_id' => $concept?->id,
+            'code' => $code,
+            'name' => $concept?->name ?: $name,
+            'type' => $concept?->type ?: $type,
+            'category' => $concept?->category ?: $category,
+            'source' => $concept?->source ?: $source,
+            'unit' => $concept?->unit ?: $unit,
+            'quantity' => round($quantity, 4),
+            'rate' => round($rate, 4),
+            'amount' => round($amount, 2),
+            'metadata' => $metadata,
+            'sort_order' => $concept?->sort_order ?: $sortOrder,
+        ];
+    }
+
+    protected static function ensurePayrollConcept(
+        int $companyId,
+        string $code,
+        string $name,
+        string $type,
+        string $category,
+        string $source,
+        string $unit,
+        int $sortOrder,
+    ): ?PayrollConcept {
+        if (! class_exists(PayrollConcept::class) || ! Schema::hasTable('payroll_concepts')) {
+            return null;
+        }
+
+        return PayrollConcept::query()->firstOrCreate(
+            [
+                'company_id' => $companyId,
+                'code' => $code,
+            ],
+            [
+                'name' => $name,
+                'type' => $type,
+                'category' => $category,
+                'source' => $source,
+                'unit' => $unit,
+                'is_active' => true,
+                'sort_order' => $sortOrder,
+            ],
+        );
     }
 
     protected static function approvedPayrollIncidents(PayrollRun $run, Employee $employee)

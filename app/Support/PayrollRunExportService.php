@@ -18,6 +18,7 @@ class PayrollRunExportService
             'lines.employee.hrDepartment',
             'lines.employee.hrJobPosition',
             'lines.contract',
+            'lines.concepts',
         ]);
 
         return [
@@ -137,6 +138,38 @@ class PayrollRunExportService
             ]));
         }
 
+        $writer->addRow(Row::fromValues([]));
+        $writer->addRow(Row::fromValues(['Conceptos por empleado']));
+        $writer->addRow(Row::fromValues([
+            'Empleado',
+            'Código',
+            'Concepto',
+            'Tipo',
+            'Categoría',
+            'Origen',
+            'Unidad',
+            'Cantidad',
+            'Tarifa',
+            'Importe',
+        ]));
+
+        foreach ($lines as $line) {
+            foreach ($line->concepts as $concept) {
+                $writer->addRow(Row::fromValues([
+                    $line->employee?->name,
+                    $concept->code,
+                    $concept->name,
+                    $concept->type,
+                    $concept->category,
+                    $concept->source,
+                    $concept->unit,
+                    (float) $concept->quantity,
+                    (float) $concept->rate,
+                    (float) $concept->amount,
+                ]));
+            }
+        }
+
         $writer->close();
     }
 
@@ -150,6 +183,7 @@ class PayrollRunExportService
             'employee.hrDepartment',
             'employee.hrJobPosition',
             'contract',
+            'concepts',
         ]);
 
         $run = $line->payrollRun;
