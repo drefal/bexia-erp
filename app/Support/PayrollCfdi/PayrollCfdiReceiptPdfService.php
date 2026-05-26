@@ -78,6 +78,10 @@ class PayrollCfdiReceiptPdfService
                 'pdf_path' => $path,
                 'force' => $force,
                 'is_demo' => $data['isDemo'] ?? false,
+                'is_internal_only' => $data['isInternalOnly'] ?? false,
+                'is_external_stamped' => $data['isExternalStamped'] ?? false,
+                'is_cfdi_not_required' => $data['isCfdiNotRequired'] ?? false,
+                'alternate_status_label' => $data['alternateStatusLabel'] ?? null,
             ],
             'response_meta' => [
                 'pdf_size' => strlen($pdfBytes),
@@ -95,6 +99,10 @@ class PayrollCfdiReceiptPdfService
                 'pdf_size' => strlen($pdfBytes),
                 'generated' => true,
                 'is_demo' => $data['isDemo'] ?? false,
+                'is_internal_only' => $data['isInternalOnly'] ?? false,
+                'is_external_stamped' => $data['isExternalStamped'] ?? false,
+                'is_cfdi_not_required' => $data['isCfdiNotRequired'] ?? false,
+                'alternate_status_label' => $data['alternateStatusLabel'] ?? null,
             ],
         ];
     }
@@ -108,6 +116,37 @@ class PayrollCfdiReceiptPdfService
         $metadata = $this->decode($receipt->metadata ?? null);
 
         $lineConcepts = $metadata['line_concepts'] ?? [];
+
+        $receiptStatus = (string) ($receipt->status ?? '');
+
+        $isInternalOnly = $receiptStatus === 'internal_only' || (bool) ($metadata['internal_only'] ?? false);
+        $isExternalStamped = $receiptStatus === 'external_stamped' || (bool) ($metadata['external_stamp'] ?? false);
+        $isCfdiNotRequired = $receiptStatus === 'cfdi_not_required' || (bool) ($metadata['cfdi_not_required'] ?? false);
+
+        $isDemo = (bool) ($metadata['dev_demo_stamp'] ?? false) || (string) ($receipt->pac_provider ?? '') === 'dev-demo';
+
+        $alternateStatusLabel = match (true) {
+            $isInternalOnly => 'Recibo interno',
+            $isExternalStamped => 'Timbrado externo',
+            $isCfdiNotRequired => 'CFDI no requerido',
+            default => null,
+        };
+
+        $watermarkText = match (true) {
+            $isInternalOnly => 'RECIBO INTERNO - NO CFDI',
+            $isCfdiNotRequired => 'CFDI NO REQUERIDO',
+            $isExternalStamped => 'TIMBRADO EXTERNO',
+            $isDemo => 'DEMO - NO FISCAL',
+            default => null,
+        };
+
+        $bannerText = match (true) {
+            $isInternalOnly => 'RECIBO INTERNO SIN VALIDEZ CFDI: este documento es solo para control interno y no fue timbrado ante PAC/SAT.',
+            $isCfdiNotRequired => 'CFDI NO REQUERIDO: este recibo fue marcado fuera del flujo fiscal de timbrado en Bexia.',
+            $isExternalStamped => 'TIMBRADO EXTERNO: el UUID fue registrado manualmente porque el CFDI se timbró fuera de Bexia.',
+            $isDemo => 'DEMO - RECIBO SIN VALIDEZ FISCAL REAL.',
+            default => null,
+        };
 
         $perceptions = array_values(array_filter($lineConcepts, fn ($line) => ($line['type'] ?? null) === 'perception'));
         $deductions = array_values(array_filter($lineConcepts, fn ($line) => ($line['type'] ?? null) === 'deduction'));
@@ -127,7 +166,14 @@ class PayrollCfdiReceiptPdfService
             'metadata' => $metadata,
             'perceptions' => $perceptions,
             'deductions' => $deductions,
-            'isDemo' => (bool) ($metadata['dev_demo_stamp'] ?? false) || (string) ($receipt->pac_provider ?? '') === 'dev-demo',
+            'isDemo' => $isDemo,
+            'isInternalOnly' => $isInternalOnly,
+            'isExternalStamped' => $isExternalStamped,
+            'isCfdiNotRequired' => $isCfdiNotRequired,
+            'alternateStatusLabel' => $alternateStatusLabel,
+            'watermarkText' => $watermarkText,
+            'bannerText' => $bannerText,
+            'bannerClass' => 'demo-banner',
             'logoDataUri' => $this->companyLogoDataUri($company),
             'generatedAt' => now(),
         ];

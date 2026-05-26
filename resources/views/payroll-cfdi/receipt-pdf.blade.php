@@ -98,6 +98,14 @@
     $conceptKey = function ($line) {
         return $line['sat_key'] ?? $line['sat_code'] ?? $line['sat_type'] ?? $line['clave_sat'] ?? $line['code'] ?? '-';
     };
+
+    $isInternalOnly = (bool) ($isInternalOnly ?? false);
+    $isExternalStamped = (bool) ($isExternalStamped ?? false);
+    $isCfdiNotRequired = (bool) ($isCfdiNotRequired ?? false);
+    $alternateStatusLabel = $alternateStatusLabel ?? null;
+    $watermarkText = $watermarkText ?? ($isDemo ? 'DEMO - NO FISCAL' : null);
+    $bannerText = $bannerText ?? null;
+    $bannerClass = $bannerClass ?? 'demo-banner';
 @endphp
 <!doctype html>
 <html lang="es">
@@ -287,8 +295,12 @@
     </style>
 </head>
 <body>
-@if ($isDemo)
-    <div class="watermark">DEMO - NO FISCAL</div>
+@if (filled($watermarkText ?? null))
+    <div class="watermark">{{ $watermarkText }}</div>
+@endif
+
+@if (filled($bannerText ?? null))
+    <div class="{{ $bannerClass ?? 'demo-banner' }}">{{ $bannerText }}</div>
 @endif
 
 <table class="box">
@@ -351,7 +363,7 @@
                     </tr>
                     <tr>
                         <td class="k">Estado CFDI</td>
-                        <td class="v">{{ strtoupper((string) $receipt->status) }}</td>
+                        <td class="v">{{ $alternateStatusLabel ?? strtoupper((string) $receipt->status) }}</td>
                     </tr>
                 </table>
             </div>

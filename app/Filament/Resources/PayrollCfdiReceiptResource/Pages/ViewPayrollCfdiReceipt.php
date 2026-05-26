@@ -72,7 +72,7 @@ class ViewPayrollCfdiReceipt extends ViewRecord
                 ->label('Generar PDF')
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('success')
-                ->visible(fn (): bool => in_array((string) ($this->record->status ?? ''), ['validated', 'stamped'], true))
+                ->visible(fn (): bool => in_array((string) ($this->record->status ?? ''), ['validated', 'stamped', 'internal_only', 'external_stamped', 'cfdi_not_required'], true))
                 ->action(function (): void {
                     $result = app(\App\Support\PayrollCfdi\PayrollCfdiReceiptPdfService::class)->generate(
                         companyId: (int) $this->record->company_id,
