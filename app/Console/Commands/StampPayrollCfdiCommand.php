@@ -38,7 +38,7 @@ class StampPayrollCfdiCommand extends Command
         }
 
         $this->line('');
-        $this->info('V5.65.5b - Timbrado CFDI nomina');
+        $this->info('V5.65.5c - Timbrado CFDI nomina');
         $this->line('Empresa: ' . $companyId);
         $this->line('Recibo: ' . $receiptId);
         $this->line('');
