@@ -3,9 +3,21 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\EmployeeResource\Pages;
+use App\Filament\Resources\EmployeeResource\RelationManagers\DocumentsRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\AttendancesRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\ContractsRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\IncidentsRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\TerminationsRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\VacationBalancesRelationManager;
 use App\Models\Branch;
 use App\Models\Employee;
+use App\Models\PayrollPeriodicity;
+use App\Models\PayrollEmployerRegistration;
+use App\Models\HrWorkSchedule;
+use App\Models\HrJobPosition;
+use App\Models\HrDepartment;
 use App\Models\User;
+use App\Support\EmployeeOrganizationResolver;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
@@ -19,6 +31,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -36,7 +49,7 @@ class EmployeeResource extends Resource
     protected static ?string $navigationLabel = 'Empleados';
     protected static bool $isScopedToTenant = false;
     protected static ?string $navigationIcon = 'heroicon-o-identification';
-    protected static ?string $navigationGroup = 'Recursos Humanos';
+    protected static ?string $navigationGroup = 'RRHH';
     protected static ?int $navigationSort = 10;
     protected static ?string $tenantOwnershipRelationshipName = null;
 
@@ -80,7 +93,7 @@ public static function canCreate(): bool
         $tenantId = Filament::getTenant()?->getKey();
 
         return parent::getEloquentQuery()
-            ->with(['user', 'manager', 'coach', 'branch'])
+            ->with(['user', 'manager', 'coach', 'branch', 'hrDepartment', 'hrJobPosition', 'hrWorkSchedule', 'payrollPeriodicity', 'payrollEmployerRegistration'])
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
 
@@ -104,12 +117,21 @@ public static function canCreate(): bool
             );
     }
 
+
+    public static function employeeHierarchyOptions(?Employee $record = null): array
+    {
+        $companyId = (int) (Filament::getTenant()?->getKey() ?? $record?->company_id ?? 0);
+        $excludeId = $record?->id ? (int) $record->id : null;
+
+        return EmployeeOrganizationResolver::activeEmployeeOptions($companyId ?: null, $excludeId);
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([
 
-                Forms\Components\Section::make('Punto de Venta')
-                    ->description('Define la capacidad general del empleado para PDV. Los permisos específicos por caja se asignan en Punto de Venta > Personal de cajas.')
+                Forms\Components\Section::make('Accesos operativos / PDV')
+                    ->description('Define si el empleado puede operar como cajero o vendedor en PDV. Los permisos específicos por caja se asignan en Punto de Venta > Personal de cajas.')
                     ->columns(3)
                     ->schema([
                         Forms\Components\Toggle::make('pos_active')
@@ -134,7 +156,8 @@ public static function canCreate(): bool
 
             Grid::make(12)
                 ->schema([
-                    Section::make()
+                    Section::make('Ficha laboral')
+                        ->description('Datos principales del empleado dentro de la empresa actual.')
                         ->schema([
                             Grid::make(12)
                                 ->schema([
@@ -154,9 +177,17 @@ public static function canCreate(): bool
                                                 ->required()
                                                 ->maxLength(255),
 
+                                            Select::make('hr_job_position_id')
+                                                ->label('Puesto (catálogo RRHH)')
+                                                ->options(fn () => self::hrJobPositionOptions())
+                                                ->searchable()
+                                                ->preload()
+                                                ->helperText('Catálogo activo de puestos de la empresa actual.'),
+
                                             TextInput::make('position')
-                                                ->label('Puesto de trabajo')
-                                                ->maxLength(255),
+                                                ->label('Puesto libre / legado')
+                                                ->maxLength(255)
+                                                ->helperText('Campo anterior. Úsalo solo si el puesto no está en catálogo.'),
 
                                             TextInput::make('phone')
                                                 ->label('Teléfono de trabajo')
@@ -171,37 +202,35 @@ public static function canCreate(): bool
                                                 ->email()
                                                 ->maxLength(255),
 
+                                            Select::make('hr_department_id')
+                                                ->label('Departamento (catálogo RRHH)')
+                                                ->options(fn () => self::hrDepartmentOptions())
+                                                ->searchable()
+                                                ->preload()
+                                                ->helperText('Catálogo activo de departamentos de la empresa actual.'),
+
                                             TextInput::make('department')
-                                                ->label('Departamento')
-                                                ->maxLength(255),
+                                                ->label('Departamento libre / legado')
+                                                ->maxLength(255)
+                                                ->helperText('Campo anterior. Úsalo solo si el departamento no está en catálogo.'),
 
                                             Select::make('manager_employee_id')
-                                                ->label('Gerente')
-                                                ->options(fn () => self::employeeOptions())
-                                                ->searchable()
-                                                ->preload(),
+                                            ->label('Jefe directo')
+                                            ->options(fn (?Employee $record): array => self::employeeHierarchyOptions($record))
+                                            ->searchable()
+                                            ->preload()
+                                            ->live()
+                                            ->nullable()
+                                            ->helperText('Solo se muestran empleados activos de la misma empresa. No se permite seleccionar al mismo empleado ni generar ciclos de jerarquía.'),
 
                                             Select::make('coach_employee_id')
-                                                ->label('Instructor')
-                                                ->options(fn () => self::employeeOptions())
-                                                ->searchable()
-                                                ->preload(),
-
-                                            TextInput::make('ssn')
-                                                ->label('Número de seguro social')
-                                                ->maxLength(255),
-
-                                            TextInput::make('curp')
-                                                ->label('Clave CURP')
-                                                ->maxLength(255),
-
-                                            TextInput::make('rfc')
-                                                ->label('Clave RFC')
-                                                ->maxLength(255),
-
-                                            Placeholder::make('empresa_actual')
-                                                ->label('Empresa')
-                                                ->content(fn () => Filament::getTenant()?->name ?? '-'),
+                                            ->label('Instructor / coach')
+                                            ->options(fn (?Employee $record): array => self::employeeHierarchyOptions($record))
+                                            ->searchable()
+                                            ->preload()
+                                            ->live()
+                                            ->nullable()
+                                            ->helperText('Opcional. Usa este campo para mentor, capacitador o responsable funcional.'),
                                         ])
                                         ->columns(2)
                                         ->columnSpan(10),
@@ -211,7 +240,7 @@ public static function canCreate(): bool
 
                     Tabs::make('EmpleadoTabs')
                         ->tabs([
-                            Tabs\Tab::make('Información del trabajo')
+                            Tabs\Tab::make('Trabajo y horario')
                                 ->schema([
                                     Section::make('Ubicación')
                                         ->schema([
@@ -230,12 +259,18 @@ public static function canCreate(): bool
 
                                     Section::make('Programar')
                                         ->schema([
+                                            Select::make('hr_work_schedule_id')
+                                                ->label('Horario laboral (catálogo RRHH)')
+                                                ->options(fn () => self::hrWorkScheduleOptions())
+                                                ->searchable()
+                                                ->preload(),
+
                                             Toggle::make('flexible_hours')
                                                 ->label('Horas flexibles')
                                                 ->default(false),
 
                                             TextInput::make('working_schedule')
-                                                ->label('Horas laborables')
+                                                ->label('Horas laborables / legado')
                                                 ->placeholder('Ej. Estándar de 40 horas a la semana')
                                                 ->maxLength(255),
 
@@ -254,7 +289,51 @@ public static function canCreate(): bool
                                         ->content('Módulo pendiente. Aquí se podrán mostrar insignias y reconocimientos del empleado.'),
                                 ]),
 
-                            Tabs\Tab::make('Información privada')
+                            Tabs\Tab::make('Fiscal / CFDI nómina')
+                                ->schema([
+                                    Section::make('Datos fiscales del empleado')
+                                        ->description('Información requerida para validar y preparar CFDI de nómina. No timbra; solo deja los datos listos.')
+                                        ->schema([
+                                            TextInput::make('rfc')
+                                                ->label('RFC')
+                                                ->maxLength(13)
+                                                ->uppercase()
+                                                ->helperText('RFC del empleado como receptor del CFDI de nómina.'),
+
+                                            TextInput::make('curp')
+                                                ->label('CURP')
+                                                ->maxLength(18)
+                                                ->uppercase(),
+
+                                            TextInput::make('social_security_number')
+                                                ->label('NSS')
+                                                ->maxLength(30)
+                                                ->helperText('Número de Seguridad Social. Si antes se capturó en SSN, copiarlo aquí para CFDI nómina.'),
+
+                                            TextInput::make('fiscal_name')
+                                                ->label('Nombre fiscal')
+                                                ->maxLength(255)
+                                                ->helperText('Debe coincidir con la constancia fiscal. Si se deja vacío, el validador usará el nombre del empleado.'),
+
+                                            TextInput::make('fiscal_postal_code')
+                                                ->label('Código postal fiscal')
+                                                ->maxLength(10)
+                                                ->rule('regex:/^[0-9]{5}$/')
+                                                ->helperText('Código postal fiscal del empleado, 5 dígitos.'),
+
+                                            Select::make('sat_tax_regime_code')
+                                                ->label('Régimen fiscal SAT')
+                                                ->options([
+                                                    '605' => '605 - Sueldos y Salarios e Ingresos Asimilados a Salarios',
+                                                ])
+                                                ->searchable()
+                                                ->preload()
+                                                ->helperText('Para empleados normalmente corresponde 605.'),
+                                        ])
+                                        ->columns(2),
+                                ]),
+
+                            Tabs\Tab::make('Datos personales')
                                 ->schema([
                                     Section::make('Contacto privado')
                                         ->schema([
@@ -407,9 +486,10 @@ public static function canCreate(): bool
                                         ->columns(2),
                                 ]),
 
-                            Tabs\Tab::make('Ajustes de RR. HH.')
+                            Tabs\Tab::make('Contrato y nómina')
                                 ->schema([
-                                    Section::make('Estado')
+                                    Section::make('Relación laboral')
+                                        ->description('Clasificación del empleado, relación con usuario del sistema y parámetros de nómina.')
                                         ->schema([
                                             Select::make('employee_type')
                                                 ->label('Tipo de empleado')
@@ -420,6 +500,28 @@ public static function canCreate(): bool
                                                     'temporary' => 'Temporal',
                                                 ])
                                                 ->default('employee'),
+
+                                            DatePicker::make('hire_date')
+                                                ->label('Fecha de ingreso')
+                                                ->native(false)
+                                                ->helperText('Necesaria para calcular antigüedad y vacaciones.'),
+
+                                            DatePicker::make('termination_date')
+                                                ->label('Fecha de baja')
+                                                ->native(false),
+
+                                            Select::make('payroll_periodicity_id')
+                                                ->label('Periodicidad de nómina')
+                                                ->options(fn () => self::payrollPeriodicityOptions())
+                                                ->searchable()
+                                                ->preload(),
+
+                                            Select::make('payroll_employer_registration_id')
+                                                ->label('Registro patronal')
+                                                ->options(fn () => self::payrollEmployerRegistrationOptions())
+                                                ->searchable()
+                                                ->preload()
+                                                ->helperText('Para demo puedes usar DEMO-0000000. Para nómina real captura el registro patronal oficial del IMSS.'),
 
                                             Select::make('user_id')
                                                 ->label('Usuario relacionado')
@@ -433,7 +535,7 @@ public static function canCreate(): bool
                                         ])
                                         ->columns(2),
 
-                                    Section::make('Ajustes de la aplicación')
+                                    Section::make('Control interno')
                                         ->schema([
                                             TextInput::make('hourly_cost')
                                                 ->label('Costo por hora')
@@ -511,6 +613,74 @@ public static function canCreate(): bool
             ->toArray();
     }
 
+
+    /*
+     * V5.64.2c-start
+     * Opciones de catalogos RRHH/Nomina por tenant.
+     */
+    protected static function hrDepartmentOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return HrDepartment::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function hrJobPositionOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return HrJobPosition::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function hrWorkScheduleOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return HrWorkSchedule::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function payrollPeriodicityOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return PayrollPeriodicity::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function payrollEmployerRegistrationOptions(): array
+    {
+        $tenantId = Filament::getTenant()?->getKey();
+
+        return PayrollEmployerRegistration::query()
+            ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+    /*
+     * V5.64.2c-end
+     */
+
     public static function table(Table $table): Table
     {
         return $table
@@ -541,15 +711,37 @@ public static function canCreate(): bool
                     ->searchable()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('position')
-                    ->label('Puesto')
+                Tables\Columns\TextColumn::make('hrJobPosition.name')
+                    ->label('Puesto RRHH')
                     ->searchable()
                     ->toggleable(),
 
-                Tables\Columns\TextColumn::make('department')
-                    ->label('Departamento')
+                Tables\Columns\TextColumn::make('hrDepartment.name')
+                    ->label('Departamento RRHH')
                     ->searchable()
                     ->toggleable(),
+
+                Tables\Columns\TextColumn::make('hrWorkSchedule.name')
+                    ->label('Horario')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('payrollPeriodicity.name')
+                    ->label('Periodicidad')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('payrollEmployerRegistration.name')
+                    ->label('Registro patronal')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('position')
+                    ->label('Puesto legado')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('department')
+                    ->label('Departamento legado')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('branch.name')
                     ->label('Ubicación')
@@ -573,6 +765,19 @@ public static function canCreate(): bool
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()->label('Eliminar'),
             ]);
+    }
+
+
+    public static function getRelations(): array
+    {
+        return [
+            DocumentsRelationManager::class,
+            ContractsRelationManager::class,
+            TerminationsRelationManager::class,
+            AttendancesRelationManager::class,
+            IncidentsRelationManager::class,
+            VacationBalancesRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

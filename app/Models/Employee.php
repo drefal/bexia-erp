@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use App\Support\EmployeeOrganizationResolver;
 
 class Employee extends Model
 {
@@ -20,6 +21,11 @@ class Employee extends Model
         'employee_number',
         'position',
         'department',
+        'hr_department_id',
+        'hr_job_position_id',
+        'hr_work_schedule_id',
+        'payroll_periodicity_id',
+        'payroll_employer_registration_id',
 
         'email',
         'phone',
@@ -29,6 +35,8 @@ class Employee extends Model
         'curp',
         'rfc',
         'employee_type',
+        'hire_date',
+        'termination_date',
 
         'work_address',
         'work_timezone',
@@ -78,7 +86,11 @@ class Employee extends Model
         'is_pos_seller',
         'pos_pin_hash',
         'notes',
-    ];
+        'fiscal_name',
+        'fiscal_postal_code',
+        'sat_tax_regime_code',
+        'social_security_number',
+];
 
     protected $casts = [
         'pos_active' => 'boolean',
@@ -87,12 +99,62 @@ class Employee extends Model
         'active' => 'boolean',
         'flexible_hours' => 'boolean',
         'birth_date' => 'date',
+        'hire_date' => 'date',
+        'termination_date' => 'date',
         'visa_expiration_date' => 'date',
         'work_permit_expiration_date' => 'date',
         'hourly_cost' => 'decimal:2',
         'distance_home_work' => 'decimal:2',
         'dependent_children' => 'integer',
+        'hr_department_id' => 'integer',
+        'hr_job_position_id' => 'integer',
+        'hr_work_schedule_id' => 'integer',
+        'payroll_periodicity_id' => 'integer',
+        'payroll_employer_registration_id' => 'integer',
     ];
+
+
+    /*
+     * V5.64.13b-start
+     * Validación básica de organigrama.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Employee $employee): void {
+            if (
+                $employee->exists
+                && ! $employee->isDirty('manager_employee_id')
+                && ! $employee->isDirty('coach_employee_id')
+            ) {
+                return;
+            }
+
+            EmployeeOrganizationResolver::validateHierarchy($employee);
+        });
+    }
+    /*
+     * V5.64.13b-end
+     */
+
+    public function payrollPerceptions()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollPerception::class);
+    }
+
+    public function payrollPerceptionApplications()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollPerceptionApplication::class);
+    }
+
+    public function payrollDeductions()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollDeduction::class);
+    }
+
+    public function payrollDeductionApplications()
+    {
+        return $this->hasMany(\App\Models\EmployeePayrollDeductionApplication::class);
+    }
 
     public function company()
     {
@@ -118,6 +180,127 @@ class Employee extends Model
     {
         return $this->belongsTo(\App\Models\Branch::class);
     }
+
+
+    /*
+     * V5.64.2c-start
+     * Relaciones RRHH/Nomina para empleados.
+     */
+    public function hrDepartment()
+    {
+        return $this->belongsTo(\App\Models\HrDepartment::class, 'hr_department_id');
+    }
+
+    public function hrJobPosition()
+    {
+        return $this->belongsTo(\App\Models\HrJobPosition::class, 'hr_job_position_id');
+    }
+
+    public function hrWorkSchedule()
+    {
+        return $this->belongsTo(\App\Models\HrWorkSchedule::class, 'hr_work_schedule_id');
+    }
+
+    public function payrollPeriodicity()
+    {
+        return $this->belongsTo(\App\Models\PayrollPeriodicity::class, 'payroll_periodicity_id');
+    }
+
+    public function payrollEmployerRegistration()
+    {
+        return $this->belongsTo(\App\Models\PayrollEmployerRegistration::class, 'payroll_employer_registration_id');
+    }
+    /*
+     * V5.64.2c-end
+     */
+
+
+    /*
+     * V5.64.3b-start
+     * Expediente documental del empleado.
+     */
+    public function documents()
+    {
+        return $this->hasMany(\App\Models\EmployeeDocument::class);
+    }
+    /*
+     * V5.64.3b-end
+     */
+
+
+    /*
+     * V5.64.4b-start
+     * Incidencias del empleado.
+     */
+    public function incidents()
+    {
+        return $this->hasMany(\App\Models\EmployeeIncident::class);
+    }
+    /*
+     * V5.64.4b-end
+     */
+
+
+    /*
+     * V5.64.7b-start
+     * Saldos de vacaciones del empleado.
+     */
+    public function vacationBalances()
+    {
+        return $this->hasMany(\App\Models\EmployeeVacationBalance::class);
+    }
+    /*
+     * V5.64.7b-end
+     */
+
+
+    /*
+     * V5.64.11b-start
+     * Contratos laborales del empleado.
+     */
+    public function contracts()
+    {
+        return $this->hasMany(\App\Models\EmployeeContract::class);
+    }
+
+    public function currentContract()
+    {
+        return $this->hasOne(\App\Models\EmployeeContract::class)->where('is_current', true);
+    }
+    /*
+     * V5.64.11b-end
+     */
+
+
+    /*
+     * V5.64.12b-start
+     * Bajas laborales del empleado.
+     */
+    public function terminations()
+    {
+        return $this->hasMany(\App\Models\EmployeeTermination::class);
+    }
+
+    public function latestTermination()
+    {
+        return $this->hasOne(\App\Models\EmployeeTermination::class)->latestOfMany();
+    }
+    /*
+     * V5.64.12b-end
+     */
+
+
+    /*
+     * V5.64.15b-start
+     * Asistencias / checador del empleado.
+     */
+    public function attendances()
+    {
+        return $this->hasMany(\App\Models\EmployeeAttendance::class);
+    }
+    /*
+     * V5.64.15b-end
+     */
 
     public function getAvatarUrlAttribute(): ?string
     {

@@ -25,6 +25,7 @@ class ApprovalSummaryWidget extends StatsOverviewWidget
                 ->join('approval_requests as requests', 'requests.id', '=', 'steps.approval_request_id')
                 ->where('steps.status', 'pending')
                 ->where('requests.status', 'pending')
+                ->whereColumn('steps.step_order', 'requests.current_step_order')
                 ->where('steps.approver_user_id', $userId)
                 ->count();
 

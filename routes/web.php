@@ -493,3 +493,11 @@ Route::middleware(['auth'])->group(function () {
         ->name('inventory.as-of-date.excel');
 });
 
+
+/*
+|--------------------------------------------------------------------------
+| V5.65.6a - PDF recibo CFDI nomina
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth'])->get('/payroll-cfdi-receipts/{receipt}/pdf', [\App\Http\Controllers\PayrollCfdiReceiptPdfController::class, 'show'])
+    ->name('payroll-cfdi-receipts.pdf');

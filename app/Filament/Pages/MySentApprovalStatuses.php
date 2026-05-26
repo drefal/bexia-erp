@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\EmployeeIncidentApprovalWorkflow;
+use App\Support\PayrollRunApprovalWorkflow;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -87,6 +89,8 @@ class MySentApprovalStatuses extends Page
                 'tenant' => $tenantId,
                 'from_tab' => in_array($type, ['sales_quote', 'sales_:quote', 'sale_quote', 'sales_margin_approval'], true) ? 'por_aprobar' : 'ordenes',
             ]),
+            'employee_incident' => EmployeeIncidentApprovalWorkflow::documentUrl($row),
+            'payroll_run' => PayrollRunApprovalWorkflow::documentUrl($row),
             default => '#',
         };
     }
@@ -102,6 +106,10 @@ class MySentApprovalStatuses extends Page
         $type = (string) ($row->document_type ?? '');
         $id = (int) ($row->approvable_id ?? 0);
         $number = (string) ($row->document_number ?? '');
+
+        if ($type === 'employee_incident' && $id > 0 && Schema::hasTable('employee_incidents')) {
+            return (int) DB::table('employee_incidents')->where('id', $id)->value('company_id');
+        }
 
         if ($type === 'purchase_order' && $id > 0 && Schema::hasTable('purchase_orders')) {
             return (int) DB::table('purchase_orders')->where('id', $id)->value('company_id');

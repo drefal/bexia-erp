@@ -74,7 +74,7 @@ class MyNotifications extends Page
     }
     public static function shouldRegisterNavigation(): bool
     {
-        return false;
+        return auth()->check();
     }
 
 
