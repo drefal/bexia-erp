@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\PayrollRunResource\RelationManagers;
 
+use App\Models\PayrollRunLine;
+use App\Support\PayrollRunExportService;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -70,6 +73,14 @@ class LinesRelationManager extends RelationManager
                     ->label('Neto')
                     ->money('MXN')
                     ->weight('bold'),
+            ])
+            ->actions([
+                Tables\Actions\Action::make('receipt_pdf')
+                    ->label('Recibo PDF')
+                    ->icon('heroicon-o-document-text')
+                    ->color('gray')
+                    ->visible(fn (PayrollRunLine $record): bool => filled($record->payroll_run_id) && filled($record->employee_id))
+                    ->action(fn (PayrollRunLine $record): StreamedResponse => PayrollRunExportService::exportReceiptPdf($record)),
             ])
             ->defaultSort('employee.name');
     }

@@ -3,8 +3,10 @@
 namespace App\Support;
 
 use App\Models\PayrollRun;
+use App\Models\PayrollRunLine;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PayrollRunExportService
 {
@@ -136,6 +138,64 @@ class PayrollRunExportService
         }
 
         $writer->close();
+    }
+
+
+    public static function receiptData(PayrollRunLine $line): array
+    {
+        $line->loadMissing([
+            'company',
+            'payrollRun.company',
+            'payrollRun.calculatedBy',
+            'employee.hrDepartment',
+            'employee.hrJobPosition',
+            'contract',
+        ]);
+
+        $run = $line->payrollRun;
+
+        return [
+            'line' => $line,
+            'run' => $run,
+            'company' => $run?->company ?: $line->company,
+            'employee' => $line->employee,
+            'contract' => $line->contract,
+            'generatedAt' => now(),
+            'statusOptions' => PayrollRun::statusOptions(),
+            'periodTypeOptions' => PayrollRun::periodTypeOptions(),
+            'legend' => 'Recibo interno sin validez CFDI. Este documento es una vista operativa de pre-nómina y no sustituye el CFDI de nómina timbrado.',
+        ];
+    }
+
+    public static function exportReceiptPdf(PayrollRunLine $line): StreamedResponse
+    {
+        if (! app()->bound('dompdf.wrapper')) {
+            throw new \RuntimeException('No hay motor PDF instalado (barryvdh/laravel-dompdf).');
+        }
+
+        $data = static::receiptData($line);
+
+        $pdf = app('dompdf.wrapper')
+            ->loadView('reports.hr.payroll-run-line-receipt-pdf', $data)
+            ->setPaper('letter', 'portrait');
+
+        return response()->streamDownload(function () use ($pdf): void {
+            echo $pdf->output();
+        }, static::receiptFilename($line), [
+            'Content-Type' => 'application/pdf',
+        ]);
+    }
+
+    public static function receiptFilename(PayrollRunLine $line): string
+    {
+        $line->loadMissing(['payrollRun', 'employee']);
+
+        $run = $line->payrollRun;
+        $from = $run?->period_start?->format('Ymd') ?: 'sin_inicio';
+        $to = $run?->period_end?->format('Ymd') ?: 'sin_fin';
+        $employeeName = preg_replace('/[^A-Za-z0-9_-]+/', '_', (string) ($line->employee?->name ?: 'empleado'));
+
+        return "recibo_interno_nomina_{$line->id}_{$from}_{$to}_{$employeeName}.pdf";
     }
 
     public static function statusLabel(?string $status): string
