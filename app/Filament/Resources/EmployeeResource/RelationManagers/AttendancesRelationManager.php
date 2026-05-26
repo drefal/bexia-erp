@@ -4,6 +4,7 @@ namespace App\Filament\Resources\EmployeeResource\RelationManagers;
 
 use App\Filament\Resources\EmployeeAttendanceResource;
 use App\Models\EmployeeAttendance;
+use App\Support\EmployeeAttendanceIncidentSync;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Grid;
@@ -12,6 +13,7 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -155,6 +157,38 @@ class AttendancesRelationManager extends RelationManager
                     ->visible(fn (): bool => static::bexiaCanAsistenciaPermission('rrhh.asistencias.crear')),
             ])
             ->actions([
+                Tables\Actions\Action::make('generate_incident')
+                    ->label('Generar incidencia')
+                    ->icon('heroicon-o-exclamation-triangle')
+                    ->requiresConfirmation()
+                    ->visible(fn (EmployeeAttendance $record): bool => EmployeeAttendanceIncidentSync::isEligible($record))
+                    ->action(function (EmployeeAttendance $record): void {
+                        try {
+                            $incident = EmployeeAttendanceIncidentSync::sync($record, auth()->id(), true);
+
+                            if (! $incident) {
+                                Notification::make()
+                                    ->title('No aplica incidencia')
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
+                            Notification::make()
+                                ->title('Incidencia generada')
+                                ->body('Incidencia #' . $incident->id . ' · Estado: ' . $incident->status)
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('No se pudo generar la incidencia')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
                 Tables\Actions\EditAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['updated_by_user_id'] = auth()->id();

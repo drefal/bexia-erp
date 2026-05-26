@@ -67,6 +67,19 @@ class EmployeeAttendance extends Model
         return $this->belongsTo(\App\Models\HrWorkSchedule::class, 'hr_work_schedule_id');
     }
 
+
+    /*
+     * V5.64.16b-start
+     * Incidencias generadas desde asistencia.
+     */
+    public function incidents()
+    {
+        return $this->hasMany(\App\Models\EmployeeIncident::class, 'employee_attendance_id');
+    }
+    /*
+     * V5.64.16b-end
+     */
+
     public function createdBy()
     {
         return $this->belongsTo(\App\Models\User::class, 'created_by_user_id');

@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\EmployeeAttendanceResource\Pages;
 use App\Models\Employee;
 use App\Models\EmployeeAttendance;
+use App\Support\EmployeeAttendanceIncidentSync;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
@@ -14,6 +15,7 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Filters\Filter;
@@ -273,10 +275,79 @@ class EmployeeAttendanceResource extends Resource
                     ->query(fn (Builder $query): Builder => $query->where('overtime_minutes', '>', 0)),
             ])
             ->actions([
+                Tables\Actions\Action::make('generate_incident')
+                    ->label('Generar incidencia')
+                    ->icon('heroicon-o-exclamation-triangle')
+                    ->requiresConfirmation()
+                    ->visible(fn (EmployeeAttendance $record): bool => EmployeeAttendanceIncidentSync::isEligible($record))
+                    ->action(function (EmployeeAttendance $record): void {
+                        try {
+                            $incident = EmployeeAttendanceIncidentSync::sync($record, auth()->id(), true);
+
+                            if (! $incident) {
+                                Notification::make()
+                                    ->title('No aplica incidencia')
+                                    ->body('Esta asistencia no genera Retardo o Falta.')
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
+                            Notification::make()
+                                ->title('Incidencia generada')
+                                ->body('Incidencia #' . $incident->id . ' · Estado: ' . $incident->status)
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('No se pudo generar la incidencia')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()->label('Eliminar'),
             ])
             ->bulkActions([
+                Tables\Actions\BulkAction::make('generate_incidents')
+                    ->label('Generar incidencias')
+                    ->icon('heroicon-o-exclamation-triangle')
+                    ->requiresConfirmation()
+                    ->action(function ($records): void {
+                        $generated = 0;
+                        $skipped = 0;
+                        $errors = [];
+
+                        foreach ($records as $record) {
+                            try {
+                                $incident = EmployeeAttendanceIncidentSync::sync($record, auth()->id(), true);
+
+                                if ($incident) {
+                                    $generated++;
+                                } else {
+                                    $skipped++;
+                                }
+                            } catch (\Throwable $e) {
+                                $errors[] = '#' . $record->id . ': ' . $e->getMessage();
+                            }
+                        }
+
+                        $body = 'Generadas/encontradas: ' . $generated . '. Omitidas: ' . $skipped . '.';
+
+                        if (! empty($errors)) {
+                            $body .= ' Errores: ' . substr(implode(' | ', array_slice($errors, 0, 3)), 0, 500);
+                        }
+
+                        Notification::make()
+                            ->title(empty($errors) ? 'Incidencias procesadas' : 'Incidencias procesadas con errores')
+                            ->body($body)
+                            ->color(empty($errors) ? 'success' : 'warning')
+                            ->send();
+                    }),
+
                 Tables\Actions\DeleteBulkAction::make()->label('Eliminar seleccionadas'),
             ])
             ->defaultSort('attendance_date', 'desc');

@@ -10,6 +10,7 @@ class EmployeeIncident extends Model
     protected $fillable = [
         'company_id',
         'employee_id',
+        'employee_attendance_id',
         'hr_incident_type_id',
         'title',
         'status',
@@ -51,6 +52,19 @@ class EmployeeIncident extends Model
     {
         return $this->belongsTo(\App\Models\Employee::class);
     }
+
+
+    /*
+     * V5.64.16b-start
+     * Asistencia origen de la incidencia.
+     */
+    public function attendance()
+    {
+        return $this->belongsTo(\App\Models\EmployeeAttendance::class, 'employee_attendance_id');
+    }
+    /*
+     * V5.64.16b-end
+     */
 
     public function incidentType()
     {
