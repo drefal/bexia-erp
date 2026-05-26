@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EmployeeResource\RelationManagers;
 
 use App\Models\HrIncidentType;
+use App\Support\EmployeeIncidentApprovalWorkflow;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -13,6 +14,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Filters\Filter;
@@ -259,6 +261,29 @@ class IncidentsRelationManager extends RelationManager
                     ->visible(fn (): bool => static::bexiaCanIncidenciaPermission('rrhh.incidencias.crear')),
             ])
             ->actions([
+                Tables\Actions\Action::make('send_to_approval')
+                    ->label('Enviar a aprobación')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->requiresConfirmation()
+                    ->visible(fn ($record): bool => in_array((string) $record->status, ['draft', 'rejected'], true))
+                    ->action(function ($record): void {
+                        try {
+                            $request = EmployeeIncidentApprovalWorkflow::sendToApproval($record);
+
+                            Notification::make()
+                                ->title('Incidencia enviada a aprobación')
+                                ->body('Solicitud #' . $request->id . ' creada correctamente.')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('No se pudo enviar a aprobación')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
                 Tables\Actions\EditAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['updated_by_user_id'] = auth()->id();

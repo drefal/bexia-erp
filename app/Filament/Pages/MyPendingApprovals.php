@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Support\BexiaUserNotification;
+use App\Support\EmployeeIncidentApprovalWorkflow;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -73,6 +74,7 @@ if (! static::canUseApprovalsPage()) {
             ->join('approval_requests as requests', 'requests.id', '=', 'steps.approval_request_id')
             ->where('steps.status', 'pending')
             ->where('requests.status', 'pending')
+            ->whereColumn('steps.step_order', 'requests.current_step_order')
             ->where('steps.approver_user_id', $userId)
             ->count();
     }
@@ -94,6 +96,7 @@ if (! static::canUseApprovalsPage()) {
             ->join('approval_requests as requests', 'requests.id', '=', 'steps.approval_request_id')
             ->where('steps.status', 'pending')
             ->where('requests.status', 'pending')
+            ->whereColumn('steps.step_order', 'requests.current_step_order')
             ->where('steps.approver_user_id', $userId)
             ->orderBy('requests.sent_at')
             ->orderBy('steps.step_order')
@@ -279,11 +282,19 @@ if (! static::canUseApprovalsPage()) {
 
         $nextStep = DB::table('approval_request_steps')
             ->where('approval_request_id', $request->id)
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'waiting'])
+            ->where('step_order', '>', $step->step_order)
             ->orderBy('step_order')
             ->first();
 
         if ($nextStep) {
+            DB::table('approval_request_steps')
+                ->where('id', $nextStep->id)
+                ->update([
+                    'status' => 'pending',
+                    'updated_at' => now(),
+                ]);
+
             $requestUpdate = [
                 'current_step_order' => $nextStep->step_order,
                 'updated_at' => now(),
@@ -361,7 +372,7 @@ if (! static::canUseApprovalsPage()) {
 
         DB::table('approval_request_steps')
             ->where('approval_request_id', $request->id)
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'waiting'])
             ->update([
                 'status' => 'skipped',
                 'updated_at' => now(),
@@ -396,6 +407,20 @@ if (! static::canUseApprovalsPage()) {
     protected function markDocumentApproved(object $request, object $user, string $comment): void
     {
         $type = (string) ($request->document_type ?? '');
+
+        if ($type === 'employee_incident') {
+            EmployeeIncidentApprovalWorkflow::markApproved($request, $user->id, $comment);
+
+            $this->notifyRequester(
+                $request,
+                'Incidencia RRHH aprobada',
+                'La incidencia ' . $request->document_number . ' fue aprobada.',
+                'employee_incident_approved',
+                $comment
+            );
+
+            return;
+        }
 
         if ($type === 'purchase_order' && Schema::hasTable('purchase_orders')) {
             DB::table('purchase_orders')
@@ -439,6 +464,20 @@ if (! static::canUseApprovalsPage()) {
     protected function markDocumentRejected(object $request, object $user, string $reason): void
     {
         $type = (string) ($request->document_type ?? '');
+
+        if ($type === 'employee_incident') {
+            EmployeeIncidentApprovalWorkflow::markRejected($request, $user->id, $reason);
+
+            $this->notifyRequester(
+                $request,
+                'Incidencia RRHH rechazada',
+                'La incidencia ' . $request->document_number . ' fue rechazada. Motivo: ' . $reason,
+                'employee_incident_rejected',
+                $reason
+            );
+
+            return;
+        }
 
         if ($type === 'purchase_order' && Schema::hasTable('purchase_orders')) {
             DB::table('purchase_orders')
@@ -550,6 +589,12 @@ if (! static::canUseApprovalsPage()) {
                 : 'Solicitud de compra rechazada.';
         }
 
+        if ($type === 'employee_incident') {
+            return $decision === 'approved'
+                ? 'Incidencia RRHH aprobada.'
+                : 'Incidencia RRHH rechazada.';
+        }
+
         return $decision === 'approved'
             ? 'Documento aprobado.'
             : 'Documento rechazado.';
@@ -579,6 +624,7 @@ if (! static::canUseApprovalsPage()) {
                 'tenant' => $tenantId,
                 'from_tab' => in_array($type, ['sales_quote', 'sales_:quote', 'sale_quote', 'sales_margin_approval'], true) ? 'por_aprobar' : 'ordenes',
             ]),
+            'employee_incident' => EmployeeIncidentApprovalWorkflow::documentUrl($row),
             default => '#',
         };
     }
@@ -594,6 +640,10 @@ if (! static::canUseApprovalsPage()) {
         $type = (string) ($row->document_type ?? '');
         $id = (int) ($row->approvable_id ?? 0);
         $number = (string) ($row->document_number ?? '');
+
+        if ($type === 'employee_incident' && $id > 0 && Schema::hasTable('employee_incidents')) {
+            return (int) DB::table('employee_incidents')->where('id', $id)->value('company_id');
+        }
 
         if ($type === 'purchase_order' && $id > 0 && Schema::hasTable('purchase_orders')) {
             return (int) DB::table('purchase_orders')->where('id', $id)->value('company_id');

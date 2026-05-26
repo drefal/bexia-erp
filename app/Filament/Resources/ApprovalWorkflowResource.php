@@ -316,6 +316,7 @@ public static function documentTypeOptions(): array
             'sales_quote' => 'Cotización de venta',
             'sales_order' => 'Orden de venta',
             'sales_margin_approval' => 'Aprobación de margen de venta',
+            'employee_incident' => 'Incidencia RRHH',
         ];
     }
 

@@ -6,6 +6,7 @@ use App\Filament\Resources\EmployeeIncidentResource\Pages;
 use App\Models\Employee;
 use App\Models\EmployeeIncident;
 use App\Models\HrIncidentType;
+use App\Support\EmployeeIncidentApprovalWorkflow;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
@@ -17,6 +18,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Filters\Filter;
@@ -336,6 +338,29 @@ class EmployeeIncidentResource extends Resource
                     ->query(fn (Builder $query): Builder => $query->where('affects_payroll', true)),
             ])
             ->actions([
+                Tables\Actions\Action::make('send_to_approval')
+                    ->label('Enviar a aprobación')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->requiresConfirmation()
+                    ->visible(fn (EmployeeIncident $record): bool => in_array((string) $record->status, ['draft', 'rejected'], true))
+                    ->action(function (EmployeeIncident $record): void {
+                        try {
+                            $request = EmployeeIncidentApprovalWorkflow::sendToApproval($record);
+
+                            Notification::make()
+                                ->title('Incidencia enviada a aprobación')
+                                ->body('Solicitud #' . $request->id . ' creada correctamente.')
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('No se pudo enviar a aprobación')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()->label('Eliminar'),
             ])
