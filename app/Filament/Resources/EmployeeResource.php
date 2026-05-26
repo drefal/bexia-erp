@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\EmployeeResource\Pages;
 use App\Filament\Resources\EmployeeResource\RelationManagers\DocumentsRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\ContractsRelationManager;
 use App\Filament\Resources\EmployeeResource\RelationManagers\IncidentsRelationManager;
 use App\Filament\Resources\EmployeeResource\RelationManagers\VacationBalancesRelationManager;
 use App\Models\Branch;
@@ -724,6 +725,7 @@ public static function canCreate(): bool
     {
         return [
             DocumentsRelationManager::class,
+            ContractsRelationManager::class,
             IncidentsRelationManager::class,
             VacationBalancesRelationManager::class,
         ];

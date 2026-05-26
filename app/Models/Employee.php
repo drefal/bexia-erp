@@ -205,6 +205,24 @@ class Employee extends Model
      * V5.64.7b-end
      */
 
+
+    /*
+     * V5.64.11b-start
+     * Contratos laborales del empleado.
+     */
+    public function contracts()
+    {
+        return $this->hasMany(\App\Models\EmployeeContract::class);
+    }
+
+    public function currentContract()
+    {
+        return $this->hasOne(\App\Models\EmployeeContract::class)->where('is_current', true);
+    }
+    /*
+     * V5.64.11b-end
+     */
+
     public function getAvatarUrlAttribute(): ?string
     {
         if (blank($this->avatar_path)) {
