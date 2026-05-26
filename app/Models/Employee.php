@@ -175,6 +175,19 @@ class Employee extends Model
      * V5.64.3b-end
      */
 
+
+    /*
+     * V5.64.4b-start
+     * Incidencias del empleado.
+     */
+    public function incidents()
+    {
+        return $this->hasMany(\App\Models\EmployeeIncident::class);
+    }
+    /*
+     * V5.64.4b-end
+     */
+
     public function getAvatarUrlAttribute(): ?string
     {
         if (blank($this->avatar_path)) {

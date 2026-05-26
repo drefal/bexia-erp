@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\EmployeeResource\Pages;
 use App\Filament\Resources\EmployeeResource\RelationManagers\DocumentsRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\IncidentsRelationManager;
 use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\PayrollPeriodicity;
@@ -713,6 +714,7 @@ public static function canCreate(): bool
     {
         return [
             DocumentsRelationManager::class,
+            IncidentsRelationManager::class,
         ];
     }
 
