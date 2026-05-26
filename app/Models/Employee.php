@@ -162,6 +162,19 @@ class Employee extends Model
      * V5.64.2c-end
      */
 
+
+    /*
+     * V5.64.3b-start
+     * Expediente documental del empleado.
+     */
+    public function documents()
+    {
+        return $this->hasMany(\App\Models\EmployeeDocument::class);
+    }
+    /*
+     * V5.64.3b-end
+     */
+
     public function getAvatarUrlAttribute(): ?string
     {
         if (blank($this->avatar_path)) {
