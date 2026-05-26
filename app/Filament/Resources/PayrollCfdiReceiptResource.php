@@ -168,6 +168,31 @@ class PayrollCfdiReceiptResource extends Resource
                     ->options(self::statusOptions()),
             ])
             ->actions([
+                Tables\Actions\Action::make('download_xml_draft')
+                    ->label('Descargar XML')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('info')
+                    ->visible(fn ($record): bool => filled($record->xml_path))
+                    ->action(function ($record) {
+                        if (! filled($record->xml_path) || ! \Illuminate\Support\Facades\Storage::disk('local')->exists($record->xml_path)) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('XML no disponible')
+                                ->body('El archivo XML no existe o no esta disponible en storage.')
+                                ->danger()
+                                ->send();
+
+                            return null;
+                        }
+
+                        $folio = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string) ($record->folio ?: ('recibo_' . $record->id)));
+
+                        return response()->download(
+                            \Illuminate\Support\Facades\Storage::disk('local')->path($record->xml_path),
+                            'cfdi_nomina_' . $folio . '.xml',
+                            ['Content-Type' => 'application/xml']
+                        );
+                    }),
+
                 Tables\Actions\Action::make('prepare_receipt_xml_draft')
                     ->label('Generar XML')
                     ->icon('heroicon-o-document-text')
@@ -280,6 +305,32 @@ class PayrollCfdiReceiptResource extends Resource
                         Infolists\Components\TextEntry::make('totals_snapshot_net')
                             ->label('Neto')
                             ->state(fn (PayrollCfdiReceipt $record): string => self::moneyFromSnapshot($record->totals_snapshot, 'net_amount')),
+                    ]),
+
+                Infolists\Components\Section::make('XML borrador')
+                    ->description('XML generado localmente. No timbrado, sin UUID y sin envio a PAC/SAT.')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('xml_path')
+                            ->label('Ruta XML')
+                            ->placeholder('Sin XML generado')
+                            ->copyable()
+                            ->columnSpanFull(),
+
+                        Infolists\Components\TextEntry::make('xml_content')
+                            ->label('Contenido XML')
+                            ->state(function (PayrollCfdiReceipt $record): string {
+                                if (! filled($record->xml_path)) {
+                                    return 'Sin XML generado.';
+                                }
+
+                                if (! \Illuminate\Support\Facades\Storage::disk('local')->exists($record->xml_path)) {
+                                    return 'El XML no existe en storage.';
+                                }
+
+                                return \Illuminate\Support\Facades\Storage::disk('local')->get($record->xml_path);
+                            })
+                            ->copyable()
+                            ->columnSpanFull(),
                     ]),
 
                 Infolists\Components\Section::make('Snapshots fiscales')
