@@ -34,6 +34,8 @@ class Employee extends Model
         'curp',
         'rfc',
         'employee_type',
+        'hire_date',
+        'termination_date',
 
         'work_address',
         'work_timezone',
@@ -92,6 +94,8 @@ class Employee extends Model
         'active' => 'boolean',
         'flexible_hours' => 'boolean',
         'birth_date' => 'date',
+        'hire_date' => 'date',
+        'termination_date' => 'date',
         'visa_expiration_date' => 'date',
         'work_permit_expiration_date' => 'date',
         'hourly_cost' => 'decimal:2',
@@ -186,6 +190,19 @@ class Employee extends Model
     }
     /*
      * V5.64.4b-end
+     */
+
+
+    /*
+     * V5.64.7b-start
+     * Saldos de vacaciones del empleado.
+     */
+    public function vacationBalances()
+    {
+        return $this->hasMany(\App\Models\EmployeeVacationBalance::class);
+    }
+    /*
+     * V5.64.7b-end
      */
 
     public function getAvatarUrlAttribute(): ?string

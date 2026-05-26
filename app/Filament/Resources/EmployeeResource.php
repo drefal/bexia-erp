@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\EmployeeResource\Pages;
 use App\Filament\Resources\EmployeeResource\RelationManagers\DocumentsRelationManager;
 use App\Filament\Resources\EmployeeResource\RelationManagers\IncidentsRelationManager;
+use App\Filament\Resources\EmployeeResource\RelationManagers\VacationBalancesRelationManager;
 use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\PayrollPeriodicity;
@@ -452,6 +453,15 @@ public static function canCreate(): bool
                                                 ])
                                                 ->default('employee'),
 
+                                            DatePicker::make('hire_date')
+                                                ->label('Fecha de ingreso')
+                                                ->native(false)
+                                                ->helperText('Necesaria para calcular antigüedad y vacaciones.'),
+
+                                            DatePicker::make('termination_date')
+                                                ->label('Fecha de baja')
+                                                ->native(false),
+
                                             Select::make('payroll_periodicity_id')
                                                 ->label('Periodicidad de nómina')
                                                 ->options(fn () => self::payrollPeriodicityOptions())
@@ -715,6 +725,7 @@ public static function canCreate(): bool
         return [
             DocumentsRelationManager::class,
             IncidentsRelationManager::class,
+            VacationBalancesRelationManager::class,
         ];
     }
 
