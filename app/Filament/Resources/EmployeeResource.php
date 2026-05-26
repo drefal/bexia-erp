@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\EmployeeResource\Pages;
+use App\Filament\Resources\EmployeeResource\RelationManagers\DocumentsRelationManager;
 use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\PayrollPeriodicity;
@@ -705,6 +706,14 @@ public static function canCreate(): bool
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()->label('Eliminar'),
             ]);
+    }
+
+
+    public static function getRelations(): array
+    {
+        return [
+            DocumentsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array
