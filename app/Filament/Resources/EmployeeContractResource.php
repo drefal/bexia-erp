@@ -236,6 +236,95 @@ class EmployeeContractResource extends Resource
                             ]),
                     ]),
 
+                Section::make('CFDI nómina SAT')
+                    ->description('Datos fiscales laborales usados para validar y preparar el complemento de nómina. No timbra.')
+                    ->schema([
+                        Grid::make(2)
+                            ->schema([
+                                Select::make('sat_contract_type_code')
+                                    ->label('Tipo contrato SAT')
+                                    ->options([
+                                        '01' => '01 - Contrato de trabajo por tiempo indeterminado',
+                                        '02' => '02 - Contrato de trabajo para obra determinada',
+                                        '03' => '03 - Contrato de trabajo por tiempo determinado',
+                                        '04' => '04 - Contrato de trabajo por temporada',
+                                        '05' => '05 - Contrato de trabajo sujeto a prueba',
+                                        '06' => '06 - Contrato de trabajo con capacitación inicial',
+                                        '07' => '07 - Modalidad de contratación por pago de hora laborada',
+                                        '08' => '08 - Modalidad de trabajo por comisión laboral',
+                                        '09' => '09 - Modalidades de contratación donde no existe relación de trabajo',
+                                        '10' => '10 - Jubilación, pensión, retiro',
+                                        '99' => '99 - Otro contrato',
+                                    ])
+                                    ->searchable()
+                                    ->preload(),
+
+                                Select::make('sat_workday_type_code')
+                                    ->label('Tipo jornada SAT')
+                                    ->options([
+                                        '01' => '01 - Diurna',
+                                        '02' => '02 - Nocturna',
+                                        '03' => '03 - Mixta',
+                                        '04' => '04 - Por hora',
+                                        '05' => '05 - Reducida',
+                                        '06' => '06 - Continuada',
+                                        '07' => '07 - Partida',
+                                        '08' => '08 - Por turnos',
+                                        '99' => '99 - Otra jornada',
+                                    ])
+                                    ->searchable()
+                                    ->preload(),
+
+                                Select::make('sat_regime_type_code')
+                                    ->label('Tipo régimen SAT')
+                                    ->options([
+                                        '02' => '02 - Sueldos',
+                                        '03' => '03 - Jubilados',
+                                        '04' => '04 - Pensionados',
+                                        '05' => '05 - Asimilados miembros sociedades cooperativas',
+                                        '06' => '06 - Asimilados integrantes sociedades y asociaciones civiles',
+                                        '07' => '07 - Asimilados miembros consejos',
+                                        '08' => '08 - Asimilados comisionistas',
+                                        '09' => '09 - Asimilados honorarios',
+                                        '10' => '10 - Asimilados acciones',
+                                        '11' => '11 - Asimilados otros',
+                                        '99' => '99 - Otro régimen',
+                                    ])
+                                    ->default('02')
+                                    ->searchable()
+                                    ->preload(),
+
+                                Select::make('sat_risk_position_code')
+                                    ->label('Riesgo puesto SAT')
+                                    ->options([
+                                        '1' => 'Clase I',
+                                        '2' => 'Clase II',
+                                        '3' => 'Clase III',
+                                        '4' => 'Clase IV',
+                                        '5' => 'Clase V',
+                                        '99' => 'No aplica',
+                                    ])
+                                    ->searchable()
+                                    ->preload(),
+
+                                TextInput::make('daily_salary')
+                                    ->label('Salario diario')
+                                    ->numeric()
+                                    ->prefix('$')
+                                    ->helperText('Salario diario usado para CFDI nómina.'),
+
+                                TextInput::make('integrated_daily_salary')
+                                    ->label('Salario diario integrado')
+                                    ->numeric()
+                                    ->prefix('$')
+                                    ->helperText('SDI usado para IMSS/CFDI nómina.'),
+
+                                Toggle::make('is_unionized')
+                                    ->label('Sindicalizado')
+                                    ->helperText('Dato informativo para complemento de nómina.'),
+                            ]),
+                    ]),
+
                 Section::make('Archivo y notas')
                     ->schema([
                         FileUpload::make('file_path')

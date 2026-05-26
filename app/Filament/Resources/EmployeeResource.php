@@ -289,6 +289,50 @@ public static function canCreate(): bool
                                         ->content('Módulo pendiente. Aquí se podrán mostrar insignias y reconocimientos del empleado.'),
                                 ]),
 
+                            Tabs\Tab::make('Fiscal / CFDI nómina')
+                                ->schema([
+                                    Section::make('Datos fiscales del empleado')
+                                        ->description('Información requerida para validar y preparar CFDI de nómina. No timbra; solo deja los datos listos.')
+                                        ->schema([
+                                            TextInput::make('rfc')
+                                                ->label('RFC')
+                                                ->maxLength(13)
+                                                ->uppercase()
+                                                ->helperText('RFC del empleado como receptor del CFDI de nómina.'),
+
+                                            TextInput::make('curp')
+                                                ->label('CURP')
+                                                ->maxLength(18)
+                                                ->uppercase(),
+
+                                            TextInput::make('social_security_number')
+                                                ->label('NSS')
+                                                ->maxLength(30)
+                                                ->helperText('Número de Seguridad Social. Si antes se capturó en SSN, copiarlo aquí para CFDI nómina.'),
+
+                                            TextInput::make('fiscal_name')
+                                                ->label('Nombre fiscal')
+                                                ->maxLength(255)
+                                                ->helperText('Debe coincidir con la constancia fiscal. Si se deja vacío, el validador usará el nombre del empleado.'),
+
+                                            TextInput::make('fiscal_postal_code')
+                                                ->label('Código postal fiscal')
+                                                ->maxLength(10)
+                                                ->rule('regex:/^[0-9]{5}$/')
+                                                ->helperText('Código postal fiscal del empleado, 5 dígitos.'),
+
+                                            Select::make('sat_tax_regime_code')
+                                                ->label('Régimen fiscal SAT')
+                                                ->options([
+                                                    '605' => '605 - Sueldos y Salarios e Ingresos Asimilados a Salarios',
+                                                ])
+                                                ->searchable()
+                                                ->preload()
+                                                ->helperText('Para empleados normalmente corresponde 605.'),
+                                        ])
+                                        ->columns(2),
+                                ]),
+
                             Tabs\Tab::make('Datos personales')
                                 ->schema([
                                     Section::make('Contacto privado')

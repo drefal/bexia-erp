@@ -32,7 +32,14 @@ class EmployeeContract extends Model
         'notes',
         'created_by_user_id',
         'updated_by_user_id',
-    ];
+        'sat_contract_type_code',
+        'sat_workday_type_code',
+        'sat_regime_type_code',
+        'sat_risk_position_code',
+        'daily_salary',
+        'integrated_daily_salary',
+        'is_unionized',
+];
 
     protected $casts = [
         'start_date' => 'date',

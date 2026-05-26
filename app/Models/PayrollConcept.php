@@ -20,7 +20,10 @@ class PayrollConcept extends Model
         'notes',
         'created_by_user_id',
         'updated_by_user_id',
-    ];
+        'is_taxable',
+        'taxable_amount_default',
+        'exempt_amount_default',
+];
 
     protected $casts = [
         'is_active' => 'boolean',

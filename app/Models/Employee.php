@@ -86,7 +86,11 @@ class Employee extends Model
         'is_pos_seller',
         'pos_pin_hash',
         'notes',
-    ];
+        'fiscal_name',
+        'fiscal_postal_code',
+        'sat_tax_regime_code',
+        'social_security_number',
+];
 
     protected $casts = [
         'pos_active' => 'boolean',
