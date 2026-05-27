@@ -34,16 +34,27 @@ return new class extends Migration
                 'dashboard.ver',
                 'dashboard.configurar',
             ] as $permissionName) {
-                DB::table('permissions')->updateOrInsert(
-                    [
-                        'name' => $permissionName,
-                        'guard_name' => 'web',
-                    ],
-                    [
-                        'updated_at' => now(),
-                        'created_at' => DB::raw('coalesce(created_at, now())'),
-                    ]
-                );
+                $existing = DB::table('permissions')
+                    ->where('name', $permissionName)
+                    ->where('guard_name', 'web')
+                    ->first();
+
+                if ($existing) {
+                    DB::table('permissions')
+                        ->where('id', $existing->id)
+                        ->update([
+                            'updated_at' => now(),
+                        ]);
+
+                    continue;
+                }
+
+                DB::table('permissions')->insert([
+                    'name' => $permissionName,
+                    'guard_name' => 'web',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
             }
         }
     }

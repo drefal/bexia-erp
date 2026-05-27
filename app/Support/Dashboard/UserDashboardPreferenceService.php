@@ -24,21 +24,14 @@ class UserDashboardPreferenceService
         }
 
         foreach ($this->registry->catalog() as $key => $definition) {
-            DB::table('dashboard_widget_user_settings')->updateOrInsert(
-                [
-                    'company_id' => $companyId,
-                    'user_id' => $userId,
-                    'widget_key' => $key,
-                ],
-                [
-                    'is_visible' => (bool) ($definition['default_visible'] ?? true),
-                    'sort_order' => (int) ($definition['sort_order'] ?? 100),
-                    'settings' => json_encode([]),
-                    'updated_by_user_id' => $actorUserId,
-                    'updated_at' => now(),
-                    'created_by_user_id' => DB::raw('coalesce(created_by_user_id, ' . ($actorUserId ?: 'null') . ')'),
-                    'created_at' => DB::raw('coalesce(created_at, now())'),
-                ]
+            $this->upsertPreference(
+                companyId: $companyId,
+                userId: $userId,
+                widgetKey: (string) $key,
+                isVisible: (bool) ($definition['default_visible'] ?? true),
+                sortOrder: (int) ($definition['sort_order'] ?? 100),
+                settings: [],
+                actorUserId: $actorUserId,
             );
         }
 
@@ -56,23 +49,16 @@ class UserDashboardPreferenceService
             return;
         }
 
-        $definition = $this->registry->catalog()[$widgetKey] ?? null;
+        $definition = $this->registry->catalog()[$widgetKey] ?? [];
 
-        DB::table('dashboard_widget_user_settings')->updateOrInsert(
-            [
-                'company_id' => $companyId,
-                'user_id' => $userId,
-                'widget_key' => $widgetKey,
-            ],
-            [
-                'is_visible' => $isVisible,
-                'sort_order' => (int) ($definition['sort_order'] ?? 100),
-                'settings' => json_encode([]),
-                'updated_by_user_id' => $actorUserId,
-                'updated_at' => now(),
-                'created_by_user_id' => DB::raw('coalesce(created_by_user_id, ' . ($actorUserId ?: 'null') . ')'),
-                'created_at' => DB::raw('coalesce(created_at, now())'),
-            ]
+        $this->upsertPreference(
+            companyId: $companyId,
+            userId: $userId,
+            widgetKey: $widgetKey,
+            isVisible: $isVisible,
+            sortOrder: (int) ($definition['sort_order'] ?? 100),
+            settings: [],
+            actorUserId: $actorUserId,
         );
     }
 
@@ -113,5 +99,48 @@ class UserDashboardPreferenceService
             ->where('company_id', $companyId)
             ->where('user_id', $userId)
             ->delete();
+    }
+
+    protected function upsertPreference(
+        int $companyId,
+        int $userId,
+        string $widgetKey,
+        bool $isVisible,
+        int $sortOrder,
+        array $settings = [],
+        ?int $actorUserId = null
+    ): void {
+        $existing = DB::table('dashboard_widget_user_settings')
+            ->where('company_id', $companyId)
+            ->where('user_id', $userId)
+            ->where('widget_key', $widgetKey)
+            ->first();
+
+        if ($existing) {
+            DB::table('dashboard_widget_user_settings')
+                ->where('id', $existing->id)
+                ->update([
+                    'is_visible' => $isVisible,
+                    'sort_order' => $sortOrder,
+                    'settings' => json_encode($settings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'updated_by_user_id' => $actorUserId,
+                    'updated_at' => now(),
+                ]);
+
+            return;
+        }
+
+        DB::table('dashboard_widget_user_settings')->insert([
+            'company_id' => $companyId,
+            'user_id' => $userId,
+            'widget_key' => $widgetKey,
+            'is_visible' => $isVisible,
+            'sort_order' => $sortOrder,
+            'settings' => json_encode($settings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'created_by_user_id' => $actorUserId,
+            'updated_by_user_id' => $actorUserId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 }
