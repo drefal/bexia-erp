@@ -22,17 +22,51 @@ class TreasuryCashTransferRequestResource extends Resource
 {
     protected static ?string $model = TreasuryCashTransferRequest::class;
 
+    /*
+     * El panel Filament usa tenant por URL (/admin/{tenant}), pero este modelo
+     * no tiene relacion companies(). Filtramos manualmente por company_id en
+     * getEloquentQuery(), por eso se desactiva el ownership relationship.
+     */
+    protected static ?string $tenantOwnershipRelationshipName = 'company';
+
     protected static ?string $navigationIcon = 'heroicon-o-arrows-right-left';
 
     protected static ?string $navigationGroup = 'Tesorería';
 
     protected static ?string $navigationLabel = 'Solicitudes de efectivo';
 
-    protected static ?string $modelLabel = 'solicitud de efectivo';
+    protected static ?string $modelLabel = 'Solicitud de efectivo';
 
-    protected static ?string $pluralModelLabel = 'solicitudes de efectivo';
+    protected static ?string $pluralModelLabel = 'Solicitudes de efectivo';
 
     protected static ?int $navigationSort = 25;
+
+
+    public static function getBreadcrumb(): string
+    {
+        return 'Solicitudes de efectivo';
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $companyId = static::currentCompanyId();
+
+        $query = static::getModel()::query()
+            ->whereIn('status', ['requested', 'approved', 'delivered']);
+
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+
+        $count = $query->count();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
 
     public static function canViewAny(): bool
     {
@@ -63,7 +97,13 @@ class TreasuryCashTransferRequestResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        $query = parent::getEloquentQuery();
+        /*
+         * No usamos parent::getEloquentQuery() porque el panel tenant intenta
+         * aplicar una relacion ownership por defecto. Este recurso se filtra
+         * manualmente por company_id usando el tenant de la URL.
+         */
+        $model = static::getModel();
+        $query = $model::query();
 
         $companyId = static::currentCompanyId();
 
@@ -79,7 +119,7 @@ class TreasuryCashTransferRequestResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Flujo de efectivo')
-                    ->description('Define de qué caja sale el dinero y a qué caja entra. Ejemplo: Caja PDV → Caja sucursal.')
+                    ->description('Define de qué caja sale el dinero y a qué caja entra. La sucursal, almacén o PDV se determinan por las cajas seleccionadas.')
                     ->columns(2)
                     ->schema([
                         Forms\Components\Select::make('type')
@@ -110,24 +150,6 @@ class TreasuryCashTransferRequestResource extends Resource
                             ->searchable()
                             ->preload()
                             ->helperText('Para retiro de PDV, selecciona la caja de tienda/sucursal.'),
-
-                        Forms\Components\Select::make('branch_id')
-                            ->label('Sucursal')
-                            ->options(fn (): array => static::branchOptions())
-                            ->searchable()
-                            ->preload(),
-
-                        Forms\Components\Select::make('warehouse_id')
-                            ->label('Almacén')
-                            ->options(fn (): array => static::warehouseOptions())
-                            ->searchable()
-                            ->preload(),
-
-                        Forms\Components\Select::make('pos_point_id')
-                            ->label('PDV')
-                            ->options(fn (): array => static::posPointOptions())
-                            ->searchable()
-                            ->preload(),
 
                         Forms\Components\TextInput::make('currency_code')
                             ->label('Moneda')
@@ -196,14 +218,6 @@ class TreasuryCashTransferRequestResource extends Resource
                         Infolists\Components\TextEntry::make('destination_treasury_account_id')
                             ->label('Caja destino')
                             ->formatStateUsing(fn ($state): string => static::accountLabel($state)),
-
-                        Infolists\Components\TextEntry::make('branch_id')
-                            ->label('Sucursal')
-                            ->formatStateUsing(fn ($state): string => static::branchLabel($state)),
-
-                        Infolists\Components\TextEntry::make('pos_point_id')
-                            ->label('PDV')
-                            ->formatStateUsing(fn ($state): string => static::posPointLabel($state)),
                     ]),
 
                 Infolists\Components\Section::make('Motivo y notas')

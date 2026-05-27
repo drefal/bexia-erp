@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TreasuryCashTransferRequest extends Model
@@ -52,6 +53,21 @@ class TreasuryCashTransferRequest extends Model
         'posted_at' => 'datetime',
         'metadata' => 'array',
     ];
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
+
+    /*
+     * Compatibilidad con panel tenant que puede buscar relacion companies.
+     * La propiedad tenantOwnershipRelationshipName del Resource usa company,
+     * pero dejamos este alias para evitar errores si otra capa usa companies.
+     */
+    public function companies(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
 
     public function approvalLogs(): HasMany
     {
