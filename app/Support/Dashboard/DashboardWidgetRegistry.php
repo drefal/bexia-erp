@@ -115,10 +115,51 @@ class DashboardWidgetRegistry
         }
 
         try {
-            return (int) app(PermissionRegistrar::class)->getPermissionsTeamId();
+            $teamId = (int) app(PermissionRegistrar::class)->getPermissionsTeamId();
+
+            if ($teamId > 0) {
+                return $teamId;
+            }
         } catch (\Throwable) {
-            return 0;
         }
+
+        $userId = (int) auth()->id();
+
+        if ($userId > 0 && Schema::hasTable('dashboard_widget_user_settings')) {
+            $companyIdFromPreferences = (int) DB::table('dashboard_widget_user_settings')
+                ->where('user_id', $userId)
+                ->orderBy('company_id')
+                ->value('company_id');
+
+            if ($companyIdFromPreferences > 0) {
+                return $companyIdFromPreferences;
+            }
+        }
+
+        if ($userId > 0) {
+            foreach (['company_user', 'company_user_access', 'company_users'] as $pivotTable) {
+                if (! Schema::hasTable($pivotTable)) {
+                    continue;
+                }
+
+                $columns = Schema::getColumnListing($pivotTable);
+
+                if (! in_array('user_id', $columns, true) || ! in_array('company_id', $columns, true)) {
+                    continue;
+                }
+
+                $companyIdFromPivot = (int) DB::table($pivotTable)
+                    ->where('user_id', $userId)
+                    ->orderBy('company_id')
+                    ->value('company_id');
+
+                if ($companyIdFromPivot > 0) {
+                    return $companyIdFromPivot;
+                }
+            }
+        }
+
+        return 0;
     }
 
     public function visibleForUser(?User $user = null, ?int $companyId = null): Collection
