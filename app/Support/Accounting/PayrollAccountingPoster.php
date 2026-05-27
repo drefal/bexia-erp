@@ -768,8 +768,27 @@ class PayrollAccountingPoster
     protected function buildEntryNumber(?object $journal, string $prefix, int $id): string
     {
         $journalCode = $journal?->code ?: 'GEN';
+        $base = sprintf('%s-%s-%08d', $journalCode, $prefix, $id);
+        $companyId = (int) ($journal->company_id ?? 0);
 
-        return sprintf('%s-%s-%08d', $journalCode, $prefix, $id);
+        if ($companyId <= 0) {
+            return $base;
+        }
+
+        $candidate = $base;
+
+        for ($i = 1; $i <= 99; $i++) {
+            if (! DB::table('accounting_entries')
+                ->where('company_id', $companyId)
+                ->where('entry_number', $candidate)
+                ->exists()) {
+                return $candidate;
+            }
+
+            $candidate = $base . '-' . str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT);
+        }
+
+        throw new RuntimeException('No se pudo generar folio contable único para nómina: ' . $base);
     }
 
     protected function assertEntryBalances(int $entryId): void

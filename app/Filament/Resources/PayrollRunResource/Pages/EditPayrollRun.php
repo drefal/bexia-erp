@@ -208,6 +208,143 @@ class EditPayrollRun extends EditRecord
                     $this->redirect($this->getResource()::getUrl('edit', ['record' => $this->record]));
                 }),
 
+
+            Actions\Action::make('setup_payroll_accounting_defaults')
+                ->label('Config. contable')
+                ->icon('heroicon-o-cog-6-tooth')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Preparar configuración contable de nómina')
+                ->modalDescription('Creará o actualizará cuentas y mapeos contables por defecto para nómina.')
+                ->modalSubmitActionLabel('Preparar configuración')
+                ->visible(fn (): bool => $this->getResource()::bexiaCanPayrollAccounting())
+                ->action(function (): void {
+                    app(\App\Support\Accounting\PayrollAccountingPoster::class)->setupDefaultMappings(
+                        companyId: (int) $this->record->company_id,
+                        userId: auth()->id(),
+                    );
+
+                    Notification::make()
+                        ->title('Configuración contable lista')
+                        ->body('Cuentas y mapeos de nómina preparados.')
+                        ->success()
+                        ->send();
+                }),
+
+            Actions\Action::make('preview_payroll_accounting')
+                ->label('Resumen contable')
+                ->icon('heroicon-o-document-magnifying-glass')
+                ->color('info')
+                ->visible(fn (): bool => $this->getResource()::bexiaCanPayrollAccounting()
+                    && in_array((string) $this->record->status, ['closed', 'approved', 'paid'], true))
+                ->action(function (): void {
+                    try {
+                        $summary = app(\App\Support\Accounting\PayrollAccountingPoster::class)->dryRun(
+                            companyId: (int) $this->record->company_id,
+                            payrollRunId: (int) $this->record->id,
+                        );
+
+                        Notification::make()
+                            ->title('Resumen contable de nómina')
+                            ->body('Debe: $' . number_format((float) $summary['total_debit'], 2) . PHP_EOL
+                                . 'Haber: $' . number_format((float) $summary['total_credit'], 2) . PHP_EOL
+                                . 'Líneas: ' . count($summary['lines']))
+                            ->success()
+                            ->send();
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->title('No se pudo generar resumen')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
+
+            Actions\Action::make('post_payroll_accounting')
+                ->label('Generar póliza')
+                ->icon('heroicon-o-check-badge')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Generar póliza contable de nómina')
+                ->modalDescription('Generará la póliza contable de esta nómina cerrada. No afecta CFDI, PAC ni SAT.')
+                ->modalSubmitActionLabel('Sí, generar póliza')
+                ->visible(fn (): bool => $this->getResource()::bexiaCanPayrollAccounting()
+                    && in_array((string) $this->record->status, ['closed', 'approved', 'paid'], true)
+                    && $this->getResource()::payrollAccountingActiveEntryId($this->record) === null)
+                ->action(function (): void {
+                    try {
+                        $entry = app(\App\Support\Accounting\PayrollAccountingPoster::class)->post(
+                            companyId: (int) $this->record->company_id,
+                            payrollRunId: (int) $this->record->id,
+                            userId: auth()->id(),
+                        );
+
+                        $this->record->refresh();
+
+                        Notification::make()
+                            ->title('Póliza de nómina generada')
+                            ->body('Póliza: ' . (string) ($entry->entry_number ?? ('ID ' . $entry->id)))
+                            ->success()
+                            ->send();
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->title('No se pudo generar póliza')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
+
+            Actions\Action::make('view_payroll_accounting_entry')
+                ->label('Ver póliza')
+                ->icon('heroicon-o-eye')
+                ->color('gray')
+                ->visible(fn (): bool => $this->getResource()::payrollAccountingAnyEntryId($this->record) !== null)
+                ->url(fn (): ?string => $this->getResource()::payrollAccountingEntryUrl($this->record))
+                ->openUrlInNewTab(),
+
+            Actions\Action::make('reverse_payroll_accounting')
+                ->label('Revertir póliza')
+                ->icon('heroicon-o-arrow-uturn-left')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading('Revertir póliza contable de nómina')
+                ->modalDescription('Generará una póliza inversa y marcará la póliza original como cancelada.')
+                ->modalSubmitActionLabel('Sí, revertir póliza')
+                ->visible(fn (): bool => $this->getResource()::bexiaCanPayrollAccounting()
+                    && $this->getResource()::payrollAccountingActiveEntryId($this->record) !== null)
+                ->form([
+                    \Filament\Forms\Components\Textarea::make('reason')
+                        ->label('Motivo')
+                        ->rows(3)
+                        ->required()
+                        ->default('Reversa contable de nómina.'),
+                ])
+                ->action(function (array $data): void {
+                    try {
+                        $entry = app(\App\Support\Accounting\PayrollAccountingPoster::class)->reverse(
+                            companyId: (int) $this->record->company_id,
+                            payrollRunId: (int) $this->record->id,
+                            reason: (string) ($data['reason'] ?? ''),
+                            userId: auth()->id(),
+                        );
+
+                        $this->record->refresh();
+
+                        Notification::make()
+                            ->title('Póliza de nómina reversada')
+                            ->body($entry ? ('Reversa: ' . (string) ($entry->entry_number ?? ('ID ' . $entry->id))) : 'No había póliza activa.')
+                            ->success()
+                            ->send();
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->title('No se pudo revertir póliza')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
+
             Actions\DeleteAction::make(),
         ];
     }
