@@ -391,7 +391,16 @@ class PayrollAccountingPoster
                 ->where('source_id', $payrollRunId)
                 ->whereIn('status', ['draft', 'posted'])
                 ->orderByDesc('id')
-                ->first();
+                ->get()
+                ->first(function ($entry) use ($original): bool {
+                    $metadata = json_decode((string) ($entry->metadata ?? ''), true);
+
+                    if (! is_array($metadata)) {
+                        return false;
+                    }
+
+                    return (int) ($metadata['reverses_accounting_entry_id'] ?? 0) === (int) $original->id;
+                });
 
             if ($existingReversal) {
                 DB::table('accounting_entries')
