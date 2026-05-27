@@ -24,6 +24,16 @@ class UserDashboardPreferenceService
         }
 
         foreach ($this->registry->catalog() as $key => $definition) {
+            $exists = DB::table('dashboard_widget_user_settings')
+                ->where('company_id', $companyId)
+                ->where('user_id', $userId)
+                ->where('widget_key', (string) $key)
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
             $this->upsertPreference(
                 companyId: $companyId,
                 userId: $userId,
