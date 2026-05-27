@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Support\Dashboard\DashboardWidgetRegistry;
 use App\Support\ApprovalInbox;
 use Filament\Widgets\Widget;
 
@@ -15,7 +16,18 @@ class PendingApprovalsWidget extends Widget
 
     public static function canView(): bool
     {
-        return auth()->check();
+        if (! auth()->check()) {
+            return false;
+        }
+
+        try {
+            return app(DashboardWidgetRegistry::class)
+                ->visibleForUser(auth()->user())
+                ->pluck('key')
+                ->contains('approvals_pending');
+        } catch (\Throwable) {
+            return true;
+        }
     }
 
     public function getPendingRows()

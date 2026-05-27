@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Support\Dashboard\DashboardWidgetRegistry;
 use App\Support\BexiaUserNotification;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -10,6 +11,22 @@ use Illuminate\Support\Facades\Schema;
 
 class ApprovalSummaryWidget extends StatsOverviewWidget
 {
+    public static function canView(): bool
+    {
+        if (! auth()->check()) {
+            return false;
+        }
+
+        try {
+            return app(DashboardWidgetRegistry::class)
+                ->visibleForUser(auth()->user())
+                ->pluck('key')
+                ->contains('approvals_summary');
+        } catch (\Throwable) {
+            return true;
+        }
+    }
+
     protected static ?int $sort = 1;
 
     protected function getStats(): array
