@@ -17,7 +17,7 @@
 
                     <select
                         wire:model.live="selectedUserId"
-                        class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                        class="mt-1 block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500"
                     >
                         @foreach ($users as $user)
                             <option value="{{ $user['id'] }}">
@@ -32,13 +32,21 @@
                 </div>
 
                 <div class="flex items-end justify-start gap-2 md:justify-end">
-                    <x-filament::button color="gray" wire:click="refreshDashboardSettings">
+                    <button
+                        type="button"
+                        wire:click="refreshDashboardSettings"
+                        class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
+                    >
                         Actualizar
-                    </x-filament::button>
+                    </button>
 
-                    <x-filament::button color="warning" wire:click="resetSelectedUser">
+                    <button
+                        type="button"
+                        wire:click="resetSelectedUser"
+                        class="inline-flex items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 shadow-sm transition hover:bg-amber-100"
+                    >
                         Restaurar defaults
-                    </x-filament::button>
+                    </button>
                 </div>
             </div>
         </x-filament::section>
@@ -53,16 +61,16 @@
                     No hay widgets configurables para mostrar.
                 </div>
             @else
-                <div class="overflow-hidden rounded-xl border border-gray-200">
+                <div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-4 py-3 text-left font-semibold text-gray-700">Orden</th>
+                                <th class="w-20 px-4 py-3 text-left font-semibold text-gray-700">Orden</th>
                                 <th class="px-4 py-3 text-left font-semibold text-gray-700">Widget</th>
-                                <th class="px-4 py-3 text-left font-semibold text-gray-700">Módulo</th>
-                                <th class="px-4 py-3 text-left font-semibold text-gray-700">Visible</th>
-                                <th class="px-4 py-3 text-left font-semibold text-gray-700">Permiso</th>
-                                <th class="px-4 py-3 text-right font-semibold text-gray-700">Acciones</th>
+                                <th class="w-44 px-4 py-3 text-left font-semibold text-gray-700">Módulo</th>
+                                <th class="w-28 px-4 py-3 text-left font-semibold text-gray-700">Visible</th>
+                                <th class="w-28 px-4 py-3 text-left font-semibold text-gray-700">Permiso</th>
+                                <th class="w-80 px-4 py-3 text-right font-semibold text-gray-700">Acciones</th>
                             </tr>
                         </thead>
 
@@ -93,11 +101,11 @@
 
                                     <td class="px-4 py-3">
                                         @if ($row['is_visible'])
-                                            <span class="rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
+                                            <span class="inline-flex rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
                                                 Visible
                                             </span>
                                         @else
-                                            <span class="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+                                            <span class="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
                                                 Oculto
                                             </span>
                                         @endif
@@ -105,41 +113,51 @@
 
                                     <td class="px-4 py-3">
                                         @if ($row['allowed_by_permission'])
-                                            <span class="rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+                                            <span class="inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
                                                 Permitido
                                             </span>
                                         @else
-                                            <span class="rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700">
+                                            <span class="inline-flex rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700">
                                                 Sin permiso
                                             </span>
                                         @endif
                                     </td>
 
                                     <td class="px-4 py-3">
-                                        <div class="flex justify-end gap-2">
-                                            <x-filament::button
-                                                size="xs"
-                                                color="gray"
+                                        <div class="flex flex-wrap justify-end gap-2">
+                                            <button
+                                                type="button"
                                                 wire:click="moveWidgetUp('{{ $row['key'] }}')"
+                                                class="inline-flex min-w-16 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
                                             >
                                                 Subir
-                                            </x-filament::button>
+                                            </button>
 
-                                            <x-filament::button
-                                                size="xs"
-                                                color="gray"
+                                            <button
+                                                type="button"
                                                 wire:click="moveWidgetDown('{{ $row['key'] }}')"
+                                                class="inline-flex min-w-16 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
                                             >
                                                 Bajar
-                                            </x-filament::button>
+                                            </button>
 
-                                            <x-filament::button
-                                                size="xs"
-                                                color="{{ $row['is_visible'] ? 'danger' : 'success' }}"
-                                                wire:click="toggleWidget('{{ $row['key'] }}')"
-                                            >
-                                                {{ $row['is_visible'] ? 'Ocultar' : 'Mostrar' }}
-                                            </x-filament::button>
+                                            @if ($row['is_visible'])
+                                                <button
+                                                    type="button"
+                                                    wire:click="toggleWidget('{{ $row['key'] }}')"
+                                                    class="inline-flex min-w-20 items-center justify-center rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 shadow-sm transition hover:bg-red-100"
+                                                >
+                                                    Ocultar
+                                                </button>
+                                            @else
+                                                <button
+                                                    type="button"
+                                                    wire:click="toggleWidget('{{ $row['key'] }}')"
+                                                    class="inline-flex min-w-20 items-center justify-center rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 shadow-sm transition hover:bg-green-100"
+                                                >
+                                                    Mostrar
+                                                </button>
+                                            @endif
                                         </div>
                                     </td>
                                 </tr>
