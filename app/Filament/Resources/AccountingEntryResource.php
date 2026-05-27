@@ -112,6 +112,9 @@ class AccountingEntryResource extends Resource
             'inventory.sale_issue:pos_order_lines' => 'Costo POS',
             'inventory.customer_return:pos_order_refund_lines' => 'Devolución POS',
             'accounting.reversal' => 'Reversa contable',
+            'payroll_run' => 'Póliza de nómina',
+            'payroll_run_reversal' => 'Reversa de nómina',
+            'payroll_accounting_setup' => 'Configuración contable de nómina',
             'invoice' => 'Factura',
         ][$source] ?? ($source ?: 'Sin origen');
     }

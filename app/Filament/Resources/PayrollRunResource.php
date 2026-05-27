@@ -338,6 +338,12 @@ class PayrollRunResource extends Resource
                         'drafts_error' => 'Error CFDI',
                         'validated' => 'Validado',
                         'stamped' => 'Timbrado',
+                        'partial_stamped' => 'Parcialmente timbrada',
+                        'partial_validated' => 'Parcialmente validada',
+                        'partial_error' => 'Con errores parciales',
+                        'cancelled' => 'Cancelada',
+                        'stamping_error' => 'Error de timbrado',
+                        'xml_generated' => 'XML generado',
                         null, '' => 'Sin preparar',
                         default => $state,
                     })

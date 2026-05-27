@@ -80,6 +80,7 @@ class LinesRelationManager extends RelationManager
                     ->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN'),
 
                 Tables\Columns\TextColumn::make('source_type')
+                    ->formatStateUsing(fn ($state) => \App\Filament\Resources\AccountingEntryResource::sourceLabel($state))
                     ->label('Origen')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::sourceLabel($state))
