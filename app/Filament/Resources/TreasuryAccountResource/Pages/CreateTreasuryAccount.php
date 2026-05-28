@@ -14,6 +14,11 @@ class CreateTreasuryAccount extends CreateRecord
         return TreasuryAccountResource::sanitizeAccountData($data);
     }
 
+    protected function afterCreate(): void
+    {
+        TreasuryAccountResource::setDefaultConcentrator($this->record);
+    }
+
     protected function getRedirectUrl(): string
     {
         return static::getResource()::getUrl('index');

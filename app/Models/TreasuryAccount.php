@@ -27,12 +27,14 @@ class TreasuryAccount extends Model
         'parent_treasury_account_id',
         'cash_scope',
         'requires_approval',
+        'is_default_concentrator',
     ];
 
     protected $casts = [
         'opening_balance' => 'decimal:6',
         'current_balance' => 'decimal:6',
         'is_active' => 'boolean',
+        'is_default_concentrator' => 'boolean',
     ];
 
     public function bank(): BelongsTo

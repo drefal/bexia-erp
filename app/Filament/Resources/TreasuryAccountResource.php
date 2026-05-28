@@ -25,11 +25,11 @@ class TreasuryAccountResource extends Resource
 
     protected static ?string $navigationGroup = 'Tesorería';
 
-    protected static ?string $navigationLabel = 'Cuentas / Cajas';
+    protected static ?string $navigationLabel = 'Cajas operativas';
 
-    protected static ?string $modelLabel = 'Cuenta / Caja';
+    protected static ?string $modelLabel = 'Caja operativa';
 
-    protected static ?string $pluralModelLabel = 'Cuentas / Cajas';
+    protected static ?string $pluralModelLabel = 'Cajas operativas';
 
     protected static ?int $navigationSort = 20;
 
@@ -65,6 +65,8 @@ class TreasuryAccountResource extends Resource
         }
 
         return $query
+            ->whereIn('cash_scope', ['pdv', 'branch_cash', 'cedis_cash', 'admin_cash', 'general_cash'])
+            ->where('type', 'cash')
             ->orderBy('cash_scope')
             ->orderBy('name');
     }
@@ -77,11 +79,11 @@ class TreasuryAccountResource extends Resource
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Configuración operativa')
-                    ->description('Define si esta caja pertenece a un PDV, sucursal/tienda, bodega/CEDIS, administración, empresa o banco.')
+                    ->description('Define si esta caja pertenece a un PDV, sucursal/tienda, bodega/CEDIS, administración o empresa. Las cuentas bancarias se administran en Tesoreria > Cuentas bancarias.')
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('name')
-                            ->label('Nombre de la cuenta / caja')
+                            ->label('Nombre de la caja')
                             ->required()
                             ->maxLength(255),
 
@@ -161,6 +163,11 @@ class TreasuryAccountResource extends Resource
                             ->default(true)
                             ->helperText('Recomendado para sucursal, administración, bodega/CEDIS y traspasos.'),
 
+                        Forms\Components\Toggle::make('is_default_concentrator')
+                            ->label('Concentradora por defecto de la empresa')
+                            ->default(false)
+                            ->helperText('Solo debe existir una por empresa. Si activas esta, se desactivan las demas.'),
+
                         Forms\Components\Toggle::make('is_active')
                             ->label('Activa')
                             ->default(true),
@@ -201,10 +208,16 @@ class TreasuryAccountResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Cuenta / Caja')
+                    ->label('Caja')
                     ->searchable()
                     ->sortable()
                     ->wrap(),
+
+                Tables\Columns\TextColumn::make('company_id')
+                    ->label('Empresa')
+                    ->formatStateUsing(fn ($state): string => static::companyLabel($state))
+                    ->toggleable()
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('cash_scope')
                     ->label('Uso')
@@ -217,12 +230,12 @@ class TreasuryAccountResource extends Resource
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('warehouse_id')
-                    ->label('Almacén PDV')
+                    ->label('Almacén del PDV')
                     ->formatStateUsing(fn ($state): string => static::warehouseLabel($state))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('pos_point_id')
-                    ->label('PDV')
+                    ->label('PDV asociado')
                     ->formatStateUsing(fn ($state): string => static::posPointLabel($state))
                     ->toggleable(),
 
@@ -235,11 +248,22 @@ class TreasuryAccountResource extends Resource
                     ->label('Aprueba')
                     ->boolean(),
 
+                Tables\Columns\IconColumn::make('is_default_concentrator')
+                    ->label('Concentradora')
+                    ->boolean()
+                    ->sortable(),
+
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Activa')
                     ->boolean(),
             ])
             ->filters([
+                Tables\Filters\TernaryFilter::make('is_default_concentrator')
+                    ->label('Concentradora'),
+                Tables\Filters\SelectFilter::make('company_id')
+                    ->label('Empresa')
+                    ->options(fn (): array => static::companyOptions()),
+
                 Tables\Filters\SelectFilter::make('cash_scope')
                     ->label('Uso operativo')
                     ->options(static::cashScopeOptions()),
@@ -249,7 +273,7 @@ class TreasuryAccountResource extends Resource
                     ->options(fn (): array => static::branchOptions()),
 
                 Tables\Filters\SelectFilter::make('pos_point_id')
-                    ->label('PDV')
+                    ->label('PDV asociado')
                     ->options(fn (): array => static::posPointOptions()),
             ])
             ->actions([
@@ -311,6 +335,8 @@ class TreasuryAccountResource extends Resource
             $data['current_balance'] = $data['opening_balance'] ?? 0;
         }
 
+        $data['is_default_concentrator'] = (bool) ($data['is_default_concentrator'] ?? false);
+
         return $data;
     }
 
@@ -322,7 +348,6 @@ class TreasuryAccountResource extends Resource
             'cedis_cash' => 'Caja bodega / CEDIS',
             'admin_cash' => 'Caja administración',
             'general_cash' => 'Caja general empresa',
-            'bank' => 'Banco',
         ];
     }
 
@@ -354,6 +379,47 @@ class TreasuryAccountResource extends Resource
                 $row->id => '[' . static::cashScopeLabel($row->cash_scope ?? null) . '] ' . $row->name,
             ])
             ->toArray();
+    }
+
+    public static function setDefaultConcentrator($record): void
+    {
+        if (! $record || ! ($record->is_default_concentrator ?? false)) {
+            return;
+        }
+
+        DB::table('treasury_accounts')
+            ->where('company_id', $record->company_id)
+            ->where('id', '!=', $record->id)
+            ->update([
+                'is_default_concentrator' => false,
+                'updated_at' => now(),
+            ]);
+    }
+
+    public static function companyOptions(): array
+    {
+        if (! Schema::hasTable('companies')) {
+            return [];
+        }
+
+        return DB::table('companies')
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->mapWithKeys(fn ($row): array => [
+                $row->id => $row->name ?: ('Empresa #' . $row->id),
+            ])
+            ->toArray();
+    }
+
+    public static function companyLabel($id): string
+    {
+        if (! $id || ! Schema::hasTable('companies')) {
+            return '-';
+        }
+
+        $row = DB::table('companies')->where('id', $id)->first();
+
+        return $row ? ($row->name ?: ('Empresa #' . $id)) : 'Empresa #' . $id;
     }
 
     public static function branchOptions(): array
