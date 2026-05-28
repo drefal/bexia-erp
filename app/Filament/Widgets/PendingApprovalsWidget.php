@@ -12,7 +12,7 @@ class PendingApprovalsWidget extends Widget
 
     protected int | string | array $columnSpan = 'full';
 
-    protected static ?int $sort = 1;
+    protected static ?int $sort = 20;
 
     public static function canView(): bool
     {

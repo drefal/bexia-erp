@@ -3,53 +3,50 @@
 namespace App\Filament\Widgets;
 
 use App\Support\Dashboard\DashboardWidgetRegistry;
-use Filament\Widgets\StatsOverviewWidget;
-use Filament\Widgets\StatsOverviewWidget\Stat;
+use Filament\Widgets\Widget;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
-class BexiaHrEmployeesSummaryWidget extends StatsOverviewWidget
+class BexiaTreasurySectionHeaderWidget extends Widget
 {
-    protected static ?int $sort = 40;
+    protected static string $view = 'filament.widgets.bexia-treasury-section-header-widget';
+
+    protected int | string | array $columnSpan = 'full';
+
+    protected static ?int $sort = 80;
+
+    protected static ?string $pollingInterval = '60s';
 
     public static function canView(): bool
     {
-        return static::bexiaDashboardWidgetVisible('hr_employees_summary');
+        return static::bexiaDashboardWidgetVisible('treasury_section_header');
     }
 
-    protected function getStats(): array
+    protected function getViewData(): array
     {
-        $metrics = app(DashboardWidgetRegistry::class)->metrics('hr_employees_summary');
+        $companyId = app(DashboardWidgetRegistry::class)->currentCompanyId();
+        $companyName = null;
+
+        if ($companyId && Schema::hasTable('companies')) {
+            $companyName = DB::table('companies')->where('id', $companyId)->value('name');
+        }
 
         return [
-            Stat::make('Empleados activos', (int) ($metrics['active'] ?? 0))
-                ->description('Personal activo en la empresa')
-                ->color('success'),
-
-            Stat::make('Empleados inactivos', (int) ($metrics['inactive'] ?? 0))
-                ->description('Personal inactivo')
-                ->color(((int) ($metrics['inactive'] ?? 0)) > 0 ? 'warning' : 'gray'),
-
-            Stat::make('Total empleados', (int) ($metrics['total'] ?? 0))
-                ->description('Activos + inactivos')
-                ->color('info'),
+            'companyName' => $companyName,
+            'updatedAt' => now()->format('H:i:s'),
         ];
     }
 
     protected static function widgetVisible(string $key): bool
     {
-        if (! auth()->check()) {
-            return false;
-        }
-
         try {
             return app(DashboardWidgetRegistry::class)
                 ->visibleForUser(auth()->user())
-                ->pluck('key')
-                ->contains($key);
+                ->contains(fn (array $definition): bool => ($definition['key'] ?? null) === $key);
         } catch (\Throwable) {
-            return false;
+            return true;
         }
     }
-
 
     protected static function bexiaDashboardWidgetVisible(string $key): bool
     {

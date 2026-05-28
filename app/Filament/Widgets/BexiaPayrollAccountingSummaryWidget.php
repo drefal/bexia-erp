@@ -12,7 +12,7 @@ class BexiaPayrollAccountingSummaryWidget extends StatsOverviewWidget
 
     public static function canView(): bool
     {
-        return static::widgetVisible('payroll_accounting_summary');
+        return static::bexiaDashboardWidgetVisible('payroll_accounting_summary');
     }
 
     protected function getStats(): array
@@ -49,4 +49,38 @@ class BexiaPayrollAccountingSummaryWidget extends StatsOverviewWidget
             return false;
         }
     }
+
+
+    protected static function bexiaDashboardWidgetVisible(string $key): bool
+    {
+        try {
+            $user = auth()->user();
+
+            if (! $user) {
+                return true;
+            }
+
+            $registry = app(\App\Support\Dashboard\DashboardWidgetRegistry::class);
+            $companyId = (int) ($registry->currentCompanyId() ?: 5);
+
+            if (! \Illuminate\Support\Facades\Schema::hasTable('dashboard_widget_user_settings')) {
+                return true;
+            }
+
+            $row = \Illuminate\Support\Facades\DB::table('dashboard_widget_user_settings')
+                ->where('company_id', $companyId)
+                ->where('user_id', $user->id)
+                ->where('widget_key', $key)
+                ->first();
+
+            if (! $row) {
+                return true;
+            }
+
+            return (bool) $row->is_visible;
+        } catch (\Throwable) {
+            return true;
+        }
+    }
+
 }

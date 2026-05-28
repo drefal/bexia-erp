@@ -27,7 +27,7 @@ class ApprovalSummaryWidget extends StatsOverviewWidget
         }
     }
 
-    protected static ?int $sort = 1;
+    protected static ?int $sort = 10;
 
     protected function getStats(): array
     {
