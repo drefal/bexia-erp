@@ -23,6 +23,10 @@ class Company extends Model implements HasAvatar
         'tax_id',
         'tax_regime',
         'fiscal_postal_code',
+        'sat_constancia_path',
+        'sat_constancia_uploaded_at',
+        'sat_constancia_parsed_at',
+        'sat_constancia_parsed_data',
         'billing_pac_provider',
         'billing_pac_username',
         'billing_pac_password',
@@ -70,6 +74,9 @@ class Company extends Model implements HasAvatar
         'max_users' => 'integer',
         'paid_until_at' => 'date',
         'last_payment_at' => 'date',
+        'sat_constancia_uploaded_at' => 'datetime',
+        'sat_constancia_parsed_at' => 'datetime',
+        'sat_constancia_parsed_data' => 'array',
     ];
 
     public function organization(): BelongsTo
