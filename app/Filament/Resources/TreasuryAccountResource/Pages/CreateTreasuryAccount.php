@@ -11,8 +11,11 @@ class CreateTreasuryAccount extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $data['current_balance'] = $data['opening_balance'] ?? 0;
+        return TreasuryAccountResource::sanitizeAccountData($data);
+    }
 
-        return $data;
+    protected function getRedirectUrl(): string
+    {
+        return static::getResource()::getUrl('index');
     }
 }

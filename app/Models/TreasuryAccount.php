@@ -21,6 +21,12 @@ class TreasuryAccount extends Model
         'current_balance',
         'is_active',
         'notes',
+        'branch_id',
+        'warehouse_id',
+        'pos_point_id',
+        'parent_treasury_account_id',
+        'cash_scope',
+        'requires_approval',
     ];
 
     protected $casts = [
