@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Support\EmployeeIncidentApprovalWorkflow;
 use App\Support\PayrollRunApprovalWorkflow;
+use App\Support\Treasury\CashTransferApprovalWorkflow;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -91,6 +92,7 @@ class MySentApprovalStatuses extends Page
             ]),
             'employee_incident' => EmployeeIncidentApprovalWorkflow::documentUrl($row),
             'payroll_run' => PayrollRunApprovalWorkflow::documentUrl($row),
+            'treasury_cash_transfer_request' => CashTransferApprovalWorkflow::documentUrl($row),
             default => '#',
         };
     }

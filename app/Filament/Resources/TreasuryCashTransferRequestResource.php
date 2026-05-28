@@ -354,12 +354,12 @@ class TreasuryCashTransferRequestResource extends Resource
     public static function approveAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('approve')
-            ->label('Aprobar')
+            ->label('Aprobar en flujo general')
             ->icon('heroicon-o-check-circle')
             ->color('success')
             ->requiresConfirmation()
             ->modalHeading('Aprobar solicitud de efectivo')
-            ->modalDescription('Esta acción registra la aprobación electrónica, pero todavía no mueve el saldo hasta contabilizar.')
+            ->modalDescription('La aprobación se atiende desde Mis aprobaciones usando el flujo general configurado.')
             ->form([
                 Forms\Components\Textarea::make('notes')
                     ->label('Notas de aprobación')
@@ -468,11 +468,11 @@ class TreasuryCashTransferRequestResource extends Resource
     public static function postAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('post')
-            ->label('Contabilizar')
+            ->label('Aplicar')
             ->icon('heroicon-o-banknotes')
             ->color('warning')
             ->requiresConfirmation()
-            ->modalHeading('Contabilizar traspaso de efectivo')
+            ->modalHeading('Aplicar traspaso de efectivo')
             ->modalDescription('Esta acción afectará los saldos: resta de la caja origen y suma a la caja destino.')
             ->visible(fn (TreasuryCashTransferRequest $record): bool => auth()->user()?->can('treasury.update') && in_array((string) $record->status, ['approved', 'delivered', 'received'], true) && blank($record->posted_at))
             ->action(function (TreasuryCashTransferRequest $record): void {

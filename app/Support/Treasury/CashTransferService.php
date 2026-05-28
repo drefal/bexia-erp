@@ -2,6 +2,9 @@
 
 namespace App\Support\Treasury;
 
+use App\Models\TreasuryCashTransferRequest;
+
+
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -67,6 +70,28 @@ class CashTransferService
             $request = DB::table('treasury_cash_transfer_requests')->where('id', $id)->first();
 
             $this->logAction($request, 'created', null, $status, $data['requested_by_user_id'] ?? null, $data['notes'] ?? null);
+
+            $createdRequestId = $request->id
+                ?? $requestId
+                ?? $transferRequestId
+                ?? $treasuryCashTransferRequestId
+                ?? $cashTransferRequestId
+                ?? $id
+                ?? null;
+
+            if (! $createdRequestId) {
+                throw new \RuntimeException('No se pudo identificar la solicitud de efectivo recién creada para enviarla a aprobación.');
+            }
+
+            $request = TreasuryCashTransferRequest::query()->findOrFail((int) $createdRequestId);
+
+            try {
+                CashTransferApprovalWorkflow::sendToApproval($request);
+                $request = TreasuryCashTransferRequest::query()->findOrFail((int) $createdRequestId);
+            } catch (\Throwable $e) {
+                report($e);
+                throw $e;
+            }
 
             return $request;
         });

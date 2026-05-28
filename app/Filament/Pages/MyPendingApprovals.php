@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Support\BexiaUserNotification;
 use App\Support\EmployeeIncidentApprovalWorkflow;
 use App\Support\PayrollRunApprovalWorkflow;
+use App\Support\Treasury\CashTransferApprovalWorkflow;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -409,6 +410,13 @@ if (! static::canUseApprovalsPage()) {
     {
         $type = (string) ($request->document_type ?? '');
 
+        if ($type === CashTransferApprovalWorkflow::DOCUMENT_TYPE) {
+            CashTransferApprovalWorkflow::markApproved($request, $user->id, $comment ?? null);
+
+            return;
+        }
+
+
         if ($type === 'employee_incident') {
             EmployeeIncidentApprovalWorkflow::markApproved($request, $user->id, $comment);
 
@@ -465,6 +473,13 @@ if (! static::canUseApprovalsPage()) {
     protected function markDocumentRejected(object $request, object $user, string $reason): void
     {
         $type = (string) ($request->document_type ?? '');
+
+        if ($type === CashTransferApprovalWorkflow::DOCUMENT_TYPE) {
+            CashTransferApprovalWorkflow::markRejected($request, $user->id, $reason ?? null);
+
+            return;
+        }
+
 
         if ($type === 'employee_incident') {
             EmployeeIncidentApprovalWorkflow::markRejected($request, $user->id, $reason);
@@ -627,6 +642,7 @@ if (! static::canUseApprovalsPage()) {
             ]),
             'employee_incident' => EmployeeIncidentApprovalWorkflow::documentUrl($row),
             'payroll_run' => PayrollRunApprovalWorkflow::documentUrl($row),
+            'treasury_cash_transfer_request' => CashTransferApprovalWorkflow::documentUrl($row),
             default => '#',
         };
     }

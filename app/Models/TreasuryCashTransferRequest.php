@@ -40,6 +40,9 @@ class TreasuryCashTransferRequest extends Model
         'outflow_treasury_movement_id',
         'inflow_treasury_movement_id',
         'metadata',
+        'approval_request_id',
+        'approval_status',
+        'approval_requested_at',
     ];
 
     protected $casts = [
@@ -52,6 +55,7 @@ class TreasuryCashTransferRequest extends Model
         'cancelled_at' => 'datetime',
         'posted_at' => 'datetime',
         'metadata' => 'array',
+        'approval_requested_at' => 'datetime',
     ];
 
     public function company(): BelongsTo
