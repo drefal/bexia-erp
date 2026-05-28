@@ -4633,8 +4633,8 @@ return response()->json([
                 ->where('pos_order_id', $orderRow->id)
                 ->delete();
 
-            foreach ($normalized as $payment) {
-                \Illuminate\Support\Facades\DB::table('pos_order_payments')->insert([
+            foreach ($normalized as $paymentIndex => $payment) {
+                $paymentId = \Illuminate\Support\Facades\DB::table('pos_order_payments')->insertGetId([
                     'pos_order_id' => $orderRow->id,
                     'payment_form_id' => $payment['payment_form_id'],
                     'payment_label' => $payment['payment_label'],
@@ -4655,6 +4655,27 @@ return response()->json([
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+
+                /*
+                 * V5.69.0d5:
+                 * Si el pago es efectivo, se registra inmediatamente una entrada
+                 * posted en Tesoreria contra la Caja PDV asociada al punto de venta.
+                 */
+                if ((bool) ($payment['is_cash'] ?? false)) {
+                    $treasuryResult = $this->v5690d5PostCashPaymentToTreasury($orderRow, (int) $paymentId, $payment);
+
+                    if (! ($treasuryResult['ok'] ?? false)) {
+                        return [
+                            'ok' => false,
+                            'status' => 422,
+                            'message' => $treasuryResult['message'] ?? 'No se pudo registrar el efectivo en Caja PDV.',
+                        ];
+                    }
+
+                    $normalized[$paymentIndex]['treasury_account_id'] = $treasuryResult['treasury_account_id'] ?? null;
+                    $normalized[$paymentIndex]['treasury_movement_id'] = $treasuryResult['treasury_movement_id'] ?? null;
+                    $normalized[$paymentIndex]['treasury_posted_at'] = $treasuryResult['treasury_posted_at'] ?? null;
+                }
             }
 
             $metadata = [];
@@ -5936,6 +5957,158 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
         ];
     }
 
+
+
+
+    private function v5690d5PostCashPaymentToTreasury(object $orderRow, int $paymentId, array $payment): array
+    {
+        if ($paymentId <= 0) {
+            return ['ok' => false, 'message' => 'No se pudo identificar el pago POS.'];
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('treasury_accounts') || ! \Illuminate\Support\Facades\Schema::hasTable('treasury_movements')) {
+            return ['ok' => false, 'message' => 'No existen tablas de Tesoreria para registrar el efectivo.'];
+        }
+
+        $companyId = (int) ($orderRow->company_id ?? 0);
+        $posPointId = (int) ($orderRow->pos_point_id ?? 0);
+        $posSessionId = ! empty($orderRow->pos_session_id) ? (int) $orderRow->pos_session_id : null;
+        $amount = round((float) ($payment['amount'] ?? 0), 2);
+
+        if ($companyId <= 0) {
+            return ['ok' => false, 'message' => 'El ticket POS no tiene empresa valida para Tesoreria.'];
+        }
+
+        if ($posPointId <= 0) {
+            return ['ok' => false, 'message' => 'El ticket POS no tiene punto de venta valido para Tesoreria.'];
+        }
+
+        if ($amount <= 0) {
+            return ['ok' => false, 'message' => 'El monto de efectivo debe ser mayor a cero.'];
+        }
+
+        $pos = null;
+        $warehouseId = null;
+        $branchId = null;
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('pos_points')) {
+            $pos = \Illuminate\Support\Facades\DB::table('pos_points')
+                ->where('id', $posPointId)
+                ->first();
+
+            if ($pos && ! empty($pos->warehouse_id)) {
+                $warehouseId = (int) $pos->warehouse_id;
+            }
+        }
+
+        if ($warehouseId && \Illuminate\Support\Facades\Schema::hasTable('warehouses')) {
+            $warehouse = \Illuminate\Support\Facades\DB::table('warehouses')
+                ->where('id', $warehouseId)
+                ->first();
+
+            if ($warehouse && ! empty($warehouse->branch_id)) {
+                $branchId = (int) $warehouse->branch_id;
+            }
+        }
+
+        $account = \Illuminate\Support\Facades\DB::table('treasury_accounts')
+            ->where('company_id', $companyId)
+            ->where('pos_point_id', $posPointId)
+            ->where('cash_scope', 'pdv')
+            ->where('is_active', true)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $account) {
+            return [
+                'ok' => false,
+                'message' => 'No existe una Caja PDV activa ligada a este punto de venta. Configura Tesoreria > Cuentas / Cajas.',
+            ];
+        }
+
+        $now = now();
+        $paymentFormId = $payment['payment_form_id'] ?? null;
+        $paymentFormId = $paymentFormId !== null && $paymentFormId !== '' ? (int) $paymentFormId : null;
+
+        $movement = [
+            'company_id' => $companyId,
+            'treasury_account_id' => (int) $account->id,
+            'payment_form_id' => $paymentFormId,
+            'type' => 'inbound',
+            'source_type' => 'pos_order_payment',
+            'source_id' => $paymentId,
+            'movement_date' => $now->toDateString(),
+            'amount' => $amount,
+            'currency_code' => $account->currency_code ?: ($orderRow->currency_code ?? 'MXN'),
+            'reference' => (string) ($orderRow->number ?? ('POS-' . $orderRow->id)),
+            'description' => 'Cobro efectivo POS ' . (string) ($orderRow->number ?? ('#' . $orderRow->id)),
+            'status' => 'posted',
+            'posted_at' => $now,
+            'created_by_user_id' => auth()->id(),
+            'metadata' => json_encode([
+                'source' => 'pos_cash_payment',
+                'pos_order_id' => (int) $orderRow->id,
+                'pos_order_number' => (string) ($orderRow->number ?? ''),
+                'pos_order_payment_id' => $paymentId,
+                'pos_session_id' => $posSessionId,
+                'pos_point_id' => $posPointId,
+                'payment_label' => $payment['payment_label'] ?? null,
+                'payment_form_code' => $payment['payment_form_code'] ?? null,
+                'cash_received' => $payment['cash_received'] ?? null,
+                'change_amount' => $payment['change_amount'] ?? 0,
+                'amount_applied_to_sale' => $amount,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+
+        foreach ([
+            'pos_order_payment_id' => $paymentId,
+            'pos_session_id' => $posSessionId,
+            'pos_point_id' => $posPointId,
+            'branch_id' => $branchId,
+            'warehouse_id' => $warehouseId,
+        ] as $column => $value) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('treasury_movements', $column)) {
+                $movement[$column] = $value;
+            }
+        }
+
+        $movementId = \Illuminate\Support\Facades\DB::table('treasury_movements')->insertGetId($movement);
+
+        \Illuminate\Support\Facades\DB::table('treasury_accounts')
+            ->where('id', (int) $account->id)
+            ->increment('current_balance', $amount, [
+                'updated_at' => $now,
+            ]);
+
+        $paymentUpdate = [
+            'updated_at' => $now,
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('pos_order_payments', 'treasury_movement_id')) {
+            $paymentUpdate['treasury_movement_id'] = $movementId;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('pos_order_payments', 'treasury_account_id')) {
+            $paymentUpdate['treasury_account_id'] = (int) $account->id;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('pos_order_payments', 'treasury_posted_at')) {
+            $paymentUpdate['treasury_posted_at'] = $now;
+        }
+
+        \Illuminate\Support\Facades\DB::table('pos_order_payments')
+            ->where('id', $paymentId)
+            ->update($paymentUpdate);
+
+        return [
+            'ok' => true,
+            'treasury_account_id' => (int) $account->id,
+            'treasury_movement_id' => (int) $movementId,
+            'treasury_posted_at' => $now->toDateTimeString(),
+        ];
+    }
 
 
     public function storeCashMovement(\Illuminate\Http\Request $request, int $session)
