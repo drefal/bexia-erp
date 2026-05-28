@@ -171,13 +171,7 @@ class TreasuryMovementResource extends Resource
 
                     Infolists\Components\TextEntry::make('type')
                         ->label('Tipo')
-                        ->badge()
-                        ->formatStateUsing(fn (?string $state): string => self::typeLabel($state))
-                        ->color(fn (?string $state): string => match ($state) {
-                            'inbound' => 'success',
-                            'outbound' => 'danger',
-                            default => 'gray',
-                        }),
+                        ->formatStateUsing(fn (?string $state): string => static::treasuryMovementTypeLabel($state)),
 
                     Infolists\Components\TextEntry::make('amount')
                         ->label('Importe')
@@ -236,13 +230,8 @@ class TreasuryMovementResource extends Resource
 
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
-                    ->formatStateUsing(fn (?string $state): string => self::typeLabel($state))
-                    ->badge()
-                    ->color(fn (?string $state): string => match ($state) {
-                        'inbound' => 'success',
-                        'outbound' => 'danger',
-                        default => 'gray',
-                    }),
+                    ->formatStateUsing(fn (?string $state): string => static::treasuryMovementTypeLabel($state))
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount')
                     ->label('Importe')
@@ -346,6 +335,18 @@ class TreasuryMovementResource extends Resource
                     ->label('Editar')
                     ->visible(fn (TreasuryMovement $record): bool => $record->status === 'draft'),
             ]);
+    }
+
+
+    public static function treasuryMovementTypeLabel(?string $state): string
+    {
+        return match ($state) {
+            'inflow', 'inbound' => 'Entrada',
+            'outflow', 'outbound' => 'Salida',
+            'transfer' => 'Traspaso',
+            'adjustment' => 'Ajuste',
+            default => $state ?: 'Sin tipo',
+        };
     }
 
     public static function getPages(): array

@@ -692,7 +692,11 @@ class SalesApprovalWorkflow
 
     public static function documentTypeLabel(?string $type): string
     {
-        return match ((string) $type) {
+        
+        if ((string) $type === 'treasury_cash_transfer_request') {
+            return 'Solicitud de efectivo / Retiro PDV';
+        }
+return match ((string) $type) {
             'purchase_request' => 'Solicitud de compra',
             'purchase_order' => 'Orden de compra',
             'sales_quote', 'sales_:quote', 'sale_quote' => 'Cotización de venta',

@@ -318,6 +318,7 @@ public static function documentTypeOptions(): array
             'sales_margin_approval' => 'Aprobación de margen de venta',
             'employee_incident' => 'Incidencia RRHH',
             'payroll_run' => 'Aprobación de pre-nómina',
+            'treasury_cash_transfer_request' => 'Solicitud de efectivo / Retiro PDV',
         ];
     }
 
