@@ -519,6 +519,34 @@ class TreasuryCashTransferRequestResource extends Resource
             });
     }
 
+
+    public static function cashTransferStatusLabel(?string $state): string
+    {
+        return match ((string) $state) {
+            'draft' => 'Borrador',
+            'requested' => 'Solicitada',
+            'pending_approval' => 'Pendiente de aprobación',
+            'approved' => 'Aprobada',
+            'rejected' => 'Rechazada',
+            'cancelled' => 'Cancelada',
+            'posted' => 'Aplicada',
+            'completed' => 'Completada',
+            default => $state ? str_replace('_', ' ', ucfirst((string) $state)) : '-',
+        };
+    }
+
+    public static function cashTransferStatusColor(?string $state): string
+    {
+        return match ((string) $state) {
+            'draft' => 'gray',
+            'requested', 'pending_approval' => 'warning',
+            'approved' => 'success',
+            'rejected', 'cancelled' => 'danger',
+            'posted', 'completed' => 'primary',
+            default => 'gray',
+        };
+    }
+
     public static function getPages(): array
     {
         return [
@@ -646,7 +674,7 @@ class TreasuryCashTransferRequestResource extends Resource
     {
         return match ($status) {
             'draft' => 'gray',
-            'requested' => 'warning',
+            'requested', 'pending_approval' => 'warning',
             'approved' => 'success',
             'delivered' => 'info',
             'received' => 'primary',
