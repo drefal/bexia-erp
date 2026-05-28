@@ -855,3 +855,252 @@ html.dark .fi-sidebar-item-group-button {
 .fi-dropdown {
     z-index: 99999 !important;
 }
+
+/* === BEXIA LOGIN V5.71.1A START === */
+
+/*
+  Login Bexia ERP - version compacta
+  Corrige:
+  - Tarjeta gigante.
+  - Campos angostos.
+  - Difuminado interno raro.
+  - Exceso de espacio vertical.
+*/
+
+.fi-simple-layout {
+    min-height: 100vh !important;
+    background:
+        radial-gradient(circle at 14% 16%, rgba(37, 99, 235, 0.12), transparent 30%),
+        radial-gradient(circle at 86% 18%, rgba(14, 165, 233, 0.10), transparent 28%),
+        linear-gradient(135deg, #f8fbff 0%, #eef5ff 52%, #f9fbff 100%) !important;
+    overflow: hidden;
+}
+
+.fi-simple-layout::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(37, 99, 235, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 235, 0.035) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(circle at center, black 0%, transparent 74%);
+}
+
+/* El contenedor exterior centra, pero no agranda la tarjeta */
+.fi-simple-main-ctn {
+    min-height: 100vh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 2rem 1rem !important;
+}
+
+/* Este era el problema: no debe tener altura de pantalla */
+.fi-simple-page {
+    min-height: auto !important;
+    display: block !important;
+    padding: 0 !important;
+}
+
+/* Tarjeta compacta */
+.fi-simple-main {
+    position: relative !important;
+    z-index: 1;
+    width: min(100%, 28rem) !important;
+    max-width: 28rem !important;
+    min-height: auto !important;
+    padding: 2rem !important;
+    border-radius: 1.5rem !important;
+    border: 1px solid rgba(148, 163, 184, 0.24) !important;
+    background: rgba(255, 255, 255, 0.96) !important;
+    box-shadow:
+        0 24px 60px rgba(15, 23, 42, 0.10),
+        0 10px 24px rgba(37, 99, 235, 0.08) !important;
+    backdrop-filter: blur(14px);
+    overflow: hidden;
+}
+
+.fi-simple-main::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2563eb 0%, #0ea5e9 52%, #14b8a6 100%);
+}
+
+/* Encabezado sin caja interna */
+.fi-simple-header,
+.fi-simple-main header,
+.fi-simple-main > :first-child {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.fi-simple-header {
+    padding: 0 !important;
+    margin-bottom: 1.35rem !important;
+    gap: 0.65rem !important;
+}
+
+.fi-logo,
+.fi-simple-header .fi-logo,
+.fi-simple-main .fi-logo {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    max-height: 4rem !important;
+}
+
+.fi-logo img,
+.fi-simple-header .fi-logo img,
+.fi-simple-main .fi-logo img {
+    background: transparent !important;
+    box-shadow: none !important;
+    max-height: 4rem !important;
+    object-fit: contain !important;
+}
+
+/* Titulo */
+.fi-simple-main h1,
+.fi-simple-header-heading {
+    color: #0f172a !important;
+    font-size: 1.45rem !important;
+    line-height: 1.15 !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.025em !important;
+    text-align: center !important;
+}
+
+/* Formulario a ancho completo */
+.fi-simple-main form,
+.fi-simple-main .fi-form,
+.fi-simple-main .fi-form > div,
+.fi-simple-main .fi-fo-field-wrp,
+.fi-simple-main .fi-fo-field-wrp > div,
+.fi-simple-main .fi-input-wrp {
+    width: 100% !important;
+    max-width: none !important;
+}
+
+.fi-simple-main form {
+    gap: 1rem !important;
+}
+
+.fi-fo-field-wrp-label label {
+    color: #334155 !important;
+    font-size: 0.84rem !important;
+    font-weight: 650 !important;
+}
+
+/* Inputs */
+.fi-input-wrp {
+    min-height: 2.9rem !important;
+    border-radius: 0.95rem !important;
+    border-color: rgba(148, 163, 184, 0.40) !important;
+    background: #ffffff !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.90),
+        0 1px 2px rgba(15, 23, 42, 0.035) !important;
+    transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+}
+
+.fi-input-wrp:focus-within {
+    border-color: rgba(37, 99, 235, 0.85) !important;
+    box-shadow:
+        0 0 0 4px rgba(37, 99, 235, 0.12),
+        0 8px 20px rgba(15, 23, 42, 0.055) !important;
+}
+
+.fi-input {
+    min-height: 2.85rem !important;
+    color: #0f172a !important;
+}
+
+.fi-input::placeholder {
+    color: #94a3b8 !important;
+}
+
+/* Recordarme */
+.fi-checkbox-input {
+    border-radius: 0.35rem !important;
+    border-color: rgba(100, 116, 139, 0.65) !important;
+}
+
+.fi-checkbox-input:checked {
+    background-color: #2563eb !important;
+    border-color: #2563eb !important;
+}
+
+.fi-checkbox-input + label {
+    color: #334155 !important;
+    font-size: 0.86rem !important;
+    font-weight: 600 !important;
+}
+
+/* Boton */
+.fi-simple-main .fi-form-actions,
+.fi-simple-main .fi-form-actions > *,
+.fi-simple-main .fi-btn {
+    width: 100% !important;
+    max-width: none !important;
+}
+
+.fi-btn {
+    min-height: 2.95rem !important;
+    border-radius: 0.95rem !important;
+    justify-content: center !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.01em !important;
+    transition:
+        transform 160ms ease,
+        box-shadow 160ms ease,
+        filter 160ms ease !important;
+}
+
+.fi-btn:hover {
+    transform: translateY(-1px);
+    filter: saturate(1.04);
+}
+
+.fi-btn-color-primary {
+    border: 0 !important;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 56%, #1e40af 100%) !important;
+    box-shadow:
+        0 16px 32px rgba(37, 99, 235, 0.24),
+        0 6px 14px rgba(37, 99, 235, 0.14) !important;
+}
+
+.fi-icon-btn {
+    color: #64748b !important;
+}
+
+.fi-icon-btn:hover {
+    color: #2563eb !important;
+    background: rgba(37, 99, 235, 0.08) !important;
+}
+
+@media (max-width: 640px) {
+    .fi-simple-main-ctn {
+        padding: 1rem !important;
+    }
+
+    .fi-simple-main {
+        max-width: 100% !important;
+        padding: 1.45rem !important;
+        border-radius: 1.25rem !important;
+    }
+
+    .fi-simple-main h1,
+    .fi-simple-header-heading {
+        font-size: 1.3rem !important;
+    }
+}
+
+/* === BEXIA LOGIN V5.71.1A END === */
+
