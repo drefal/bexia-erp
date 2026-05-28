@@ -501,3 +501,14 @@ Route::middleware(['auth'])->group(function () {
 */
 Route::middleware(['auth'])->get('/payroll-cfdi-receipts/{receipt}/pdf', [\App\Http\Controllers\PayrollCfdiReceiptPdfController::class, 'show'])
     ->name('payroll-cfdi-receipts.pdf');
+
+
+Route::get('/admin/{tenant}/dashboard-section-pdf/{section}', [\App\Http\Controllers\DashboardSectionPdfController::class, 'show'])
+    ->middleware(['web', 'auth'])
+    ->name('bexia.dashboard.section.pdf');
+
+
+Route::post('/admin/{tenant}/dashboard-section-settings/{section}', [\App\Http\Controllers\DashboardSectionSettingsController::class, 'update'])
+    ->middleware(['web', 'auth'])
+    ->name('bexia.dashboard.section.settings.update');
+

@@ -51,7 +51,101 @@
             </div>
         </x-filament::section>
 
-        <x-filament::section>
+        
+{{-- V5700E_TREASURY_REFRESH_SETTINGS --}}
+@php
+    $v5700eTenantId = (int) request()->route('tenant');
+    $v5700eUserId = (int) auth()->id();
+    $v5700eCurrentRefresh = 60;
+
+    try {
+        if (\Illuminate\Support\Facades\Schema::hasTable('dashboard_section_user_settings')) {
+            $v5700eStoredRefresh = \Illuminate\Support\Facades\DB::table('dashboard_section_user_settings')
+                ->where('company_id', $v5700eTenantId)
+                ->where('user_id', $v5700eUserId)
+                ->where('section_key', 'tesoreria')
+                ->value('refresh_seconds');
+
+            $v5700eCurrentRefresh = in_array((int) $v5700eStoredRefresh, [30, 60, 120, 300, 600], true)
+                ? (int) $v5700eStoredRefresh
+                : 60;
+        }
+    } catch (\Throwable $e) {
+        $v5700eCurrentRefresh = 60;
+    }
+
+    $v5700eRefreshOptions = [
+        30 => '30 segundos',
+        60 => '1 minuto',
+        120 => '2 minutos',
+        300 => '5 minutos',
+        600 => '10 minutos',
+    ];
+@endphp
+
+<x-filament::section>
+    <x-slot name="heading">
+        Configuración de actualización
+    </x-slot>
+
+    <x-slot name="description">
+        Controla cada cuánto se refresca la sección de Tesorería en el Escritorio.
+    </x-slot>
+
+    @if (session('dashboard_section_settings_status'))
+        <div class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            {{ session('dashboard_section_settings_status') }}
+        </div>
+    @endif
+
+    <form
+        method="POST"
+        action="{{ route('bexia.dashboard.section.settings.update', ['tenant' => $v5700eTenantId, 'section' => 'tesoreria']) }}"
+        class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+    >
+        @csrf
+
+        <div class="w-full md:max-w-md">
+            <label class="mb-2 block text-sm font-medium text-gray-700">
+                Actualización automática de Tesorería
+            </label>
+
+            <select
+                name="refresh_seconds"
+                class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+            >
+                @foreach ($v5700eRefreshOptions as $seconds => $label)
+                    <option value="{{ $seconds }}" @selected($v5700eCurrentRefresh === $seconds)>
+                        {{ $label }}
+                    </option>
+                @endforeach
+            </select>
+
+            <p class="mt-2 text-sm text-gray-500">
+                Valor actual: {{ $v5700eRefreshOptions[$v5700eCurrentRefresh] ?? '1 minuto' }}.
+            </p>
+        </div>
+
+        <x-filament::button type="submit">
+            Guardar actualización
+        </x-filament::button>
+    </form>
+</x-filament::section>
+
+
+
+{{-- V5700E1_WIDGETS_GROUP_HELP --}}
+<x-filament::section>
+    <div class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+        <strong>Nota:</strong>
+        Las filas llamadas <strong>“Sección completa”</strong> son las recomendadas.
+        Los widgets individuales que aparecen como <strong>Oculto / Mostrar</strong> ya están incluidos dentro de esas secciones completas.
+        Actívalos solo si quieres duplicarlos como widgets sueltos en el Escritorio.
+    </div>
+</x-filament::section>
+
+
+<x-filament::section>
             <x-slot name="heading">
                 Widgets disponibles
             </x-slot>
@@ -75,7 +169,23 @@
                         </thead>
 
                         <tbody class="divide-y divide-gray-100 bg-white">
+                            @php($v5700bLastModule = null)
                             @foreach ($rows as $row)
+                                @php($v5700bCurrentModule = (string) ($row['module'] ?? 'General'))
+                                @if ($v5700bLastModule !== $v5700bCurrentModule)
+                                    {{-- V5700B_MODULE_GROUP_HEADER --}}
+                                    <tr class="bg-blue-50/80 dark:bg-blue-950/40">
+                                        <td colspan="6" class="px-4 py-3">
+                                            <div class="flex items-center gap-3">
+                                                <span class="h-3 w-3 rounded-full bg-blue-500"></span>
+                                                <span class="text-sm font-bold uppercase tracking-wide text-blue-900 dark:text-blue-200">
+                                                    {{ $v5700bCurrentModule }}
+                                                </span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    @php($v5700bLastModule = $v5700bCurrentModule)
+                                @endif
                                 <tr>
                                     <td class="px-4 py-3 text-gray-600">
                                         {{ $row['sort_order'] }}
