@@ -6037,39 +6037,212 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
 
         $user = auth()->user();
 
-        $movementId = \Illuminate\Support\Facades\DB::table('pos_cash_movements')->insertGetId([
-            'company_id' => $sessionRow->company_id ?? null,
-            'pos_point_id' => $sessionRow->pos_point_id ?? null,
-            'pos_session_id' => $sessionRow->id,
-            'number' => $number,
-            'type' => $type,
-            'amount' => $amount,
-            'reason' => $reason,
-            'notes' => $notes ?: null,
-            'performed_by_user_id' => auth()->id(),
-            'performed_by_name' => $user->name ?? $user->email ?? ('Usuario #' . auth()->id()),
-            'supervisor_name' => $supervisorName,
-            'movement_at' => now(),
-            'metadata' => json_encode([
-                'source' => 'pos_close_cash_control',
-                'supervisor_employee_id' => $supervisorEmployeeId,
-                'requires_cashier_signature' => true,
-                'requires_supervisor_signature' => true,
-                'print_copies' => 2,
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $treasuryTransferRequestId = null;
+        $treasuryStatus = 'not_linked';
+        $treasuryMessage = null;
+        $destinationTreasuryAccountId = null;
+
+        try {
+            $movementId = \Illuminate\Support\Facades\DB::transaction(function () use (
+                $sessionRow,
+                $pos,
+                $type,
+                $amount,
+                $reason,
+                $notes,
+                $supervisorEmployeeId,
+                $supervisorName,
+                $number,
+                $user,
+                &$treasuryTransferRequestId,
+                &$treasuryStatus,
+                &$treasuryMessage,
+                &$destinationTreasuryAccountId
+            ) {
+                $movementId = \Illuminate\Support\Facades\DB::table('pos_cash_movements')->insertGetId([
+                    'company_id' => $sessionRow->company_id ?? null,
+                    'pos_point_id' => $sessionRow->pos_point_id ?? null,
+                    'pos_session_id' => $sessionRow->id,
+                    'number' => $number,
+                    'type' => $type,
+                    'amount' => $amount,
+                    'reason' => $reason,
+                    'notes' => $notes ?: null,
+                    'performed_by_user_id' => auth()->id(),
+                    'performed_by_name' => $user->name ?? $user->email ?? ('Usuario #' . auth()->id()),
+                    'supervisor_name' => $supervisorName,
+                    'movement_at' => now(),
+                    'metadata' => json_encode([
+                        'source' => 'pos_close_cash_control',
+                        'supervisor_employee_id' => $supervisorEmployeeId,
+                        'requires_cashier_signature' => true,
+                        'requires_supervisor_signature' => true,
+                        'print_copies' => 2,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                /*
+                 * V5.69.0d3:
+                 * Solo los retiros de PDV generan solicitud formal en Tesoreria.
+                 * Entradas de efectivo siguen registrandose como movimiento POS por ahora.
+                 */
+                if ($type === 'cash_out') {
+                    $context = $this->v5690d3TreasuryCashOutContext($sessionRow, $pos);
+
+                    if (! empty($context['error'])) {
+                        throw new \RuntimeException($context['error']);
+                    }
+
+                    $sourceAccount = $context['source_account'];
+                    $destinationAccount = $context['destination_account'];
+
+                    $transferRequest = app(\App\Support\Treasury\CashTransferService::class)->createRequest([
+                        'company_id' => (int) ($sessionRow->company_id ?? $pos->company_id ?? 0),
+                        'branch_id' => $context['branch_id'] ?? null,
+                        'warehouse_id' => $context['warehouse_id'] ?? null,
+                        'pos_point_id' => (int) ($sessionRow->pos_point_id ?? $pos->id ?? 0),
+                        'pos_session_id' => (int) $sessionRow->id,
+                        'pos_cash_movement_id' => $movementId,
+                        'source_treasury_account_id' => (int) $sourceAccount->id,
+                        'destination_treasury_account_id' => (int) $destinationAccount->id,
+                        'type' => 'pos_withdrawal',
+                        'status' => 'requested',
+                        'amount' => $amount,
+                        'currency_code' => $sourceAccount->currency_code ?: 'MXN',
+                        'reason' => 'Retiro PDV ' . $number . ': ' . $reason,
+                        'notes' => $notes ?: null,
+                        'requested_by_user_id' => auth()->id(),
+                        'metadata' => [
+                            'source' => 'pos_cash_movement',
+                            'pos_cash_movement_id' => $movementId,
+                            'pos_cash_movement_number' => $number,
+                            'supervisor_name' => $supervisorName,
+                            'supervisor_employee_id' => $supervisorEmployeeId,
+                            'source_account_scope' => $sourceAccount->cash_scope ?? null,
+                            'destination_account_scope' => $destinationAccount->cash_scope ?? null,
+                        ],
+                    ]);
+
+                    $treasuryTransferRequestId = (int) $transferRequest->id;
+                    $destinationTreasuryAccountId = (int) $destinationAccount->id;
+                    $treasuryStatus = (string) ($transferRequest->status ?? 'requested');
+                    $treasuryMessage = 'Solicitud de efectivo #' . $treasuryTransferRequestId . ' creada para aprobación.';
+
+                    \Illuminate\Support\Facades\DB::table('pos_cash_movements')
+                        ->where('id', $movementId)
+                        ->update([
+                            'treasury_transfer_request_id' => $treasuryTransferRequestId,
+                            'destination_treasury_account_id' => $destinationTreasuryAccountId,
+                            'treasury_status' => $treasuryStatus,
+                            'updated_at' => now(),
+                        ]);
+                }
+
+                return $movementId;
+            });
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => $type === 'cash_out'
+                    ? 'No se pudo registrar el retiro. Revisa que el PDV tenga Caja PDV y que su sucursal tenga Caja sucursal configurada.'
+                    : 'No se pudo registrar el movimiento de efectivo.',
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+
+        $message = $type === 'cash_in'
+            ? 'Entrada de efectivo registrada.'
+            : 'Retiro de efectivo registrado.';
+
+        if ($treasuryMessage) {
+            $message .= ' ' . $treasuryMessage;
+        }
 
         return response()->json([
             'ok' => true,
             'movement_id' => $movementId,
             'number' => $number,
             'print_url' => url('/pos/cash-movements/' . $movementId . '/print'),
-            'message' => $type === 'cash_in'
-                ? 'Entrada de efectivo registrada.'
-                : 'Retiro de efectivo registrado.',
+            'treasury_transfer_request_id' => $treasuryTransferRequestId,
+            'destination_treasury_account_id' => $destinationTreasuryAccountId,
+            'treasury_status' => $treasuryStatus,
+            'message' => $message,
         ]);
+    }
+
+    private function v5690d3TreasuryCashOutContext(object $sessionRow, object $pos): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('treasury_accounts')) {
+            return ['error' => 'No existe la tabla de cuentas/cajas de Tesorería.'];
+        }
+
+        $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
+        $posPointId = (int) ($sessionRow->pos_point_id ?? $pos->id ?? 0);
+        $warehouseId = ! empty($pos->warehouse_id) ? (int) $pos->warehouse_id : null;
+        $branchId = null;
+
+        if ($companyId <= 0) {
+            return ['error' => 'La sesión PDV no tiene empresa válida.'];
+        }
+
+        if ($posPointId <= 0) {
+            return ['error' => 'La sesión PDV no tiene punto de venta válido.'];
+        }
+
+        if (! empty($pos->branch_id)) {
+            $branchId = (int) $pos->branch_id;
+        }
+
+        if (! $branchId && $warehouseId && \Illuminate\Support\Facades\Schema::hasTable('warehouses')) {
+            $warehouse = \Illuminate\Support\Facades\DB::table('warehouses')
+                ->where('id', $warehouseId)
+                ->first();
+
+            if ($warehouse && ! empty($warehouse->branch_id)) {
+                $branchId = (int) $warehouse->branch_id;
+            }
+        }
+
+        if (! $branchId) {
+            return ['error' => 'Este PDV no tiene sucursal asociada. Configura la sucursal/tienda antes de registrar retiros.'];
+        }
+
+        $sourceAccount = \Illuminate\Support\Facades\DB::table('treasury_accounts')
+            ->where('company_id', $companyId)
+            ->where('pos_point_id', $posPointId)
+            ->where('cash_scope', 'pdv')
+            ->where('is_active', true)
+            ->first();
+
+        if (! $sourceAccount) {
+            return ['error' => 'No existe una Caja PDV activa ligada a este punto de venta.'];
+        }
+
+        $destinationAccount = \Illuminate\Support\Facades\DB::table('treasury_accounts')
+            ->where('company_id', $companyId)
+            ->where('branch_id', $branchId)
+            ->where('cash_scope', 'branch_cash')
+            ->where('is_active', true)
+            ->first();
+
+        if (! $destinationAccount) {
+            return ['error' => 'No existe una Caja sucursal activa ligada a la sucursal de este PDV.'];
+        }
+
+        if ((int) $destinationAccount->id === (int) $sourceAccount->id) {
+            return ['error' => 'La Caja PDV origen y la Caja sucursal destino no pueden ser la misma.'];
+        }
+
+        return [
+            'source_account' => $sourceAccount,
+            'destination_account' => $destinationAccount,
+            'warehouse_id' => $warehouseId,
+            'branch_id' => $branchId,
+        ];
     }
 
     public function printCashMovement(\Illuminate\Http\Request $request, int $movement)
