@@ -176,6 +176,27 @@ public static function canCreate(): bool
                         ->label('Razón social')
                         ->maxLength(255),
 
+                    Select::make('company_group_id')
+                        ->label('Grupo de empresas')
+                        ->options(fn (): array => \App\Models\CompanyGroup::query()
+                            ->where('active', true)
+                            ->orderBy('name')
+                            ->pluck('name', 'id')
+                            ->all())
+                        ->searchable()
+                        ->preload()
+                        ->nullable()
+                        ->live()
+                        ->afterStateUpdated(function (\Filament\Forms\Set $set, $state): void {
+                            $set('organization_id', $state
+                                ? \App\Models\CompanyGroup::query()->whereKey($state)->value('organization_id')
+                                : null
+                            );
+                        })
+                        ->helperText('Jerarquía: Cliente → Grupo de empresas → Empresa → Sucursal.'),
+
+                    \Filament\Forms\Components\Hidden::make('organization_id'),
+
                     TextInput::make('slug')
                         ->label('Slug')
                         ->required()
