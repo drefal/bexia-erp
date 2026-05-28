@@ -342,25 +342,6 @@ public static function canCreate(): bool
     {
         return $table
             ->columns([
-                \Filament\Tables\Columns\TextColumn::make('default_costing_method')
-                    ->label('Costeo default')
-                    ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'fifo' => 'FIFO',
-                        'standard' => 'Costo estándar',
-                        default => 'Promedio',
-                    })
-                    ->badge()
-                    ->sortable(),
-
-                \Filament\Tables\Columns\TextColumn::make('costing_scope')
-                    ->label('Alcance costeo')
-                    ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'warehouse' => 'Por almacén',
-                        default => 'Por empresa',
-                    })
-                    ->badge()
-                    ->sortable(),
-
                 ImageColumn::make('logo_compact_path')
                     ->label('Logo')
                     ->disk('public')
