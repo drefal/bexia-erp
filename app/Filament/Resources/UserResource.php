@@ -4,6 +4,8 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\UserResource\Pages;
 use App\Models\User;
+use App\Models\Company;
+use App\Models\CompanyGroup;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Components\FileUpload;
@@ -109,20 +111,34 @@ public static function canCreate(): bool
     public static function getEloquentQuery(): Builder
     {
         $tenantId = Filament::getTenant()?->getKey();
-        $query = parent::getEloquentQuery()->with(['companies']);
+        $user = auth()->user();
 
-        if ($tenantId) {
+        $query = parent::getEloquentQuery()->with(['companies', 'companyGroups']);
+
+        if ($user && static::currentUserIsSuperAdmin()) {
+            return $query;
+        }
+
+        $manageableGroupIds = [];
+
+        if ($user && method_exists($user, 'manageableCompanyGroupIds')) {
+            $manageableGroupIds = $user->manageableCompanyGroupIds();
+        }
+
+        if (! empty($manageableGroupIds)) {
+            $query->whereHas('companies', function (Builder $q) use ($manageableGroupIds) {
+                $q->whereIn('companies.company_group_id', $manageableGroupIds);
+            });
+        } elseif ($tenantId) {
             $query->whereHas('companies', function (Builder $q) use ($tenantId) {
                 $q->where('companies.id', $tenantId);
             });
         }
 
-        if (! static::currentUserIsSuperAdmin()) {
-            $query->where(function (Builder $q) {
-                $q->whereNull('is_system_admin')
-                  ->orWhere('is_system_admin', false);
-            });
-        }
+        $query->where(function (Builder $q) {
+            $q->whereNull('is_system_admin')
+              ->orWhere('is_system_admin', false);
+        });
 
         return $query;
     }
@@ -215,16 +231,88 @@ public static function canViewAny(): bool
 
             Forms\Components\Section::make('Accesos')
                 ->schema([
+                    Forms\Components\Select::make('company_group_access_helper')
+                        ->label('Cargar empresas de un grupo')
+                        ->helperText('Selecciona un grupo para llenar automáticamente todas sus empresas. Después puedes quitar manualmente las que no apliquen.')
+                        ->options(function (): array {
+                            $query = CompanyGroup::query()
+                                ->where('active', true)
+                                ->orderBy('name');
+
+                            $user = auth()->user();
+
+                            if (
+                                $user
+                                && ! static::currentUserIsSuperAdmin()
+                                && method_exists($user, 'manageableCompanyGroupIds')
+                            ) {
+                                $groupIds = $user->manageableCompanyGroupIds();
+
+                                if (! empty($groupIds)) {
+                                    $query->whereIn('id', $groupIds);
+                                }
+                            }
+
+                            return $query->pluck('name', 'id')->toArray();
+                        })
+                        ->searchable()
+                        ->preload()
+                        ->live()
+                        ->dehydrated(false)
+                        ->afterStateUpdated(function ($state, Forms\Set $set): void {
+                            if (! $state) {
+                                return;
+                            }
+
+                            $companyIds = Company::query()
+                                ->where('company_group_id', $state)
+                                ->where('active', true)
+                                ->orderBy('name')
+                                ->pluck('id')
+                                ->map(fn ($id): string => (string) $id)
+                                ->all();
+
+                            $set('companies', $companyIds);
+                        }),
+
                     Forms\Components\Select::make('companies')
-                        ->label('Empresas')
+                        ->label('Empresas asignadas')
+                        ->helperText('Estas son las empresas finales a las que tendrá acceso el usuario. Puedes quitar empresas después de cargar el grupo.')
                         ->relationship(
                             name: 'companies',
                             titleAttribute: 'name',
-                            modifyQueryUsing: function (Builder $query) use ($tenantId) {
+                            modifyQueryUsing: function (Builder $query, Forms\Get $get) use ($tenantId) {
                                 $query->select(['companies.id', 'companies.name']);
 
+                                $groupId = $get('company_group_access_helper');
+
+                                $selectedCompanyIds = collect($get('companies') ?? [])
+                                    ->filter()
+                                    ->map(fn ($id): int => (int) $id)
+                                    ->unique()
+                                    ->values()
+                                    ->all();
+
+                                if ($groupId) {
+                                    $query->where(function (Builder $q) use ($groupId, $selectedCompanyIds) {
+                                        $q->where('companies.company_group_id', $groupId);
+
+                                        if (! empty($selectedCompanyIds)) {
+                                            $q->orWhereIn('companies.id', $selectedCompanyIds);
+                                        }
+                                    });
+
+                                    return;
+                                }
+
                                 if ($tenantId) {
-                                    $query->where('companies.id', $tenantId);
+                                    $query->where(function (Builder $q) use ($tenantId, $selectedCompanyIds) {
+                                        $q->where('companies.id', $tenantId);
+
+                                        if (! empty($selectedCompanyIds)) {
+                                            $q->orWhereIn('companies.id', $selectedCompanyIds);
+                                        }
+                                    });
                                 }
                             }
                         )
@@ -422,17 +510,51 @@ public static function canViewAny(): bool
                     ->label('Superadmin')
                     ->boolean(),
 
-                Tables\Columns\TextColumn::make('empresa_actual')
-                    ->label('Empresa')
-                    ->getStateUsing(function ($record) {
-                        $tenantId = Filament::getTenant()?->getKey();
-
-                        return $record->companies
-                            ->where('id', $tenantId)
+                Tables\Columns\TextColumn::make('grupos_acceso')
+                    ->label('Grupos')
+                    ->getStateUsing(function (User $record): string {
+                        return $record->companyGroups
                             ->pluck('name')
-                            ->join(', ');
+                            ->filter()
+                            ->join(', ') ?: 'Sin grupo';
                     })
-                    ->badge(),
+                    ->badge()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('empresas_acceso')
+                    ->label('Empresas')
+                    ->getStateUsing(function (User $record): string {
+                        $companies = $record->companies
+                            ->pluck('name')
+                            ->filter()
+                            ->values();
+
+                        $count = $companies->count();
+
+                        if ($count === 0) {
+                            return 'Sin empresas';
+                        }
+
+                        $preview = $companies->take(3)->join(', ');
+
+                        if ($count > 3) {
+                            return $count . ' empresas: ' . $preview . ' +' . ($count - 3) . ' más';
+                        }
+
+                        return $count . ' empresa' . ($count === 1 ? ': ' : 's: ') . $preview;
+                    })
+                    ->tooltip(function (User $record): ?string {
+                        $companies = $record->companies
+                            ->pluck('name')
+                            ->filter()
+                            ->values();
+
+                        return $companies->isNotEmpty()
+                            ? $companies->join("\n")
+                            : null;
+                    })
+                    ->wrap()
+                    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Creado')

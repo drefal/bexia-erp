@@ -19,11 +19,44 @@ class CreateUser extends CreateRecord
 
     protected function afterCreate(): void
     {
-        $roleIds = $this->data['role_ids'] ?? [];
-        $permissionIds = $this->data['permission_ids'] ?? [];
+        $formState = $this->form->getRawState();
+
+        if (is_object($formState) && method_exists($formState, 'toArray')) {
+            $formState = $formState->toArray();
+        }
+
+        if (! is_array($formState)) {
+            $formState = $this->data ?? [];
+        }
+
+        $roleIds = $formState['role_ids'] ?? $this->data['role_ids'] ?? [];
+        $permissionIds = $formState['permission_ids'] ?? $this->data['permission_ids'] ?? [];
+
+        $companyIds = collect($formState['companies'] ?? $this->data['companies'] ?? [])
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $groupId = filled($formState['company_group_access_helper'] ?? $this->data['company_group_access_helper'] ?? null)
+            ? (int) ($formState['company_group_access_helper'] ?? $this->data['company_group_access_helper'])
+            : null;
 
         $roles = Role::query()->whereIn('id', $roleIds)->pluck('name')->all();
         $permissions = Permission::query()->whereIn('id', $permissionIds)->pluck('name')->all();
+
+        $this->record->companies()->sync($companyIds);
+
+        $this->record->companyGroups()
+            ->wherePivot('is_group_admin', false)
+            ->detach();
+
+        if ($groupId) {
+            $this->record->companyGroups()->syncWithoutDetaching([
+                $groupId => ['is_group_admin' => false],
+            ]);
+        }
 
         $this->record->syncRoles($roles);
         $this->record->syncPermissions($permissions);
