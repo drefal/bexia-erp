@@ -419,11 +419,14 @@ public static function canCreate(): bool
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
-                    ->visible(fn () => auth()->check() && auth()->user()->can('company.update')),
+                    ->label('Editar')
+                    ->visible(fn (): bool => static::currentUserIsSystemAdmin()
+                        || (auth()->check() && auth()->user()->can('company.update'))),
 
                 DeleteAction::make()
                     ->label('Eliminar')
-                    ->visible(fn () => auth()->check() && auth()->user()->can('company.update'))
+                    ->visible(fn (): bool => static::currentUserIsSystemAdmin()
+                        || (auth()->check() && auth()->user()->can('company.update')))
                     ->before(function ($record) {
                         if (method_exists($record, 'users') && $record->users()->count() > 0) {
                             Notification::make()
@@ -436,6 +439,12 @@ public static function canCreate(): bool
                         }
                     }),
             ])
+            ->recordUrl(fn (Company $record): ?string => (
+                static::currentUserIsSystemAdmin()
+                || (auth()->check() && auth()->user()->can('company.update'))
+            )
+                ? static::getUrl('edit', ['record' => $record])
+                : null)
             ->bulkActions([]);
     }
 
