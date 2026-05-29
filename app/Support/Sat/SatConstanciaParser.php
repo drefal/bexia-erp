@@ -22,14 +22,26 @@ class SatConstanciaParser
         $rfc = $this->extractRfc($flat);
         $regimeName = $this->extractRegime($flat);
 
+        $headerName = $this->extractHeaderName($text);
+
+        $businessName = $this->resolveName(
+            $this->extractBusinessName($flat, $rfc),
+            $headerName,
+        );
+
+        $commercialName = $this->resolveName(
+            $this->between($flat, 'Nombre Comercial:', 'Fecha inicio de operaciones:'),
+            $businessName,
+        );
+
         return [
             'source_file' => $path,
             'raw_text_length' => mb_strlen($rawText),
 
             'rfc' => $rfc,
-            'business_name' => $this->readable($this->extractBusinessName($flat, $rfc)),
+            'business_name' => $businessName,
             'capital_regime' => $this->readable($this->between($flat, 'Régimen Capital:', 'Nombre Comercial:')),
-            'commercial_name' => $this->readable($this->between($flat, 'Nombre Comercial:', 'Fecha inicio de operaciones:')),
+            'commercial_name' => $commercialName,
             'operation_start_date_text' => $this->readableDateText($this->between($flat, 'Fecha inicio de operaciones:', 'Estatus en el padrón:')),
             'taxpayer_status' => $this->readable($this->between($flat, 'Estatus en el padrón:', 'Fecha de último cambio de estado:')),
 
@@ -48,7 +60,6 @@ class SatConstanciaParser
             'tax_regime_name' => $regimeName,
             'tax_regime_code' => $this->mapTaxRegimeCode($regimeName),
             'activities' => $this->extractActivities($flat),
-
         ];
     }
 
@@ -199,6 +210,65 @@ class SatConstanciaParser
         $value = preg_replace('/\s+/u', ' ', $value);
 
         return $this->clean($value);
+    }
+
+    private function extractHeaderName(string $text): ?string
+    {
+        $patterns = [
+            '/Registro Federal de Contribuyentes\s*(.*?)\s*Nombre,\s*denominación\s*o razón\s*social/su',
+            '/Registro Federal de Contribuyentes\s*(.*?)\s*idCIF:/su',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $text, $m)) {
+                $value = $this->readable($m[1] ?? null);
+
+                if ($value) {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function compactName(?string $value): ?string
+    {
+        $value = $this->clean($value);
+
+        if (! $value) {
+            return null;
+        }
+
+        return preg_replace('/[^A-Z0-9Ñ&]/u', '', mb_strtoupper($value));
+    }
+
+    private function resolveName(?string $primary, ?string $fallback): ?string
+    {
+        $primary = $this->readable($primary);
+        $fallback = $this->readable($fallback);
+
+        if (! $primary) {
+            return $fallback;
+        }
+
+        if (! $fallback) {
+            return $primary;
+        }
+
+        $primaryCompact = $this->compactName($primary);
+        $fallbackCompact = $this->compactName($fallback);
+
+        if (
+            $primaryCompact
+            && $fallbackCompact
+            && $primaryCompact === $fallbackCompact
+            && substr_count($fallback, ' ') > substr_count($primary, ' ')
+        ) {
+            return $fallback;
+        }
+
+        return $primary;
     }
 
     private function readableDateText(?string $value): ?string
