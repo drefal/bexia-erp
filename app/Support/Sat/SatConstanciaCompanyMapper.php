@@ -30,14 +30,22 @@ class SatConstanciaCompanyMapper
         $absolutePath = Storage::disk('local')->path($storedPath);
         $parsed = $this->parser->parseFile($absolutePath);
 
-        $name = $parsed['commercial_name']
-            ?: $parsed['business_name']
-            ?: $parsed['rfc']
-            ?: 'Empresa sin nombre';
+        $businessName = $this->cleanName($parsed['business_name'] ?? null);
+        $commercialName = $this->cleanName($parsed['commercial_name'] ?? null);
+
+        $name = $this->resolveDisplayName(
+            $commercialName,
+            $businessName,
+            $parsed['rfc'] ?? null,
+        );
+
+        // Guardamos tambien el parsed_data ya normalizado para auditoria futura.
+        $parsed['business_name'] = $businessName ?: $name;
+        $parsed['commercial_name'] = $name;
 
         $attributes = [
             'name' => $name,
-            'business_name' => $parsed['business_name'] ?: $name,
+            'business_name' => $businessName ?: $name,
             'tax_id' => $parsed['rfc'],
             'tax_regime' => $parsed['tax_regime_code'],
             'fiscal_postal_code' => $parsed['fiscal_postal_code'],
@@ -65,6 +73,70 @@ class SatConstanciaCompanyMapper
         }
 
         return $attributes;
+    }
+
+    private function cleanName(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = preg_replace('/\s+/u', ' ', trim((string) $value));
+
+        return $value !== '' ? $value : null;
+    }
+
+    private function compactName(?string $value): ?string
+    {
+        $value = $this->cleanName($value);
+
+        if (! $value) {
+            return null;
+        }
+
+        return preg_replace('/[^A-Z0-9Ñ&]/u', '', mb_strtoupper($value));
+    }
+
+    private function resolveDisplayName(?string $commercialName, ?string $businessName, ?string $rfc): string
+    {
+        $commercialName = $this->cleanName($commercialName);
+        $businessName = $this->cleanName($businessName);
+
+        if (! $commercialName) {
+            return $businessName ?: ($rfc ?: 'Empresa sin nombre');
+        }
+
+        if (! $businessName) {
+            return $commercialName ?: ($rfc ?: 'Empresa sin nombre');
+        }
+
+        $commercialCompact = $this->compactName($commercialName);
+        $businessCompact = $this->compactName($businessName);
+
+        $commercialLooksCompacted = substr_count($commercialName, ' ') === 0
+            && mb_strlen($commercialCompact ?? '') >= 12;
+
+        $sameNameDifferentSpacing = $commercialCompact
+            && $businessCompact
+            && $commercialCompact === $businessCompact
+            && substr_count($businessName, ' ') > substr_count($commercialName, ' ');
+
+        $almostSameLength = $commercialCompact
+            && $businessCompact
+            && (mb_strlen($commercialCompact) / max(mb_strlen($businessCompact), 1)) >= 0.75;
+
+        $containedBecauseCompacted = $commercialLooksCompacted
+            && $almostSameLength
+            && (
+                str_contains($businessCompact, $commercialCompact)
+                || str_contains($commercialCompact, $businessCompact)
+            );
+
+        if ($sameNameDifferentSpacing || $containedBecauseCompacted) {
+            return $businessName;
+        }
+
+        return $commercialName;
     }
 
     public function uniqueSlug(string $baseName, ?int $ignoreCompanyId = null): string
