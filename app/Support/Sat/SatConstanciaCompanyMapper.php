@@ -102,6 +102,10 @@ class SatConstanciaCompanyMapper
         $commercialName = $this->cleanName($commercialName);
         $businessName = $this->cleanName($businessName);
 
+        if (! $businessName && ! $commercialName) {
+            return $rfc ?: 'Empresa sin nombre';
+        }
+
         if (! $commercialName) {
             return $businessName ?: ($rfc ?: 'Empresa sin nombre');
         }
@@ -113,26 +117,35 @@ class SatConstanciaCompanyMapper
         $commercialCompact = $this->compactName($commercialName);
         $businessCompact = $this->compactName($businessName);
 
-        $commercialLooksCompacted = substr_count($commercialName, ' ') === 0
-            && mb_strlen($commercialCompact ?? '') >= 12;
+        /*
+         * Regla general para Constancias SAT:
+         * En algunos PDF el campo Nombre Comercial viene vacio,
+         * pero el parser puede tomar un texto del encabezado o tabla sin espacios.
+         *
+         * Si el nombre comercial viene todo pegado y la razon social ya viene legible
+         * con espacios, usamos la razon social como nombre comercial.
+         *
+         * Esto evita correcciones por empresa:
+         * - MEMMONKELECTRICMOBILITY -> MEM MONK MOVILIDAD ELECTRICA
+         * - BIKESCYCLESANDPARTSMEXICO -> BIKES CYCLES AND PARTS MEXICO
+         */
+        $commercialLooksCompacted = $commercialCompact
+            && $commercialName === $commercialCompact
+            && substr_count($commercialName, ' ') === 0
+            && mb_strlen($commercialCompact) >= 12;
+
+        $businessLooksReadable = substr_count($businessName, ' ') >= 1;
+
+        if ($commercialLooksCompacted && $businessLooksReadable) {
+            return $businessName;
+        }
 
         $sameNameDifferentSpacing = $commercialCompact
             && $businessCompact
             && $commercialCompact === $businessCompact
             && substr_count($businessName, ' ') > substr_count($commercialName, ' ');
 
-        $almostSameLength = $commercialCompact
-            && $businessCompact
-            && (mb_strlen($commercialCompact) / max(mb_strlen($businessCompact), 1)) >= 0.75;
-
-        $containedBecauseCompacted = $commercialLooksCompacted
-            && $almostSameLength
-            && (
-                str_contains($businessCompact, $commercialCompact)
-                || str_contains($commercialCompact, $businessCompact)
-            );
-
-        if ($sameNameDifferentSpacing || $containedBecauseCompacted) {
+        if ($sameNameDifferentSpacing) {
             return $businessName;
         }
 
