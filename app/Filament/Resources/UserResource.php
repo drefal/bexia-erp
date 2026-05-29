@@ -273,74 +273,122 @@ public static function canViewAny(): bool
                                 ->all();
 
                             $set('companies', $companyIds);
+                            $set('role_ids', []);
                         }),
 
                     Forms\Components\Select::make('companies')
                         ->label('Empresas asignadas')
                         ->helperText('Estas son las empresas finales a las que tendrá acceso el usuario. Puedes quitar empresas después de cargar el grupo.')
-                        ->relationship(
-                            name: 'companies',
-                            titleAttribute: 'name',
-                            modifyQueryUsing: function (Builder $query, Forms\Get $get) use ($tenantId) {
-                                $query->select(['companies.id', 'companies.name']);
+                        ->options(function (Forms\Get $get) use ($tenantId): array {
+                            $groupId = $get('company_group_access_helper');
 
-                                $groupId = $get('company_group_access_helper');
+                            $selectedCompanyIds = collect($get('companies') ?? [])
+                                ->filter()
+                                ->map(fn ($id): int => (int) $id)
+                                ->unique()
+                                ->values()
+                                ->all();
 
-                                $selectedCompanyIds = collect($get('companies') ?? [])
-                                    ->filter()
-                                    ->map(fn ($id): int => (int) $id)
-                                    ->unique()
-                                    ->values()
-                                    ->all();
+                            $query = Company::query()
+                                ->select(['companies.id', 'companies.name'])
+                                ->where('active', true);
 
-                                if ($groupId) {
-                                    $query->where(function (Builder $q) use ($groupId, $selectedCompanyIds) {
-                                        $q->where('companies.company_group_id', $groupId);
+                            if ($groupId) {
+                                $query->where(function (Builder $q) use ($groupId, $selectedCompanyIds) {
+                                    $q->where('companies.company_group_id', $groupId);
 
-                                        if (! empty($selectedCompanyIds)) {
-                                            $q->orWhereIn('companies.id', $selectedCompanyIds);
-                                        }
-                                    });
-
-                                    return;
-                                }
-
-                                if ($tenantId) {
-                                    $query->where(function (Builder $q) use ($tenantId, $selectedCompanyIds) {
-                                        $q->where('companies.id', $tenantId);
-
-                                        if (! empty($selectedCompanyIds)) {
-                                            $q->orWhereIn('companies.id', $selectedCompanyIds);
-                                        }
-                                    });
-                                }
-                            }
-                        )
-                        ->multiple()
-                        ->searchable()
-                        ->preload()
-                        ->native(false),
-
-                    Forms\Components\Select::make('role_ids')
-                        ->label('Roles')
-                        ->options(function () use ($tenantId) {
-                            return Role::query()
-                                ->where(function ($q) use ($tenantId) {
-                                    $q->whereNull('roles.company_id');
-
-                                    if ($tenantId) {
-                                        $q->orWhere('roles.company_id', $tenantId);
+                                    if (! empty($selectedCompanyIds)) {
+                                        $q->orWhereIn('companies.id', $selectedCompanyIds);
                                     }
-                                })
-                                ->orderBy('name')
-                                ->pluck('name', 'id')
+                                });
+                            } elseif ($tenantId) {
+                                $query->where(function (Builder $q) use ($tenantId, $selectedCompanyIds) {
+                                    $q->where('companies.id', $tenantId);
+
+                                    if (! empty($selectedCompanyIds)) {
+                                        $q->orWhereIn('companies.id', $selectedCompanyIds);
+                                    }
+                                });
+                            }
+
+                            return $query
+                                ->orderBy('companies.name')
+                                ->pluck('companies.name', 'companies.id')
                                 ->toArray();
                         })
                         ->multiple()
                         ->searchable()
                         ->preload()
+                        ->live()
                         ->native(false)
-                        ->default([]),
+                        ->afterStateUpdated(fn (Forms\Set $set) => $set('role_ids', [])),
+
+                    Forms\Components\Select::make('role_ids')
+                        ->label('Roles')
+                        ->options(function (Forms\Get $get) use ($tenantId): array {
+                            $companyIds = collect($get('companies') ?? [])
+                                ->filter()
+                                ->map(fn ($id): int => (int) $id)
+                                ->unique()
+                                ->values();
+
+                            $groupId = $get('company_group_access_helper');
+
+                            if ($companyIds->isEmpty() && $groupId) {
+                                $companyIds = Company::query()
+                                    ->where('company_group_id', $groupId)
+                                    ->where('active', true)
+                                    ->pluck('id')
+                                    ->map(fn ($id): int => (int) $id)
+                                    ->values();
+                            }
+
+                            if ($tenantId) {
+                                $companyIds->push((int) $tenantId);
+                            }
+
+                            $companyIds = $companyIds
+                                ->unique()
+                                ->values()
+                                ->all();
+
+                            $roles = Role::query()
+                                ->where(function ($q) use ($companyIds) {
+                                    $q->whereNull('roles.company_id');
+
+                                    if (! empty($companyIds)) {
+                                        $q->orWhereIn('roles.company_id', $companyIds);
+                                    }
+                                })
+                                ->orderBy('name')
+                                ->get(['id', 'name', 'company_id']);
+
+                            $companyNames = ! empty($companyIds)
+                                ? Company::query()->whereIn('id', $companyIds)->pluck('name', 'id')
+                                : collect();
+
+                            return $roles
+                                ->mapWithKeys(function (Role $role) use ($companyNames): array {
+                                    $label = $role->name;
+
+                                    if ($role->company_id) {
+                                        $companyName = $companyNames->get($role->company_id);
+                                        $label .= $companyName ? ' - ' . $companyName : ' - Empresa #' . $role->company_id;
+                                    } else {
+                                        $label .= ' - Global';
+                                    }
+
+                                    return [$role->id => $label];
+                                })
+                                ->toArray();
+                        })
+                        ->multiple()
+                        ->searchable()
+                        ->preload()
+                        ->live()
+                        ->native(false)
+                        ->default([])
+                        ->helperText('Los roles seleccionados se aplican a cada empresa asignada.'),
 
                     Forms\Components\Select::make('permission_ids')
                         ->label('Permisos directos')
