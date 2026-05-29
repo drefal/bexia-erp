@@ -221,6 +221,8 @@ public static function canViewAny(): bool
                             name: 'companies',
                             titleAttribute: 'name',
                             modifyQueryUsing: function (Builder $query) use ($tenantId) {
+                                $query->select(['companies.id', 'companies.name']);
+
                                 if ($tenantId) {
                                     $query->where('companies.id', $tenantId);
                                 }
