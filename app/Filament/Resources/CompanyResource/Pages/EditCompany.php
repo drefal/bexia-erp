@@ -19,9 +19,9 @@ class EditCompany extends EditRecord
     {
         return [
             Actions\Action::make('update_from_sat_constancia')
-                ->label('Actualizar desde Constancia SAT')
+                ->label('Constancia SAT')
                 ->icon('heroicon-o-document-arrow-up')
-                ->color('success')
+                ->color('gray')
                 ->visible(fn (): bool => CompanyResource::currentUserIsSystemAdmin())
                 ->form([
                     FileUpload::make('constancia_sat')
@@ -71,10 +71,6 @@ class EditCompany extends EditRecord
                     $this->record->save();
                     $this->record->refresh();
 
-                    // Muy importante:
-                    // La accion actualiza el registro desde un modal de cabecera.
-                    // Si no refrescamos el form, Filament conserva valores viejos
-                    // y al presionar Guardar cambios puede sobrescribir lo que acabamos de leer del PDF.
                     $this->fillForm();
 
                     Notification::make()
@@ -85,9 +81,9 @@ class EditCompany extends EditRecord
                 }),
 
             Actions\Action::make('test_sw_connection')
-                ->label('Probar conexión PAC')
+                ->label('Probar PAC')
                 ->icon('heroicon-o-bolt')
-                ->color('info')
+                ->color('primary')
                 ->visible(fn (): bool => CompanyResource::currentUserIsSystemAdmin())
                 ->action(function (): void {
                     $result = app(SwPacClient::class)->testAuthentication($this->record->refresh());
@@ -118,7 +114,8 @@ class EditCompany extends EditRecord
                     $this->record->refresh();
                 }),
 
-            Actions\DeleteAction::make(),
+            Actions\DeleteAction::make()
+                ->label('Borrar'),
         ];
     }
 }
