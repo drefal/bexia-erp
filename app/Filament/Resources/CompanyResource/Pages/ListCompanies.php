@@ -21,9 +21,9 @@ class ListCompanies extends ListRecords
     {
         return [
             Actions\Action::make('create_from_sat_constancia')
-                ->label('Crear desde Constancia SAT')
+                ->label('Importar SAT')
                 ->icon('heroicon-o-document-arrow-up')
-                ->color('success')
+                ->color('gray')
                 ->visible(fn (): bool => CompanyResource::canCreate())
                 ->form([
                     FileUpload::make('constancia_sat')
@@ -81,7 +81,7 @@ class ListCompanies extends ListRecords
                     if (Company::query()->where('tax_id', $attributes['tax_id'])->exists()) {
                         Notification::make()
                             ->title('Ya existe una empresa con ese RFC')
-                            ->body('Usa la acción Actualizar desde Constancia SAT dentro de la empresa existente.')
+                            ->body('Usa la acción Constancia SAT dentro de la empresa existente.')
                             ->warning()
                             ->send();
 
@@ -101,7 +101,9 @@ class ListCompanies extends ListRecords
                 }),
 
             Actions\CreateAction::make()
-                ->label('Nueva empresa'),
+                ->label('Nueva empresa')
+                ->icon('heroicon-o-plus')
+                ->color('primary'),
         ];
     }
 }
