@@ -51,7 +51,15 @@ public static function canCreate(): bool
 
     public static function canEdit(Model $record): bool
     {
-        return auth()->check() && auth()->user()->can('company.update');
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        return $user->isSystemAdmin()
+            || $user->isGroupAdmin()
+            || $user->can('company.update');
     }
 
     public static function canDeleteAny(): bool
