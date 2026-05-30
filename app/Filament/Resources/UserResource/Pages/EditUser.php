@@ -5,11 +5,13 @@ namespace App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource;
 use App\Models\Company;
 use Filament\Actions;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class EditUser extends EditRecord
 {
@@ -34,12 +36,12 @@ class EditUser extends EditRecord
             ->map(fn ($id): string => (string) $id)
             ->all();
 
-        $data['company_group_access_helper'] = $this->record->companyGroups()
+        $data['access_company_group_id'] = $this->record->companyGroups()
             ->wherePivot('is_group_admin', false)
             ->orderBy('company_groups.name')
             ->value('company_groups.id');
 
-        if (! $data['company_group_access_helper'] && ! empty($data['companies'])) {
+        if (! $data['access_company_group_id'] && ! empty($data['companies'])) {
             $groupIds = Company::query()
                 ->whereIn('id', $data['companies'])
                 ->whereNotNull('company_group_id')
@@ -48,7 +50,7 @@ class EditUser extends EditRecord
                 ->all();
 
             if (count($groupIds) === 1) {
-                $data['company_group_access_helper'] = $groupIds[0];
+                $data['access_company_group_id'] = $groupIds[0];
             }
         }
 
@@ -57,40 +59,87 @@ class EditUser extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        unset(
+            $data['role_ids'],
+            $data['permission_ids'],
+            $data['companies'],
+            $data['access_company_group_id'],
+        );
+
         return UserResource::normalizeOperationalDefaults($data);
     }
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        $formState = $this->form->getRawState();
+        $this->saveUserAndAccessConfiguration();
 
-        if (is_object($formState) && method_exists($formState, 'toArray')) {
-            $formState = $formState->toArray();
+        return $record->refresh();
+    }
+
+    public function saveUserAndAccessConfiguration(): void
+    {
+        $state = $this->form->getState();
+
+        if (is_object($state) && method_exists($state, 'toArray')) {
+            $state = $state->toArray();
         }
 
-        if (! is_array($formState)) {
-            $formState = $data;
+        if (! is_array($state)) {
+            $state = [];
         }
 
-        $roleIds = collect($formState['role_ids'] ?? $data['role_ids'] ?? [])
+        $this->persistUserDataFromState($this->record, $state);
+        $this->persistAccessFromState($this->record, $state);
+
+        Notification::make()
+            ->title('Usuario guardado')
+            ->body('Se guardaron datos, grupo, empresas y roles.')
+            ->success()
+            ->send();
+    }
+
+    private function persistUserDataFromState(Model $record, array $state): void
+    {
+        $data = $state;
+
+        unset(
+            $data['role_ids'],
+            $data['permission_ids'],
+            $data['companies'],
+            $data['access_company_group_id'],
+        );
+
+        if (array_key_exists('password', $data) && blank($data['password'])) {
+            unset($data['password']);
+        }
+
+        $data = UserResource::normalizeOperationalDefaults($data);
+
+        $record->fill($data);
+        $record->save();
+    }
+
+    private function persistAccessFromState(Model $record, array $state): void
+    {
+        $roleIds = collect($state['role_ids'] ?? [])
             ->filter()
             ->map(fn ($id): int => (int) $id)
             ->unique()
             ->values()
             ->all();
 
-        $permissionIds = collect($formState['permission_ids'] ?? $data['permission_ids'] ?? [])
+        $permissionIds = collect($state['permission_ids'] ?? [])
             ->filter()
             ->map(fn ($id): int => (int) $id)
             ->unique()
             ->values()
             ->all();
 
-        $groupId = filled($formState['company_group_access_helper'] ?? $data['company_group_access_helper'] ?? null)
-            ? (int) ($formState['company_group_access_helper'] ?? $data['company_group_access_helper'])
+        $groupId = filled($state['access_company_group_id'] ?? null)
+            ? (int) $state['access_company_group_id']
             : null;
 
-        $selectedCompanyIds = collect($formState['companies'] ?? $data['companies'] ?? [])
+        $selectedCompanyIds = collect($state['companies'] ?? [])
             ->filter()
             ->map(fn ($id): int => (int) $id)
             ->unique()
@@ -99,19 +148,16 @@ class EditUser extends EditRecord
 
         $companyIds = $this->normalizeCompanyIdsForGroup($selectedCompanyIds, $groupId);
 
-        unset(
-            $data['role_ids'],
-            $data['permission_ids'],
-            $data['companies'],
-            $data['company_group_access_helper'],
-        );
+        \Log::info('BEXIA_USER_SAVE_FINAL_V57117C', [
+            'record_id' => $record->getKey(),
+            'group_id' => $groupId,
+            'selected_company_ids' => $selectedCompanyIds,
+            'normalized_company_ids' => $companyIds,
+            'role_ids' => $roleIds,
+            'permission_ids' => $permissionIds,
+        ]);
 
-        $data = UserResource::normalizeOperationalDefaults($data);
-
-        DB::transaction(function () use ($record, $data, $companyIds, $groupId, $roleIds, $permissionIds): void {
-            $record->fill($data);
-            $record->save();
-
+        DB::transaction(function () use ($record, $companyIds, $groupId, $roleIds, $permissionIds): void {
             $record->companies()->sync($companyIds);
 
             $this->syncNonAdminCompanyGroup($record, $groupId);
@@ -126,8 +172,6 @@ class EditUser extends EditRecord
 
             app(PermissionRegistrar::class)->forgetCachedPermissions();
         });
-
-        return $record;
     }
 
     private function normalizeCompanyIdsForGroup(array $selectedCompanyIds, ?int $groupId): array
@@ -163,11 +207,17 @@ class EditUser extends EditRecord
             })
             ->delete();
 
-        if ($groupId) {
-            $record->companyGroups()->syncWithoutDetaching([
-                $groupId => ['is_group_admin' => false],
-            ]);
+        if (! $groupId) {
+            return;
         }
+
+        DB::table('company_group_user')->insert([
+            'company_group_id' => $groupId,
+            'user_id' => $record->getKey(),
+            'is_group_admin' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function syncRolesForCompanies(Model $record, array $roleIds, array $companyIds): void
@@ -181,12 +231,31 @@ class EditUser extends EditRecord
             return;
         }
 
+        $roleNames = Role::query()
+            ->whereIn('id', $roleIds)
+            ->pluck('name')
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($roleNames)) {
+            return;
+        }
+
         $rows = [];
 
         foreach ($companyIds as $companyId) {
-            foreach ($roleIds as $roleId) {
+            $roles = Role::query()
+                ->whereIn('name', $roleNames)
+                ->where(function ($query) use ($companyId) {
+                    $query->whereNull('company_id')
+                        ->orWhere('company_id', $companyId);
+                })
+                ->get(['id']);
+
+            foreach ($roles as $role) {
                 $rows[] = [
-                    'role_id' => $roleId,
+                    'role_id' => $role->id,
                     'model_type' => $record->getMorphClass(),
                     'model_id' => $record->getKey(),
                     'company_id' => $companyId,
@@ -194,7 +263,19 @@ class EditUser extends EditRecord
             }
         }
 
-        DB::table('model_has_roles')->insertOrIgnore($rows);
+        if (! empty($rows)) {
+            DB::table('model_has_roles')->insertOrIgnore($rows);
+        }
+    }
+
+    protected function getSaveFormAction(): Actions\Action
+    {
+        return Actions\Action::make('save')
+            ->label('Guardar')
+            ->icon('heroicon-o-check')
+            ->color('primary')
+            ->action('saveUserAndAccessConfiguration')
+            ->keyBindings(['mod+s']);
     }
 
     protected function getHeaderActions(): array

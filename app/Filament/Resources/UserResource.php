@@ -231,9 +231,9 @@ public static function canViewAny(): bool
 
             Forms\Components\Section::make('Accesos')
                 ->schema([
-                    Forms\Components\Select::make('company_group_access_helper')
-                        ->label('Cargar empresas de un grupo')
-                        ->helperText('Selecciona un grupo para llenar automáticamente todas sus empresas. Después puedes quitar manualmente las que no apliquen.')
+                    Forms\Components\Select::make('access_company_group_id')
+                        ->label('Grupo de acceso del usuario')
+                        ->helperText('Selecciona el grupo principal de acceso. Se cargarán sus empresas y después puedes quitar manualmente las que no apliquen.')
                         ->options(function (): array {
                             $query = CompanyGroup::query()
                                 ->where('active', true)
@@ -258,7 +258,7 @@ public static function canViewAny(): bool
                         ->searchable()
                         ->preload()
                         ->live()
-                        ->dehydrated(false)
+                        ->dehydrated(true)
                         ->afterStateUpdated(function ($state, Forms\Set $set): void {
                             if (! $state) {
                                 return;
@@ -273,14 +273,13 @@ public static function canViewAny(): bool
                                 ->all();
 
                             $set('companies', $companyIds);
-                            $set('role_ids', []);
                         }),
 
                     Forms\Components\Select::make('companies')
                         ->label('Empresas asignadas')
                         ->helperText('Estas son las empresas finales a las que tendrá acceso el usuario. Puedes quitar empresas después de cargar el grupo.')
                         ->options(function (Forms\Get $get) use ($tenantId): array {
-                            $groupId = $get('company_group_access_helper');
+                            $groupId = $get('access_company_group_id');
 
                             $selectedCompanyIds = collect($get('companies') ?? [])
                                 ->filter()
@@ -321,7 +320,7 @@ public static function canViewAny(): bool
                         ->preload()
                         ->live()
                         ->native(false)
-                        ->afterStateUpdated(fn (Forms\Set $set) => $set('role_ids', [])),
+                        ->afterStateUpdated(fn (): null => null),
 
                     Forms\Components\Select::make('role_ids')
                         ->label('Roles')
@@ -332,7 +331,14 @@ public static function canViewAny(): bool
                                 ->unique()
                                 ->values();
 
-                            $groupId = $get('company_group_access_helper');
+                            $selectedRoleIds = collect($get('role_ids') ?? [])
+                                ->filter()
+                                ->map(fn ($id): int => (int) $id)
+                                ->unique()
+                                ->values()
+                                ->all();
+
+                            $groupId = $get('access_company_group_id');
 
                             if ($companyIds->isEmpty() && $groupId) {
                                 $companyIds = Company::query()
@@ -353,11 +359,15 @@ public static function canViewAny(): bool
                                 ->all();
 
                             $roles = Role::query()
-                                ->where(function ($q) use ($companyIds) {
+                                ->where(function ($q) use ($companyIds, $selectedRoleIds) {
                                     $q->whereNull('roles.company_id');
 
                                     if (! empty($companyIds)) {
                                         $q->orWhereIn('roles.company_id', $companyIds);
+                                    }
+
+                                    if (! empty($selectedRoleIds)) {
+                                        $q->orWhereIn('roles.id', $selectedRoleIds);
                                     }
                                 })
                                 ->orderBy('name')
@@ -559,15 +569,28 @@ public static function canViewAny(): bool
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('grupos_acceso')
-                    ->label('Grupos')
+                    ->label('Grupo acceso')
                     ->getStateUsing(function (User $record): string {
                         return $record->companyGroups
+                            ->filter(fn ($group): bool => ! (bool) ($group->pivot->is_group_admin ?? false))
                             ->pluck('name')
                             ->filter()
                             ->join(', ') ?: 'Sin grupo';
                     })
                     ->badge()
                     ->toggleable(),
+
+                Tables\Columns\TextColumn::make('grupos_admin')
+                    ->label('Admin grupos')
+                    ->getStateUsing(function (User $record): string {
+                        return $record->companyGroups
+                            ->filter(fn ($group): bool => (bool) ($group->pivot->is_group_admin ?? false))
+                            ->pluck('name')
+                            ->filter()
+                            ->join(', ') ?: 'No';
+                    })
+                    ->badge()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('empresas_acceso')
                     ->label('Empresas')
