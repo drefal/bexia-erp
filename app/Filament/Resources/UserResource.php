@@ -320,7 +320,7 @@ public static function canViewAny(): bool
 
                     Forms\Components\Select::make('role_group_loader')
                         ->label('Cargar roles base para el grupo')
-                        ->helperText('Selecciona roles por nombre para llenar automáticamente los roles equivalentes en todas las empresas asignadas. Después puedes quitar roles específicos por empresa.')
+                        ->helperText('Selecciona roles por nombre. Si faltan en empresas del grupo, se crearán copiando permisos desde el rol plantilla.')
                         ->options(function (Forms\Get $get) use ($tenantId): array {
                             $companyIds = collect($get('companies') ?? [])
                                 ->filter()
@@ -330,7 +330,7 @@ public static function canViewAny(): bool
 
                             $groupId = $get('access_company_group_id');
 
-                            if ($companyIds->isEmpty() && $groupId) {
+                            if ($groupId) {
                                 $companyIds = Company::query()
                                     ->where('company_group_id', $groupId)
                                     ->where('active', true)
@@ -348,21 +348,20 @@ public static function canViewAny(): bool
                                 ->values()
                                 ->all();
 
-                            $roleNames = Role::query()
-                                ->where(function ($q) use ($companyIds) {
-                                    $q->whereNull('roles.company_id');
+                            if (empty($companyIds)) {
+                                return [];
+                            }
 
-                                    if (! empty($companyIds)) {
-                                        $q->orWhereIn('roles.company_id', $companyIds);
-                                    }
+                            return Role::query()
+                                ->where(function ($q) use ($companyIds) {
+                                    $q->whereNull('roles.company_id')
+                                        ->orWhereIn('roles.company_id', $companyIds);
                                 })
                                 ->orderBy('name')
                                 ->pluck('name')
                                 ->filter()
                                 ->unique()
-                                ->values();
-
-                            return $roleNames
+                                ->values()
                                 ->mapWithKeys(fn (string $name): array => [$name => $name])
                                 ->toArray();
                         })
@@ -423,40 +422,115 @@ public static function canViewAny(): bool
                                 return;
                             }
 
-                            $roles = Role::query()
-                                ->whereIn('name', $roleNames)
-                                ->where(function ($q) use ($companyIds) {
-                                    $q->whereNull('roles.company_id')
-                                        ->orWhereIn('roles.company_id', $companyIds);
-                                })
-                                ->get(['id', 'name', 'company_id']);
+                            $created = 0;
+                            $updated = 0;
+                            $skipped = [];
 
-                            $loadedRoleIds = [];
-
-                            foreach ($roleNames as $roleName) {
-                                $globalRole = $roles
-                                    ->where('name', $roleName)
-                                    ->first(fn (Role $role): bool => blank($role->company_id));
-
-                                foreach ($companyIds as $companyId) {
-                                    $companyRole = $roles
+                            DB::transaction(function () use ($roleNames, $companyIds, $tenantId, &$created, &$updated, &$skipped): void {
+                                foreach ($roleNames as $roleName) {
+                                    $availableRoles = Role::query()
                                         ->where('name', $roleName)
-                                        ->first(fn (Role $role): bool => (int) $role->company_id === (int) $companyId);
+                                        ->where(function ($q) use ($companyIds) {
+                                            $q->whereNull('roles.company_id')
+                                                ->orWhereIn('roles.company_id', $companyIds);
+                                        })
+                                        ->get(['id', 'name', 'guard_name', 'company_id']);
 
-                                    if ($companyRole) {
-                                        $loadedRoleIds[] = (string) $companyRole->id;
-                                    } elseif ($globalRole) {
-                                        $loadedRoleIds[] = (string) $globalRole->id;
+                                    $sourceRole = null;
+
+                                    if ($tenantId) {
+                                        $sourceRole = $availableRoles
+                                            ->first(fn (Role $role): bool => filled($role->company_id) && (int) $role->company_id === (int) $tenantId);
+                                    }
+
+                                    if (! $sourceRole) {
+                                        $sourceRole = $availableRoles
+                                            ->first(fn (Role $role): bool => filled($role->company_id));
+                                    }
+
+                                    if (! $sourceRole) {
+                                        $sourceRole = $availableRoles
+                                            ->first(fn (Role $role): bool => blank($role->company_id));
+                                    }
+
+                                    if (! $sourceRole) {
+                                        $skipped[] = $roleName;
+
+                                        continue;
+                                    }
+
+                                    $permissionIds = DB::table('role_has_permissions')
+                                        ->where('role_id', $sourceRole->id)
+                                        ->pluck('permission_id')
+                                        ->map(fn ($id): int => (int) $id)
+                                        ->values()
+                                        ->all();
+
+                                    foreach ($companyIds as $companyId) {
+                                        $existingRole = Role::query()
+                                            ->where('name', $roleName)
+                                            ->where('guard_name', $sourceRole->guard_name)
+                                            ->where('company_id', $companyId)
+                                            ->first();
+
+                                        if ($existingRole) {
+                                            $existingRole->syncPermissions($permissionIds);
+                                            $updated++;
+
+                                            continue;
+                                        }
+
+                                        $newRole = Role::query()->create([
+                                            'name' => $roleName,
+                                            'guard_name' => $sourceRole->guard_name,
+                                            'company_id' => $companyId,
+                                        ]);
+
+                                        $newRole->syncPermissions($permissionIds);
+                                        $created++;
                                     }
                                 }
+
+                                app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+                            });
+
+                            $loadedRoleIds = Role::query()
+                                ->whereIn('name', $roleNames)
+                                ->whereIn('company_id', $companyIds)
+                                ->orderBy('name')
+                                ->orderBy('company_id')
+                                ->pluck('id')
+                                ->map(fn ($id): string => (string) $id)
+                                ->values()
+                                ->all();
+
+                            $set('role_ids', $loadedRoleIds);
+
+                            \Log::info('BEXIA_ROLE_GROUP_LOADER_AUTOSYNC_V57119A', [
+                                'group_id' => $groupId,
+                                'company_ids' => $companyIds,
+                                'role_names' => $roleNames,
+                                'created' => $created,
+                                'updated' => $updated,
+                                'skipped' => $skipped,
+                                'loaded_role_ids' => $loadedRoleIds,
+                            ]);
+
+                            if ($created > 0 || $updated > 0) {
+                                Notification::make()
+                                    ->title('Roles base sincronizados')
+                                    ->body('Creados: ' . $created . '. Actualizados: ' . $updated . '.')
+                                    ->success()
+                                    ->send();
                             }
 
-                            $set('role_ids', collect($loadedRoleIds)
-                                ->filter()
-                                ->map(fn ($id): string => (string) $id)
-                                ->unique()
-                                ->values()
-                                ->all());
+                            if (! empty($skipped)) {
+                                Notification::make()
+                                    ->title('Roles no sincronizados')
+                                    ->body('No se encontró rol plantilla para: ' . implode(', ', $skipped))
+                                    ->warning()
+                                    ->send();
+                            }
                         }),
 
                     Forms\Components\Select::make('role_ids')
