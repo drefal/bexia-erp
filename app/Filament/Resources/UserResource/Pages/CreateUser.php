@@ -24,6 +24,7 @@ class CreateUser extends CreateRecord
             $data['permission_ids'],
             $data['companies'],
             $data['access_company_group_id'],
+            $data['access_company_group_is_admin'],
         );
 
         return UserResource::normalizeOperationalDefaults($data);
@@ -59,6 +60,8 @@ class CreateUser extends CreateRecord
             ? (int) ($formState['access_company_group_id'] ?? $this->data['access_company_group_id'])
             : null;
 
+        $isGroupAdmin = (bool) ($formState['access_company_group_is_admin'] ?? $this->data['access_company_group_is_admin'] ?? false);
+
         $selectedCompanyIds = collect($formState['companies'] ?? $this->data['companies'] ?? [])
             ->filter()
             ->map(fn ($id): int => (int) $id)
@@ -66,12 +69,13 @@ class CreateUser extends CreateRecord
             ->values()
             ->all();
 
+        $groupId = $this->resolveGroupIdFromSelectedCompanies($selectedCompanyIds, $groupId);
         $companyIds = $this->normalizeCompanyIdsForGroup($selectedCompanyIds, $groupId);
 
-        DB::transaction(function () use ($companyIds, $groupId, $roleIds, $permissionIds): void {
+        DB::transaction(function () use ($companyIds, $groupId, $isGroupAdmin, $roleIds, $permissionIds): void {
             $this->record->companies()->sync($companyIds);
 
-            $this->syncNonAdminCompanyGroup($groupId);
+            $this->syncCompanyGroup($groupId, $isGroupAdmin);
 
             $this->syncRolesForCompanies($roleIds, $companyIds);
 
@@ -89,6 +93,29 @@ class CreateUser extends CreateRecord
             ->body('Se actualizaron grupo, empresas y roles del usuario.')
             ->success()
             ->send();
+    }
+
+    private function resolveGroupIdFromSelectedCompanies(array $selectedCompanyIds, ?int $groupId): ?int
+    {
+        if (empty($selectedCompanyIds)) {
+            return $groupId;
+        }
+
+        $groupIds = Company::query()
+            ->whereIn('id', $selectedCompanyIds)
+            ->whereNotNull('company_group_id')
+            ->distinct()
+            ->pluck('company_group_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (count($groupIds) === 1) {
+            return $groupIds[0];
+        }
+
+        return $groupId;
     }
 
     private function normalizeCompanyIdsForGroup(array $selectedCompanyIds, ?int $groupId): array
@@ -114,14 +141,10 @@ class CreateUser extends CreateRecord
             ->all();
     }
 
-    private function syncNonAdminCompanyGroup(?int $groupId): void
+    private function syncCompanyGroup(?int $groupId, bool $isGroupAdmin): void
     {
         DB::table('company_group_user')
             ->where('user_id', $this->record->getKey())
-            ->where(function ($query) {
-                $query->whereNull('is_group_admin')
-                    ->orWhere('is_group_admin', false);
-            })
             ->delete();
 
         if (! $groupId) {
@@ -131,7 +154,7 @@ class CreateUser extends CreateRecord
         DB::table('company_group_user')->insert([
             'company_group_id' => $groupId,
             'user_id' => $this->record->getKey(),
-            'is_group_admin' => false,
+            'is_group_admin' => $isGroupAdmin,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
