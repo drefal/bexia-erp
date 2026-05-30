@@ -61,6 +61,7 @@ class EditUser extends EditRecord
     {
         unset(
             $data['role_ids'],
+            $data['role_group_loader'],
             $data['permission_ids'],
             $data['companies'],
             $data['access_company_group_id'],
@@ -104,6 +105,7 @@ class EditUser extends EditRecord
 
         unset(
             $data['role_ids'],
+            $data['role_group_loader'],
             $data['permission_ids'],
             $data['companies'],
             $data['access_company_group_id'],
@@ -148,7 +150,7 @@ class EditUser extends EditRecord
 
         $companyIds = $this->normalizeCompanyIdsForGroup($selectedCompanyIds, $groupId);
 
-        \Log::info('BEXIA_USER_SAVE_FINAL_V57117C', [
+        \Log::info('BEXIA_USER_SAVE_FINAL_V57118A', [
             'record_id' => $record->getKey(),
             'group_id' => $groupId,
             'selected_company_ids' => $selectedCompanyIds,
@@ -231,29 +233,37 @@ class EditUser extends EditRecord
             return;
         }
 
-        $roleNames = Role::query()
-            ->whereIn('id', $roleIds)
-            ->pluck('name')
+        $companyIds = collect($companyIds)
+            ->map(fn ($id): int => (int) $id)
             ->unique()
             ->values()
             ->all();
 
-        if (empty($roleNames)) {
-            return;
-        }
+        $roles = Role::query()
+            ->whereIn('id', $roleIds)
+            ->get(['id', 'company_id']);
 
         $rows = [];
 
-        foreach ($companyIds as $companyId) {
-            $roles = Role::query()
-                ->whereIn('name', $roleNames)
-                ->where(function ($query) use ($companyId) {
-                    $query->whereNull('company_id')
-                        ->orWhere('company_id', $companyId);
-                })
-                ->get(['id']);
+        foreach ($roles as $role) {
+            if (filled($role->company_id)) {
+                $companyId = (int) $role->company_id;
 
-            foreach ($roles as $role) {
+                if (! in_array($companyId, $companyIds, true)) {
+                    continue;
+                }
+
+                $rows[] = [
+                    'role_id' => $role->id,
+                    'model_type' => $record->getMorphClass(),
+                    'model_id' => $record->getKey(),
+                    'company_id' => $companyId,
+                ];
+
+                continue;
+            }
+
+            foreach ($companyIds as $companyId) {
                 $rows[] = [
                     'role_id' => $role->id,
                     'model_type' => $record->getMorphClass(),

@@ -273,6 +273,8 @@ public static function canViewAny(): bool
                                 ->all();
 
                             $set('companies', $companyIds);
+                            $set('role_group_loader', []);
+                            $set('role_ids', []);
                         }),
 
                     Forms\Components\Select::make('companies')
@@ -293,13 +295,7 @@ public static function canViewAny(): bool
                                 ->where('active', true);
 
                             if ($groupId) {
-                                $query->where(function (Builder $q) use ($groupId, $selectedCompanyIds) {
-                                    $q->where('companies.company_group_id', $groupId);
-
-                                    if (! empty($selectedCompanyIds)) {
-                                        $q->orWhereIn('companies.id', $selectedCompanyIds);
-                                    }
-                                });
+                                $query->where('companies.company_group_id', $groupId);
                             } elseif ($tenantId) {
                                 $query->where(function (Builder $q) use ($tenantId, $selectedCompanyIds) {
                                     $q->where('companies.id', $tenantId);
@@ -321,6 +317,147 @@ public static function canViewAny(): bool
                         ->live()
                         ->native(false)
                         ->afterStateUpdated(fn (): null => null),
+
+                    Forms\Components\Select::make('role_group_loader')
+                        ->label('Cargar roles base para el grupo')
+                        ->helperText('Selecciona roles por nombre para llenar automáticamente los roles equivalentes en todas las empresas asignadas. Después puedes quitar roles específicos por empresa.')
+                        ->options(function (Forms\Get $get) use ($tenantId): array {
+                            $companyIds = collect($get('companies') ?? [])
+                                ->filter()
+                                ->map(fn ($id): int => (int) $id)
+                                ->unique()
+                                ->values();
+
+                            $groupId = $get('access_company_group_id');
+
+                            if ($companyIds->isEmpty() && $groupId) {
+                                $companyIds = Company::query()
+                                    ->where('company_group_id', $groupId)
+                                    ->where('active', true)
+                                    ->pluck('id')
+                                    ->map(fn ($id): int => (int) $id)
+                                    ->values();
+                            }
+
+                            if ($companyIds->isEmpty() && $tenantId) {
+                                $companyIds->push((int) $tenantId);
+                            }
+
+                            $companyIds = $companyIds
+                                ->unique()
+                                ->values()
+                                ->all();
+
+                            $roleNames = Role::query()
+                                ->where(function ($q) use ($companyIds) {
+                                    $q->whereNull('roles.company_id');
+
+                                    if (! empty($companyIds)) {
+                                        $q->orWhereIn('roles.company_id', $companyIds);
+                                    }
+                                })
+                                ->orderBy('name')
+                                ->pluck('name')
+                                ->filter()
+                                ->unique()
+                                ->values();
+
+                            return $roleNames
+                                ->mapWithKeys(fn (string $name): array => [$name => $name])
+                                ->toArray();
+                        })
+                        ->multiple()
+                        ->searchable()
+                        ->preload()
+                        ->live()
+                        ->dehydrated(false)
+                        ->native(false)
+                        ->afterStateUpdated(function ($state, Forms\Get $get, Forms\Set $set) use ($tenantId): void {
+                            $roleNames = collect($state ?? [])
+                                ->filter()
+                                ->map(fn ($name): string => (string) $name)
+                                ->unique()
+                                ->values()
+                                ->all();
+
+                            $groupId = $get('access_company_group_id');
+
+                            if (empty($roleNames)) {
+                                $set('role_ids', []);
+
+                                return;
+                            }
+
+                            if ($groupId) {
+                                $companyIds = Company::query()
+                                    ->where('company_group_id', $groupId)
+                                    ->where('active', true)
+                                    ->orderBy('name')
+                                    ->pluck('id')
+                                    ->map(fn ($id): int => (int) $id)
+                                    ->values();
+
+                                $set('companies', $companyIds
+                                    ->map(fn ($id): string => (string) $id)
+                                    ->all());
+                            } else {
+                                $companyIds = collect($get('companies') ?? [])
+                                    ->filter()
+                                    ->map(fn ($id): int => (int) $id)
+                                    ->unique()
+                                    ->values();
+                            }
+
+                            if ($companyIds->isEmpty() && $tenantId) {
+                                $companyIds->push((int) $tenantId);
+                            }
+
+                            $companyIds = $companyIds
+                                ->unique()
+                                ->values()
+                                ->all();
+
+                            if (empty($companyIds)) {
+                                $set('role_ids', []);
+
+                                return;
+                            }
+
+                            $roles = Role::query()
+                                ->whereIn('name', $roleNames)
+                                ->where(function ($q) use ($companyIds) {
+                                    $q->whereNull('roles.company_id')
+                                        ->orWhereIn('roles.company_id', $companyIds);
+                                })
+                                ->get(['id', 'name', 'company_id']);
+
+                            $loadedRoleIds = [];
+
+                            foreach ($roleNames as $roleName) {
+                                $globalRole = $roles
+                                    ->where('name', $roleName)
+                                    ->first(fn (Role $role): bool => blank($role->company_id));
+
+                                foreach ($companyIds as $companyId) {
+                                    $companyRole = $roles
+                                        ->where('name', $roleName)
+                                        ->first(fn (Role $role): bool => (int) $role->company_id === (int) $companyId);
+
+                                    if ($companyRole) {
+                                        $loadedRoleIds[] = (string) $companyRole->id;
+                                    } elseif ($globalRole) {
+                                        $loadedRoleIds[] = (string) $globalRole->id;
+                                    }
+                                }
+                            }
+
+                            $set('role_ids', collect($loadedRoleIds)
+                                ->filter()
+                                ->map(fn ($id): string => (string) $id)
+                                ->unique()
+                                ->values()
+                                ->all());
+                        }),
 
                     Forms\Components\Select::make('role_ids')
                         ->label('Roles')
@@ -349,7 +486,7 @@ public static function canViewAny(): bool
                                     ->values();
                             }
 
-                            if ($tenantId) {
+                            if ($companyIds->isEmpty() && $tenantId) {
                                 $companyIds->push((int) $tenantId);
                             }
 
@@ -398,7 +535,7 @@ public static function canViewAny(): bool
                         ->live()
                         ->native(false)
                         ->default([])
-                        ->helperText('Los roles seleccionados se aplican a cada empresa asignada.'),
+                        ->helperText('Estos son los roles finales del usuario. Puedes quitar roles por empresa después de usar la carga base por grupo.'),
 
                     Forms\Components\Select::make('permission_ids')
                         ->label('Permisos directos')
