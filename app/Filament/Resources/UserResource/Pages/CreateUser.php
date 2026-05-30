@@ -6,6 +6,7 @@ use App\Filament\Resources\UserResource;
 use App\Models\Company;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Models\Permission;
@@ -17,6 +18,13 @@ class CreateUser extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        unset(
+            $data['role_ids'],
+            $data['permission_ids'],
+            $data['companies'],
+            $data['access_company_group_id'],
+        );
+
         return UserResource::normalizeOperationalDefaults($data);
     }
 
@@ -46,8 +54,8 @@ class CreateUser extends CreateRecord
             ->values()
             ->all();
 
-        $groupId = filled($formState['company_group_access_helper'] ?? $this->data['company_group_access_helper'] ?? null)
-            ? (int) ($formState['company_group_access_helper'] ?? $this->data['company_group_access_helper'])
+        $groupId = filled($formState['access_company_group_id'] ?? $this->data['access_company_group_id'] ?? null)
+            ? (int) ($formState['access_company_group_id'] ?? $this->data['access_company_group_id'])
             : null;
 
         $selectedCompanyIds = collect($formState['companies'] ?? $this->data['companies'] ?? [])
@@ -74,6 +82,12 @@ class CreateUser extends CreateRecord
 
             app(PermissionRegistrar::class)->forgetCachedPermissions();
         });
+
+        Notification::make()
+            ->title('Usuario guardado')
+            ->body('Se actualizaron grupo, empresas y roles del usuario.')
+            ->success()
+            ->send();
     }
 
     private function normalizeCompanyIdsForGroup(array $selectedCompanyIds, ?int $groupId): array
@@ -109,11 +123,17 @@ class CreateUser extends CreateRecord
             })
             ->delete();
 
-        if ($groupId) {
-            $this->record->companyGroups()->syncWithoutDetaching([
-                $groupId => ['is_group_admin' => false],
-            ]);
+        if (! $groupId) {
+            return;
         }
+
+        DB::table('company_group_user')->insert([
+            'company_group_id' => $groupId,
+            'user_id' => $this->record->getKey(),
+            'is_group_admin' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     private function syncRolesForCompanies(array $roleIds, array $companyIds): void
@@ -127,12 +147,31 @@ class CreateUser extends CreateRecord
             return;
         }
 
-        $nowRows = [];
+        $roleNames = Role::query()
+            ->whereIn('id', $roleIds)
+            ->pluck('name')
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($roleNames)) {
+            return;
+        }
+
+        $rows = [];
 
         foreach ($companyIds as $companyId) {
-            foreach ($roleIds as $roleId) {
-                $nowRows[] = [
-                    'role_id' => $roleId,
+            $roles = Role::query()
+                ->whereIn('name', $roleNames)
+                ->where(function ($query) use ($companyId) {
+                    $query->whereNull('company_id')
+                        ->orWhere('company_id', $companyId);
+                })
+                ->get(['id']);
+
+            foreach ($roles as $role) {
+                $rows[] = [
+                    'role_id' => $role->id,
                     'model_type' => $this->record->getMorphClass(),
                     'model_id' => $this->record->getKey(),
                     'company_id' => $companyId,
@@ -140,7 +179,9 @@ class CreateUser extends CreateRecord
             }
         }
 
-        DB::table('model_has_roles')->insertOrIgnore($nowRows);
+        if (! empty($rows)) {
+            DB::table('model_has_roles')->insertOrIgnore($rows);
+        }
     }
 
     protected function getCreateFormAction(): Action
