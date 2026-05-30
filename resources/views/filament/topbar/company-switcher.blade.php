@@ -4,7 +4,14 @@
 
     $companies = collect();
 
-    if ($user && method_exists($user, 'companies')) {
+    if ($user && method_exists($user, 'getTenants')) {
+        $panel = filament()->getCurrentPanel();
+
+        $companies = $user->getTenants($panel)
+            ->filter(fn ($company): bool => (bool) ($company->active ?? false))
+            ->sortBy('name')
+            ->values();
+    } elseif ($user && method_exists($user, 'companies')) {
         $companies = $user->companies()
             ->where('companies.active', true)
             ->orderBy('companies.name')
