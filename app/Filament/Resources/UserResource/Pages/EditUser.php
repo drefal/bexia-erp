@@ -36,22 +36,31 @@ class EditUser extends EditRecord
             ->map(fn ($id): string => (string) $id)
             ->all();
 
-        $data['access_company_group_id'] = $this->record->companyGroups()
-            ->wherePivot('is_group_admin', false)
-            ->orderBy('company_groups.name')
-            ->value('company_groups.id');
+        $companyGroupIds = Company::query()
+            ->whereIn('id', $data['companies'])
+            ->whereNotNull('company_group_id')
+            ->distinct()
+            ->pluck('company_group_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
 
-        if (! $data['access_company_group_id'] && ! empty($data['companies'])) {
-            $groupIds = Company::query()
-                ->whereIn('id', $data['companies'])
-                ->whereNotNull('company_group_id')
-                ->distinct()
-                ->pluck('company_group_id')
-                ->all();
+        if (count($companyGroupIds) === 1) {
+            $data['access_company_group_id'] = $companyGroupIds[0];
+            $data['access_company_group_is_admin'] = DB::table('company_group_user')
+                ->where('user_id', $this->record->getKey())
+                ->where('company_group_id', $companyGroupIds[0])
+                ->where('is_group_admin', true)
+                ->exists();
+        } else {
+            $primaryGroup = $this->record->companyGroups()
+                ->orderByDesc('company_group_user.is_group_admin')
+                ->orderBy('company_groups.name')
+                ->first();
 
-            if (count($groupIds) === 1) {
-                $data['access_company_group_id'] = $groupIds[0];
-            }
+            $data['access_company_group_id'] = $primaryGroup?->getKey();
+            $data['access_company_group_is_admin'] = (bool) ($primaryGroup?->pivot?->is_group_admin ?? false);
         }
 
         return $data;
@@ -65,6 +74,7 @@ class EditUser extends EditRecord
             $data['permission_ids'],
             $data['companies'],
             $data['access_company_group_id'],
+            $data['access_company_group_is_admin'],
         );
 
         return UserResource::normalizeOperationalDefaults($data);
@@ -79,18 +89,41 @@ class EditUser extends EditRecord
 
     public function saveUserAndAccessConfiguration(): void
     {
-        $state = $this->form->getState();
+        $state = $this->form->getRawState();
 
         if (is_object($state) && method_exists($state, 'toArray')) {
             $state = $state->toArray();
         }
 
         if (! is_array($state)) {
-            $state = [];
+            $state = $this->data ?? [];
         }
 
+        \Log::info('BEXIA_USER_SAVE_RAW_STATE_V57123C', [
+            'record_id' => $this->record->getKey(),
+            'access_company_group_id' => $state['access_company_group_id'] ?? null,
+            'access_company_group_is_admin' => $state['access_company_group_is_admin'] ?? null,
+            'companies' => $state['companies'] ?? null,
+            'role_ids_count' => is_countable($state['role_ids'] ?? null) ? count($state['role_ids']) : null,
+        ]);
+
+        \Log::info('BEXIA_USER_SAVE_BEFORE_PERSIST_V57123F', [
+            'record_id' => $this->record->getKey(),
+            'access_company_group_id' => $state['access_company_group_id'] ?? null,
+            'access_company_group_is_admin' => $state['access_company_group_is_admin'] ?? null,
+        ]);
+
         $this->persistUserDataFromState($this->record, $state);
+
+        \Log::info('BEXIA_USER_SAVE_AFTER_USERDATA_V57123F', [
+            'record_id' => $this->record->getKey(),
+        ]);
+
         $this->persistAccessFromState($this->record, $state);
+
+        \Log::info('BEXIA_USER_SAVE_AFTER_ACCESS_V57123F', [
+            'record_id' => $this->record->getKey(),
+        ]);
 
         Notification::make()
             ->title('Usuario guardado')
@@ -101,21 +134,33 @@ class EditUser extends EditRecord
 
     private function persistUserDataFromState(Model $record, array $state): void
     {
-        $data = $state;
+        $allowedKeys = [
+            'name',
+            'email',
+            'password',
+            'avatar_path',
+            'locale',
+            'is_system_admin',
+        ];
 
-        unset(
-            $data['role_ids'],
-            $data['role_group_loader'],
-            $data['permission_ids'],
-            $data['companies'],
-            $data['access_company_group_id'],
-        );
+        $data = collect($state)
+            ->only($allowedKeys)
+            ->toArray();
 
         if (array_key_exists('password', $data) && blank($data['password'])) {
             unset($data['password']);
         }
 
         $data = UserResource::normalizeOperationalDefaults($data);
+
+        \Log::info('BEXIA_USERDATA_WHITELIST_V57123G2', [
+            'record_id' => $record->getKey(),
+            'keys' => array_keys($data),
+            'defaults_skipped' => [
+                'default_warehouse_id' => $state['default_warehouse_id'] ?? null,
+                'default_location_id' => $state['default_location_id'] ?? null,
+            ],
+        ]);
 
         $record->fill($data);
         $record->save();
@@ -141,6 +186,8 @@ class EditUser extends EditRecord
             ? (int) $state['access_company_group_id']
             : null;
 
+        $isGroupAdmin = (bool) ($state['access_company_group_is_admin'] ?? false);
+
         $selectedCompanyIds = collect($state['companies'] ?? [])
             ->filter()
             ->map(fn ($id): int => (int) $id)
@@ -148,6 +195,7 @@ class EditUser extends EditRecord
             ->values()
             ->all();
 
+        $groupId = $this->resolveGroupIdFromSelectedCompanies($selectedCompanyIds, $groupId);
         $companyIds = $this->normalizeCompanyIdsForGroup($selectedCompanyIds, $groupId);
 
         \Log::info('BEXIA_USER_SAVE_FINAL_V57118A', [
@@ -155,14 +203,15 @@ class EditUser extends EditRecord
             'group_id' => $groupId,
             'selected_company_ids' => $selectedCompanyIds,
             'normalized_company_ids' => $companyIds,
+            'is_group_admin' => $isGroupAdmin,
             'role_ids' => $roleIds,
             'permission_ids' => $permissionIds,
         ]);
 
-        DB::transaction(function () use ($record, $companyIds, $groupId, $roleIds, $permissionIds): void {
+        DB::transaction(function () use ($record, $companyIds, $groupId, $isGroupAdmin, $roleIds, $permissionIds): void {
             $record->companies()->sync($companyIds);
 
-            $this->syncNonAdminCompanyGroup($record, $groupId);
+            $this->syncCompanyGroup($record, $groupId, $isGroupAdmin);
 
             $this->syncRolesForCompanies($record, $roleIds, $companyIds);
 
@@ -174,6 +223,29 @@ class EditUser extends EditRecord
 
             app(PermissionRegistrar::class)->forgetCachedPermissions();
         });
+    }
+
+    private function resolveGroupIdFromSelectedCompanies(array $selectedCompanyIds, ?int $groupId): ?int
+    {
+        if (empty($selectedCompanyIds)) {
+            return $groupId;
+        }
+
+        $groupIds = Company::query()
+            ->whereIn('id', $selectedCompanyIds)
+            ->whereNotNull('company_group_id')
+            ->distinct()
+            ->pluck('company_group_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (count($groupIds) === 1) {
+            return $groupIds[0];
+        }
+
+        return $groupId;
     }
 
     private function normalizeCompanyIdsForGroup(array $selectedCompanyIds, ?int $groupId): array
@@ -199,14 +271,10 @@ class EditUser extends EditRecord
             ->all();
     }
 
-    private function syncNonAdminCompanyGroup(Model $record, ?int $groupId): void
+    private function syncCompanyGroup(Model $record, ?int $groupId, bool $isGroupAdmin): void
     {
         DB::table('company_group_user')
             ->where('user_id', $record->getKey())
-            ->where(function ($query) {
-                $query->whereNull('is_group_admin')
-                    ->orWhere('is_group_admin', false);
-            })
             ->delete();
 
         if (! $groupId) {
@@ -216,7 +284,7 @@ class EditUser extends EditRecord
         DB::table('company_group_user')->insert([
             'company_group_id' => $groupId,
             'user_id' => $record->getKey(),
-            'is_group_admin' => false,
+            'is_group_admin' => $isGroupAdmin,
             'created_at' => now(),
             'updated_at' => now(),
         ]);

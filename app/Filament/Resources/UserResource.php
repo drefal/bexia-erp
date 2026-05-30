@@ -273,9 +273,18 @@ public static function canViewAny(): bool
                                 ->all();
 
                             $set('companies', $companyIds);
+                            $set('access_company_group_is_admin', false);
                             $set('role_group_loader', []);
                             $set('role_ids', []);
                         }),
+
+                    Forms\Components\Toggle::make('access_company_group_is_admin')
+                        ->label('Administrar este grupo')
+                        ->helperText('Activa esto para que el usuario sea administrador real del grupo seleccionado. Si queda apagado, el grupo solo se usa para cargar empresas y limitar acceso.')
+                        ->default(false)
+                        ->live()
+                        ->dehydrated(true)
+                        ->visible(fn (Forms\Get $get): bool => filled($get('access_company_group_id'))),
 
                     Forms\Components\Select::make('companies')
                         ->label('Empresas asignadas')
