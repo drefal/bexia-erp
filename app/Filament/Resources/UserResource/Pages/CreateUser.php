@@ -20,6 +20,7 @@ class CreateUser extends CreateRecord
     {
         unset(
             $data['role_ids'],
+            $data['role_group_loader'],
             $data['permission_ids'],
             $data['companies'],
             $data['access_company_group_id'],
@@ -147,29 +148,37 @@ class CreateUser extends CreateRecord
             return;
         }
 
-        $roleNames = Role::query()
-            ->whereIn('id', $roleIds)
-            ->pluck('name')
+        $companyIds = collect($companyIds)
+            ->map(fn ($id): int => (int) $id)
             ->unique()
             ->values()
             ->all();
 
-        if (empty($roleNames)) {
-            return;
-        }
+        $roles = Role::query()
+            ->whereIn('id', $roleIds)
+            ->get(['id', 'company_id']);
 
         $rows = [];
 
-        foreach ($companyIds as $companyId) {
-            $roles = Role::query()
-                ->whereIn('name', $roleNames)
-                ->where(function ($query) use ($companyId) {
-                    $query->whereNull('company_id')
-                        ->orWhere('company_id', $companyId);
-                })
-                ->get(['id']);
+        foreach ($roles as $role) {
+            if (filled($role->company_id)) {
+                $companyId = (int) $role->company_id;
 
-            foreach ($roles as $role) {
+                if (! in_array($companyId, $companyIds, true)) {
+                    continue;
+                }
+
+                $rows[] = [
+                    'role_id' => $role->id,
+                    'model_type' => $this->record->getMorphClass(),
+                    'model_id' => $this->record->getKey(),
+                    'company_id' => $companyId,
+                ];
+
+                continue;
+            }
+
+            foreach ($companyIds as $companyId) {
                 $rows[] = [
                     'role_id' => $role->id,
                     'model_type' => $this->record->getMorphClass(),
