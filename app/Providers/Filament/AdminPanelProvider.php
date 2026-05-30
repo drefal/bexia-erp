@@ -145,6 +145,7 @@ HTML),
             ->renderHook(
                 'panels::user-menu.before',
                 fn (): string => view('filament.topbar.approval-links')->render()
+                 . view('filament.topbar.company-switcher')->render()
             ) // BEXIA_TOPBAR_APPROVAL_LINKS_V5_13_8
 
 ->middleware([
