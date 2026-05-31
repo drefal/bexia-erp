@@ -205,7 +205,8 @@ public static function canViewAny(): bool
                         ->avatar()
                         ->imagePreviewHeight('120')
                         ->openable()
-                        ->downloadable(),
+                        ->downloadable()
+                        ->dehydrateStateUsing(fn ($state) => static::normalizeAvatarPathValue($state)),
                 ])
                 ->columns(2),
 
@@ -642,6 +643,38 @@ public static function canViewAny(): bool
     }
 
 
+    public static function normalizeAvatarPathValue(mixed $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        if (is_array($value)) {
+            $value = collect($value)->filter()->first();
+        }
+
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $value = collect($decoded)->filter()->first();
+            }
+        }
+
+        if (blank($value)) {
+            return null;
+        }
+
+        $path = ltrim((string) $value, '/');
+
+        if (str_starts_with($path, 'storage/')) {
+            $path = substr($path, strlen('storage/'));
+        }
+
+        return $path !== '' ? $path : null;
+    }
+
+
     protected static function warehouseOptions(): array
     {
         if (! Schema::hasTable('warehouses')) {
@@ -765,9 +798,9 @@ public static function canViewAny(): bool
     {
         return $table
             ->columns([
-                ImageColumn::make('avatar_path')
+                ImageColumn::make('avatar_url')
                     ->label('Avatar')
-                    ->disk('public')
+                    ->getStateUsing(fn (User $record): ?string => $record->getFilamentAvatarUrl())
                     ->circular(),
 
                 Tables\Columns\TextColumn::make('id')

@@ -27,6 +27,10 @@ class CreateUser extends CreateRecord
             $data['access_company_group_is_admin'],
         );
 
+        if (array_key_exists('avatar_path', $data)) {
+            $data['avatar_path'] = UserResource::normalizeAvatarPathValue($data['avatar_path']);
+        }
+
         return UserResource::normalizeOperationalDefaults($data);
     }
 

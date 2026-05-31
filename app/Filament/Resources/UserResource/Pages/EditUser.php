@@ -89,37 +89,54 @@ class EditUser extends EditRecord
 
     public function saveUserAndAccessConfiguration(): void
     {
-        $state = $this->form->getRawState();
+        $rawState = $this->form->getRawState();
 
-        if (is_object($state) && method_exists($state, 'toArray')) {
-            $state = $state->toArray();
+        if (is_object($rawState) && method_exists($rawState, 'toArray')) {
+            $rawState = $rawState->toArray();
         }
 
-        if (! is_array($state)) {
-            $state = $this->data ?? [];
+        if (! is_array($rawState)) {
+            $rawState = $this->data ?? [];
         }
 
-        \Log::info('BEXIA_USER_SAVE_RAW_STATE_V57123C', [
+        /*
+         * Para FileUpload necesitamos el estado procesado de Filament.
+         * Para accesos usamos rawState porque Select/Toggle reactivos ya nos dieron problemas antes.
+         */
+        $userState = $this->form->getState();
+
+        if (is_object($userState) && method_exists($userState, 'toArray')) {
+            $userState = $userState->toArray();
+        }
+
+        if (! is_array($userState)) {
+            $userState = $rawState;
+        }
+
+        \Log::info('BEXIA_USER_SAVE_STATE_SPLIT_V57125C', [
             'record_id' => $this->record->getKey(),
-            'access_company_group_id' => $state['access_company_group_id'] ?? null,
-            'access_company_group_is_admin' => $state['access_company_group_is_admin'] ?? null,
-            'companies' => $state['companies'] ?? null,
-            'role_ids_count' => is_countable($state['role_ids'] ?? null) ? count($state['role_ids']) : null,
+            'raw_access_company_group_id' => $rawState['access_company_group_id'] ?? null,
+            'raw_access_company_group_is_admin' => $rawState['access_company_group_is_admin'] ?? null,
+            'raw_avatar_path' => $rawState['avatar_path'] ?? null,
+            'user_avatar_path' => $userState['avatar_path'] ?? null,
+            'raw_companies' => $rawState['companies'] ?? null,
+            'user_keys' => array_keys($userState),
         ]);
 
         \Log::info('BEXIA_USER_SAVE_BEFORE_PERSIST_V57123F', [
             'record_id' => $this->record->getKey(),
-            'access_company_group_id' => $state['access_company_group_id'] ?? null,
-            'access_company_group_is_admin' => $state['access_company_group_is_admin'] ?? null,
+            'access_company_group_id' => $rawState['access_company_group_id'] ?? null,
+            'access_company_group_is_admin' => $rawState['access_company_group_is_admin'] ?? null,
         ]);
 
-        $this->persistUserDataFromState($this->record, $state);
+        $this->persistUserDataFromState($this->record, $userState);
 
         \Log::info('BEXIA_USER_SAVE_AFTER_USERDATA_V57123F', [
             'record_id' => $this->record->getKey(),
+            'avatar_path' => $this->record->fresh()?->avatar_path,
         ]);
 
-        $this->persistAccessFromState($this->record, $state);
+        $this->persistAccessFromState($this->record, $rawState);
 
         \Log::info('BEXIA_USER_SAVE_AFTER_ACCESS_V57123F', [
             'record_id' => $this->record->getKey(),
@@ -149,6 +166,10 @@ class EditUser extends EditRecord
 
         if (array_key_exists('password', $data) && blank($data['password'])) {
             unset($data['password']);
+        }
+
+        if (array_key_exists('avatar_path', $data)) {
+            $data['avatar_path'] = UserResource::normalizeAvatarPathValue($data['avatar_path']);
         }
 
         $data = UserResource::normalizeOperationalDefaults($data);

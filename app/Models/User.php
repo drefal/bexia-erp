@@ -147,12 +147,36 @@ class User extends Authenticatable implements FilamentUser, HasTenants, HasAvata
             return null;
         }
 
-        $path = ltrim((string) $this->avatar_path, '/');
+        $path = $this->avatar_path;
 
-        if (str_starts_with($path, 'storage/')) {
-            return asset($path);
+        if (is_array($path)) {
+            $path = collect($path)->filter()->first();
         }
 
-        return Storage::disk('public')->url($path);
+        if (is_string($path)) {
+            $decoded = json_decode($path, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $path = collect($decoded)->filter()->first();
+            }
+        }
+
+        if (! filled($path)) {
+            return null;
+        }
+
+        $path = ltrim((string) $path, '/');
+
+        if (str_starts_with($path, 'storage/')) {
+            $publicPath = substr($path, strlen('storage/'));
+
+            return Storage::disk('public')->exists($publicPath)
+                ? asset($path)
+                : null;
+        }
+
+        return Storage::disk('public')->exists($path)
+            ? Storage::disk('public')->url($path)
+            : null;
     }
 }
