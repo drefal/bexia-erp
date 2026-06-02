@@ -824,11 +824,25 @@ public static function canViewAny(): bool
                 Tables\Columns\TextColumn::make('grupos_acceso')
                     ->label('Grupo acceso')
                     ->getStateUsing(function (User $record): string {
-                        return $record->companyGroups
-                            ->filter(fn ($group): bool => ! (bool) ($group->pivot->is_group_admin ?? false))
-                            ->pluck('name')
+                        /*
+                         * V5.71.26k:
+                         * El grupo visible del usuario se calcula desde sus empresas asignadas.
+                         * El pivot de companyGroups se usa para administración del grupo, no para
+                         * decidir si el usuario pertenece o no al grupo en el listado.
+                         */
+                        $groups = \Illuminate\Support\Facades\DB::table('company_user')
+                            ->join('companies', 'companies.id', '=', 'company_user.company_id')
+                            ->join('company_groups', 'company_groups.id', '=', 'companies.company_group_id')
+                            ->where('company_user.user_id', $record->getKey())
+                            ->whereNotNull('companies.company_group_id')
+                            ->select('company_groups.name')
+                            ->distinct()
+                            ->orderBy('company_groups.name')
+                            ->pluck('company_groups.name')
                             ->filter()
-                            ->join(', ') ?: 'Sin grupo';
+                            ->values();
+
+                        return $groups->join(', ') ?: 'Sin grupo';
                     })
                     ->badge()
                     ->toggleable(),
