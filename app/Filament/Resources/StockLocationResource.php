@@ -157,8 +157,10 @@ public static function shouldRegisterNavigation(): bool
     {
         return $table
             ->columns([
+
                 Tables\Columns\TextColumn::make('warehouse.name')
                     ->label('Almacén')
+                    ->getStateUsing(fn ($record): string => $record->warehouse?->name ?: 'Sin almacén (virtual)')
                     ->searchable()
                     ->sortable(),
 
