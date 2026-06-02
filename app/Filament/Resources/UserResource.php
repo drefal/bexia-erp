@@ -817,9 +817,7 @@ public static function canViewAny(): bool
                     ->searchable()
                     ->sortable(),
 
-                Tables\Columns\IconColumn::make('is_system_admin')
-                    ->label('Superadmin')
-                    ->boolean(),
+                // V5.71.27b columna Superadmin removida del listado para liberar espacio.
 
                 Tables\Columns\TextColumn::make('grupos_acceso')
                     ->label('Grupo acceso')
