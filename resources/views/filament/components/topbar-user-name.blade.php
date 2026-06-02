@@ -123,3 +123,39 @@
         </script>
     @endonce
 @endif
+
+
+<style>
+    /*
+     * V5.71.27c - hover visible logout user dropdown
+     * Evita que "Salir" quede blanco/invisible al pasar el mouse.
+     */
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item:hover,
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item:focus,
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item:focus-visible {
+        background-color: rgba(37, 99, 235, 0.08) !important;
+        color: #0f172a !important;
+    }
+
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item:hover *,
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item:focus *,
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item:focus-visible * {
+        color: #0f172a !important;
+        opacity: 1 !important;
+    }
+
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item.fi-color-danger:hover,
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item.fi-color-danger:focus,
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item.fi-color-danger:focus-visible {
+        background-color: rgba(239, 68, 68, 0.08) !important;
+        color: #991b1b !important;
+    }
+
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item.fi-color-danger:hover *,
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item.fi-color-danger:focus *,
+    .fi-topbar .fi-dropdown-panel .fi-dropdown-list-item.fi-color-danger:focus-visible * {
+        color: #991b1b !important;
+        opacity: 1 !important;
+    }
+</style>
+
