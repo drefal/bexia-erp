@@ -318,6 +318,14 @@ public static function form(Form $form): Form
 
     public static function shouldRegisterNavigation(): bool
     {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.purchaserequestresource',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
+
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
+    {
         $user = auth()->user();
 
         return auth()->check()

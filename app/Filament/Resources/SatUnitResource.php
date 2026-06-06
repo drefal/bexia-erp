@@ -44,6 +44,14 @@ public static function canDelete($record): bool
 }
 
 public static function shouldRegisterNavigation(): bool
+{
+    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+        'resources.satunitresource',
+        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+    );
+}
+
+protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 

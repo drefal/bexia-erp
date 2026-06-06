@@ -20,6 +20,14 @@ class PurchaseDocuments extends Page
     protected static string $view = 'filament.pages.purchase-documents';
 
         public static function shouldRegisterNavigation(): bool
+        {
+            return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+                'pages.purchasedocuments',
+                fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+            );
+        }
+
+        protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         return false;
     }

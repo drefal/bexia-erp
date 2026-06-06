@@ -44,6 +44,14 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
 
     public static function shouldRegisterNavigation(): bool
     {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.productpricecostauditresource',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
+
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
+    {
         $user = auth()->user();
 
         return auth()->check()

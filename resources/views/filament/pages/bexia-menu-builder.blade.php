@@ -7,22 +7,52 @@
                         Configurador visual del menú lateral
                     </h2>
                     <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                        Estructura de 2 niveles: grupos y opciones.
+                        Estructura de 2 niveles: grupos/secciones y opciones. Las flechas del grupo mueven toda la sección completa para todos los usuarios; la visibilidad final también depende de permisos por empresa.
                     </p>
                     <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                        Por seguridad, los nombres de grupos están fijos. Puedes mover grupos arriba/abajo.
+                        Por seguridad, los nombres de grupos están fijos. Puedes mover grupos/secciones arriba/abajo. Al mover una sección, bajan o suben todos sus links.
                         Los nombres de opciones sí se pueden editar. Esta fase aplica especialmente a opciones manuales del menú.
                     </p>
                 </div>
 
-                <button
-                    type="button"
-                    class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                    wire:click="resetDefaultOrder"
-                    wire:confirm="¿Restaurar nombres, visibilidad y orden base del menú?"
-                >
-                    Restaurar base
-                </button>
+                
+                                <div class="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                        type="button"
+                        wire:click="syncMenuFromCode"
+                        wire:loading.attr="disabled"
+                        wire:target="syncMenuFromCode"
+                        class="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm transition hover:bg-blue-100 disabled:opacity-60"
+                    >
+                        <span wire:loading.remove wire:target="syncMenuFromCode">Sincronizar menú</span>
+                        <span wire:loading wire:target="syncMenuFromCode">Sincronizando...</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        wire:click="saveMenuBaseSnapshot"
+                        wire:loading.attr="disabled"
+                        wire:target="saveMenuBaseSnapshot"
+                        class="inline-flex items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:opacity-60"
+                    >
+                        <span wire:loading.remove wire:target="saveMenuBaseSnapshot">Guardar estado base</span>
+                        <span wire:loading wire:target="saveMenuBaseSnapshot">Guardando...</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        wire:click="restoreMenuBaseSnapshot"
+                        wire:confirm="Esto restaurará el menú lateral al estado base guardado. Se perderán cambios manuales posteriores. ¿Deseas continuar?"
+                        wire:loading.attr="disabled"
+                        wire:target="restoreMenuBaseSnapshot"
+                        class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:opacity-60"
+                    >
+                        <span wire:loading.remove wire:target="restoreMenuBaseSnapshot">Restaurar base guardada</span>
+                        <span wire:loading wire:target="restoreMenuBaseSnapshot">Restaurando...</span>
+                    </button>
+                </div>
+
+
             </div>
         </div>
 

@@ -303,4 +303,86 @@ class BexiaMenuBuilder extends Page
                 ->update(['sort' => ($index + 1) * 10]);
         }
     }
+
+    public function syncMenuFromCode()
+    {
+        abort_unless(static::canAccess(), 403);
+
+        $summary = \App\Support\Navigation\BexiaMenuSynchronizer::sync();
+
+        if (! ($summary['ok'] ?? false)) {
+            \Filament\Notifications\Notification::make()
+                ->title('No se pudo sincronizar el menú')
+                ->body((string) ($summary['error'] ?? 'Error desconocido.'))
+                ->danger()
+                ->send();
+
+            return null;
+        }
+
+        $body = 'Detectados: ' . ($summary['detected'] ?? 0)
+            . ' | Grupos actualizados: ' . ($summary['group_changes'] ?? 0)
+            . ' | Opciones actualizadas: ' . ($summary['item_changes'] ?? 0);
+
+        \Filament\Notifications\Notification::make()
+            ->title('Menú sincronizado')
+            ->body($body)
+            ->success()
+            ->send();
+
+        return redirect(request()->header('Referer') ?: request()->fullUrl());
+    }
+
+
+    public function saveMenuBaseSnapshot()
+    {
+        abort_unless(static::canAccess(), 403);
+
+        $summary = \App\Support\Navigation\BexiaMenuSnapshotService::save();
+
+        if (! ($summary['ok'] ?? false)) {
+            \Filament\Notifications\Notification::make()
+                ->title('No se pudo guardar el estado base')
+                ->body((string) ($summary['error'] ?? 'Error desconocido.'))
+                ->danger()
+                ->send();
+
+            return null;
+        }
+
+        \Filament\Notifications\Notification::make()
+            ->title('Estado base guardado')
+            ->body('Grupos: ' . ($summary['groups'] ?? 0) . ' | Opciones: ' . ($summary['items'] ?? 0))
+            ->success()
+            ->send();
+
+        return redirect(request()->header('Referer') ?: request()->fullUrl());
+    }
+
+
+    public function restoreMenuBaseSnapshot()
+    {
+        abort_unless(static::canAccess(), 403);
+
+        $summary = \App\Support\Navigation\BexiaMenuSnapshotService::restore();
+
+        if (! ($summary['ok'] ?? false)) {
+            \Filament\Notifications\Notification::make()
+                ->title('No se pudo restaurar el estado base')
+                ->body((string) ($summary['error'] ?? 'Error desconocido.'))
+                ->danger()
+                ->send();
+
+            return null;
+        }
+
+        \Filament\Notifications\Notification::make()
+            ->title('Menú restaurado al estado base guardado')
+            ->body('Grupos: ' . ($summary['groups'] ?? 0) . ' | Opciones: ' . ($summary['items'] ?? 0))
+            ->success()
+            ->send();
+
+        return redirect(request()->header('Referer') ?: request()->fullUrl());
+    }
+
 }

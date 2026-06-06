@@ -145,6 +145,14 @@ class MySentApprovalStatuses extends Page
 
     public static function shouldRegisterNavigation(): bool
     {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'pages.mysentapprovalstatuses',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
+
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
+    {
         return false;
     }
 

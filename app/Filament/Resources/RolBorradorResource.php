@@ -78,6 +78,14 @@ public static function canCreate(): bool
 
 public static function shouldRegisterNavigation(): bool
 {
+    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+        'resources.rolborradorresource',
+        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+    );
+}
+
+protected static function bexiaBaseShouldRegisterNavigation(): bool
+{
     $user = auth()->user();
 
     return (bool) (

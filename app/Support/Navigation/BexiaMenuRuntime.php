@@ -167,4 +167,28 @@ class BexiaMenuRuntime
                 ->all();
         }
     }
+
+    public static function shouldRegister(string $key, ?callable $baseCheck = null): bool
+    {
+        if (! static::itemVisible($key, true)) {
+            return false;
+        }
+
+        $user = auth()->user();
+
+        if ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
+            return true;
+        }
+
+        if ($baseCheck === null) {
+            return true;
+        }
+
+        try {
+            return (bool) $baseCheck();
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
 }

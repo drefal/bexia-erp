@@ -337,4 +337,15 @@ class AccountPayablePaymentResource extends Resource
             'view' => Pages\ViewAccountPayablePayment::route('/{record}'),
         ];
     }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.accountpayablepaymentresource',
+            fn (): bool => method_exists(static::class, 'canViewAny')
+                ? static::canViewAny()
+                : (method_exists(static::class, 'canAccess') ? static::canAccess() : true),
+        );
+    }
+
 }

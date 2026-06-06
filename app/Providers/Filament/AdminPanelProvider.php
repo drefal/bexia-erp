@@ -45,7 +45,8 @@ class AdminPanelProvider extends PanelProvider
             ->navigationGroups(\App\Support\Navigation\BexiaMenuRuntime::navigationGroups([
                 'inicio' => 'Inicio',
                 'contactos' => 'Contactos',
-                'recursos_humanos' => 'Recursos Humanos',
+                'recursos_humanos' => 'RRHH',
+                'nomina' => 'Nómina',
                 'productos' => 'Productos',
                 'compras' => 'Compras',
                 'cuentas_por_pagar' => 'Cuentas por pagar',

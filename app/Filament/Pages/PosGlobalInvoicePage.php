@@ -134,6 +134,14 @@ class PosGlobalInvoicePage extends Page
 
     public static function shouldRegisterNavigation(): bool
     {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'pages.posglobalinvoicepage',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
+
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
+    {
         $user = auth()->user();
 
         return auth()->check()

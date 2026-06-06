@@ -217,6 +217,14 @@ public array $warehouses = [];
         return $parts ? implode(' - ', $parts) : ('ID ' . ($row->id ?? ''));
     }
 public static function shouldRegisterNavigation(): bool
+{
+    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+        'pages.createpurchaseorderfromxml',
+        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+    );
+}
+
+protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 

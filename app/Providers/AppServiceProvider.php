@@ -10,6 +10,7 @@ use App\Models\Product;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
 
+use Illuminate\Support\Facades\Gate;
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
@@ -19,6 +20,12 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+
+        Gate::before(function ($user, string $ability): ?bool {
+            return method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()
+                ? true
+                : null;
+        });
 
         if (class_exists(\App\Models\StockAdjustment::class) && class_exists(\App\Observers\StockAdjustmentObserver::class)) {
             \App\Models\StockAdjustment::observe(\App\Observers\StockAdjustmentObserver::class);

@@ -27,6 +27,14 @@ class SatCfdiCancellationReasonResource extends Resource
     protected static ?int $navigationSort = 50;
 
 public static function shouldRegisterNavigation(): bool
+{
+    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+        'resources.satcfdicancellationreasonresource',
+        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+    );
+}
+
+protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 

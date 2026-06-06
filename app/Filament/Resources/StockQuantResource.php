@@ -49,6 +49,14 @@ class StockQuantResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.stockquantresource',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
+
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
+    {
         $user = auth()->user();
 
         return auth()->check()

@@ -40,6 +40,14 @@ class TreasuryMovementResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.treasurymovementresource',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
+
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
+    {
         return auth()->check() && auth()->user()->can('treasury.view');
     }
 
