@@ -38,19 +38,19 @@ class ProductCatalogExportService
                 'nombre' => 'Producto ejemplo',
                 'categoria_codigo' => '',
                 'categoria_nombre' => 'General',
-                'tipo_producto' => 'stockable',
-                'tracking' => 'none',
-                'metodo_costeo' => 'average',
+                'tipo_producto' => 'almacenable',
+                'tracking' => 'sin seguimiento',
+                'metodo_costeo' => 'promedio',
                 'precio_venta' => '0.0000',
                 'costo_promedio_sin_iva' => '0.0000',
                 'costo_estandar' => '0.0000',
                 'ultimo_costo_compra' => '0.0000',
-                'se_puede_vender' => '1',
-                'se_puede_comprar' => '1',
-                'activo' => '1',
-                'disponible_pdv' => '1',
-                'favorito_pdv' => '0',
-                'permitir_venta_sin_stock' => '0',
+                'se_puede_vender' => 'sí',
+                'se_puede_comprar' => 'sí',
+                'activo' => 'sí',
+                'disponible_pdv' => 'sí',
+                'favorito_pdv' => 'no',
+                'permitir_venta_sin_stock' => 'no',
                 'marca' => '',
                 'modelo' => '',
                 'material' => '',
@@ -161,9 +161,9 @@ class ProductCatalogExportService
                     'nombre' => (string) ($product->name ?? ''),
                     'categoria_codigo' => (string) ($product->category_code ?? ''),
                     'categoria_nombre' => (string) ($product->category_name ?? ''),
-                    'tipo_producto' => (string) ($product->product_type ?? ''),
-                    'tracking' => (string) ($product->tracking ?? 'none'),
-                    'metodo_costeo' => (string) ($product->costing_method ?? ''),
+                    'tipo_producto' => static::productTypeLabel($product->product_type ?? ''),
+                    'tracking' => static::trackingLabel($product->tracking ?? 'none'),
+                    'metodo_costeo' => static::costingMethodLabel($product->costing_method ?? ''),
                     'precio_venta' => static::decimal($product->sale_price ?? 0),
                     'costo_promedio_sin_iva' => static::decimal($product->average_cost_without_tax ?? 0),
                     'costo_estandar' => static::decimal($product->standard_cost ?? 0),
@@ -456,7 +456,7 @@ class ProductCatalogExportService
             $html .= '<td class="num">' . e($row['precio_venta'] ?? '') . '</td>';
             $html .= '<td class="num">' . e($row['costo_promedio_sin_iva'] ?? '') . '</td>';
             $html .= '<td><div>' . e($row['sku'] ?? '') . '</div><div class="small">' . e($row['codigo_barras'] ?? '') . '</div></td>';
-            $html .= '<td>' . e(($row['activo'] ?? '') === '1' ? 'Sí' : 'No') . '</td>';
+            $html .= '<td>' . e(($row['activo'] ?? '') === 'sí' ? 'Sí' : 'No') . '</td>';
             $html .= '</tr>';
         }
 
@@ -567,7 +567,37 @@ class ProductCatalogExportService
 
     protected static function boolValue(mixed $value): string
     {
-        return (bool) $value ? '1' : '0';
+        return (bool) $value ? 'sí' : 'no';
+    }
+
+    protected static function productTypeLabel(mixed $value): string
+    {
+        return match ((string) $value) {
+            'stockable' => 'almacenable',
+            'service' => 'servicio',
+            'consumable' => 'consumible',
+            default => (string) ($value ?? ''),
+        };
+    }
+
+    protected static function trackingLabel(mixed $value): string
+    {
+        return match ((string) $value) {
+            'none', '' => 'sin seguimiento',
+            'serial', 'series' => 'series',
+            'lot', 'lots', 'lote' => 'lotes',
+            default => (string) ($value ?? ''),
+        };
+    }
+
+    protected static function costingMethodLabel(mixed $value): string
+    {
+        return match ((string) $value) {
+            'average' => 'promedio',
+            'fifo' => 'fifo',
+            'standard' => 'estándar',
+            default => (string) ($value ?? ''),
+        };
     }
 
     protected static function companyLabel(?int $companyId): string
