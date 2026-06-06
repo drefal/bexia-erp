@@ -256,6 +256,209 @@ class ProductCatalogImportService
     }
 
 
+
+    public static function validateForModalFromFilamentUpload(mixed $file): array
+    {
+        try {
+            $path = static::resolveUploadedPath($file);
+            $companyId = static::currentCompanyId();
+
+            if ($companyId === null) {
+                return static::modalErrorResult('No se pudo detectar la empresa actual.');
+            }
+
+            return static::validateFileForModal($path, $companyId);
+        } catch (\Throwable $e) {
+            return static::modalErrorResult($e->getMessage());
+        }
+    }
+
+    public static function validateFileForModal(string $path, int $companyId): array
+    {
+        try {
+            if (! file_exists($path)) {
+                return static::modalErrorResult('No se encontró el archivo a validar.');
+            }
+
+            $result = static::processFile($path, $companyId, false);
+            $result = static::appendReferenceDuplicationValidation($path, $companyId, $result);
+
+            $isClean = (int) ($result['errors'] ?? 0) === 0
+                && (int) ($result['validated'] ?? 0) > 0;
+
+            return [
+                'ok' => $isClean,
+                'hash' => hash_file('sha256', $path) ?: '',
+                'html' => static::modalValidationSummaryHtml($result, $isClean),
+                'result' => $result,
+            ];
+        } catch (\Throwable $e) {
+            return static::modalErrorResult($e->getMessage());
+        }
+    }
+
+    public static function importValidatedModalUpload(mixed $file, ?string $expectedHash = null, bool $confirmed = false): void
+    {
+        if (! $confirmed) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'confirm_apply' => 'Confirma que deseas aplicar el archivo validado.',
+            ]);
+        }
+
+        $path = static::resolveUploadedPath($file);
+        $companyId = static::currentCompanyId();
+
+        if ($companyId === null) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'file' => 'No se pudo detectar la empresa actual.',
+            ]);
+        }
+
+        if (! file_exists($path)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'file' => 'El archivo validado ya no existe. Vuelve a subirlo.',
+            ]);
+        }
+
+        $currentHash = hash_file('sha256', $path) ?: '';
+
+        if ($expectedHash && $currentHash !== $expectedHash) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'file' => 'El archivo cambió después de validarse. Vuelve a validarlo.',
+            ]);
+        }
+
+        $validation = static::validateFileForModal($path, $companyId);
+
+        if (! (bool) ($validation['ok'] ?? false)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'file' => 'El archivo no pasa la validación. Corrige los errores antes de importar.',
+            ]);
+        }
+
+        $result = static::processFile($path, $companyId, true);
+
+        $created = (int) ($result['created'] ?? 0);
+        $updated = (int) ($result['updated'] ?? 0);
+        $skipped = (int) ($result['skipped'] ?? 0);
+        $errors = (int) ($result['errors'] ?? 0);
+
+        if ($errors > 0) {
+            \Filament\Notifications\Notification::make()
+                ->title('Importación terminada con errores')
+                ->body("Creados: {$created}. Actualizados: {$updated}. Omitidos: {$skipped}. Errores: {$errors}.")
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        \Filament\Notifications\Notification::make()
+            ->title('Productos importados')
+            ->body("Creados: {$created}. Actualizados: {$updated}. Omitidos: {$skipped}.")
+            ->success()
+            ->send();
+    }
+
+    protected static function modalErrorResult(string $message): array
+    {
+        $safe = static::modalEscape($message);
+
+        return [
+            'ok' => false,
+            'hash' => '',
+            'html' => '<div class="rounded-lg border border-danger-300 bg-danger-50 p-3 text-sm text-danger-700">'
+                . '<div class="font-semibold">No se pudo validar el archivo</div>'
+                . '<div class="mt-1">' . $safe . '</div>'
+                . '</div>',
+            'result' => [
+                'errors' => 1,
+                'validated' => 0,
+                'log_rows' => [],
+            ],
+        ];
+    }
+
+    protected static function modalValidationSummaryHtml(array $result, bool $isClean): string
+    {
+        $total = (int) ($result['total_rows'] ?? 0);
+        $validated = (int) ($result['validated'] ?? 0);
+        $created = (int) ($result['created'] ?? 0);
+        $updated = (int) ($result['updated'] ?? 0);
+        $skipped = (int) ($result['skipped'] ?? 0);
+        $errors = (int) ($result['errors'] ?? 0);
+
+        $statusClass = $isClean
+            ? 'border-success-300 bg-success-50 text-success-800'
+            : 'border-danger-300 bg-danger-50 text-danger-800';
+
+        $statusTitle = $isClean
+            ? 'Validación limpia'
+            : 'Validación con errores';
+
+        $html = '<div class="rounded-lg border ' . $statusClass . ' p-3 text-sm">';
+        $html .= '<div class="font-semibold">' . $statusTitle . '</div>';
+        $html .= '<div class="mt-2 grid grid-cols-2 gap-2">';
+        $html .= '<div>Total filas: <strong>' . $total . '</strong></div>';
+        $html .= '<div>Validadas: <strong>' . $validated . '</strong></div>';
+        $html .= '<div>Crearían: <strong>' . $created . '</strong></div>';
+        $html .= '<div>Actualizarían: <strong>' . $updated . '</strong></div>';
+        $html .= '<div>Omitidas: <strong>' . $skipped . '</strong></div>';
+        $html .= '<div>Errores: <strong>' . $errors . '</strong></div>';
+        $html .= '</div>';
+
+        $errorRows = array_values(array_filter(
+            $result['log_rows'] ?? [],
+            fn (array $row): bool => str_contains((string) ($row['resultado'] ?? ''), 'ERROR')
+                || str_contains((string) ($row['resultado'] ?? ''), 'BLOQUEADA')
+                || str_contains((string) ($row['resultado'] ?? ''), 'NO_APROBADA')
+        ));
+
+        if (! empty($errorRows)) {
+            $html .= '<div class="mt-3 font-semibold">Errores principales</div>';
+            $html .= '<ul class="mt-1 list-disc space-y-1 pl-5">';
+
+            foreach (array_slice($errorRows, 0, 8) as $row) {
+                $line = static::modalEscape((string) ($row['linea'] ?? ''));
+                $reference = static::modalEscape((string) ($row['referencia_interna'] ?? ''));
+                $message = static::modalEscape((string) ($row['mensaje'] ?? ''));
+                $resultLabel = static::modalEscape((string) ($row['resultado'] ?? ''));
+
+                $html .= '<li>'
+                    . ($line !== '0' && $line !== '' ? 'Línea ' . $line . ': ' : '')
+                    . ($reference !== '' ? '[' . $reference . '] ' : '')
+                    . $resultLabel . ' - ' . $message
+                    . '</li>';
+            }
+
+            if (count($errorRows) > 8) {
+                $html .= '<li>Hay más errores. Corrige el archivo y vuelve a subirlo.</li>';
+            }
+
+            $html .= '</ul>';
+        }
+
+        if ($isClean) {
+            $html .= '<div class="mt-3 rounded-md bg-white/70 p-2">'
+                . 'El archivo está listo. Activa la confirmación inferior y presiona <strong>Procesar importación</strong>.'
+                . '</div>';
+        } else {
+            $html .= '<div class="mt-3 rounded-md bg-white/70 p-2">'
+                . 'Corrige el archivo y vuelve a subirlo. No se aplicarán cambios mientras existan errores.'
+                . '</div>';
+        }
+
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    protected static function modalEscape(string $value): string
+    {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+
     public static function processFile(string $path, int $companyId, bool $apply = false): array
     {
         if (! file_exists($path)) {
