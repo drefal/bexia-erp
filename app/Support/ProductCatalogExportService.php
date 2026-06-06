@@ -76,6 +76,9 @@ class ProductCatalogExportService
 
     public static function downloadProductsPdf(): Response
     {
+        @set_time_limit(180);
+        @ini_set('memory_limit', '512M');
+
         $companyId = static::currentCompanyId();
         $rows = static::productRows($companyId);
 
@@ -83,14 +86,26 @@ class ProductCatalogExportService
             abort(500, 'No hay motor PDF instalado (barryvdh/laravel-dompdf).');
         }
 
-        $pdf = app('dompdf.wrapper');
+        try {
+            $pdf = app('dompdf.wrapper');
 
-        $pdf->loadHTML(static::pdfHtml($companyId, $rows))
-            ->setPaper('letter', 'landscape');
+            $pdf->loadHTML(static::pdfHtml($companyId, $rows))
+                ->setPaper('letter', 'landscape');
 
-        return $pdf->download(
-            'productos_' . static::safeSlug(static::companyLabel($companyId)) . '_' . now()->format('Ymd_His') . '.pdf'
-        );
+            return $pdf->download(
+                'productos_' . static::safeSlug(static::companyLabel($companyId)) . '_' . now()->format('Ymd_His') . '.pdf'
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('PRODUCTOS_PDF_EXPORT_ERROR', [
+                'company_id' => $companyId,
+                'rows' => count($rows),
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            abort(500, 'No se pudo generar el PDF de productos. Usa Exportar Excel para el catálogo completo o revisa el log del servidor.');
+        }
     }
 
     public static function productRows(?int $companyId = null): array
@@ -426,23 +441,40 @@ class ProductCatalogExportService
     {
         $company = e(static::companyLabel($companyId));
         $createdAt = e(now()->format('Y-m-d H:i:s'));
+        $totalRows = count($rows);
 
         $html = '<!doctype html><html><head><meta charset="utf-8">';
         $html .= '<style>
-            body{font-family:DejaVu Sans,sans-serif;font-size:9px;color:#111827}
-            h1{font-size:18px;margin:0 0 4px}
-            .meta{font-size:10px;color:#4b5563;margin-bottom:12px}
-            table{width:100%;border-collapse:collapse}
-            th{background:#eff6ff;border:1px solid #d1d5db;padding:5px;text-align:left;font-size:8px}
-            td{border:1px solid #e5e7eb;padding:4px;font-size:8px;vertical-align:top}
+            @page{margin:18px 16px}
+            body{font-family:DejaVu Sans,sans-serif;font-size:7px;color:#111827}
+            h1{font-size:15px;margin:0 0 3px}
+            .meta{font-size:8px;color:#4b5563;margin-bottom:8px}
+            table{width:100%;border-collapse:collapse;table-layout:fixed}
+            th{background:#eff6ff;border:1px solid #d1d5db;padding:3px;text-align:left;font-size:6.5px;line-height:1.1}
+            td{border:1px solid #e5e7eb;padding:2px;font-size:6.5px;line-height:1.1;vertical-align:top;word-wrap:break-word}
             .num{text-align:right}
-            .small{font-size:7px;color:#374151}
+            .w-ref{width:8%}
+            .w-prod{width:25%}
+            .w-cat{width:13%}
+            .w-small{width:8%}
+            .w-num{width:7%}
+            .w-sku{width:12%}
+            .footer{font-size:7px;color:#6b7280;margin-top:6px}
         </style>';
         $html .= '</head><body>';
         $html .= '<h1>Listado de productos</h1>';
-        $html .= '<div class="meta">Empresa: ' . $company . ' · Generado: ' . $createdAt . ' · Registros: ' . count($rows) . '</div>';
+        $html .= '<div class="meta">Empresa: ' . $company . ' · Generado: ' . $createdAt . ' · Registros: ' . $totalRows . '</div>';
         $html .= '<table><thead><tr>';
-        $html .= '<th>Ref.</th><th>Producto</th><th>Categoría</th><th>Tipo</th><th>Tipo de seguimiento</th><th>Stock</th><th>Precio</th><th>Costo</th><th>SKU/Código</th><th>Activo</th>';
+        $html .= '<th class="w-ref">Ref.</th>';
+        $html .= '<th class="w-prod">Producto</th>';
+        $html .= '<th class="w-cat">Categoría</th>';
+        $html .= '<th class="w-small">Tipo</th>';
+        $html .= '<th class="w-small">Tipo seguimiento</th>';
+        $html .= '<th class="w-num">Stock</th>';
+        $html .= '<th class="w-num">Precio</th>';
+        $html .= '<th class="w-num">Costo</th>';
+        $html .= '<th class="w-sku">SKU / Código</th>';
+        $html .= '<th class="w-small">Activo</th>';
         $html .= '</tr></thead><tbody>';
 
         foreach ($rows as $row) {
@@ -455,12 +487,14 @@ class ProductCatalogExportService
             $html .= '<td class="num">' . e($row['stock_actual_solo_lectura'] ?? '') . '</td>';
             $html .= '<td class="num">' . e($row['precio_venta'] ?? '') . '</td>';
             $html .= '<td class="num">' . e($row['costo_promedio_sin_iva'] ?? '') . '</td>';
-            $html .= '<td><div>' . e($row['sku'] ?? '') . '</div><div class="small">' . e($row['codigo_barras'] ?? '') . '</div></td>';
+            $html .= '<td>' . e(trim((string) ($row['sku'] ?? '') . ' ' . (string) ($row['codigo_barras'] ?? ''))) . '</td>';
             $html .= '<td>' . e(($row['activo'] ?? '') === 'sí' ? 'Sí' : 'No') . '</td>';
             $html .= '</tr>';
         }
 
-        $html .= '</tbody></table></body></html>';
+        $html .= '</tbody></table>';
+        $html .= '<div class="footer">Para edición masiva usa Exportar Excel o Plantilla carga masiva. El PDF es solo consulta/impresión.</div>';
+        $html .= '</body></html>';
 
         return $html;
     }
