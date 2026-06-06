@@ -29,13 +29,14 @@ class ListProducts extends ListRecords
                 ->color('warning')
                 ->action(fn () => \App\Support\ProductCatalogExportService::downloadTemplateXlsx()),
 
-            \Filament\Actions\Action::make('import_products')
-                ->label('Importar productos')
-                ->icon('heroicon-o-arrow-up-tray')
+
+            \Filament\Actions\Action::make('validate_products_import')
+                ->label('Validar importación')
+                ->icon('heroicon-o-shield-check')
                 ->color('primary')
-                ->modalHeading('Importar productos desde plantilla')
-                ->modalDescription('Sube el Excel/CSV con el mismo formato de la plantilla. Por seguridad, primero déjalo en modo validación. No se modifican existencias.')
-                ->modalSubmitActionLabel('Procesar archivo')
+                ->modalHeading('Validar importación de productos')
+                ->modalDescription('Primero valida el archivo. Si no hay errores ni referencias internas duplicadas, se habilita el botón Procesar validación limpia.')
+                ->modalSubmitActionLabel('Validar archivo')
                 ->form([
                     \Filament\Forms\Components\FileUpload::make('file')
                         ->label('Archivo Excel/CSV')
@@ -52,16 +53,25 @@ class ListProducts extends ListRecords
                         ])
                         ->required()
                         ->helperText('Formatos permitidos: .xlsx o .csv. Usa la plantilla descargada desde Bexia.'),
-
-                    \Filament\Forms\Components\Toggle::make('apply')
-                        ->label('Aplicar cambios')
-                        ->default(false)
-                        ->helperText('Apagado: solo valida y descarga log. Encendido: crea/actualiza productos.'),
                 ])
-                ->action(fn (array $data) => \App\Support\ProductCatalogImportService::importFromFilamentUpload(
+                ->action(fn (array $data) => \App\Support\ProductCatalogImportService::validateFromFilamentUpload(
                     $data['file'] ?? null,
-                    (bool) ($data['apply'] ?? false),
                 )),
+
+            \Filament\Actions\Action::make('apply_validated_products_import')
+                ->label('Procesar validación limpia')
+                ->icon('heroicon-o-arrow-up-tray')
+                ->color('success')
+                ->disabled(fn (): bool => ! \App\Support\ProductCatalogImportService::hasCleanValidationSession())
+                ->tooltip(fn (): string => \App\Support\ProductCatalogImportService::hasCleanValidationSession()
+                    ? 'Importar el último archivo validado sin errores.'
+                    : 'Primero valida un archivo sin errores.')
+                ->requiresConfirmation()
+                ->modalHeading('Procesar productos validados')
+                ->modalDescription('Se aplicará el último archivo validado correctamente para esta empresa. Antes de importar, Bexia volverá a validar el archivo.')
+                ->modalSubmitActionLabel('Importar productos')
+                ->action(fn () => \App\Support\ProductCatalogImportService::importLastValidatedFromSession()),
+
 
             Actions\CreateAction::make(),
         ];

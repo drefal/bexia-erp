@@ -23,6 +23,239 @@ class ProductCatalogImportService
         return static::downloadLog($result, $apply);
     }
 
+
+    public static function validateFromFilamentUpload(mixed $file): StreamedResponse
+    {
+        $path = static::resolveUploadedPath($file);
+        $companyId = static::currentCompanyId();
+
+        if ($companyId === null) {
+            abort(422, 'No se pudo detectar la empresa actual.');
+        }
+
+        $result = static::processFile($path, $companyId, false);
+        $result = static::appendReferenceDuplicationValidation($path, $companyId, $result);
+
+        $isClean = (int) ($result['errors'] ?? 0) === 0
+            && (int) ($result['validated'] ?? 0) > 0;
+
+        if ($isClean) {
+            session([
+                'bexia_products_import_validation_ok' => true,
+                'bexia_products_import_validated_path' => $path,
+                'bexia_products_import_validated_hash' => file_exists($path) ? hash_file('sha256', $path) : null,
+                'bexia_products_import_validated_company_id' => $companyId,
+                'bexia_products_import_validated_at' => now()->toDateTimeString(),
+            ]);
+
+            $result['log_rows'][] = static::logRow(
+                0,
+                'validar',
+                'VALIDACION_LIMPIA',
+                '',
+                '',
+                '',
+                '',
+                'Archivo validado correctamente. Ya puedes usar Procesar validación limpia.'
+            );
+        } else {
+            static::clearCleanValidationSession();
+
+            $result['log_rows'][] = static::logRow(
+                0,
+                'validar',
+                'VALIDACION_NO_APROBADA',
+                '',
+                '',
+                '',
+                '',
+                'Corrige los errores del archivo antes de importar.'
+            );
+        }
+
+        return static::downloadLog($result, false);
+    }
+
+    public static function importLastValidatedFromSession(): StreamedResponse
+    {
+        $companyId = static::currentCompanyId();
+
+        if ($companyId === null) {
+            abort(422, 'No se pudo detectar la empresa actual.');
+        }
+
+        $path = (string) session('bexia_products_import_validated_path');
+        $hash = (string) session('bexia_products_import_validated_hash');
+        $validatedCompanyId = (int) session('bexia_products_import_validated_company_id');
+
+        if (! static::hasCleanValidationSession()) {
+            abort(422, 'Primero debes validar un archivo sin errores.');
+        }
+
+        if ($validatedCompanyId !== $companyId) {
+            static::clearCleanValidationSession();
+            abort(422, 'La validación pertenece a otra empresa. Vuelve a validar el archivo.');
+        }
+
+        if (! file_exists($path) || hash_file('sha256', $path) !== $hash) {
+            static::clearCleanValidationSession();
+            abort(422, 'El archivo validado ya no existe o cambió. Vuelve a validarlo.');
+        }
+
+        $preflight = static::processFile($path, $companyId, false);
+        $preflight = static::appendReferenceDuplicationValidation($path, $companyId, $preflight);
+
+        if ((int) ($preflight['errors'] ?? 0) > 0 || (int) ($preflight['validated'] ?? 0) <= 0) {
+            static::clearCleanValidationSession();
+
+            $preflight['log_rows'][] = static::logRow(
+                0,
+                'importar',
+                'IMPORTACION_BLOQUEADA',
+                '',
+                '',
+                '',
+                '',
+                'El archivo ya no pasa la validación. No se aplicaron cambios.'
+            );
+
+            return static::downloadLog($preflight, false);
+        }
+
+        $result = static::processFile($path, $companyId, true);
+
+        static::clearCleanValidationSession();
+
+        return static::downloadLog($result, true);
+    }
+
+    public static function hasCleanValidationSession(): bool
+    {
+        $path = (string) session('bexia_products_import_validated_path');
+        $hash = (string) session('bexia_products_import_validated_hash');
+
+        return session('bexia_products_import_validation_ok') === true
+            && $path !== ''
+            && $hash !== ''
+            && file_exists($path)
+            && hash_file('sha256', $path) === $hash;
+    }
+
+    protected static function clearCleanValidationSession(): void
+    {
+        session()->forget([
+            'bexia_products_import_validation_ok',
+            'bexia_products_import_validated_path',
+            'bexia_products_import_validated_hash',
+            'bexia_products_import_validated_company_id',
+            'bexia_products_import_validated_at',
+        ]);
+    }
+
+    protected static function appendReferenceDuplicationValidation(string $path, int $companyId, array $result): array
+    {
+        try {
+            $rows = static::readRows($path);
+
+            if (count($rows) < 2) {
+                return $result;
+            }
+
+            $headers = static::normalizeHeaderRow($rows[0]);
+            $references = [];
+
+            foreach (array_slice($rows, 1) as $index => $rawRow) {
+                $lineNumber = $index + 2;
+                $data = static::rowToAssoc($headers, $rawRow);
+
+                if (static::isEmptyProductRow($data)) {
+                    continue;
+                }
+
+                $action = static::normalizeAction($data['accion'] ?? 'crear_o_actualizar');
+
+                if ($action === 'omitir') {
+                    continue;
+                }
+
+                $reference = trim((string) ($data['referencia_interna'] ?? ''));
+
+                if ($reference === '') {
+                    continue;
+                }
+
+                $key = mb_strtolower($reference);
+                $references[$key]['reference'] = $reference;
+                $references[$key]['lines'][] = $lineNumber;
+            }
+
+            foreach ($references as $item) {
+                $lines = $item['lines'] ?? [];
+
+                if (count($lines) > 1) {
+                    $result['errors'] = (int) ($result['errors'] ?? 0) + 1;
+
+                    $result['log_rows'][] = static::logRow(
+                        (int) $lines[0],
+                        'validar',
+                        'ERROR_REFERENCIA_DUPLICADA_ARCHIVO',
+                        (string) ($item['reference'] ?? ''),
+                        '',
+                        '',
+                        '',
+                        'La referencia_interna aparece más de una vez en el archivo. Líneas: ' . implode(', ', $lines)
+                    );
+                }
+            }
+
+            $fileReferences = array_values(array_unique(array_map(
+                fn (array $item): string => (string) ($item['reference'] ?? ''),
+                $references
+            )));
+
+            if (! empty($fileReferences) && Schema::hasTable('products') && Schema::hasColumn('products', 'internal_reference')) {
+                $dbDuplicates = DB::table('products')
+                    ->where('company_id', $companyId)
+                    ->whereIn('internal_reference', $fileReferences)
+                    ->select('internal_reference', DB::raw('COUNT(*) as qty'))
+                    ->groupBy('internal_reference')
+                    ->havingRaw('COUNT(*) > 1')
+                    ->get();
+
+                foreach ($dbDuplicates as $dup) {
+                    $result['errors'] = (int) ($result['errors'] ?? 0) + 1;
+
+                    $result['log_rows'][] = static::logRow(
+                        0,
+                        'validar',
+                        'ERROR_REFERENCIA_DUPLICADA_EMPRESA',
+                        (string) $dup->internal_reference,
+                        '',
+                        '',
+                        '',
+                        'La referencia_interna ya está duplicada en esta empresa. Cantidad encontrada: ' . $dup->qty
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            $result['errors'] = (int) ($result['errors'] ?? 0) + 1;
+
+            $result['log_rows'][] = static::logRow(
+                0,
+                'validar',
+                'ERROR_VALIDACION_REFERENCIAS',
+                '',
+                '',
+                '',
+                '',
+                $e->getMessage()
+            );
+        }
+
+        return $result;
+    }
+
+
     public static function processFile(string $path, int $companyId, bool $apply = false): array
     {
         if (! file_exists($path)) {
