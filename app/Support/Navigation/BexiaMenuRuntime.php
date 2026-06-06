@@ -168,27 +168,180 @@ class BexiaMenuRuntime
         }
     }
 
-    public static function shouldRegister(string $key, ?callable $baseCheck = null): bool
+    public static function shouldRegister(string $key, mixed $fallback = true): bool
     {
-        if (! static::itemVisible($key, true)) {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('bexia_menu_items')
+                || ! \Illuminate\Support\Facades\Schema::hasTable('bexia_menu_groups')) {
+                return static::evaluateFallback($fallback);
+            }
+
+            $item = \Illuminate\Support\Facades\DB::table('bexia_menu_items as i')
+                ->join('bexia_menu_groups as g', 'g.id', '=', 'i.group_id')
+                ->where('i.key', $key)
+                ->select([
+                    'i.is_visible as item_visible',
+                    'i.permission_name',
+                    'g.is_visible as group_visible',
+                ])
+                ->first();
+
+            if (! $item) {
+                return static::evaluateFallback($fallback);
+            }
+
+            if (! (bool) $item->group_visible || ! (bool) $item->item_visible) {
+                return false;
+            }
+
+            $permissionName = trim((string) ($item->permission_name ?? ''));
+
+            if ($permissionName === '') {
+                return true;
+            }
+
+            return static::userCanSeePermission($permissionName);
+        } catch (\Throwable) {
+            return static::evaluateFallback($fallback);
+        }
+    }
+
+
+    protected static function evaluateFallback(mixed $fallback): bool
+    {
+        try {
+            if ($fallback instanceof \Closure) {
+                return (bool) $fallback();
+            }
+
+            if (is_callable($fallback) && ! is_string($fallback)) {
+                return (bool) $fallback();
+            }
+
+            return (bool) $fallback;
+        } catch (\Throwable) {
+            return true;
+        }
+    }
+
+    protected static function userCanSeePermission(string $permissionName): bool
+    {
+        try {
+            $user = auth()->user();
+
+            if (! $user) {
+                return false;
+            }
+
+            if ((bool) ($user->is_system_admin ?? false)) {
+                return true;
+            }
+
+            $companyId = static::currentCompanyId();
+
+            $modelTypes = array_values(array_unique([
+                get_class($user),
+                \App\Models\User::class,
+            ]));
+
+            $query = \Illuminate\Support\Facades\DB::table('model_has_roles as mhr')
+                ->join('roles as r', 'r.id', '=', 'mhr.role_id')
+                ->join('role_has_permissions as rhp', 'rhp.role_id', '=', 'r.id')
+                ->join('permissions as p', 'p.id', '=', 'rhp.permission_id')
+                ->whereIn('mhr.model_type', $modelTypes)
+                ->where('mhr.model_id', $user->getKey())
+                ->where('p.name', $permissionName)
+                ->where('p.guard_name', 'web');
+
+            if ($companyId !== null && \Illuminate\Support\Facades\Schema::hasColumn('model_has_roles', 'company_id')) {
+                $query->where(function ($subQuery) use ($companyId): void {
+                    $subQuery->where('mhr.company_id', $companyId)
+                        ->orWhereNull('mhr.company_id');
+                });
+            }
+
+            if ($companyId !== null && \Illuminate\Support\Facades\Schema::hasColumn('roles', 'company_id')) {
+                $query->where(function ($subQuery) use ($companyId): void {
+                    $subQuery->where('r.company_id', $companyId)
+                        ->orWhereNull('r.company_id');
+                });
+            }
+
+            if ($query->exists()) {
+                return true;
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('model_has_permissions')) {
+                $directQuery = \Illuminate\Support\Facades\DB::table('model_has_permissions as mhp')
+                    ->join('permissions as p', 'p.id', '=', 'mhp.permission_id')
+                    ->whereIn('mhp.model_type', $modelTypes)
+                    ->where('mhp.model_id', $user->getKey())
+                    ->where('p.name', $permissionName)
+                    ->where('p.guard_name', 'web');
+
+                if ($companyId !== null && \Illuminate\Support\Facades\Schema::hasColumn('model_has_permissions', 'company_id')) {
+                    $directQuery->where(function ($subQuery) use ($companyId): void {
+                        $subQuery->where('mhp.company_id', $companyId)
+                            ->orWhereNull('mhp.company_id');
+                    });
+                }
+
+                if ($directQuery->exists()) {
+                    return true;
+                }
+            }
+
+            if ($companyId === null && method_exists($user, 'can')) {
+                return (bool) $user->can($permissionName);
+            }
+
+            return false;
+        } catch (\Throwable) {
             return false;
         }
+    }
 
-        $user = auth()->user();
+    protected static function currentCompanyId(): ?int
+    {
+        try {
+            if (class_exists(\Filament\Facades\Filament::class)) {
+                $tenant = \Filament\Facades\Filament::getTenant();
 
-        if ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-            return true;
-        }
+                if (is_object($tenant) && isset($tenant->id)) {
+                    return (int) $tenant->id;
+                }
 
-        if ($baseCheck === null) {
-            return true;
+                if (is_numeric($tenant)) {
+                    return (int) $tenant;
+                }
+            }
+        } catch (\Throwable) {
+            // Continuar con ruta/segmento.
         }
 
         try {
-            return (bool) $baseCheck();
-        } catch (Throwable) {
-            return false;
+            foreach (['tenant', 'company', 'company_id'] as $parameter) {
+                $value = request()->route($parameter);
+
+                if (is_object($value) && isset($value->id)) {
+                    return (int) $value->id;
+                }
+
+                if (is_numeric($value)) {
+                    return (int) $value;
+                }
+            }
+
+            $segment = request()->segment(2);
+
+            if (is_numeric($segment)) {
+                return (int) $segment;
+            }
+        } catch (\Throwable) {
+            return null;
         }
+
+        return null;
     }
 
 }
