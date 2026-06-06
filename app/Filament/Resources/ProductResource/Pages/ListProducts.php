@@ -33,6 +33,40 @@ class ListProducts extends ListRecords
                 ->color('warning')
                 ->action(fn () => \App\Support\ProductCatalogExportService::downloadTemplateXlsx()),
 
+            \Filament\Actions\Action::make('import_products')
+                ->label('Importar productos')
+                ->icon('heroicon-o-arrow-up-tray')
+                ->color('primary')
+                ->modalHeading('Importar productos desde plantilla')
+                ->modalDescription('Sube el Excel/CSV con el mismo formato de la plantilla. Por seguridad, primero déjalo en modo validación. No se modifican existencias.')
+                ->modalSubmitActionLabel('Procesar archivo')
+                ->form([
+                    \Filament\Forms\Components\FileUpload::make('file')
+                        ->label('Archivo Excel/CSV')
+                        ->disk('local')
+                        ->directory('imports/productos')
+                        ->visibility('private')
+                        ->preserveFilenames()
+                        ->acceptedFileTypes([
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            'application/octet-stream',
+                            'text/csv',
+                            'text/plain',
+                            'application/csv',
+                        ])
+                        ->required()
+                        ->helperText('Formatos permitidos: .xlsx o .csv. Usa la plantilla descargada desde Bexia.'),
+
+                    \Filament\Forms\Components\Toggle::make('apply')
+                        ->label('Aplicar cambios')
+                        ->default(false)
+                        ->helperText('Apagado: solo valida y descarga log. Encendido: crea/actualiza productos.'),
+                ])
+                ->action(fn (array $data) => \App\Support\ProductCatalogImportService::importFromFilamentUpload(
+                    $data['file'] ?? null,
+                    (bool) ($data['apply'] ?? false),
+                )),
+
             Actions\CreateAction::make(),
         ];
     }
