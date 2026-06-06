@@ -50,7 +50,7 @@ class InventoryAsOfDate extends Page
     {
         $today = now()->toDateString();
 
-        $this->company_id = $this->currentCompanyId();
+        $this->company_id = $this->ensureAllowedCompanyId($this->currentCompanyId());
 
         $this->cutoff_date = $today;
         $this->cutoff_time = '23:59';
@@ -167,7 +167,7 @@ class InventoryAsOfDate extends Page
     {
         $today = now()->toDateString();
 
-        $this->company_id = $this->currentCompanyId();
+        $this->company_id = $this->ensureAllowedCompanyId($this->currentCompanyId());
         $this->warehouse_id = null;
         $this->location_id = null;
         $this->clearProduct();
@@ -202,7 +202,7 @@ class InventoryAsOfDate extends Page
             return [];
         }
 
-        return DB::table('companies')->orderBy('name')->pluck('name', 'id')->all();
+        return $this->allowedCompanyOptions();
     }
 
     public function warehouseOptions(): array
@@ -316,6 +316,97 @@ class InventoryAsOfDate extends Page
             ->limit(300)
             ->pluck('lot.lot_number', 'lot.id')
             ->all();
+    }
+
+
+    protected function allowedCompanyOptions(): array
+    {
+        $companyIds = $this->accessibleCompanyIds();
+
+        if (empty($companyIds)) {
+            return [];
+        }
+
+        return \Illuminate\Support\Facades\DB::table('companies')
+            ->whereIn('id', $companyIds)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    protected function ensureAllowedCompanyId(?int $companyId): ?int
+    {
+        $companyIds = $this->accessibleCompanyIds();
+
+        if (empty($companyIds)) {
+            return null;
+        }
+
+        if ($companyId && in_array((int) $companyId, $companyIds, true)) {
+            return (int) $companyId;
+        }
+
+        return (int) $companyIds[0];
+    }
+
+    protected function accessibleCompanyIds(): array
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return [];
+        }
+
+        $ids = [];
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('company_user')
+            && \Illuminate\Support\Facades\Schema::hasColumn('company_user', 'user_id')
+            && \Illuminate\Support\Facades\Schema::hasColumn('company_user', 'company_id')
+        ) {
+            $ids = \Illuminate\Support\Facades\DB::table('company_user')
+                ->where('user_id', (int) $user->id)
+                ->orderBy('company_id')
+                ->pluck('company_id')
+                ->map(fn ($id): int => (int) $id)
+                ->filter(fn (int $id): bool => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+
+            if (! empty($ids)) {
+                return $ids;
+            }
+        }
+
+        $tenant = null;
+
+        if (class_exists(\Filament\Facades\Filament::class)) {
+            $tenant = \Filament\Facades\Filament::getTenant();
+        }
+
+        if ($tenant && method_exists($tenant, 'getKey') && (int) $tenant->getKey() > 0) {
+            return [(int) $tenant->getKey()];
+        }
+
+        foreach (['company_id', 'current_company_id', 'active_company_id', 'tenant_company_id'] as $field) {
+            if (isset($user->{$field}) && (int) $user->{$field} > 0) {
+                return [(int) $user->{$field}];
+            }
+        }
+
+        if ((bool) ($user->is_system_admin ?? false)) {
+            return \Illuminate\Support\Facades\DB::table('companies')
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->filter(fn (int $id): bool => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        return [];
     }
 
     protected function currentCompanyId(): ?int
