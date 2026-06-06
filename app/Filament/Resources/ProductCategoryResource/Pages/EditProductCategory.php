@@ -14,8 +14,23 @@ class EditProductCategory extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make()
-                ->label('Eliminar'),
+            Actions\Action::make('archive_category')
+                ->label('Archivar')
+                ->icon('heroicon-o-archive-box')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Archivar categoría')
+                ->modalDescription('Se archivará esta categoría y sus subcategorías. No se eliminarán productos ligados ni historial.')
+                ->action(function (): void {
+                    ProductCategoryResource::archiveCategoryRecord($this->record);
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('Categoría archivada')
+                        ->success()
+                        ->send();
+
+                    $this->redirect(ProductCategoryResource::getUrl('index'));
+                }),
         ];
     }
 

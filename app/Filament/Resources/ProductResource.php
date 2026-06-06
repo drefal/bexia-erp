@@ -2193,18 +2193,79 @@ Forms\Components\Placeholder::make('variants_inner_table')
             ->actions([
                 Tables\Actions\EditAction::make()
                     ->label('Editar'),
-                Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar'),
+
+                Tables\Actions\Action::make('archive_product')
+                    ->label('Archivar')
+                    ->icon('heroicon-o-archive-box')
+                    ->color('warning')
+                    ->visible(fn (Product $record): bool => (bool) $record->is_active)
+                    ->requiresConfirmation()
+                    ->modalHeading('Archivar producto')
+                    ->modalDescription(fn (Product $record): string => (bool) ($record->has_variants ?? false)
+                        ? 'Se archivará este producto y también sus variantes. No se eliminará historial, stock ni movimientos.'
+                        : 'Se archivará este producto. No se eliminará historial, stock ni movimientos.')
+                    ->action(function (Product $record): void {
+                        static::archiveProductRecord($record);
+                    })
+                    ->successNotificationTitle('Producto archivado'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make()
-                        ->label('Eliminar seleccionados'),
+                    Tables\Actions\BulkAction::make('archive_products')
+                        ->label('Archivar seleccionados')
+                        ->icon('heroicon-o-archive-box')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalHeading('Archivar productos seleccionados')
+                        ->modalDescription('Se archivarán los productos seleccionados. Si alguno es producto padre, también se archivarán sus variantes. No se eliminará historial, stock ni movimientos.')
+                        ->action(function ($records): void {
+                            $records->each(fn (Product $record) => static::archiveProductRecord($record));
+                        })
+                        ->successNotificationTitle('Productos archivados'),
                 ]),
             ]);
     }
 
     
+
+    public static function archiveProductRecord(Product $record): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active')) {
+            return;
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($record): void {
+            $now = now();
+
+            Product::query()
+                ->whereKey($record->id)
+                ->update([
+                    'is_active' => false,
+                    'updated_at' => $now,
+                ]);
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn('products', 'parent_product_id')
+                && \Illuminate\Support\Facades\Schema::hasColumn('products', 'is_variant')
+            ) {
+                $variants = Product::query()
+                    ->where('parent_product_id', $record->id);
+
+                if (
+                    \Illuminate\Support\Facades\Schema::hasColumn('products', 'company_id')
+                    && ! empty($record->company_id)
+                ) {
+                    $variants->where('company_id', (int) $record->company_id);
+                }
+
+                $variants->update([
+                    'is_active' => false,
+                    'updated_at' => $now,
+                ]);
+            }
+        });
+    }
+
     public static function getRelations(): array
     {
         return [

@@ -202,8 +202,23 @@ class EditProduct extends EditRecord
                 ->color('gray')
                 ->url(fn (): string => ProductResource::getUrl('edit', ['record' => $this->record])),
 
-            Actions\DeleteAction::make()
-                ->label('Eliminar'),
+            Actions\Action::make('archive_product')
+                ->label('Archivar')
+                ->icon('heroicon-o-archive-box')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Archivar producto')
+                ->modalDescription('Se archivará este producto. Si es producto padre, también se archivarán sus variantes. No se eliminará historial, stock ni movimientos.')
+                ->action(function (): void {
+                    ProductResource::archiveProductRecord($this->record);
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('Producto archivado')
+                        ->success()
+                        ->send();
+
+                    $this->redirect(ProductResource::getUrl('index'));
+                }),
         ];
     }
 

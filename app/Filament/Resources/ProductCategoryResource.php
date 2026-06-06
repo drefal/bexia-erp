@@ -350,22 +350,79 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                 Tables\Actions\EditAction::make()
                     ->label('Editar'),
 
-                Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar')
-                    ->visible(fn (ProductCategory $record): bool => ! ProductCategory::query()
-                        ->where('parent_id', $record->id)
-                        ->exists()
-                        && ! Product::query()
-                            ->where('product_category_id', $record->id)
-                            ->exists()
-                    ),
+                Tables\Actions\Action::make('archive_category')
+                    ->label('Archivar')
+                    ->icon('heroicon-o-archive-box')
+                    ->color('warning')
+                    ->visible(fn (ProductCategory $record): bool => (bool) $record->is_active)
+                    ->requiresConfirmation()
+                    ->modalHeading('Archivar categoría')
+                    ->modalDescription('Se archivará esta categoría y sus subcategorías. No se eliminarán productos ligados ni historial.')
+                    ->action(function (ProductCategory $record): void {
+                        static::archiveCategoryRecord($record);
+                    })
+                    ->successNotificationTitle('Categoría archivada'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make()
-                        ->label('Eliminar seleccionadas'),
+                    Tables\Actions\BulkAction::make('archive_categories')
+                        ->label('Archivar seleccionadas')
+                        ->icon('heroicon-o-archive-box')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalHeading('Archivar categorías seleccionadas')
+                        ->modalDescription('Se archivarán las categorías seleccionadas y sus subcategorías. No se eliminarán productos ligados ni historial.')
+                        ->action(function ($records): void {
+                            $records->each(fn (ProductCategory $record) => static::archiveCategoryRecord($record));
+                        })
+                        ->successNotificationTitle('Categorías archivadas'),
                 ]),
             ]);
+    }
+
+
+    public static function archiveCategoryRecord(ProductCategory $record): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('product_categories', 'is_active')) {
+            return;
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($record): void {
+            $ids = [(int) $record->id];
+            $pending = [(int) $record->id];
+
+            while (! empty($pending)) {
+                $children = ProductCategory::query()
+                    ->whereIn('parent_id', $pending)
+                    ->when(
+                        \Illuminate\Support\Facades\Schema::hasColumn('product_categories', 'company_id') && ! empty($record->company_id),
+                        fn ($query) => $query->where('company_id', (int) $record->company_id),
+                    )
+                    ->pluck('id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->all();
+
+                $children = array_values(array_diff($children, $ids));
+
+                if (empty($children)) {
+                    break;
+                }
+
+                $ids = array_values(array_unique(array_merge($ids, $children)));
+                $pending = $children;
+            }
+
+            ProductCategory::query()
+                ->whereIn('id', $ids)
+                ->when(
+                    \Illuminate\Support\Facades\Schema::hasColumn('product_categories', 'company_id') && ! empty($record->company_id),
+                    fn ($query) => $query->where('company_id', (int) $record->company_id),
+                )
+                ->update([
+                    'is_active' => false,
+                    'updated_at' => now(),
+                ]);
+        });
     }
 
     public static function getPages(): array
