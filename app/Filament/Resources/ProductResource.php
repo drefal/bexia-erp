@@ -1781,7 +1781,7 @@ Forms\Components\Actions::make([
                                 ->default(fn () => request()->filled('parent_product_id'))
                                 ->dehydrated(),
 
-/* V5.72.5e2b: evita duplicado visual de variantes por colección única */
+/* V5.72.5e2b/e4: variantes únicas y filtradas por empresa del producto padre */
 Forms\Components\Placeholder::make('variants_inner_table')
                                 ->label('')
                                 ->content(function (?\Illuminate\Database\Eloquent\Model $record): \Illuminate\Support\HtmlString {
@@ -1807,8 +1807,12 @@ Forms\Components\Placeholder::make('variants_inner_table')
                                         );
                                     }
 
-                                    $variants = $record->variants()
-                                        ->select('products.*')
+                                    $variants = \App\Models\Product::query()
+                                        ->where('parent_product_id', $record->id)
+                                        ->when(
+                                            \Illuminate\Support\Facades\Schema::hasColumn('products', 'company_id') && ! empty($record->company_id),
+                                            fn ($query) => $query->where('company_id', (int) $record->company_id),
+                                        )
                                         ->where('is_variant', true)
                                         ->orderBy('variant_group')
                                         ->orderBy('variant_value')
