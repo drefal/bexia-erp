@@ -1781,6 +1781,7 @@ Forms\Components\Actions::make([
                                 ->default(fn () => request()->filled('parent_product_id'))
                                 ->dehydrated(),
 
+/* V5.72.5e2b: evita duplicado visual de variantes por colección única */
 Forms\Components\Placeholder::make('variants_inner_table')
                                 ->label('')
                                 ->content(function (?\Illuminate\Database\Eloquent\Model $record): \Illuminate\Support\HtmlString {
@@ -1807,9 +1808,14 @@ Forms\Components\Placeholder::make('variants_inner_table')
                                     }
 
                                     $variants = $record->variants()
+                                        ->select('products.*')
+                                        ->where('is_variant', true)
                                         ->orderBy('variant_group')
                                         ->orderBy('variant_value')
-                                        ->get();
+                                        ->orderBy('id')
+                                        ->get()
+                                        ->unique('id')
+                                        ->values();
 
                                     if ($variants->isEmpty()) {
                                         return new \Illuminate\Support\HtmlString('<div class="text-sm text-gray-500">Este producto no tiene variantes ligadas.</div>');
