@@ -15,8 +15,25 @@ class ListProducts extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make()
-                ->label('Nuevo producto'),
+            \Filament\Actions\Action::make('export_products_xlsx')
+                ->label('Exportar Excel')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('success')
+                ->action(fn () => \App\Support\ProductCatalogExportService::downloadProductsXlsx()),
+
+            \Filament\Actions\Action::make('export_products_pdf')
+                ->label('Exportar PDF')
+                ->icon('heroicon-o-document-text')
+                ->color('gray')
+                ->action(fn () => \App\Support\ProductCatalogExportService::downloadProductsPdf()),
+
+            \Filament\Actions\Action::make('download_products_template')
+                ->label('Plantilla carga masiva')
+                ->icon('heroicon-o-table-cells')
+                ->color('warning')
+                ->action(fn () => \App\Support\ProductCatalogExportService::downloadTemplateXlsx()),
+
+            Actions\CreateAction::make(),
         ];
     }
 
