@@ -39,7 +39,7 @@ class InventoryAsOfDate extends Page
     public string $applied_cutoff_date = '';
     public string $applied_cutoff_time = '23:59';
 
-    public int $limit = 1000;
+    public int $limit = 5000;
     public bool $show_zero = false;
     public bool $only_negative = false;
 
@@ -178,7 +178,7 @@ class InventoryAsOfDate extends Page
         $this->applied_cutoff_date = $today;
         $this->applied_cutoff_time = '23:59';
 
-        $this->limit = 1000;
+        $this->limit = 5000;
         $this->show_zero = false;
         $this->only_negative = false;
 

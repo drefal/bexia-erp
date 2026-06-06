@@ -27,6 +27,10 @@ class InventoryAsOfDateService
         $this->seedCurrentQuants($balances, $filters, $qtyColumn);
         $this->reverseMovementsAfterCutoff($balances, $filters, $cutoff);
 
+        if (! empty($filters['show_zero'])) {
+            $this->seedCatalogZeroProducts($balances, $filters);
+        }
+
         $rows = collect(array_values($balances))
             ->map(function (array $row) use ($cutoff): object {
                 $row['quantity_as_of'] = round((float) ($row['quantity_as_of'] ?? 0), 6);
@@ -74,6 +78,235 @@ class InventoryAsOfDateService
             'with_lot' => $rows->filter(fn (object $row): bool => ! empty($row->lot_id))->count(),
             'method' => 'Existencia actual menos movimientos posteriores al corte',
         ];
+    }
+
+
+    protected function seedCatalogZeroProducts(array &$balances, array $filters): void
+    {
+        if (! Schema::hasTable('products')) {
+            return;
+        }
+
+        if (! empty($filters['lot_id'])) {
+            return;
+        }
+
+        $companyId = (int) ($filters['company_id'] ?? 0);
+
+        if ($companyId <= 0) {
+            return;
+        }
+
+        $context = $this->catalogZeroContext($filters);
+
+        $query = DB::table('products as p')
+            ->leftJoin('products as parent', 'parent.id', '=', 'p.parent_product_id')
+            ->where('p.company_id', $companyId)
+            ->select([
+                'p.id',
+                'p.company_id',
+                'p.name',
+                'p.parent_product_id',
+                'p.is_variant',
+                'p.variant_name',
+                'p.variant_value',
+                'parent.name as parent_name',
+            ]);
+
+        if (Schema::hasColumn('products', 'is_active')) {
+            $query->where('p.is_active', true);
+        }
+
+        if (Schema::hasColumn('products', 'product_type')) {
+            $query->whereIn('p.product_type', ['stockable', 'consumable']);
+        }
+
+        if (! empty($filters['product_variant_id'])) {
+            $query->where('p.id', (int) $filters['product_variant_id']);
+        } elseif (! empty($filters['product_id'])) {
+            $productId = (int) $filters['product_id'];
+
+            $query->where(function ($q) use ($productId): void {
+                $q->where('p.id', $productId)
+                    ->orWhere('p.parent_product_id', $productId);
+            });
+        }
+
+        foreach ($query->orderBy('p.name')->limit(5000)->get() as $product) {
+            $isVariant = (bool) ($product->is_variant ?? false) || ! empty($product->parent_product_id);
+
+            $productId = $isVariant && ! empty($product->parent_product_id)
+                ? (int) $product->parent_product_id
+                : (int) $product->id;
+
+            $variantId = $isVariant ? (int) $product->id : null;
+
+            if ($this->catalogProductAlreadyRepresented($balances, $productId, $variantId, $filters)) {
+                continue;
+            }
+
+            $productName = $isVariant
+                ? (string) ($product->parent_name ?: $product->name)
+                : (string) $product->name;
+
+            $variantName = $isVariant
+                ? (string) ($product->variant_name ?: $product->variant_value ?: $product->name)
+                : null;
+
+            $meta = [
+                'company_id' => $companyId,
+                'company_name' => $context['company_name'],
+                'warehouse_id' => $context['warehouse_id'],
+                'warehouse_name' => $context['warehouse_name'],
+                'location_id' => $context['location_id'],
+                'location_name' => $context['location_name'],
+                'product_id' => $productId,
+                'product_name' => $productName,
+                'variant_id' => $variantId,
+                'variant_name' => $variantName,
+                'lot_id' => null,
+                'lot_number' => null,
+            ];
+
+            $this->addBalance($balances, $this->keyFromMeta($meta), $meta, 0.0);
+        }
+    }
+
+    protected function catalogProductAlreadyRepresented(array $balances, int $productId, ?int $variantId, array $filters): bool
+    {
+        $warehouseId = ! empty($filters['warehouse_id']) ? (int) $filters['warehouse_id'] : null;
+        $locationId = ! empty($filters['location_id']) ? (int) $filters['location_id'] : null;
+
+        foreach ($balances as $balance) {
+            if ((int) ($balance['product_id'] ?? 0) !== $productId) {
+                continue;
+            }
+
+            $balanceVariantId = ! empty($balance['variant_id']) ? (int) $balance['variant_id'] : null;
+
+            if ($balanceVariantId !== $variantId) {
+                continue;
+            }
+
+            if ($warehouseId !== null && (int) ($balance['warehouse_id'] ?? 0) !== $warehouseId) {
+                continue;
+            }
+
+            if ($locationId !== null && (int) ($balance['location_id'] ?? 0) !== $locationId) {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function catalogZeroContext(array $filters): array
+    {
+        $companyId = (int) ($filters['company_id'] ?? 0);
+        $warehouseId = ! empty($filters['warehouse_id']) ? (int) $filters['warehouse_id'] : null;
+        $locationId = ! empty($filters['location_id']) ? (int) $filters['location_id'] : null;
+
+        if ($locationId && Schema::hasTable('stock_locations')) {
+            $location = DB::table('stock_locations')->where('id', $locationId)->first();
+
+            if ($location) {
+                $warehouseId = $warehouseId ?: (isset($location->warehouse_id) ? (int) $location->warehouse_id : null);
+
+                return [
+                    'company_name' => $this->companyName($companyId),
+                    'warehouse_id' => $warehouseId,
+                    'warehouse_name' => $this->warehouseName($warehouseId),
+                    'location_id' => $locationId,
+                    'location_name' => (string) ($location->name ?? 'Ubicación #' . $locationId),
+                ];
+            }
+        }
+
+        if (! $warehouseId) {
+            $warehouseId = $this->defaultWarehouseId($companyId);
+        }
+
+        if (! $locationId) {
+            $locationId = $this->defaultLocationId($companyId, $warehouseId);
+        }
+
+        return [
+            'company_name' => $this->companyName($companyId),
+            'warehouse_id' => $warehouseId,
+            'warehouse_name' => $this->warehouseName($warehouseId),
+            'location_id' => $locationId,
+            'location_name' => $this->locationName($locationId) ?: 'Sin ubicación',
+        ];
+    }
+
+    protected function defaultWarehouseId(int $companyId): ?int
+    {
+        if ($companyId <= 0 || ! Schema::hasTable('warehouses')) {
+            return null;
+        }
+
+        if (Schema::hasTable('companies') && Schema::hasColumn('companies', 'default_warehouse_id')) {
+            $default = DB::table('companies')->where('id', $companyId)->value('default_warehouse_id');
+
+            if ($default) {
+                return (int) $default;
+            }
+        }
+
+        $query = DB::table('warehouses');
+
+        if (Schema::hasColumn('warehouses', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        return ($id = $query->orderBy('id')->value('id')) ? (int) $id : null;
+    }
+
+    protected function defaultLocationId(int $companyId, ?int $warehouseId): ?int
+    {
+        if ($companyId <= 0 || ! Schema::hasTable('stock_locations')) {
+            return null;
+        }
+
+        if (Schema::hasTable('companies') && Schema::hasColumn('companies', 'default_location_id')) {
+            $default = DB::table('companies')->where('id', $companyId)->value('default_location_id');
+
+            if ($default) {
+                return (int) $default;
+            }
+        }
+
+        $query = DB::table('stock_locations');
+
+        if (Schema::hasColumn('stock_locations', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        if ($warehouseId && Schema::hasColumn('stock_locations', 'warehouse_id')) {
+            $query->where('warehouse_id', $warehouseId);
+        }
+
+        return ($id = $query->orderBy('id')->value('id')) ? (int) $id : null;
+    }
+
+    protected function companyName(int $companyId): ?string
+    {
+        if ($companyId <= 0 || ! Schema::hasTable('companies')) {
+            return null;
+        }
+
+        return DB::table('companies')->where('id', $companyId)->value('name');
+    }
+
+    protected function warehouseName(?int $warehouseId): ?string
+    {
+        if (! $warehouseId || ! Schema::hasTable('warehouses')) {
+            return 'Sin almacén';
+        }
+
+        return DB::table('warehouses')->where('id', $warehouseId)->value('name') ?: 'Almacén #' . $warehouseId;
     }
 
     protected function seedCurrentQuants(array &$balances, array $filters, string $qtyColumn): void
