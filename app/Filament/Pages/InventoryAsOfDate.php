@@ -118,6 +118,7 @@ class InventoryAsOfDate extends Page
 
     public function updatedCompanyId(): void
     {
+        $this->company_id = $this->ensureAllowedCompanyId((int) ($this->company_id ?? 0));
         $this->warehouse_id = null;
         $this->location_id = null;
         $this->clearProduct();
@@ -226,13 +227,49 @@ class InventoryAsOfDate extends Page
             return [];
         }
 
-        $query = DB::table('stock_locations');
+        $companyId = (int) ($this->company_id ?: $this->currentCompanyId() ?: 0);
 
-        if ($this->warehouse_id && Schema::hasColumn('stock_locations', 'warehouse_id')) {
-            $query->where('warehouse_id', $this->warehouse_id);
+        if ($companyId <= 0) {
+            return [];
         }
 
-        return $query->orderBy('name')->limit(500)->pluck('name', 'id')->all();
+        $query = DB::table('stock_locations');
+
+        if (Schema::hasColumn('stock_locations', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        if ($this->warehouse_id && Schema::hasColumn('stock_locations', 'warehouse_id')) {
+            $query->where('warehouse_id', (int) $this->warehouse_id);
+        }
+
+        if (Schema::hasColumn('stock_locations', 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        if (Schema::hasColumn('stock_locations', 'active')) {
+            $query->where('active', true);
+        }
+
+        $select = ['id', 'name'];
+
+        if (Schema::hasColumn('stock_locations', 'code')) {
+            $select[] = 'code';
+        }
+
+        return $query
+            ->orderBy('name')
+            ->limit(500)
+            ->get($select)
+            ->mapWithKeys(function ($location): array {
+                $code = trim((string) ($location->code ?? ''));
+                $name = trim((string) ($location->name ?? ('Ubicación #' . $location->id)));
+
+                return [
+                    (int) $location->id => $code !== '' ? "{$code} - {$name}" : $name,
+                ];
+            })
+            ->all();
     }
 
     public function productOptions(): array
