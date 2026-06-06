@@ -687,6 +687,7 @@ class ProductCatalogImportService
                     'product_id' => '',
                     'message' => 'Producto nuevo válido. No aplicado.',
                 ];
+            static::sanitizeNullableUniqueProductPayload($payload);
             }
 
             $productId = DB::table('products')->insertGetId($payload);
@@ -706,6 +707,7 @@ class ProductCatalogImportService
                 'product_id' => (int) $existing->id,
                 'message' => 'Producto existente válido. No aplicado.',
             ];
+        static::sanitizeNullableUniqueProductPayload($payload);
         }
 
         DB::table('products')
@@ -725,8 +727,12 @@ class ProductCatalogImportService
         $payload = [];
 
         static::setText($payload, 'internal_reference', $data, 'referencia_interna');
-        static::setText($payload, 'sku', $data, 'sku');
-        static::setText($payload, 'barcode', $data, 'codigo_barras');
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'sku') && array_key_exists('sku', $data)) {
+            $payload['sku'] = static::normalizeNullableUniqueText($data['sku']);
+        }
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'barcode') && array_key_exists('codigo_barras', $data)) {
+            $payload['barcode'] = static::normalizeNullableUniqueText($data['codigo_barras']);
+        }
         static::setText($payload, 'name', $data, 'nombre');
 
         $categoryId = static::categoryId(
@@ -957,6 +963,23 @@ class ProductCatalogImportService
             'sin seguimiento', 'ninguno', 'none', '' => 'none',
             default => 'none',
         };
+    }
+
+
+    protected static function normalizeNullableUniqueText(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    protected static function sanitizeNullableUniqueProductPayload(array &$payload): void
+    {
+        foreach (['sku', 'barcode'] as $column) {
+            if (array_key_exists($column, $payload)) {
+                $payload[$column] = static::normalizeNullableUniqueText($payload[$column]);
+            }
+        }
     }
 
     protected static function parseCostingMethod(mixed $value): string
