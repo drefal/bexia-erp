@@ -39,7 +39,7 @@ class ProductCatalogExportService
                 'categoria_codigo' => '',
                 'categoria_nombre' => 'General',
                 'tipo_producto' => 'almacenable',
-                'tracking' => 'sin seguimiento',
+                'tipo_seguimiento' => 'sin seguimiento',
                 'metodo_costeo' => 'promedio',
                 'precio_venta' => '0.0000',
                 'costo_promedio_sin_iva' => '0.0000',
@@ -162,7 +162,7 @@ class ProductCatalogExportService
                     'categoria_codigo' => (string) ($product->category_code ?? ''),
                     'categoria_nombre' => (string) ($product->category_name ?? ''),
                     'tipo_producto' => static::productTypeLabel($product->product_type ?? ''),
-                    'tracking' => static::trackingLabel($product->tracking ?? 'none'),
+                    'tipo_seguimiento' => static::trackingLabel($product->tracking ?? 'none'),
                     'metodo_costeo' => static::costingMethodLabel($product->costing_method ?? ''),
                     'precio_venta' => static::decimal($product->sale_price ?? 0),
                     'costo_promedio_sin_iva' => static::decimal($product->average_cost_without_tax ?? 0),
@@ -202,7 +202,7 @@ class ProductCatalogExportService
             'categoria_codigo',
             'categoria_nombre',
             'tipo_producto',
-            'tracking',
+            'tipo_seguimiento',
             'metodo_costeo',
             'precio_venta',
             'costo_promedio_sin_iva',
@@ -442,7 +442,7 @@ class ProductCatalogExportService
         $html .= '<h1>Listado de productos</h1>';
         $html .= '<div class="meta">Empresa: ' . $company . ' · Generado: ' . $createdAt . ' · Registros: ' . count($rows) . '</div>';
         $html .= '<table><thead><tr>';
-        $html .= '<th>Ref.</th><th>Producto</th><th>Categoría</th><th>Tipo</th><th>Seguimiento</th><th>Stock</th><th>Precio</th><th>Costo</th><th>SKU/Código</th><th>Activo</th>';
+        $html .= '<th>Ref.</th><th>Producto</th><th>Categoría</th><th>Tipo</th><th>Tipo de seguimiento</th><th>Stock</th><th>Precio</th><th>Costo</th><th>SKU/Código</th><th>Activo</th>';
         $html .= '</tr></thead><tbody>';
 
         foreach ($rows as $row) {
@@ -451,7 +451,7 @@ class ProductCatalogExportService
             $html .= '<td>' . e($row['nombre'] ?? '') . '</td>';
             $html .= '<td>' . e($row['categoria_nombre'] ?? '') . '</td>';
             $html .= '<td>' . e($row['tipo_producto'] ?? '') . '</td>';
-            $html .= '<td>' . e($row['tracking'] ?? '') . '</td>';
+            $html .= '<td>' . e($row['tipo_seguimiento'] ?? $row['tracking'] ?? '') . '</td>';
             $html .= '<td class="num">' . e($row['stock_actual_solo_lectura'] ?? '') . '</td>';
             $html .= '<td class="num">' . e($row['precio_venta'] ?? '') . '</td>';
             $html .= '<td class="num">' . e($row['costo_promedio_sin_iva'] ?? '') . '</td>';

@@ -692,6 +692,10 @@ class ProductCatalogImportService
         $aliases = [
             'codigo_de_barras' => 'codigo_barras',
             'codigo_barras' => 'codigo_barras',
+            'tipo_seguimiento' => 'tracking',
+            'tipo_de_seguimiento' => 'tracking',
+            'seguimiento' => 'tracking',
+            'rastreo' => 'tracking',
             'referencia' => 'referencia_interna',
             'ref' => 'referencia_interna',
             'producto' => 'nombre',
