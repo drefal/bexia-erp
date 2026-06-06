@@ -1782,7 +1782,8 @@ Forms\Components\Actions::make([
                                 ->dehydrated(),
 
 /* V5.72.5e2b/e4: variantes únicas y filtradas por empresa del producto padre */
-Forms\Components\Placeholder::make('variants_inner_table')
+Forms\Components\Placeholder::make('/* V5.72.5j0: filas de variantes clicables usando el link Abrir */
+variants_inner_table')
                                 ->label('')
                                 ->content(function (?\Illuminate\Database\Eloquent\Model $record): \Illuminate\Support\HtmlString {
                                     if (! $record) {
@@ -1841,7 +1842,7 @@ Forms\Components\Placeholder::make('variants_inner_table')
 
                                         $url = self::getUrl('edit', ['record' => $variant]);
 
-                                        return '<tr>' .
+                                        return '<tr data-bexia-variant-row="1" style="cursor:pointer;" onclick="if (! event.target.closest(&quot;a,button,input,select,textarea,label,[role=button]&quot;)) { const link = this.querySelector(&quot;a[href]&quot;); if (link) { window.location.href = link.href; } }">' .
                                             '<td class="px-4 py-3">' . $image . '</td>' .
                                             '<td class="px-4 py-3"><span class="inline-flex items-center rounded-md bg-primary-50 px-2 py-1 text-xs font-medium text-primary-700 ring-1 ring-inset ring-primary-700/10">' . e($variant->variant_group ?: '—') . '</span></td>' .
                                             '<td class="px-4 py-3 font-medium text-gray-950">' . e($variant->variant_value ?: $variant->variant_name ?: '—') . '</td>' .
