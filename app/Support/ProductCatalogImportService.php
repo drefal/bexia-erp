@@ -324,7 +324,7 @@ class ProductCatalogImportService
 
         if ($expectedHash && $currentHash !== $expectedHash) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'file' => 'El archivo cambió después de validarse. Vuelve a validarlo.',
+                'file' => 'El archivo cambio despues de validarse. Vuelve a validarlo.',
             ]);
         }
 
@@ -332,26 +332,29 @@ class ProductCatalogImportService
 
         if (! (bool) ($validation['ok'] ?? false)) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'file' => 'El archivo no pasa la validación. Corrige los errores antes de importar.',
+                'file' => 'El archivo no pasa la validacion. Corrige los errores antes de importar.',
             ]);
         }
 
-        $result = static::processFile($path, $companyId, true);
+        try {
+            $result = static::applyFileStrict($path, $companyId);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('PRODUCTOS_IMPORT_STRICT_ERROR', [
+                'company_id' => $companyId,
+                'path' => $path,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'file' => 'No se aplico ningun cambio. Error: ' . $e->getMessage(),
+            ]);
+        }
 
         $created = (int) ($result['created'] ?? 0);
         $updated = (int) ($result['updated'] ?? 0);
         $skipped = (int) ($result['skipped'] ?? 0);
-        $errors = (int) ($result['errors'] ?? 0);
-
-        if ($errors > 0) {
-            \Filament\Notifications\Notification::make()
-                ->title('Importación terminada con errores')
-                ->body("Creados: {$created}. Actualizados: {$updated}. Omitidos: {$skipped}. Errores: {$errors}.")
-                ->danger()
-                ->send();
-
-            return;
-        }
 
         \Filament\Notifications\Notification::make()
             ->title('Productos importados')
@@ -383,26 +386,39 @@ class ProductCatalogImportService
     {
         $total = (int) ($result['total_rows'] ?? 0);
         $validated = (int) ($result['validated'] ?? 0);
-        $created = (int) ($result['created'] ?? 0);
-        $updated = (int) ($result['updated'] ?? 0);
         $skipped = (int) ($result['skipped'] ?? 0);
         $errors = (int) ($result['errors'] ?? 0);
+
+        $wouldCreate = 0;
+        $wouldUpdate = 0;
+
+        foreach (($result['log_rows'] ?? []) as $row) {
+            $status = (string) ($row['resultado'] ?? '');
+
+            if ($status === 'VALIDADO_CREAR') {
+                $wouldCreate++;
+            }
+
+            if ($status === 'VALIDADO_ACTUALIZAR') {
+                $wouldUpdate++;
+            }
+        }
 
         $statusClass = $isClean
             ? 'border-success-300 bg-success-50 text-success-800'
             : 'border-danger-300 bg-danger-50 text-danger-800';
 
         $statusTitle = $isClean
-            ? 'Validación limpia'
-            : 'Validación con errores';
+            ? 'Validacion limpia'
+            : 'Validacion con errores';
 
         $html = '<div class="rounded-lg border ' . $statusClass . ' p-3 text-sm">';
         $html .= '<div class="font-semibold">' . $statusTitle . '</div>';
         $html .= '<div class="mt-2 grid grid-cols-2 gap-2">';
         $html .= '<div>Total filas: <strong>' . $total . '</strong></div>';
         $html .= '<div>Validadas: <strong>' . $validated . '</strong></div>';
-        $html .= '<div>Crearían: <strong>' . $created . '</strong></div>';
-        $html .= '<div>Actualizarían: <strong>' . $updated . '</strong></div>';
+        $html .= '<div>Se crearan: <strong>' . $wouldCreate . '</strong></div>';
+        $html .= '<div>Se actualizaran: <strong>' . $wouldUpdate . '</strong></div>';
         $html .= '<div>Omitidas: <strong>' . $skipped . '</strong></div>';
         $html .= '<div>Errores: <strong>' . $errors . '</strong></div>';
         $html .= '</div>';
@@ -425,14 +441,14 @@ class ProductCatalogImportService
                 $resultLabel = static::modalEscape((string) ($row['resultado'] ?? ''));
 
                 $html .= '<li>'
-                    . ($line !== '0' && $line !== '' ? 'Línea ' . $line . ': ' : '')
+                    . ($line !== '0' && $line !== '' ? 'Linea ' . $line . ': ' : '')
                     . ($reference !== '' ? '[' . $reference . '] ' : '')
                     . $resultLabel . ' - ' . $message
                     . '</li>';
             }
 
             if (count($errorRows) > 8) {
-                $html .= '<li>Hay más errores. Corrige el archivo y vuelve a subirlo.</li>';
+                $html .= '<li>Hay mas errores. Corrige el archivo y vuelve a subirlo.</li>';
             }
 
             $html .= '</ul>';
@@ -440,11 +456,11 @@ class ProductCatalogImportService
 
         if ($isClean) {
             $html .= '<div class="mt-3 rounded-md bg-white/70 p-2">'
-                . 'El archivo está listo. Activa la confirmación inferior y presiona <strong>Procesar importación</strong>.'
+                . 'El archivo esta listo. Se aplicara en modo todo-o-nada: si aparece un error al procesar, no se actualizara ningun producto.'
                 . '</div>';
         } else {
             $html .= '<div class="mt-3 rounded-md bg-white/70 p-2">'
-                . 'Corrige el archivo y vuelve a subirlo. No se aplicarán cambios mientras existan errores.'
+                . 'Corrige el archivo y vuelve a subirlo. No se aplicaran cambios mientras existan errores.'
                 . '</div>';
         }
 
@@ -458,6 +474,85 @@ class ProductCatalogImportService
         return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
+
+    public static function applyFileStrict(string $path, int $companyId): array
+    {
+        if (! file_exists($path)) {
+            throw new \RuntimeException('No se encontro el archivo a importar.');
+        }
+
+        $rows = static::readRows($path);
+
+        if (count($rows) < 2) {
+            throw new \RuntimeException('El archivo no tiene lineas de productos.');
+        }
+
+        $headers = static::normalizeHeaderRow($rows[0]);
+
+        $result = [
+            'company_id' => $companyId,
+            'apply' => true,
+            'created_at' => now()->toDateTimeString(),
+            'total_rows' => max(0, count($rows) - 1),
+            'created' => 0,
+            'updated' => 0,
+            'validated' => 0,
+            'skipped' => 0,
+            'errors' => 0,
+            'log_rows' => [],
+        ];
+
+        DB::transaction(function () use (&$result, $rows, $headers, $companyId): void {
+            foreach (array_slice($rows, 1) as $index => $rawRow) {
+                $lineNumber = $index + 2;
+                $data = static::rowToAssoc($headers, $rawRow);
+
+                if (static::isEmptyProductRow($data)) {
+                    $result['skipped']++;
+                    $result['log_rows'][] = static::logRow($lineNumber, 'omitir', 'OMITIDA', '', '', '', '', 'Linea vacia.');
+                    continue;
+                }
+
+                $action = static::normalizeAction($data['accion'] ?? 'crear_o_actualizar');
+
+                if ($action === 'omitir') {
+                    $result['skipped']++;
+                    $result['log_rows'][] = static::logRow(
+                        $lineNumber,
+                        $action,
+                        'OMITIDA',
+                        $data['referencia_interna'] ?? '',
+                        $data['sku'] ?? '',
+                        $data['codigo_barras'] ?? '',
+                        '',
+                        'Accion omitir.'
+                    );
+                    continue;
+                }
+
+                $outcome = static::processRow($data, $action, $companyId, true);
+
+                if (($outcome['status'] ?? '') === 'CREADO') {
+                    $result['created']++;
+                } elseif (($outcome['status'] ?? '') === 'ACTUALIZADO') {
+                    $result['updated']++;
+                }
+
+                $result['log_rows'][] = static::logRow(
+                    $lineNumber,
+                    $action,
+                    (string) ($outcome['status'] ?? 'OK'),
+                    $data['referencia_interna'] ?? '',
+                    $data['sku'] ?? '',
+                    $data['codigo_barras'] ?? '',
+                    (string) ($outcome['product_id'] ?? ''),
+                    (string) ($outcome['message'] ?? '')
+                );
+            }
+        });
+
+        return $result;
+    }
 
     public static function processFile(string $path, int $companyId, bool $apply = false): array
     {
