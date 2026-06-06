@@ -21,11 +21,7 @@ class ListProducts extends ListRecords
                 ->color('success')
                 ->action(fn () => \App\Support\ProductCatalogExportService::downloadProductsXlsx()),
 
-            \Filament\Actions\Action::make('export_products_pdf')
-                ->label('Exportar PDF')
-                ->icon('heroicon-o-document-text')
-                ->color('gray')
-                ->action(fn () => \App\Support\ProductCatalogExportService::downloadProductsPdf()),
+
 
             \Filament\Actions\Action::make('download_products_template')
                 ->label('Plantilla carga masiva')
