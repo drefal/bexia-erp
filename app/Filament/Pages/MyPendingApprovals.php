@@ -31,6 +31,14 @@ protected static function canUseApprovalsPage(): bool
 
 public static function shouldRegisterNavigation(): bool
 {
+    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+        'pages.mypendingapprovals',
+        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+    );
+}
+
+protected static function bexiaBaseShouldRegisterNavigation(): bool
+{
     return static::canUseApprovalsPage();
 }
 

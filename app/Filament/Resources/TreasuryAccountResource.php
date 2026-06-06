@@ -546,4 +546,15 @@ class TreasuryAccountResource extends Resource
 
         return $row ? trim(($row->code ? $row->code . ' - ' : '') . $row->name) : 'PDV #' . $id;
     }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.treasuryaccountresource',
+            fn (): bool => method_exists(static::class, 'canViewAny')
+                ? static::canViewAny()
+                : (method_exists(static::class, 'canAccess') ? static::canAccess() : true),
+        );
+    }
+
 }

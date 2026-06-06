@@ -118,6 +118,14 @@ class AccountingInventoryValuationLayerResource extends Resource
     }
 
 public static function shouldRegisterNavigation(): bool
+{
+    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+        'resources.accountinginventoryvaluationlayerresource',
+        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+    );
+}
+
+protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 

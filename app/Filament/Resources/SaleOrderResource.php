@@ -57,6 +57,14 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
     }
 
                     public static function shouldRegisterNavigation(): bool
+                    {
+                        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+                            'resources.saleorderresource',
+                            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+                        );
+                    }
+
+                    protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         return false;
     }

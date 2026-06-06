@@ -20,6 +20,14 @@ class PointOfSale extends Page
     protected static string $view = 'filament.pages.point-of-sale';
 
 public static function shouldRegisterNavigation(): bool
+{
+    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+        'pages.pointofsale',
+        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+    );
+}
+
+protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         $user = auth()->user();
 

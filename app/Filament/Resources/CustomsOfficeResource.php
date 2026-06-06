@@ -31,6 +31,14 @@ class CustomsOfficeResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.customsofficeresource',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
+
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
+    {
         return auth()->check()
             && auth()->user()->can('settings.access');
     }

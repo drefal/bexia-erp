@@ -37,6 +37,14 @@ class StockSerialNumberResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.stockserialnumberresource',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
+
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
+    {
         return auth()->check() && static::canManage('inventory.menu.view');
     }
 

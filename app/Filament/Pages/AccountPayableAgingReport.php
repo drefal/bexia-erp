@@ -192,4 +192,15 @@ class AccountPayableAgingReport extends Page
             ? (int) $tenant->getKey()
             : null;
     }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'pages.accountpayableagingreport',
+            fn (): bool => method_exists(static::class, 'canViewAny')
+                ? static::canViewAny()
+                : (method_exists(static::class, 'canAccess') ? static::canAccess() : true),
+        );
+    }
+
 }

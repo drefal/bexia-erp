@@ -352,4 +352,15 @@ class AccountReceivablePaymentResource extends Resource
             'view' => Pages\ViewAccountReceivablePayment::route('/{record}'),
         ];
     }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.accountreceivablepaymentresource',
+            fn (): bool => method_exists(static::class, 'canViewAny')
+                ? static::canViewAny()
+                : (method_exists(static::class, 'canAccess') ? static::canAccess() : true),
+        );
+    }
+
 }
