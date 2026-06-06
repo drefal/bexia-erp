@@ -106,17 +106,102 @@ class CreateProduct extends CreateRecord
         }
 
         $data = $this->fillRequiredProductColumnsForCreate($data);
+        $data = $this->normalizeUniqueCodesBeforeCreate($data);
 
         $modelClass = static::getModel();
 
         /** @var \Illuminate\Database\Eloquent\Model $record */
         $record = new $modelClass();
         $record->forceFill($data);
-        $record->save();
+
+        try {
+            $record->save();
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            throw ValidationException::withMessages($this->friendlyUniqueConstraintMessages($e));
+        }
 
         return $record;
     }
 
+
+
+
+    protected function normalizeUniqueCodesBeforeCreate(array $data): array
+    {
+        // V5.72.5l1: evitar error 500 por SKU/codigo duplicado al crear productos o variantes.
+        $companyId = (int) (($data['company_id'] ?? null) ?: (Filament::getTenant()?->getKey() ?: 0));
+
+        foreach ([
+            'sku' => 'SKU / Código de barras',
+            'barcode' => 'Código de barras',
+        ] as $field => $label) {
+            if (! array_key_exists($field, $data)) {
+                continue;
+            }
+
+            $value = trim((string) ($data[$field] ?? ''));
+
+            if ($value === '') {
+                $data[$field] = null;
+                continue;
+            }
+
+            $data[$field] = $value;
+
+            if ($companyId <= 0) {
+                continue;
+            }
+
+            if (! \Illuminate\Support\Facades\Schema::hasColumn('products', $field)) {
+                continue;
+            }
+
+            $duplicateExists = Product::query()
+                ->where('company_id', $companyId)
+                ->whereRaw('LOWER(TRIM(' . $field . ')) = ?', [mb_strtolower($value, 'UTF-8')])
+                ->exists();
+
+            if ($duplicateExists) {
+                throw ValidationException::withMessages([
+                    $field => $label . ' ya existe en otro producto o variante de esta empresa.',
+                    'data.' . $field => $label . ' ya existe en otro producto o variante de esta empresa.',
+                ]);
+            }
+        }
+
+        return $data;
+    }
+
+    protected function friendlyUniqueConstraintMessages(\Throwable $e): array
+    {
+        $message = $e->getMessage();
+
+        if (str_contains($message, 'products_company_id_sku_unique')) {
+            return [
+                'sku' => 'El SKU / Código de barras ya existe en otro producto o variante de esta empresa.',
+                'data.sku' => 'El SKU / Código de barras ya existe en otro producto o variante de esta empresa.',
+            ];
+        }
+
+        if (str_contains($message, 'products_company_id_barcode_unique')) {
+            return [
+                'barcode' => 'El código de barras ya existe en otro producto o variante de esta empresa.',
+                'data.barcode' => 'El código de barras ya existe en otro producto o variante de esta empresa.',
+            ];
+        }
+
+        if (str_contains($message, 'products_company_id_internal_reference_unique')) {
+            return [
+                'internal_reference' => 'La referencia interna ya existe en otro producto o variante de esta empresa.',
+                'data.internal_reference' => 'La referencia interna ya existe en otro producto o variante de esta empresa.',
+            ];
+        }
+
+        return [
+            'sku' => 'No se pudo guardar porque existe un dato único duplicado. Revisa SKU, código de barras y referencia interna.',
+            'data.sku' => 'No se pudo guardar porque existe un dato único duplicado. Revisa SKU, código de barras y referencia interna.',
+        ];
+    }
 
 
     protected function getCreateFormAction(): Actions\Action
@@ -165,6 +250,9 @@ class CreateProduct extends CreateRecord
             'parent_product_id' => $parent->id,
             // variant_reference_mount_v1
             'internal_reference' => $this->nextVariantReference($parent),
+            // variant_unique_codes_mount_v5725l1
+            'sku' => null,
+            'barcode' => null,
             'is_variant' => true,
             'has_variants' => false,
             'product_category_id' => $parent->product_category_id,
