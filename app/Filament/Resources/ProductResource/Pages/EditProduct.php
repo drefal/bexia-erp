@@ -15,6 +15,9 @@ class EditProduct extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        // V5.72.5l3b: evitar 500 al guardar variantes/productos con tracking avanzado vacío.
+        $data = $this->normalizeAdvancedTrackingBeforeSave($data);
+
         // BEXIA_V5550E_EDIT_INTERNAL_REFERENCE_MUTATE_BEFORE_SAVE
         $reference = trim((string) ($data['internal_reference'] ?? ''));
 
@@ -78,6 +81,48 @@ class EditProduct extends EditRecord
 
         throw new \Filament\Support\Exceptions\Halt();
     }
+
+
+    protected function normalizeAdvancedTrackingBeforeSave(array $data): array
+    {
+        // En products.advanced_tracking_mode la base de datos no permite NULL.
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'advanced_tracking_mode')) {
+            $mode = trim((string) ($data['advanced_tracking_mode'] ?? ''));
+
+            if ($mode === '') {
+                $data['advanced_tracking_mode'] = 'none';
+            }
+        }
+
+        // En el formulario puede llegar vacío/null; se normaliza para evitar updates inválidos.
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'advanced_tracking_fields')) {
+            if (
+                ! array_key_exists('advanced_tracking_fields', $data)
+                || $data['advanced_tracking_fields'] === null
+                || $data['advanced_tracking_fields'] === ''
+            ) {
+                $data['advanced_tracking_fields'] = [];
+            }
+        }
+
+        $record = $this->record ?? null;
+
+        if ($record && (bool) ($record->is_variant ?? false)) {
+            $variantValue = trim((string) ($data['variant_value'] ?? ''));
+            $variantName = trim((string) ($data['variant_name'] ?? ''));
+
+            if ($variantValue === '' && $variantName !== '') {
+                $data['variant_value'] = $variantName;
+            }
+
+            if ($variantName === '' && $variantValue !== '') {
+                $data['variant_name'] = $variantValue;
+            }
+        }
+
+        return $data;
+    }
+
 
     protected function getHeaderActions(): array
     {
