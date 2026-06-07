@@ -130,6 +130,7 @@ HTML),
                 for: 'App\\Filament\\Pages'
             )
             ->pages([
+                \App\Filament\Pages\SystemOperationLogs::class,
                 Pages\Dashboard::class,
             ])
             ->discoverResources(
