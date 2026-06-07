@@ -67,7 +67,10 @@
                     </div>
                 @endif
 
-                <pre class="max-h-[650px] overflow-auto rounded-lg bg-gray-950 p-4 text-xs leading-relaxed text-gray-100">{{ $this->selectedLogContent }}</pre>
+                <pre
+                    class="max-h-[650px] overflow-auto rounded-lg p-4 text-xs leading-relaxed"
+                    style="background-color: #0f172a; color: #e5e7eb; border: 1px solid #334155; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"
+                >{{ $this->selectedLogContent }}</pre>
             </x-filament::section>
         </div>
     </div>
