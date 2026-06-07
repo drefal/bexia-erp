@@ -2,23 +2,103 @@
     <div class="space-y-6">
         <x-filament::section>
             <x-slot name="heading">
-                Logs operativos del servidor
+                Operaciones del sistema
             </x-slot>
 
             <x-slot name="description">
-                Solo superadmin. Muestra logs técnicos de respaldos, clonación y validaciones.
+                Ambiente actual: <strong>{{ $this->environmentLabel }}</strong>. Solo superadmin.
             </x-slot>
 
-            <div class="text-sm text-gray-600 dark:text-gray-300">
-                Carpeta privada:
-                <code>storage/app/private/system-ops/logs</code>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="text-sm font-semibold">Ambiente</div>
+                    <div class="mt-1 text-2xl font-bold">{{ $this->environmentLabel }}</div>
+                    <div class="mt-1 text-xs text-gray-500">{{ config('app.url') }}</div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="text-sm font-semibold">Última operación</div>
+                    <div class="mt-1 text-sm">
+                        {{ $this->lastOperation['type'] ?? 'Sin operaciones registradas' }}
+                    </div>
+                    <div class="mt-1 text-xs text-gray-500">
+                        {{ $this->lastOperation['finished_at'] ?? $this->lastOperation['started_at'] ?? '' }}
+                    </div>
+                    <div class="mt-1 text-xs">
+                        Estado: <strong>{{ $this->lastOperation['status'] ?? 'N/A' }}</strong>
+                    </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="text-sm font-semibold">Acciones</div>
+                    <div class="mt-3">
+                        <x-filament::button wire:click="refreshBackupIndex" size="sm" color="gray">
+                            Actualizar lista de respaldos
+                        </x-filament::button>
+                    </div>
+                </div>
             </div>
         </x-filament::section>
+
+        @if ($this->isDevEnvironment())
+            <x-filament::section>
+                <x-slot name="heading">
+                    Restaurar PROD sobre DEV
+                </x-slot>
+
+                <x-slot name="description">
+                    Esta acción restaura la base y storage de PROD sobre DEV. Antes crea backup previo de DEV.
+                </x-slot>
+
+                <div class="rounded-lg border border-warning-300 bg-warning-50 p-4 text-sm text-warning-900 dark:bg-warning-950 dark:text-warning-100">
+                    Para habilitar el botón escribe exactamente:
+                    <strong>CLONAR PROD A DEV</strong>
+                </div>
+
+                <div class="mt-4">
+                    <x-filament::input.wrapper>
+                        <x-filament::input
+                            wire:model.live="restoreConfirmation"
+                            placeholder="CLONAR PROD A DEV"
+                        />
+                    </x-filament::input.wrapper>
+                </div>
+
+                <div class="mt-4 space-y-3">
+                    @forelse ($this->prodBackups as $backup)
+                        <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                            <div class="font-semibold">{{ $backup['name'] }}</div>
+                            <div class="mt-1 text-xs text-gray-500">
+                                {{ $backup['path'] }}
+                            </div>
+                            <div class="mt-1 text-xs text-gray-500">
+                                {{ $this->formatBytes((int) ($backup['size'] ?? 0)) }}
+                                ·
+                                {{ $backup['modified_at'] ?? '' }}
+                            </div>
+                            <div class="mt-3">
+                                <x-filament::button
+                                    color="danger"
+                                    size="sm"
+                                    wire:click="requestRestore('{{ $backup['path'] }}')"
+                                >
+                                    Restaurar este respaldo en DEV
+                                </x-filament::button>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-sm text-gray-500">
+                            No hay respaldos indexados. Presiona “Actualizar lista de respaldos”.
+                        </div>
+                    @endforelse
+                </div>
+            </x-filament::section>
+        @endif
 
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <x-filament::section class="lg:col-span-1">
                 <x-slot name="heading">
-                    Archivos disponibles
+                    Logs disponibles
                 </x-slot>
 
                 <div class="space-y-2">
