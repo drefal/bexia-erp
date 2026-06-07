@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    <div class="space-y-6">
+    <div class="space-y-6" wire:poll.15s>
         <x-filament::section>
             <x-slot name="heading">
                 Operaciones del sistema
@@ -40,6 +40,57 @@
                     <div class="mt-1 text-xs text-gray-500">143.244.186.80</div>
                 </div>
             </div>
+        </x-filament::section>
+
+        <x-filament::section>
+            <x-slot name="heading">
+                Estado en vivo
+            </x-slot>
+
+            <x-slot name="description">
+                La pantalla se actualiza automáticamente cada 15 segundos. El runner revisa solicitudes cada 5 minutos.
+            </x-slot>
+
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+                <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="text-xs uppercase tracking-wide text-gray-500">Estado</div>
+                    <div class="mt-1 text-xl font-bold">
+                        {{ strtoupper($this->lastOperation['status'] ?? 'N/A') }}
+                    </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="text-xs uppercase tracking-wide text-gray-500">Operación</div>
+                    <div class="mt-1 text-sm font-semibold">
+                        {{ $this->lastOperation['type'] ?? 'Sin operación' }}
+                    </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="text-xs uppercase tracking-wide text-gray-500">Actualizado</div>
+                    <div class="mt-1 text-sm font-semibold">
+                        {{ $this->lastOperation['updated_at'] ?? $this->lastOperation['finished_at'] ?? $this->lastOperation['started_at'] ?? 'N/A' }}
+                    </div>
+                </div>
+
+                <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="text-xs uppercase tracking-wide text-gray-500">Acción</div>
+                    <button
+                        type="button"
+                        wire:click="$refresh"
+                        class="mt-2 inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition hover:opacity-90"
+                        style="background-color: #2563eb; color: #ffffff; border: 1px solid #1d4ed8;"
+                    >
+                        Actualizar estado ahora
+                    </button>
+                </div>
+            </div>
+
+            @if (! empty($this->lastOperation['message']))
+                <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    {{ $this->lastOperation['message'] }}
+                </div>
+            @endif
         </x-filament::section>
 
         @if ($this->isProdEnvironment())
