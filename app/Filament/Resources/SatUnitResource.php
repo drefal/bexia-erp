@@ -77,7 +77,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             ->schema([
                 Forms\Components\Section::make('Unidad SAT')
                     ->schema([
-                        Forms\Components\TextInput::make('key')
+                        Forms\Components\TextInput::make('code')
                             ->label('Clave SAT')
                             ->placeholder('H87, XBX, XPK...')
                             ->required()
@@ -112,7 +112,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('key')
+                Tables\Columns\TextColumn::make('code')
                     ->label('Clave')
                     ->searchable()
                     ->sortable(),
