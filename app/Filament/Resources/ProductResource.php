@@ -120,7 +120,7 @@ public static function canCreate(): bool
         $companyId = static::currentCompanyId();
 
         if (! $companyId) {
-            return [];
+            $options = [];
         }
 
         return InventoryUnit::query()
@@ -132,6 +132,7 @@ public static function canCreate(): bool
                 $unit->id => "{$unit->code} - {$unit->name}",
             ])
             ->all();
+            return static::sortFavoriteUnitOptions($options);
     }
 
     protected static function accountOptions(?string $type = null): array
@@ -745,7 +746,7 @@ public static function canCreate(): bool
     protected static function satUnitOptions(): array
     {
         if (! \Illuminate\Support\Facades\Schema::hasTable('sat_unit_codes')) {
-            return [];
+            $options = [];
         }
 
         return SatUnitCode::query()
@@ -756,6 +757,7 @@ public static function canCreate(): bool
                 $unit->code => trim($unit->code . ' - ' . $unit->name . ($unit->symbol ? ' (' . $unit->symbol . ')' : '')),
             ])
             ->all();
+            return static::sortFavoriteUnitOptions($options);
     }
 
 
@@ -866,7 +868,7 @@ public static function canCreate(): bool
     protected static function satUnitSearchOptions(?string $search = null, int $limit = 80): array
     {
         if (! \Illuminate\Support\Facades\Schema::hasTable('sat_unit_codes')) {
-            return [];
+            $options = [];
         }
 
         $search = trim((string) $search);
@@ -920,6 +922,7 @@ public static function canCreate(): bool
                 ];
             })
             ->all();
+            return static::sortFavoriteUnitOptions($options);
     }
 
     protected static function satUnitOptionLabel($value): ?string
@@ -3413,12 +3416,100 @@ public static function getPages(): array
 
 
 
+
+    protected static function favoriteSatUnitCodesForDropdowns(): array
+    {
+        return [
+            'H87',
+            'EA',
+            'E48',
+            'ACT',
+            'KGM',
+            'E51',
+            'A9',
+            'MTR',
+            'AB',
+            'BB',
+            'KT',
+            'SET',
+            'LTR',
+            'XBX',
+            'MON',
+            'HUR',
+            'MTK',
+            '11',
+            'MGM',
+            'XPK',
+            'XKI',
+            'AS',
+            'GRM',
+            'PR',
+            'DPC',
+            'XUN',
+            'DAY',
+            'XLT',
+            '10',
+            'MLT',
+            'E54',
+        ];
+    }
+
+    protected static function sortFavoriteUnitOptions(array $options): array
+    {
+        if ($options === []) {
+            return $options;
+        }
+
+        $favoriteRank = array_flip(static::favoriteSatUnitCodesForDropdowns());
+        $labels = $options;
+
+        uksort($options, function ($keyA, $keyB) use ($labels, $favoriteRank): int {
+            $labelA = (string) ($labels[$keyA] ?? '');
+            $labelB = (string) ($labels[$keyB] ?? '');
+
+            $codeA = static::unitCodeFromDropdownOption($keyA, $labelA);
+            $codeB = static::unitCodeFromDropdownOption($keyB, $labelB);
+
+            $rankA = $favoriteRank[$codeA] ?? 999999;
+            $rankB = $favoriteRank[$codeB] ?? 999999;
+
+            if ($rankA !== $rankB) {
+                return $rankA <=> $rankB;
+            }
+
+            return strnatcasecmp($labelA, $labelB);
+        });
+
+        return $options;
+    }
+
+    protected static function unitCodeFromDropdownOption(int|string $key, string $label): string
+    {
+        $key = trim((string) $key);
+
+        if (in_array($key, static::favoriteSatUnitCodesForDropdowns(), true)) {
+            return $key;
+        }
+
+        $label = trim(strip_tags($label));
+
+        if (preg_match('/^([A-Z0-9]+)\s*(?:-|–|—|\|)/u', $label, $matches)) {
+            return $matches[1];
+        }
+
+        if (preg_match('/^([A-Z0-9]{1,5})\b/u', $label, $matches)) {
+            return $matches[1];
+        }
+
+        return $key;
+    }
+
     public static function purchaseEquivalenceSatUnitOptions(string $search = ''): array
     {
         $source = static::purchaseEquivalenceSatUnitSource();
 
         if (! $source) {
-            return [
+            $options = [
                 'H87' => 'H87 - Pieza',
                 'EA' => 'EA - Elemento',
                 'XBX' => 'XBX - Caja',
@@ -3459,6 +3550,7 @@ public static function getPages(): array
                 (string) $unit->{$keyColumn} => (string) $unit->{$keyColumn} . ' - ' . (string) $unit->{$nameColumn},
             ])
             ->all();
+            return static::sortFavoriteUnitOptions($options);
     }
 
     public static function purchaseEquivalenceSatUnitLabel(?string $key): ?string
