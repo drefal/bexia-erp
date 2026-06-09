@@ -299,7 +299,10 @@ public static function canCreate(): bool
         }
 
         $query = \Illuminate\Support\Facades\DB::table('stock_movement_lines as l')
-            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id');
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
+            ->leftJoin('stock_operation_types as ot', 'ot.id', '=', 'm.stock_operation_type_id')
+            ->leftJoin('stock_locations as src', 'src.id', '=', 'm.source_location_id')
+            ->leftJoin('stock_locations as dst', 'dst.id', '=', 'm.destination_location_id');
 
         static::applyProductOperationalScope($query, $record, 'stock_movement_lines', 'l');
 
@@ -314,8 +317,90 @@ public static function canCreate(): bool
             $query->whereIn('m.status', ['done', 'confirmed', 'posted', 'completed']);
         }
 
-        return (float) $query->sum('l.done_quantity');
+        $select = [
+            'l.done_quantity',
+            'l.source_type',
+            'm.source_location_id',
+            'm.destination_location_id',
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_operation_types', 'code')) {
+            $select[] = 'ot.code as operation_code';
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_operation_types', 'operation_kind')) {
+            $select[] = 'ot.operation_kind as operation_kind';
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_locations', 'code')) {
+            $select[] = 'src.code as source_code';
+            $select[] = 'dst.code as destination_code';
+        }
+
+        $rows = $query->get($select);
+
+        return (float) $rows->sum(function ($row) use ($direction): float {
+            $quantity = (float) ($row->done_quantity ?? 0);
+
+            if (abs($quantity) <= 0.000001) {
+                return 0.0;
+            }
+
+            $operationCode = mb_strtolower((string) ($row->operation_code ?? ''));
+            $operationKind = mb_strtolower((string) ($row->operation_kind ?? ''));
+            $sourceType = mb_strtolower((string) ($row->source_type ?? ''));
+
+            $sourceLocationId = (int) ($row->source_location_id ?? 0);
+            $destinationLocationId = (int) ($row->destination_location_id ?? 0);
+
+            $isAdjustment = str_contains($sourceType, 'adjustment')
+                || str_contains($operationCode, 'ajuste')
+                || str_contains($operationKind, 'adjustment');
+
+            if ($isAdjustment) {
+                if ($direction === 'incoming') {
+                    return $quantity > 0 ? $quantity : 0.0;
+                }
+
+                if ($direction === 'outgoing') {
+                    return $quantity < 0 ? abs($quantity) : 0.0;
+                }
+
+                return 0.0;
+            }
+
+            if ($sourceLocationId > 0 && $destinationLocationId > 0 && $sourceLocationId === $destinationLocationId) {
+                return 0.0;
+            }
+
+            if ($direction === 'incoming') {
+                if ($destinationLocationId > 0 && $sourceLocationId <= 0) {
+                    return abs($quantity);
+                }
+
+                if (str_contains($operationCode, 'entrada') || str_contains($operationCode, 'recepcion') || str_contains($operationCode, 'in')) {
+                    return abs($quantity);
+                }
+
+                return 0.0;
+            }
+
+            if ($direction === 'outgoing') {
+                if ($sourceLocationId > 0 && $destinationLocationId <= 0) {
+                    return abs($quantity);
+                }
+
+                if (str_contains($operationCode, 'salida') || str_contains($operationCode, 'despacho') || str_contains($operationCode, 'out')) {
+                    return abs($quantity);
+                }
+
+                return 0.0;
+            }
+
+            return 0.0;
+        });
     }
+
 
     protected static function productOperationalPurchasedQuantity(Product $record): float
     {
