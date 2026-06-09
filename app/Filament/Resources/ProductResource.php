@@ -182,6 +182,24 @@ public static function canCreate(): bool
 
     protected static function productMetric(?Product $record, string $metric): string
     {
+        if (! $record) {
+            return '0';
+        }
+
+        if (in_array($metric, [
+            'on_hand',
+            'forecasted',
+            'incoming',
+            'outgoing',
+            'reordering_rules',
+            'bom',
+            'sold',
+            'purchased',
+        ], true)) {
+            return static::productOperationalMetricFromInventory($record, $metric);
+        }
+
+
         if (! $record || ! $record->id) {
             return match ($metric) {
                 'website' => 'No publicado',
@@ -213,6 +231,291 @@ public static function canCreate(): bool
         return (string) DB::table($table)
             ->where($column, $productId)
             ->count();
+    }
+
+
+    protected static function productOperationalMetricFromInventory(Product $record, string $metric): string
+    {
+        return match ($metric) {
+            'on_hand' => static::formatOperationalMetric(static::productOperationalStockQuantity($record, false)),
+            'forecasted' => static::formatOperationalMetric(static::productOperationalStockQuantity($record, true)),
+            'incoming' => static::formatOperationalMetric(static::productOperationalMovementQuantity($record, 'incoming')),
+            'outgoing' => static::formatOperationalMetric(static::productOperationalMovementQuantity($record, 'outgoing')),
+            'reordering_rules' => (string) static::productOperationalReorderingRulesCount($record),
+            'bom' => (string) static::productOperationalBomCount($record),
+            'sold' => static::formatOperationalMetric(static::productOperationalSoldQuantity($record)),
+            'purchased' => static::formatOperationalMetric(static::productOperationalPurchasedQuantity($record)),
+            default => '0',
+        };
+    }
+
+    protected static function productOperationalStockQuantity(Product $record, bool $available): float
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('stock_quants')) {
+            return 0.0;
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('stock_quants', 'quantity')) {
+            return 0.0;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table('stock_quants');
+
+        static::applyProductOperationalScope($query, $record, 'stock_quants');
+
+        if (
+            (int) ($record->company_id ?? 0) > 0
+            && \Illuminate\Support\Facades\Schema::hasColumn('stock_quants', 'company_id')
+        ) {
+            $query->where('company_id', (int) $record->company_id);
+        }
+
+        $quantity = (float) (clone $query)->sum('quantity');
+
+        if (! $available) {
+            return $quantity;
+        }
+
+        $reserved = 0.0;
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_quants', 'reserved_quantity')) {
+            $reserved = (float) (clone $query)->sum('reserved_quantity');
+        }
+
+        return $quantity - $reserved;
+    }
+
+    protected static function productOperationalMovementQuantity(Product $record, string $direction): float
+    {
+        if (
+            ! \Illuminate\Support\Facades\Schema::hasTable('stock_movement_lines')
+            || ! \Illuminate\Support\Facades\Schema::hasTable('stock_movements')
+        ) {
+            return 0.0;
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('stock_movement_lines', 'done_quantity')) {
+            return 0.0;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table('stock_movement_lines as l')
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id');
+
+        static::applyProductOperationalScope($query, $record, 'stock_movement_lines', 'l');
+
+        if (
+            (int) ($record->company_id ?? 0) > 0
+            && \Illuminate\Support\Facades\Schema::hasColumn('stock_movements', 'company_id')
+        ) {
+            $query->where('m.company_id', (int) $record->company_id);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_movements', 'status')) {
+            $query->whereIn('m.status', ['done', 'confirmed', 'posted', 'completed']);
+        }
+
+        return (float) $query->sum('l.done_quantity');
+    }
+
+    protected static function productOperationalPurchasedQuantity(Product $record): float
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('purchase_order_lines')) {
+            return 0.0;
+        }
+
+        $quantityColumn = static::firstExistingOperationalColumn('purchase_order_lines', [
+            'received_base_quantity',
+            'base_quantity',
+            'ordered_quantity',
+            'received_quantity',
+        ]);
+
+        if (! $quantityColumn) {
+            return 0.0;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table('purchase_order_lines');
+
+        static::applyProductOperationalScope($query, $record, 'purchase_order_lines');
+
+        if (
+            (int) ($record->company_id ?? 0) > 0
+            && \Illuminate\Support\Facades\Schema::hasColumn('purchase_order_lines', 'company_id')
+        ) {
+            $query->where('company_id', (int) $record->company_id);
+        }
+
+        return (float) $query->sum($quantityColumn);
+    }
+
+    protected static function productOperationalSoldQuantity(Product $record): float
+    {
+        foreach (['sales_lines', 'sale_order_lines', 'sale_lines', 'pos_order_lines'] as $table) {
+            if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                continue;
+            }
+
+            $quantityColumn = static::firstExistingOperationalColumn($table, [
+                'quantity',
+                'qty',
+                'ordered_quantity',
+                'delivered_quantity',
+                'base_quantity',
+            ]);
+
+            if (! $quantityColumn) {
+                continue;
+            }
+
+            $query = \Illuminate\Support\Facades\DB::table($table);
+
+            static::applyProductOperationalScope($query, $record, $table);
+
+            if (
+                (int) ($record->company_id ?? 0) > 0
+                && \Illuminate\Support\Facades\Schema::hasColumn($table, 'company_id')
+            ) {
+                $query->where('company_id', (int) $record->company_id);
+            }
+
+            return (float) $query->sum($quantityColumn);
+        }
+
+        return 0.0;
+    }
+
+    protected static function productOperationalReorderingRulesCount(Product $record): int
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('stock_replenishment_rules')) {
+            return 0;
+        }
+
+        $query = \Illuminate\Support\Facades\DB::table('stock_replenishment_rules');
+
+        static::applyProductOperationalScope($query, $record, 'stock_replenishment_rules');
+
+        if (
+            (int) ($record->company_id ?? 0) > 0
+            && \Illuminate\Support\Facades\Schema::hasColumn('stock_replenishment_rules', 'company_id')
+        ) {
+            $query->where('company_id', (int) $record->company_id);
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('stock_replenishment_rules', 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        return (int) $query->count();
+    }
+
+    protected static function productOperationalBomCount(Product $record): int
+    {
+        foreach (['bill_of_materials', 'manufacturing_boms', 'product_boms'] as $table) {
+            if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                continue;
+            }
+
+            $query = \Illuminate\Support\Facades\DB::table($table);
+
+            static::applyProductOperationalScope($query, $record, $table);
+
+            if (
+                (int) ($record->company_id ?? 0) > 0
+                && \Illuminate\Support\Facades\Schema::hasColumn($table, 'company_id')
+            ) {
+                $query->where('company_id', (int) $record->company_id);
+            }
+
+            return (int) $query->count();
+        }
+
+        return 0;
+    }
+
+    protected static function applyProductOperationalScope($query, Product $record, string $table, ?string $alias = null): void
+    {
+        $prefix = $alias ? $alias . '.' : '';
+
+        $recordId = (int) ($record->id ?? 0);
+        $companyId = (int) ($record->company_id ?? 0);
+
+        if ($recordId <= 0) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $hasProductId = \Illuminate\Support\Facades\Schema::hasColumn($table, 'product_id');
+        $hasVariantId = \Illuminate\Support\Facades\Schema::hasColumn($table, 'product_variant_id');
+
+        if ((bool) ($record->is_variant ?? false)) {
+            $query->where(function ($inner) use ($prefix, $recordId, $hasVariantId, $hasProductId): void {
+                if ($hasVariantId) {
+                    $inner->where($prefix . 'product_variant_id', $recordId);
+                }
+
+                if ($hasProductId) {
+                    $hasVariantId
+                        ? $inner->orWhere($prefix . 'product_id', $recordId)
+                        : $inner->where($prefix . 'product_id', $recordId);
+                }
+            });
+
+            return;
+        }
+
+        $variantIds = [];
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('products')
+            && \Illuminate\Support\Facades\Schema::hasColumn('products', 'parent_product_id')
+        ) {
+            $variantQuery = \Illuminate\Support\Facades\DB::table('products')
+                ->where('parent_product_id', $recordId);
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'company_id') && $companyId > 0) {
+                $variantQuery->where('company_id', $companyId);
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'is_variant')) {
+                $variantQuery->where('is_variant', true);
+            }
+
+            $variantIds = $variantQuery
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->filter(fn (int $id): bool => $id > 0)
+                ->values()
+                ->all();
+        }
+
+        $query->where(function ($inner) use ($prefix, $recordId, $variantIds, $hasVariantId, $hasProductId): void {
+            if ($hasProductId) {
+                $inner->where($prefix . 'product_id', $recordId);
+            }
+
+            if ($hasVariantId && ! empty($variantIds)) {
+                $hasProductId
+                    ? $inner->orWhereIn($prefix . 'product_variant_id', $variantIds)
+                    : $inner->whereIn($prefix . 'product_variant_id', $variantIds);
+            }
+        });
+    }
+
+    protected static function firstExistingOperationalColumn(string $table, array $columns): ?string
+    {
+        foreach ($columns as $column) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn($table, $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    protected static function formatOperationalMetric(float $value): string
+    {
+        return number_format($value, 2);
     }
 
     protected static function sumIfTableExists(string $table, string $column, int $productId, string $sumColumn): string
