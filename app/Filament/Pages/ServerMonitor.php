@@ -60,7 +60,64 @@ class ServerMonitor extends Page
             return false;
         }
 
-        return static::currentUserIsSuperAdmin($user);
+        return static::currentUserIsSuperAdmin($user)
+            || static::currentUserHasPermission($user, 'server_monitor.view')
+            || static::currentUserCanManageMenuLateral($user);
+    }
+
+    protected static function currentUserHasPermission(mixed $user, string $permission): bool
+    {
+        if ($permission === '' || ! method_exists($user, 'can')) {
+            return false;
+        }
+
+        try {
+            return (bool) $user->can($permission);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    protected static function currentUserCanManageMenuLateral(mixed $user): bool
+    {
+        $permissions = [
+            'server_monitor.view',
+            'menu_lateral.view',
+            'menu_lateral.manage',
+            'bexia_menu.view',
+            'bexia_menu.manage',
+            'configurar_menu_lateral',
+            'admin.menu_lateral',
+        ];
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('bexia_menu_items')) {
+                $menuPermission = \Illuminate\Support\Facades\DB::table('bexia_menu_items')
+                    ->where(function ($query) {
+                        $query->where('key', 'ilike', '%menulateral%')
+                            ->orWhere('key', 'ilike', '%menu%lateral%')
+                            ->orWhere('label', 'ilike', '%Menú lateral%')
+                            ->orWhere('label', 'ilike', '%Menu lateral%')
+                            ->orWhere('route_name', 'ilike', '%menu%');
+                    })
+                    ->whereNotNull('permission_name')
+                    ->value('permission_name');
+
+                if ($menuPermission) {
+                    $permissions[] = $menuPermission;
+                }
+            }
+        } catch (\Throwable) {
+            //
+        }
+
+        foreach (array_unique(array_filter($permissions)) as $permission) {
+            if (static::currentUserHasPermission($user, $permission)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected static function currentUserIsSuperAdmin(mixed $user): bool
@@ -72,7 +129,43 @@ class ServerMonitor extends Page
         }
 
         foreach (['isSuperAdmin', 'isSuperadmin', 'is_super_admin'] as $method) {
-            if (method_exists($user, $method) && (bool) $user->{$method}()) {
+            if (method_exists($user, $method)) {
+                try {
+                    if ((bool) $user->{$method}()) {
+                        return true;
+                    }
+                } catch (\Throwable) {
+                    //
+                }
+            }
+        }
+
+        $roleNames = [];
+
+        if (method_exists($user, 'getRoleNames')) {
+            try {
+                $roleNames = array_merge($roleNames, $user->getRoleNames()->all());
+            } catch (\Throwable) {
+                //
+            }
+        }
+
+        if (method_exists($user, 'roles')) {
+            try {
+                $roleNames = array_merge($roleNames, $user->roles()->pluck('name')->all());
+            } catch (\Throwable) {
+                //
+            }
+        }
+
+        foreach ($roleNames as $roleName) {
+            $normalized = preg_replace('/[^a-z0-9]/', '', strtolower((string) $roleName));
+
+            if ($normalized === 'superadmin' || $normalized === 'root') {
+                return true;
+            }
+
+            if (str_contains($normalized, 'super') && str_contains($normalized, 'admin')) {
                 return true;
             }
         }
@@ -87,14 +180,19 @@ class ServerMonitor extends Page
                 'Root',
                 'root',
             ] as $role) {
-                if ($user->hasRole($role)) {
-                    return true;
+                try {
+                    if ($user->hasRole($role)) {
+                        return true;
+                    }
+                } catch (\Throwable) {
+                    //
                 }
             }
         }
 
         return false;
     }
+
 
     protected function serverMonitorDirectory(): string
     {
