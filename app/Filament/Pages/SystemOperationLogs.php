@@ -9,6 +9,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SystemOperationLogs extends Page
 {
+
+    public string $serverMonitorAlertEmails = '';
+
+    public ?string $serverMonitorAlertFeedback = null;
+
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
     protected static ?string $navigationGroup = 'Administración';
     protected static ?string $navigationLabel = 'Logs operativos';
@@ -251,4 +256,131 @@ class SystemOperationLogs extends Page
 
         return $bytes . ' B';
     }
+
+    public function mount(): void
+    {
+        $this->loadServerMonitorAlertEmailConfig();
+    }
+
+    protected function serverMonitorAlertEmailsFile(): string
+    {
+        return storage_path('app/bexia-monitor/alert-emails.txt');
+    }
+
+    protected function serverMonitorForceTestFlagFile(): string
+    {
+        return storage_path('app/bexia-monitor/force-test-email.flag');
+    }
+
+    public function loadServerMonitorAlertEmailConfig(): void
+    {
+        $path = $this->serverMonitorAlertEmailsFile();
+
+        if (\Illuminate\Support\Facades\File::exists($path)) {
+            $this->serverMonitorAlertEmails = trim((string) \Illuminate\Support\Facades\File::get($path));
+
+            return;
+        }
+
+        $envPath = '/etc/bexia-monitor-prod.env';
+
+        if (\Illuminate\Support\Facades\File::exists($envPath)) {
+            $env = (string) \Illuminate\Support\Facades\File::get($envPath);
+
+            if (preg_match('/^ALERT_EMAILS=(.*)$/m', $env, $matches)) {
+                $this->serverMonitorAlertEmails = trim(trim((string) $matches[1]), "\"' ");
+
+                return;
+            }
+        }
+
+        $this->serverMonitorAlertEmails = '';
+    }
+
+    public function saveServerMonitorAlertEmails(): void
+    {
+        $emails = collect(preg_split('/[,;\n]+/', (string) $this->serverMonitorAlertEmails))
+            ->map(fn ($email) => trim((string) $email))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $invalid = $emails
+            ->filter(fn ($email) => ! filter_var($email, FILTER_VALIDATE_EMAIL))
+            ->values();
+
+        if ($invalid->isNotEmpty()) {
+            $this->serverMonitorAlertFeedback = 'Correos inválidos: ' . $invalid->implode(', ');
+
+            \Filament\Notifications\Notification::make()
+                ->title('Hay correos inválidos')
+                ->body($this->serverMonitorAlertFeedback)
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $path = $this->serverMonitorAlertEmailsFile();
+
+        \Illuminate\Support\Facades\File::ensureDirectoryExists(dirname($path));
+        \Illuminate\Support\Facades\File::put($path, $emails->implode(', ') . PHP_EOL);
+
+        @chmod($path, 0664);
+
+        $this->serverMonitorAlertEmails = $emails->implode(', ');
+        $this->serverMonitorAlertFeedback = 'Correos guardados correctamente. El monitor usará esta lista en el siguiente ciclo.';
+
+        \Filament\Notifications\Notification::make()
+            ->title('Correos de alerta guardados')
+            ->body($this->serverMonitorAlertFeedback)
+            ->success()
+            ->send();
+    }
+
+    public function requestServerMonitorEmailTest(): void
+    {
+        $this->saveServerMonitorAlertEmails();
+
+        $flagPath = $this->serverMonitorForceTestFlagFile();
+
+        \Illuminate\Support\Facades\File::ensureDirectoryExists(dirname($flagPath));
+        \Illuminate\Support\Facades\File::put($flagPath, now()->toIso8601String());
+
+        @chmod($flagPath, 0664);
+
+        $this->serverMonitorAlertFeedback = 'Prueba solicitada. El cron del monitor la ejecutará en el siguiente ciclo, máximo 15 minutos.';
+
+        \Filament\Notifications\Notification::make()
+            ->title('Prueba de correo solicitada')
+            ->body($this->serverMonitorAlertFeedback)
+            ->success()
+            ->send();
+    }
+
+    public function serverMonitorStatusText(): string
+    {
+        $path = storage_path('app/bexia-monitor/server-health.txt');
+
+        if (! \Illuminate\Support\Facades\File::exists($path)) {
+            return 'Sin lectura todavía. El monitor generará este estado en el próximo ciclo.';
+        }
+
+        return trim((string) \Illuminate\Support\Facades\File::get($path));
+    }
+
+    public function serverMonitorMailLogText(): string
+    {
+        $path = '/var/log/bexia-monitor/mail-alert.log';
+
+        if (! \Illuminate\Support\Facades\File::exists($path)) {
+            return 'Sin log de correo todavía.';
+        }
+
+        $content = trim((string) \Illuminate\Support\Facades\File::get($path));
+        $lines = array_slice(preg_split('/\r\n|\r|\n/', $content), -20);
+
+        return trim(implode(PHP_EOL, $lines));
+    }
+
 }
