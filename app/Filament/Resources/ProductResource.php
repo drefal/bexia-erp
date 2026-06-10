@@ -2311,24 +2311,7 @@ variants_inner_table')
 
     protected static function productListStockValue(Product $record): float
     {
-        $ids = [];
-
-        if ((bool) ($record->is_variant ?? false)) {
-            $ids = [$record->id];
-        } else {
-            $variantIds = Product::query()
-                ->where('company_id', $record->company_id)
-                ->where('parent_product_id', $record->id)
-                ->where('is_variant', true)
-                ->pluck('id')
-                ->all();
-
-            $ids = count($variantIds) > 0
-                ? $variantIds
-                : [$record->id];
-        }
-
-        return static::stockForProductIds($ids);
+        return static::productOperationalStockQuantity($record, false);
     }
 
     protected static function stockForProductIds(array $productIds): float
