@@ -54,7 +54,46 @@ class ServerMonitor extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->check();
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        return static::currentUserIsSuperAdmin($user);
+    }
+
+    protected static function currentUserIsSuperAdmin(mixed $user): bool
+    {
+        foreach (['is_super_admin', 'super_admin', 'isSuperAdmin'] as $property) {
+            if (isset($user->{$property}) && (bool) $user->{$property}) {
+                return true;
+            }
+        }
+
+        foreach (['isSuperAdmin', 'isSuperadmin', 'is_super_admin'] as $method) {
+            if (method_exists($user, $method) && (bool) $user->{$method}()) {
+                return true;
+            }
+        }
+
+        if (method_exists($user, 'hasRole')) {
+            foreach ([
+                'super_admin',
+                'superadmin',
+                'super-admin',
+                'Super Admin',
+                'SuperAdmin',
+                'Root',
+                'root',
+            ] as $role) {
+                if ($user->hasRole($role)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     protected function serverMonitorDirectory(): string
