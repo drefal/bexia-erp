@@ -2206,6 +2206,13 @@ variants_inner_table')
                                             fn ($query) => $query->where('company_id', (int) $record->company_id),
                                         )
                                         ->where('is_variant', true)
+                                        // BEXIA_V5727N28C_VARIANTS_TABLE_ACTIVE_ONLY
+                                        ->when(
+                                            \Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active'),
+                                            fn ($query) => $query->where(function ($q): void {
+                                                $q->whereNull('is_active')->orWhere('is_active', true);
+                                            }),
+                                        )
                                         ->orderBy('variant_group')
                                         ->orderBy('variant_value')
                                         ->orderBy('id')
