@@ -22,6 +22,27 @@ class ServerMonitor extends Page
 
     protected static ?int $navigationSort = 990;
 
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::itemVisible('pages.servermonitor', true);
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::itemLabel('pages.servermonitor', 'Monitor del servidor');
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::itemGroupLabel('pages.servermonitor', 'configuraci_n_bexia', 'Configuración Bexia');
+    }
+
+    public static function getNavigationSort(): ?int
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::itemSort('pages.servermonitor', 60);
+    }
+
     public string $serverMonitorAlertEmails = '';
 
     public ?string $serverMonitorAlertFeedback = null;
