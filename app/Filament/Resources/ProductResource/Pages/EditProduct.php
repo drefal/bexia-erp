@@ -543,4 +543,56 @@ class EditProduct extends EditRecord
     }
 
 
+
+    // BEXIA_V5727N21_EDIT_PRODUCT_UNIQUE_GUARD
+    protected function handleRecordUpdate(\Illuminate\Database\Eloquent\Model $record, array $data): \Illuminate\Database\Eloquent\Model
+    {
+        try {
+            return parent::handleRecordUpdate($record, $data);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            $this->raiseUniqueFieldValidation($e);
+        } catch (\Illuminate\Database\QueryException $e) {
+            $message = $e->getMessage();
+
+            if ((string) $e->getCode() === '23505' || str_contains($message, 'unique constraint')) {
+                $this->raiseUniqueFieldValidation($e);
+            }
+
+            throw $e;
+        }
+    }
+
+    // BEXIA_V5727N21_EDIT_PRODUCT_UNIQUE_GUARD
+    protected function raiseUniqueFieldValidation(\Throwable $e): never
+    {
+        $message = $e->getMessage();
+
+        $field = 'sku';
+        $label = 'SKU / Código de barras';
+
+        if (str_contains($message, 'products_company_id_barcode_unique') || str_contains($message, '(company_id, barcode)')) {
+            $field = 'barcode';
+            $label = 'Código de barras';
+        } elseif (str_contains($message, 'products_company_id_internal_reference_unique') || str_contains($message, '(company_id, internal_reference)')) {
+            $field = 'internal_reference';
+            $label = 'Referencia interna';
+        } elseif (str_contains($message, 'products_company_id_sku_unique') || str_contains($message, '(company_id, sku)')) {
+            $field = 'sku';
+            $label = 'SKU / Código de barras';
+        }
+
+        $validationMessage = $label . ' ya existe en otro producto o variante de esta empresa. Usa otro valor o edita el producto existente.';
+
+        \Filament\Notifications\Notification::make()
+            ->title('Dato duplicado')
+            ->body($validationMessage)
+            ->danger()
+            ->send();
+
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            $field => $validationMessage,
+            'data.' . $field => $validationMessage,
+        ]);
+    }
+
 }
