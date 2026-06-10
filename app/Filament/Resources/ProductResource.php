@@ -2403,22 +2403,31 @@ variants_inner_table')
 
     protected static function productVariantStatusLabel(Product $record): string
     {
+        // BEXIA_V5727N28D4_VARIANTS_LABEL_ACTIVE_ONLY
         if ((bool) ($record->is_variant ?? false)) {
             return 'Variante';
-        }
-
-        if ((bool) ($record->has_variants ?? false)) {
-            return 'Con variantes';
         }
 
         $hasVariants = Product::query()
             ->where('company_id', $record->company_id)
             ->where('parent_product_id', $record->id)
-            ->where('is_variant', true)
-            ->exists();
+            ->where('is_variant', true);
 
-        return $hasVariants ? 'Con variantes' : 'Sin variantes';
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active')) {
+            $hasVariants->where(function ($query): void {
+                $query->whereNull('is_active')->orWhere('is_active', true);
+            });
+        } elseif (\Illuminate\Support\Facades\Schema::hasColumn('products', 'active')) {
+            $hasVariants->where(function ($query): void {
+                $query->whereNull('active')->orWhere('active', true);
+            });
+        }
+
+        return $hasVariants->exists()
+            ? 'Con variantes'
+            : 'Sin variantes';
     }
+
 
     protected static function productVariantStatusColor(Product $record): string
     {
