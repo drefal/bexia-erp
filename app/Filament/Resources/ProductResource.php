@@ -2403,30 +2403,47 @@ variants_inner_table')
 
     protected static function productVariantStatusLabel(Product $record): string
     {
-        // BEXIA_V5727N28D4_VARIANTS_LABEL_ACTIVE_ONLY
+        // BEXIA_V5727N28E_VARIANTS_LABEL_CACHED_ACTIVE_ONLY
         if ((bool) ($record->is_variant ?? false)) {
             return 'Variante';
         }
 
-        $hasVariants = Product::query()
-            ->where('company_id', $record->company_id)
-            ->where('parent_product_id', $record->id)
-            ->where('is_variant', true);
-
-        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active')) {
-            $hasVariants->where(function ($query): void {
-                $query->whereNull('is_active')->orWhere('is_active', true);
-            });
-        } elseif (\Illuminate\Support\Facades\Schema::hasColumn('products', 'active')) {
-            $hasVariants->where(function ($query): void {
-                $query->whereNull('active')->orWhere('active', true);
-            });
+        /*
+         * Optimización:
+         * - has_variants sirve como guard rápido para productos que nunca tuvieron variantes.
+         * - si has_variants=true, sí validamos contra variantes activas y de la misma empresa.
+         * - cacheamos por request para que getStateUsing() y color() no consulten dos veces por fila.
+         */
+        if (! (bool) ($record->has_variants ?? false)) {
+            return 'Sin variantes';
         }
 
-        return $hasVariants->exists()
-            ? 'Con variantes'
-            : 'Sin variantes';
+        static $cache = [];
+
+        $key = ((int) ($record->company_id ?? 0)) . ':' . ((int) $record->getKey());
+
+        if (! array_key_exists($key, $cache)) {
+            $query = Product::query()
+                ->where('company_id', $record->company_id)
+                ->where('parent_product_id', $record->id)
+                ->where('is_variant', true);
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active')) {
+                $query->where(function ($q): void {
+                    $q->whereNull('is_active')->orWhere('is_active', true);
+                });
+            } elseif (\Illuminate\Support\Facades\Schema::hasColumn('products', 'active')) {
+                $query->where(function ($q): void {
+                    $q->whereNull('active')->orWhere('active', true);
+                });
+            }
+
+            $cache[$key] = $query->exists();
+        }
+
+        return $cache[$key] ? 'Con variantes' : 'Sin variantes';
     }
+
 
 
     protected static function productVariantStatusColor(Product $record): string
