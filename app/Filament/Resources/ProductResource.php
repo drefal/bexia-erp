@@ -2501,15 +2501,13 @@ variants_inner_table')
                     })
                     ->toggleable(),
 
-                                Tables\Columns\TextColumn::make('bexia_operational_stock')
+                Tables\Columns\TextColumn::make('product_list_stock')
                     ->label('Stock')
-                    ->getStateUsing(fn (\App\Models\Product $record): string => static::formatOperationalMetric(
-                        static::productOperationalStockQuantity($record)
-                    ))
+                    ->getStateUsing(fn (Product $record): string => static::productListStockLabel($record))
+                    ->alignEnd()
                     ->badge()
-                    ->alignCenter()
-                    ->color(fn (\App\Models\Product $record): string => static::productOperationalStockQuantity($record) > 0 ? 'success' : 'gray')
-                    ->tooltip('Stock operativo a la mano. En productos con variantes suma las variantes.'),
+                    ->color('gray')
+                    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('variant_status')
                     ->label('Variantes')
