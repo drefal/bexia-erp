@@ -128,49 +128,32 @@ class CreateProduct extends CreateRecord
 
     protected function normalizeUniqueCodesBeforeCreate(array $data): array
     {
-        // V5.72.5l1: evitar error 500 por SKU/codigo duplicado al crear productos o variantes.
-        $companyId = (int) (($data['company_id'] ?? null) ?: (Filament::getTenant()?->getKey() ?: 0));
 
-        foreach ([
-            'sku' => 'SKU / Código de barras',
-            'barcode' => 'Código de barras',
-        ] as $field => $label) {
-            if (! array_key_exists($field, $data)) {
-                continue;
-            }
+        // BEXIA_V5727N28A_CREATE_VALIDATE_ACTIVE_ONLY
+        $companyId = (int) ($data['company_id'] ?? 0);
 
-            $value = trim((string) ($data[$field] ?? ''));
+        if (! $companyId && ! empty($data['parent_product_id'])) {
+            $companyId = (int) \Illuminate\Support\Facades\DB::table('products')
+                ->where('id', (int) $data['parent_product_id'])
+                ->value('company_id');
+        }
 
-            if ($value === '') {
-                $data[$field] = null;
-                continue;
-            }
+        if (! $companyId) {
+            $tenant = \Filament\Facades\Filament::getTenant();
 
-            $data[$field] = $value;
-
-            if ($companyId <= 0) {
-                continue;
-            }
-
-            if (! \Illuminate\Support\Facades\Schema::hasColumn('products', $field)) {
-                continue;
-            }
-
-            $duplicateExists = Product::query()
-                ->where('company_id', $companyId)
-                ->whereRaw('LOWER(TRIM(' . $field . ')) = ?', [mb_strtolower($value, 'UTF-8')])
-                ->exists();
-
-            if ($duplicateExists) {
-                throw ValidationException::withMessages([
-                    $field => $label . ' ya existe en otro producto o variante de esta empresa.',
-                    'data.' . $field => $label . ' ya existe en otro producto o variante de esta empresa.',
-                ]);
+            if (is_object($tenant) && method_exists($tenant, 'getKey')) {
+                $companyId = (int) $tenant->getKey();
+            } elseif (is_numeric($tenant)) {
+                $companyId = (int) $tenant;
             }
         }
 
-        return $data;
-    }
+        return \App\Filament\Resources\ProductResource::bexiaN28aValidateProductCodesUniqueAmongActive(
+            $data,
+            null,
+            $companyId
+        );
+}
 
     protected function friendlyUniqueConstraintMessages(\Throwable $e): array
     {

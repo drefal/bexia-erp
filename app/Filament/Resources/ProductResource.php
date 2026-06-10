@@ -3716,4 +3716,85 @@ public static function getPages(): array
     }
 
 
+
+    // BEXIA_V5727N28A_UNIQUE_CODES_ACTIVE_ONLY_HELPER
+    public static function bexiaN28aValidateProductCodesUniqueAmongActive(array $data, ?int $ignoreProductId = null, ?int $companyId = null): array
+    {
+        $companyId = $companyId ?: (int) ($data['company_id'] ?? 0);
+
+        if (! $companyId) {
+            $tenant = \Filament\Facades\Filament::getTenant();
+
+            if (is_object($tenant) && method_exists($tenant, 'getKey')) {
+                $companyId = (int) $tenant->getKey();
+            } elseif (is_numeric($tenant)) {
+                $companyId = (int) $tenant;
+            }
+        }
+
+        foreach (['sku', 'barcode', 'internal_reference'] as $field) {
+            if (! \Illuminate\Support\Facades\Schema::hasColumn('products', $field)) {
+                continue;
+            }
+
+            $value = trim((string) ($data[$field] ?? ''));
+
+            if ($value === '') {
+                $data[$field] = null;
+                continue;
+            }
+
+            $data[$field] = $value;
+
+            if (! $companyId) {
+                continue;
+            }
+
+            $query = \Illuminate\Support\Facades\DB::table('products')
+                ->where('company_id', $companyId)
+                ->where($field, $value);
+
+            if ($ignoreProductId) {
+                $query->where('id', '<>', $ignoreProductId);
+            }
+
+            static::bexiaN28aApplyActiveOnlyFilter($query);
+
+            if ($query->exists()) {
+                $label = match ($field) {
+                    'barcode' => 'Código de barras',
+                    'internal_reference' => 'Referencia interna',
+                    default => 'SKU',
+                };
+
+                $message = $label . ' ya existe en otro producto o variante activa de esta empresa. Si el producto anterior está archivado, ya no debe bloquear este código.';
+
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    $field => $message,
+                    'data.' . $field => $message,
+                ]);
+            }
+        }
+
+        return $data;
+    }
+
+    public static function bexiaN28aApplyActiveOnlyFilter($query): void
+    {
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'active')) {
+            $query->where(function ($q) {
+                $q->whereNull('active')->orWhere('active', true);
+            });
+
+            return;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active')) {
+            $query->where(function ($q) {
+                $q->whereNull('is_active')->orWhere('is_active', true);
+            });
+        }
+    }
+
+
 }
