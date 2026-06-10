@@ -291,19 +291,49 @@ class ProductCatalogExportService
             return [];
         }
 
+        if (
+            ! Schema::hasColumn('stock_quants', 'quantity')
+            || ! Schema::hasColumn('stock_quants', 'product_id')
+        ) {
+            return [];
+        }
+
+        $quantityExpression = Schema::hasColumn('stock_quants', 'reserved_quantity')
+            ? 'SUM(quantity - COALESCE(reserved_quantity, 0)) as qty'
+            : 'SUM(quantity) as qty';
+
         $query = DB::table('stock_quants')
-            ->select('product_id', DB::raw('SUM(quantity - COALESCE(reserved_quantity, 0)) as qty'))
-            ->whereNotNull('product_id')
+            ->select('product_id', DB::raw($quantityExpression))
             ->groupBy('product_id');
+
+        if (Schema::hasColumn('stock_quants', 'product_variant_id')) {
+            $query->addSelect('product_variant_id')
+                ->groupBy('product_variant_id');
+        }
 
         if ($companyId !== null && Schema::hasColumn('stock_quants', 'company_id')) {
             $query->where('company_id', $companyId);
         }
 
-        return $query
-            ->get()
-            ->mapWithKeys(fn ($row): array => [(int) $row->product_id => (float) $row->qty])
-            ->all();
+        $stockByProduct = [];
+
+        $query->get()->each(function ($row) use (&$stockByProduct): void {
+            $quantity = (float) ($row->qty ?? 0);
+
+            $productId = (int) ($row->product_id ?? 0);
+
+            if ($productId > 0) {
+                $stockByProduct[$productId] = ($stockByProduct[$productId] ?? 0.0) + $quantity;
+            }
+
+            $variantId = (int) ($row->product_variant_id ?? 0);
+
+            if ($variantId > 0 && $variantId !== $productId) {
+                $stockByProduct[$variantId] = ($stockByProduct[$variantId] ?? 0.0) + $quantity;
+            }
+        });
+
+        return $stockByProduct;
     }
 
     protected static function downloadXlsx(string $filename, string $sheetName, array $headers, array $rows): StreamedResponse
