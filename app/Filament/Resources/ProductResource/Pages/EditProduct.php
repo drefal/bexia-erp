@@ -51,7 +51,11 @@ class EditProduct extends EditRecord
         if (! $query->exists()) {
             $data['internal_reference'] = $reference;
 
-            return $data;
+    
+        // BEXIA_V5727N23B_PREVENT_DUPLICATE_CODES_BEFORE_SAVE
+        $this->validateUniqueCodesBeforeSave($data);
+
+        return $data;
         }
 
         $previousReference = trim((string) (
@@ -543,6 +547,87 @@ class EditProduct extends EditRecord
     }
 
 
+
+
+    // BEXIA_V5727N23B_VALIDATE_UNIQUE_CODES_HELPER
+    protected function validateUniqueCodesBeforeSave(array $data): void
+    {
+        $companyId = (int) (
+            $data['company_id']
+            ?? $this->record?->company_id
+            ?? request()->route('tenant')
+            ?? auth()->user()?->company_id
+            ?? 0
+        );
+
+        $currentProductId = (int) ($this->record?->getKey() ?? 0);
+
+        if ($companyId <= 0 || $currentProductId <= 0) {
+            return;
+        }
+
+        $fields = [
+            'sku' => 'SKU / Código de barras',
+            'barcode' => 'Código de barras',
+            'internal_reference' => 'Referencia interna',
+        ];
+
+        foreach ($fields as $field => $label) {
+            if (! array_key_exists($field, $data)) {
+                continue;
+            }
+
+            $value = trim((string) ($data[$field] ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $duplicate = \App\Models\Product::query()
+                ->where('company_id', $companyId)
+                ->whereKeyNot($currentProductId)
+                ->where($field, $value)
+                ->select('id', 'name', 'sku', 'barcode', 'internal_reference', 'is_variant', 'parent_product_id', 'variant_name')
+                ->first();
+
+            if (! $duplicate) {
+                continue;
+            }
+
+            $duplicateInfo = 'ID ' . $duplicate->getKey();
+
+            if (filled($duplicate->name ?? null)) {
+                $duplicateInfo .= ' - ' . $duplicate->name;
+            }
+
+            if ((bool) ($duplicate->is_variant ?? false)) {
+                $duplicateInfo .= ' (variante';
+
+                if ($duplicate->parent_product_id) {
+                    $duplicateInfo .= ' del producto padre ID ' . $duplicate->parent_product_id;
+                }
+
+                if ($duplicate->variant_name) {
+                    $duplicateInfo .= ', ' . $duplicate->variant_name;
+                }
+
+                $duplicateInfo .= ')';
+            }
+
+            $message = $label . ' "' . $value . '" ya existe en ' . $duplicateInfo . '. Usa otro valor o edita ese producto existente.';
+
+            \Filament\Notifications\Notification::make()
+                ->title('Dato duplicado')
+                ->body($message)
+                ->danger()
+                ->send();
+
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                $field => $message,
+                'data.' . $field => $message,
+            ]);
+        }
+    }
 
     // BEXIA_V5727N21_EDIT_PRODUCT_UNIQUE_GUARD
     protected function handleRecordUpdate(\Illuminate\Database\Eloquent\Model $record, array $data): \Illuminate\Database\Eloquent\Model
