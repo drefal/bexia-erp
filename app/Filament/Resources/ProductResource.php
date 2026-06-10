@@ -2458,6 +2458,12 @@ variants_inner_table')
     public static function table(Table $table): Table
     {
         return $table
+            // BEXIA_V5727N29C_EAGER_LOAD_PRODUCT_LIST
+            ->modifyQueryUsing(fn ($query) => $query
+                ->with(['category', 'unit'])
+                ->withExists([
+                    'images as has_active_images' => fn ($imageQuery) => $imageQuery->where('is_active', true),
+                ]))
             ->columns([
                 Tables\Columns\TextColumn::make('internal_reference')
                     ->label('Referencia interna')
@@ -2547,7 +2553,7 @@ variants_inner_table')
                 Tables\Columns\IconColumn::make('has_image')
                     ->label('Imagen')
                     ->boolean()
-                    ->getStateUsing(fn (Product $record): bool => filled($record->image_path) || $record->images()->where('is_active', true)->exists())
+                    ->getStateUsing(fn (Product $record): bool => filled($record->image_path) || (bool) ($record->has_active_images ?? false))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sku')
