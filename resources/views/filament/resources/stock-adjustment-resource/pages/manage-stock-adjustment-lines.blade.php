@@ -48,6 +48,92 @@
             </div>
         </div>
 
+
+        {{-- BEXIA_V5728C_UI_HEADER_INLINE_SAVE_VISIBLE --}}
+        <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <form wire:submit.prevent="saveHeader" class="space-y-4">
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h3 class="text-base font-semibold text-gray-950 dark:text-white">Encabezado del ajuste</h3>
+                        <p class="text-sm text-gray-500">
+                            Se muestra en la misma pantalla para capturar encabezado y líneas sin cambiar de página.
+                        </p>
+                    </div>
+
+                    @if ($isDraft)
+                        <button
+                            type="submit"
+                            class="inline-flex items-center justify-center rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
+                        >
+                            Guardar encabezado
+                        </button>
+                    @endif
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-12">
+                    <div class="md:col-span-3">
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Fecha y hora</label>
+                        <input
+                            type="datetime-local"
+                            wire:model.defer="headerAdjustmentAt"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                            @if(! $isDraft) disabled @endif
+                        />
+                    </div>
+
+                    <div class="md:col-span-3">
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Almacén</label>
+                        <input
+                            type="text"
+                            value="{{ $this->warehouseLabel() }}"
+                            class="block w-full rounded-xl border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                            readonly
+                        />
+                    </div>
+
+                    <div class="md:col-span-3">
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Ubicación</label>
+                        <input
+                            type="text"
+                            value="{{ $this->locationLabel() }}"
+                            class="block w-full rounded-xl border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                            readonly
+                        />
+                    </div>
+
+                    <div class="md:col-span-3">
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Referencia</label>
+                        <input
+                            type="text"
+                            value="{{ $this->record->reference ?: ('Ajuste #' . $this->record->id) }}"
+                            class="block w-full rounded-xl border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                            readonly
+                        />
+                    </div>
+
+                    <div class="md:col-span-6">
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Motivo</label>
+                        <textarea
+                            rows="2"
+                            wire:model.defer="headerReason"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                            @if(! $isDraft) disabled @endif
+                        ></textarea>
+                    </div>
+
+                    <div class="md:col-span-6">
+                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Notas</label>
+                        <textarea
+                            rows="2"
+                            wire:model.defer="headerNotes"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                            @if(! $isDraft) disabled @endif
+                        ></textarea>
+                    </div>
+                </div>
+            </form>
+        </div>
+
         @if ($isDraft)
             <div class="rounded-2xl border border-primary-200 bg-white p-5 shadow-sm dark:border-primary-800 dark:bg-gray-900">
                 <form wire:submit.prevent="addQuickLineInline" class="space-y-4">
@@ -176,8 +262,25 @@
 
         <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div class="border-b border-gray-200 px-5 py-4 dark:border-gray-700">
-                <h3 class="text-base font-semibold text-gray-950 dark:text-white">Productos capturados</h3>
-                <p class="text-sm text-gray-500">Puedes capturar varias cantidades y después usar “Guardar cantidades”.</p>
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <h3 class="text-base font-semibold text-gray-950 dark:text-white">Productos capturados</h3>
+                        <p class="text-sm text-gray-500">
+                            Puedes capturar varias cantidades y después usar “Guardar cambios de tabla”.
+                            También puedes guardar una línea individual.
+                        </p>
+                    </div>
+
+                    @if ($isDraft)
+                        <button
+                            type="button"
+                            wire:click="saveVisibleLines"
+                            class="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                        >
+                            Guardar cambios de tabla
+                        </button>
+                    @endif
+                </div>
             </div>
 
             <div class="overflow-x-auto">
@@ -191,7 +294,7 @@
                             <th class="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-200">Diferencia</th>
                             <th class="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-200">Costo</th>
                             <th class="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Notas</th>
-                            <th class="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-200">Acciones</th>
+                            <th class="w-56 px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-200">Acciones</th>
                         </tr>
                     </thead>
 
@@ -215,8 +318,8 @@
                                 $difference = (float) ($line->difference_quantity ?? 0);
                             @endphp
 
-                            <tr class="align-top hover:bg-gray-50 dark:hover:bg-gray-800/60">
-                                <td class="px-4 py-3">
+                            <tr class="align-middle hover:bg-gray-50 dark:hover:bg-gray-800/60">
+                                <td class="px-4 py-3 align-middle">
                                     <div class="font-medium text-gray-950 dark:text-white">
                                         {{ $line->product_name ?: ('Producto #' . $line->product_id) }}
                                     </div>
@@ -226,7 +329,7 @@
                                     @endif
                                 </td>
 
-                                <td class="px-4 py-3">
+                                <td class="px-4 py-3 align-middle">
                                     @if ($variantName !== '')
                                         <div class="font-medium text-gray-800 dark:text-gray-100">{{ $variantName }}</div>
                                     @else
@@ -244,16 +347,17 @@
                                     @endif
                                 </td>
 
-                                <td class="px-4 py-3 text-right tabular-nums">
+                                <td class="px-4 py-3 align-middle text-right tabular-nums">
                                     {{ $this->quantity($line->current_quantity) }}
                                 </td>
 
-                                <td class="px-4 py-3 text-right">
+                                <td class="px-4 py-3 align-middle text-right">
                                     @if ($isDraft)
                                         <input
                                             type="number"
                                             step="0.000001"
                                             wire:model.defer="countedInputs.{{ (int) $line->id }}"
+                                            wire:keydown.enter="saveLine({{ (int) $line->id }})"
                                             class="w-28 rounded-lg border-gray-300 text-right text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                                         />
                                     @else
@@ -261,17 +365,17 @@
                                     @endif
                                 </td>
 
-                                <td class="px-4 py-3 text-right tabular-nums">
+                                <td class="px-4 py-3 align-middle text-right tabular-nums">
                                     <span class="{{ $difference < 0 ? 'text-red-600' : ($difference > 0 ? 'text-emerald-600' : 'text-gray-600') }}">
                                         {{ $this->quantity($difference) }}
                                     </span>
                                 </td>
 
-                                <td class="px-4 py-3 text-right tabular-nums">
+                                <td class="px-4 py-3 align-middle text-right tabular-nums">
                                     {{ $this->money($line->unit_cost) }}
                                 </td>
 
-                                <td class="px-4 py-3">
+                                <td class="px-4 py-3 align-middle">
                                     @if ($isDraft)
                                         <input
                                             type="text"
@@ -283,15 +387,15 @@
                                     @endif
                                 </td>
 
-                                <td class="px-4 py-3 text-right">
+                                <td class="px-4 py-3 align-middle text-right">
                                     @if ($isDraft)
-                                        <div class="flex justify-end gap-2">
+                                        <div class="flex min-w-48 justify-end gap-2">
                                             <button
                                                 type="button"
                                                 wire:click="saveLine({{ (int) $line->id }})"
-                                                class="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700"
+                                                class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
                                             >
-                                                Guardar
+                                                Guardar línea
                                             </button>
 
                                             <button
