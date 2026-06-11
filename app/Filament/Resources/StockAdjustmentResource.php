@@ -60,6 +60,26 @@ class StockAdjustmentResource extends Resource
         );
     }
 
+    // BEXIA_V5728D_NAV_AJUSTES_TO_LINES
+    public static function getNavigationUrl(): string
+    {
+        $companyId = static::currentCompanyId();
+
+        if ($companyId) {
+            $draftId = StockAdjustment::query()
+                ->where('company_id', $companyId)
+                ->where('status', 'draft')
+                ->latest('updated_at')
+                ->value('id');
+
+            if ($draftId) {
+                return static::getUrl('lines', ['record' => $draftId]);
+            }
+        }
+
+        return static::getUrl('create');
+    }
+
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         $user = auth()->user();
