@@ -41,7 +41,8 @@ class CreateStockAdjustment extends CreateRecord
 
     protected function getRedirectUrl(): string
     {
-        return $this->getResource()::getUrl('edit', [
+        // BEXIA_V5728B_AJUSTES_INVENTARIO_LINES_FINAL
+        return $this->getResource()::getUrl('lines', [
             'record' => $this->record,
         ]);
     }

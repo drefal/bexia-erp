@@ -170,119 +170,29 @@ class StockAdjustmentResource extends Resource
                     ->columns(12),
 
                 Forms\Components\Section::make('Productos contados')
-                    ->description('Captura la cantidad física contada. Al confirmar, Bexia actualizará la existencia en la ubicación seleccionada.')
+                    // BEXIA_V5728B_AJUSTES_INVENTARIO_LINES_FINAL
+                    ->description('La captura de productos se realiza en una pantalla rápida tipo tabla para evitar formularios pesados.')
                     ->schema([
-                        Forms\Components\Repeater::make('lines')
-                            ->label('Líneas')
-                            ->relationship()
-                            ->schema([
-                                Forms\Components\Select::make('product_id')
-                                    ->label('Producto')
-                                    ->searchable()
-                                    ->getSearchResultsUsing(fn (string $search): array => static::productSearchOptions($search))
-                                    ->getOptionLabelUsing(fn ($value): ?string => static::productLabel($value))
-                                    ->required()
-                                    ->live()
-                                    ->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
-                                        $set('product_variant_id', null);
-                                        $set('lot_id', null);
-                                        static::refreshAdjustmentLineComputedFields($set, $get);
-                                    })
-                                    ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
-                                    ->columnSpan(4),
+                        Forms\Components\Placeholder::make('lines_capture_notice')
+                            ->label('')
+                            ->content(function (?StockAdjustment $record): \Illuminate\Support\HtmlString {
+                                if (! $record || ! $record->exists) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div style="padding:12px;border:1px solid #fde68a;background:#fffbeb;border-radius:12px;color:#92400e;">Primero guarda el encabezado del ajuste. Después Bexia abrirá la pantalla rápida para capturar productos.</div>'
+                                    );
+                                }
 
-                                Forms\Components\Select::make('product_variant_id')
-                                    ->label('Variante')
-                                    ->options(fn (Forms\Get $get): array => static::variantOptions($get('product_id')))
-                                    ->searchable()
-                                    ->preload()
-                                    ->native(false)
-                                    ->placeholder('Sin variante')
-                                    ->live()
-                                    ->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
-                                        // V5623D_RESET_LOT_ON_VARIANT
-                                        $set('lot_id', null);
-                                        static::refreshAdjustmentLineComputedFields($set, $get);
-                                    })
-                                    ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
-                                    ->columnSpan(3),
+                                $url = static::getUrl('lines', ['record' => $record]);
+                                $safeUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
 
-                                Forms\Components\Select::make('lot_id')
-                                    ->label('Lote')
-                                    ->placeholder('Selecciona lote')
-                                    ->searchable()
-                                    ->preload()
-                                    ->options(fn (Forms\Get $get): array => static::lotOptions(
-                                        $get('product_id'),
-                                        $get('product_variant_id'),
-                                        $get('../../warehouse_id') ?: $get('warehouse_id'),
-                                        $get('../../location_id') ?: $get('location_id')
-                                    ))
-                                    ->visible(fn (Forms\Get $get): bool => static::productRequiresLot($get('product_id'), $get('product_variant_id')))
-                                    ->required(fn (Forms\Get $get): bool => static::productRequiresLot($get('product_id'), $get('product_variant_id')))
-                                    ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
-                                    ->live()
-                                    ->afterStateUpdated(fn (Forms\Set $set, Forms\Get $get): null => static::refreshAdjustmentLineComputedFields($set, $get))
-                                    ->columnSpan(3),
-
-                                Forms\Components\Placeholder::make('serial_adjustment_notice')
-                                    ->label('Número de serie')
-                                    ->content('Este producto maneja números de serie. El ajuste por serie se hará en una pantalla especial para mantener la trazabilidad individual.')
-                                    ->visible(fn (Forms\Get $get): bool => static::productRequiresSerial($get('product_id'), $get('product_variant_id')))
-                                    ->columnSpan(6),
-
-                                Forms\Components\TextInput::make('counted_quantity')
-                                    ->label('Cantidad contada')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->required()
-                                    ->live(onBlur: true)
-                                    ->afterStateUpdated(function (Forms\Set $set, Forms\Get $get): void {
-                                        static::refreshAdjustmentLineComputedFields($set, $get);
-                                    })
-                                    ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
-                                    ->columnSpan(2),
-
-                                Forms\Components\Hidden::make('current_quantity')
-                                    ->default(0)
-                                    ->dehydrated(true),
-
-                                Forms\Components\Hidden::make('difference_quantity')
-                                    ->default(0)
-                                    ->dehydrated(true),
-
-                                Forms\Components\Hidden::make('unit_cost')
-                                    ->default(0)
-                                    ->dehydrated(true),
-
-                                Forms\Components\Placeholder::make('current_quantity_info')
-                                    ->label('Cantidad actual')
-                                    ->content(fn (Forms\Get $get): string => number_format((float) ($get('current_quantity') ?: 0), 2))
-                                    ->columnSpan(1),
-
-                                Forms\Components\Placeholder::make('difference_quantity_info')
-                                    ->label('Diferencia')
-                                    ->content(fn (Forms\Get $get): string => number_format((float) ($get('difference_quantity') ?: 0), 2))
-                                    ->columnSpan(1),
-
-                                Forms\Components\Placeholder::make('unit_cost_info')
-                                    ->label('Costo prom.')
-                                    ->content(fn (Forms\Get $get): string => '$ ' . number_format((float) ($get('unit_cost') ?: 0), 2))
-                                    ->columnSpan(1),
-
-                                Forms\Components\Textarea::make('notes')
-                                    ->label('Notas')
-                                    ->rows(1)
-                                    ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
-                                    ->columnSpanFull(),
-                            ])
-                            ->columns(12)
-                            ->defaultItems(1)
-                            ->addActionLabel('Agregar producto')
-                            ->reorderable(false)
-                            ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
+                                return new \Illuminate\Support\HtmlString(
+                                    '<div style="padding:12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px;color:#1e40af;">Las líneas se capturan en una pantalla optimizada. <a href="' . $safeUrl . '" style="font-weight:700;text-decoration:underline;">Abrir captura rápida de líneas</a>.</div>'
+                                );
+                            })
                             ->columnSpanFull(),
-                    ]),
+                    ])
+                    ->columnSpanFull(),
+
             ]);
     }
 
@@ -367,6 +277,12 @@ class StockAdjustmentResource extends Resource
                             ->send();
                     }),
 
+                Tables\Actions\Action::make('lines')
+                    // BEXIA_V5727N27A_TABLE_ACTION_LINES
+                    ->label('Líneas')
+                    ->icon('heroicon-o-list-bullet')
+                    ->color('primary')
+                    ->url(fn ($record): string => static::getUrl('lines', ['record' => $record])),
                 Tables\Actions\EditAction::make()
                     ->label('Editar'),
             ])
@@ -376,6 +292,7 @@ class StockAdjustmentResource extends Resource
     public static function getPages(): array
     {
         return [
+            'lines' => Pages\ManageStockAdjustmentLines::route('/{record}/lines'),
             'index' => Pages\ListStockAdjustments::route('/'),
             'create' => Pages\CreateStockAdjustment::route('/create'),
             'edit' => Pages\EditStockAdjustment::route('/{record}/edit'),

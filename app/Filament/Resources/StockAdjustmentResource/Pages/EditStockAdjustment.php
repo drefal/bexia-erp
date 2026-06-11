@@ -22,6 +22,14 @@ class EditStockAdjustment extends EditRecord
                 ->url(fn (): string => route('inventory.stock-adjustments.pdf', $this->record))
                 ->openUrlInNewTab(),
 
+            Actions\Action::make('lines')
+                // BEXIA_V5728B_HEADER_ACTION_LINES
+                ->label('Capturar líneas')
+                ->icon('heroicon-o-list-bullet')
+                ->color('primary')
+                ->url(fn (): string => StockAdjustmentResource::getUrl('lines', ['record' => $this->record]))
+                ->visible(fn (): bool => $this->record instanceof StockAdjustment),
+
             Actions\Action::make('auditLog')
                 ->label('Auditoría')
                 ->icon('heroicon-o-clipboard-document-list')
