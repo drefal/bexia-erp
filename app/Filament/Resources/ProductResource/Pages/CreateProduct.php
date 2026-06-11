@@ -19,6 +19,11 @@ class CreateProduct extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        // BEXIA_V5729U_LIMPIAR_TRAZABILIDAD_NO_APLICA
+        if ((string) ($data['advanced_tracking_mode'] ?? 'none') === 'none') {
+            $data['advanced_tracking_fields'] = [];
+        }
+
         $companyId = Filament::getTenant()?->getKey();
 
         if ($companyId) {

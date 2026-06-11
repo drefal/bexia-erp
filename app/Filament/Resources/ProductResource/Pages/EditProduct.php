@@ -15,6 +15,11 @@ class EditProduct extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        // BEXIA_V5729U_LIMPIAR_TRAZABILIDAD_NO_APLICA
+        if ((string) ($data['advanced_tracking_mode'] ?? 'none') === 'none') {
+            $data['advanced_tracking_fields'] = [];
+        }
+
         // V5.72.5l3b: evitar 500 al guardar variantes/productos con tracking avanzado vacío.
         $data = $this->normalizeAdvancedTrackingBeforeSave($data);
 
