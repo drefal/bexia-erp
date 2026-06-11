@@ -172,7 +172,7 @@ class ListStockAdjustments extends ListRecords
                         ->success()
                         ->send();
 
-                    $this->redirect(StockAdjustmentResource::getUrl('edit', [
+                    $this->redirect(StockAdjustmentResource::getUrl('lines', [
                         'record' => $adjustment,
                     ]));
                 }),
@@ -297,7 +297,7 @@ class ListStockAdjustments extends ListRecords
                         ->success()
                         ->send();
 
-                    $this->redirect(StockAdjustmentResource::getUrl('edit', [
+                    $this->redirect(StockAdjustmentResource::getUrl('lines', [
                         'record' => $adjustment,
                     ]));
                 }),
