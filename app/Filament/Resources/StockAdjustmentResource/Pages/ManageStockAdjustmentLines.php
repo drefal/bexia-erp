@@ -243,6 +243,13 @@ class ManageStockAdjustmentLines extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('index')
+                // BEXIA_V5728D_HEADER_ACTION_INDEX
+                ->label('Ver listado')
+                ->icon('heroicon-o-list-bullet')
+                ->color('gray')
+                ->url(fn (): string => StockAdjustmentResource::getUrl('index')),
+
             Actions\Action::make('editHeader')
                 ->label('Editar encabezado')
                 ->icon('heroicon-o-pencil-square')
