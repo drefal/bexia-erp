@@ -1,6 +1,6 @@
 <x-filament-widgets::widget>
     <x-filament::section>
-        <div wire:poll.60s>
+        <div wire:poll.600s>
             <div class="mb-5 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div>
                     <h3 class="text-base font-semibold text-gray-950 dark:text-white">Últimos movimientos de tesorería</h3>

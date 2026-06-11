@@ -51,7 +51,11 @@ class EditProduct extends EditRecord
         if (! $query->exists()) {
             $data['internal_reference'] = $reference;
 
-            return $data;
+    
+        // BEXIA_V5727N23B_PREVENT_DUPLICATE_CODES_BEFORE_SAVE
+        $this->validateUniqueCodesBeforeSave($data);
+
+        return $data;
         }
 
         $previousReference = trim((string) (
@@ -543,6 +547,21 @@ class EditProduct extends EditRecord
     }
 
 
+
+
+    // BEXIA_V5727N23B_VALIDATE_UNIQUE_CODES_HELPER
+    protected function validateUniqueCodesBeforeSave(array $data): void
+    {
+
+        // BEXIA_V5727N28A1_EDIT_VALIDATE_ACTIVE_ONLY_VOID
+        $companyId = (int) ($data['company_id'] ?? $this->record?->company_id ?? 0);
+
+        \App\Filament\Resources\ProductResource::bexiaN28aValidateProductCodesUniqueAmongActive(
+            $data,
+            $this->record?->getKey(),
+            $companyId
+        );
+}
 
     // BEXIA_V5727N21_EDIT_PRODUCT_UNIQUE_GUARD
     protected function handleRecordUpdate(\Illuminate\Database\Eloquent\Model $record, array $data): \Illuminate\Database\Eloquent\Model

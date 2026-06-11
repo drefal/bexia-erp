@@ -15,7 +15,8 @@ class BexiaTreasurySectionHeaderWidget extends Widget
 
     protected static ?int $sort = 80;
 
-    protected static ?string $pollingInterval = '60s';
+    // BEXIA_V5727N29F_TREASURY_POLLING_10MIN_NO_SPATIE_INFO
+    protected static ?string $pollingInterval = '600s';
 
     public static function canView(): bool
     {

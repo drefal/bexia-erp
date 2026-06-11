@@ -27,7 +27,11 @@ class SetSpatieCompanyFromTenant
         }
 
         if ($companyId) {
-            \Log::info('SPATIE_TEAM_SET', ['user_id' => auth()->id(), 'company_id' => (int) $companyId]);
+            // BEXIA_V5727N29F_TREASURY_POLLING_10MIN_NO_SPATIE_INFO
+            // Evitar escritura repetitiva en production por cada request/polling Livewire.
+            if (config('app.debug')) {
+                \Log::debug('SPATIE_TEAM_SET', ['user_id' => auth()->id(), 'company_id' => (int) $companyId]);
+            }
             session(['company_id' => (int) $companyId]);
 
             app(PermissionRegistrar::class)->setPermissionsTeamId((int) $companyId);

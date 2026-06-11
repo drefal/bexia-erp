@@ -2206,6 +2206,13 @@ variants_inner_table')
                                             fn ($query) => $query->where('company_id', (int) $record->company_id),
                                         )
                                         ->where('is_variant', true)
+                                        // BEXIA_V5727N28C_VARIANTS_TABLE_ACTIVE_ONLY
+                                        ->when(
+                                            \Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active'),
+                                            fn ($query) => $query->where(function ($q): void {
+                                                $q->whereNull('is_active')->orWhere('is_active', true);
+                                            }),
+                                        )
                                         ->orderBy('variant_group')
                                         ->orderBy('variant_value')
                                         ->orderBy('id')
@@ -2396,22 +2403,48 @@ variants_inner_table')
 
     protected static function productVariantStatusLabel(Product $record): string
     {
+        // BEXIA_V5727N28E_VARIANTS_LABEL_CACHED_ACTIVE_ONLY
         if ((bool) ($record->is_variant ?? false)) {
             return 'Variante';
         }
 
-        if ((bool) ($record->has_variants ?? false)) {
-            return 'Con variantes';
+        /*
+         * Optimización:
+         * - has_variants sirve como guard rápido para productos que nunca tuvieron variantes.
+         * - si has_variants=true, sí validamos contra variantes activas y de la misma empresa.
+         * - cacheamos por request para que getStateUsing() y color() no consulten dos veces por fila.
+         */
+        if (! (bool) ($record->has_variants ?? false)) {
+            return 'Sin variantes';
         }
 
-        $hasVariants = Product::query()
-            ->where('company_id', $record->company_id)
-            ->where('parent_product_id', $record->id)
-            ->where('is_variant', true)
-            ->exists();
+        static $cache = [];
 
-        return $hasVariants ? 'Con variantes' : 'Sin variantes';
+        $key = ((int) ($record->company_id ?? 0)) . ':' . ((int) $record->getKey());
+
+        if (! array_key_exists($key, $cache)) {
+            $query = Product::query()
+                ->where('company_id', $record->company_id)
+                ->where('parent_product_id', $record->id)
+                ->where('is_variant', true);
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active')) {
+                $query->where(function ($q): void {
+                    $q->whereNull('is_active')->orWhere('is_active', true);
+                });
+            } elseif (\Illuminate\Support\Facades\Schema::hasColumn('products', 'active')) {
+                $query->where(function ($q): void {
+                    $q->whereNull('active')->orWhere('active', true);
+                });
+            }
+
+            $cache[$key] = $query->exists();
+        }
+
+        return $cache[$key] ? 'Con variantes' : 'Sin variantes';
     }
+
+
 
     protected static function productVariantStatusColor(Product $record): string
     {
@@ -2425,6 +2458,12 @@ variants_inner_table')
     public static function table(Table $table): Table
     {
         return $table
+            // BEXIA_V5727N29C_EAGER_LOAD_PRODUCT_LIST
+            ->modifyQueryUsing(fn ($query) => $query
+                ->with(['category', 'unit'])
+                ->withExists([
+                    'images as has_active_images' => fn ($imageQuery) => $imageQuery->where('is_active', true),
+                ]))
             ->columns([
                 Tables\Columns\TextColumn::make('internal_reference')
                     ->label('Referencia interna')
@@ -2514,7 +2553,7 @@ variants_inner_table')
                 Tables\Columns\IconColumn::make('has_image')
                     ->label('Imagen')
                     ->boolean()
-                    ->getStateUsing(fn (Product $record): bool => filled($record->image_path) || $record->images()->where('is_active', true)->exists())
+                    ->getStateUsing(fn (Product $record): bool => filled($record->image_path) || (bool) ($record->has_active_images ?? false))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sku')
@@ -3713,6 +3752,87 @@ public static function getPages(): array
         }
 
         return $best;
+    }
+
+
+
+    // BEXIA_V5727N28A_UNIQUE_CODES_ACTIVE_ONLY_HELPER
+    public static function bexiaN28aValidateProductCodesUniqueAmongActive(array $data, ?int $ignoreProductId = null, ?int $companyId = null): array
+    {
+        $companyId = $companyId ?: (int) ($data['company_id'] ?? 0);
+
+        if (! $companyId) {
+            $tenant = \Filament\Facades\Filament::getTenant();
+
+            if (is_object($tenant) && method_exists($tenant, 'getKey')) {
+                $companyId = (int) $tenant->getKey();
+            } elseif (is_numeric($tenant)) {
+                $companyId = (int) $tenant;
+            }
+        }
+
+        foreach (['sku', 'barcode', 'internal_reference'] as $field) {
+            if (! \Illuminate\Support\Facades\Schema::hasColumn('products', $field)) {
+                continue;
+            }
+
+            $value = trim((string) ($data[$field] ?? ''));
+
+            if ($value === '') {
+                $data[$field] = null;
+                continue;
+            }
+
+            $data[$field] = $value;
+
+            if (! $companyId) {
+                continue;
+            }
+
+            $query = \Illuminate\Support\Facades\DB::table('products')
+                ->where('company_id', $companyId)
+                ->where($field, $value);
+
+            if ($ignoreProductId) {
+                $query->where('id', '<>', $ignoreProductId);
+            }
+
+            static::bexiaN28aApplyActiveOnlyFilter($query);
+
+            if ($query->exists()) {
+                $label = match ($field) {
+                    'barcode' => 'Código de barras',
+                    'internal_reference' => 'Referencia interna',
+                    default => 'SKU',
+                };
+
+                $message = $label . ' ya existe en otro producto o variante activa de esta empresa. Si el producto anterior está archivado, ya no debe bloquear este código.';
+
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    $field => $message,
+                    'data.' . $field => $message,
+                ]);
+            }
+        }
+
+        return $data;
+    }
+
+    public static function bexiaN28aApplyActiveOnlyFilter($query): void
+    {
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'active')) {
+            $query->where(function ($q) {
+                $q->whereNull('active')->orWhere('active', true);
+            });
+
+            return;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active')) {
+            $query->where(function ($q) {
+                $q->whereNull('is_active')->orWhere('is_active', true);
+            });
+        }
     }
 
 

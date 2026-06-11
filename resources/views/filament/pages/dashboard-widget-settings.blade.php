@@ -56,7 +56,7 @@
 @php
     $v5700eTenantId = (int) request()->route('tenant');
     $v5700eUserId = (int) auth()->id();
-    $v5700eCurrentRefresh = 60;
+    $v5700eCurrentRefresh = 600;
 
     try {
         if (\Illuminate\Support\Facades\Schema::hasTable('dashboard_section_user_settings')) {
@@ -71,7 +71,7 @@
                 : 60;
         }
     } catch (\Throwable $e) {
-        $v5700eCurrentRefresh = 60;
+        $v5700eCurrentRefresh = 600;
     }
 
     $v5700eRefreshOptions = [
@@ -122,7 +122,7 @@
             </select>
 
             <p class="mt-2 text-sm text-gray-500">
-                Valor actual: {{ $v5700eRefreshOptions[$v5700eCurrentRefresh] ?? '1 minuto' }}.
+                Valor actual: {{ $v5700eRefreshOptions[$v5700eCurrentRefresh] ?? '10 minutos' }}.
             </p>
         </div>
 

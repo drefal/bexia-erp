@@ -1,6 +1,6 @@
 <x-filament-widgets::widget>
     <div
-        wire:poll.{{ (int) ($refresh_seconds ?? 60) }}s
+        wire:poll.{{ (int) ($refresh_seconds ?? 600) }}s
         x-data="{ collapsed: localStorage.getItem('bexia_section_treasury_collapsed') === '1' }"
         style="background:#ffffff; border:1px solid #e5e7eb; border-radius:24px; padding:16px; box-shadow:0 8px 24px rgba(15,23,42,.04); overflow:hidden;"
     >
@@ -33,7 +33,7 @@
                             </div>
 
                             <div style="font-size:14px; color:#475569; margin-top:6px;">
-                                {{ $company_name ? 'Empresa: ' . $company_name . ' · ' : '' }}Actualización automática cada {{ $refresh_label ?? "1 minuto" }}.
+                                {{ $company_name ? 'Empresa: ' . $company_name . ' · ' : '' }}Actualización automática cada {{ $refresh_label ?? "10 minutos" }}.
                             </div>
                         </div>
                     </div>
