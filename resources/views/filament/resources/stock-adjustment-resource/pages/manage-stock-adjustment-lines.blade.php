@@ -272,10 +272,12 @@
                     </div>
 
                     @if ($isDraft)
+                        {{-- BEXIA_V5728G_FIX_VISIBLE_SAVE_BUTTONS --}}
                         <button
                             type="button"
                             wire:click="saveVisibleLines"
-                            class="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+                            class="inline-flex items-center justify-center rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700"
+                            style="background-color:#2563eb;color:#ffffff;"
                         >
                             Guardar cambios de tabla
                         </button>
@@ -294,7 +296,7 @@
                             <th class="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-200">Diferencia</th>
                             <th class="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-200">Costo</th>
                             <th class="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-200">Notas</th>
-                            <th class="w-56 px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-200">Acciones</th>
+                            <th class="w-64 px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-200">Acciones</th>
                         </tr>
                     </thead>
 
@@ -389,11 +391,12 @@
 
                                 <td class="px-4 py-3 align-middle text-right">
                                     @if ($isDraft)
-                                        <div class="flex min-w-48 justify-end gap-2">
+                                        <div class="flex min-w-56 flex-nowrap justify-end gap-2">
                                             <button
                                                 type="button"
                                                 wire:click="saveLine({{ (int) $line->id }})"
-                                                class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                                                class="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700"
+                                                style="background-color:#2563eb;color:#ffffff;"
                                             >
                                                 Guardar línea
                                             </button>
