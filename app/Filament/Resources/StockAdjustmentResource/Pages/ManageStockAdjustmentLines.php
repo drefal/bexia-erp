@@ -243,45 +243,28 @@ class ManageStockAdjustmentLines extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('index')
-                // BEXIA_V5728D_HEADER_ACTION_INDEX
-                ->label('Ver listado')
-                ->icon('heroicon-o-list-bullet')
-                ->color('gray')
-                ->url(fn (): string => StockAdjustmentResource::getUrl('index')),
-
             Actions\Action::make('pdf')
-                ->label('PDF')
+                // BEXIA_V5728F_TOOLTIPS_ACTIONS_LINES
+                ->label('Imprimir PDF')
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('gray')
+                ->tooltip('Abre el PDF del ajuste en otra pestaña.')
                 ->url(fn (): string => route('inventory.stock-adjustments.pdf', $this->record))
                 ->openUrlInNewTab(),
 
-            Actions\Action::make('refreshLines')
-                ->label('Recargar')
-                ->icon('heroicon-o-arrow-path')
-                ->color('gray')
-                ->action(function (): void {
-                    $this->record->refresh();
-                    $this->syncLineInputs();
-
-                    Notification::make()
-                        ->title('Líneas recargadas')
-                        ->success()
-                        ->send();
-                }),
-
             Actions\Action::make('recalculateVisibleLines')
-                ->label('Recalcular actuales')
+                ->label('Recalcular existencia actual')
                 ->icon('heroicon-o-calculator')
                 ->color('warning')
+                ->tooltip('Consulta el stock actual real y recalcula la diferencia contra lo contado.')
                 ->visible(fn (): bool => (string) $this->record->status === 'draft')
                 ->action(fn (): null => $this->recalculateVisibleLines()),
 
             Actions\Action::make('saveVisibleLines')
-                ->label('Guardar cantidades')
+                ->label('Guardar cambios de tabla')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
+                ->tooltip('Guarda cantidades y notas capturadas. No afecta inventario todavía.')
                 ->visible(fn (): bool => (string) $this->record->status === 'draft')
                 ->action(fn (): null => $this->saveVisibleLines()),
 
@@ -289,6 +272,7 @@ class ManageStockAdjustmentLines extends Page
                 ->label('Confirmar ajuste')
                 ->icon('heroicon-o-check-badge')
                 ->color('success')
+                ->tooltip('Actualiza existencias y bloquea el ajuste.')
                 ->requiresConfirmation()
                 ->modalHeading('Confirmar ajuste de inventario')
                 ->modalDescription('Al confirmar, se actualizarán las existencias y el ajuste quedará bloqueado.')
