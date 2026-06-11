@@ -127,6 +127,18 @@ class ListProducts extends ListRecords
                 ),
 
             'todos' => Tab::make('Todos'),
+
+            // BEXIA_V5729O_TABS_LOTES_SERIES_PRODUCTOS
+            // Filtros rápidos superiores para productos/variantes con seguimiento especial.
+            'lotes' => Tab::make('Lotes')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                    ->where('tracking', 'lot')
+                ),
+
+            'series' => Tab::make('Series')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                    ->where('tracking', 'serial')
+                ),
         ];
     }
 
