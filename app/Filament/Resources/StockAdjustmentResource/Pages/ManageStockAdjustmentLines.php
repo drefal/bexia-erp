@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Carbon;
 
 class ManageStockAdjustmentLines extends Page
 {
@@ -39,6 +40,13 @@ class ManageStockAdjustmentLines extends Page
 
     public string $quickNotes = '';
 
+    // BEXIA_V5728C_UI_HEADER_INLINE_SAVE_VISIBLE
+    public string $headerAdjustmentAt = '';
+
+    public string $headerReason = '';
+
+    public string $headerNotes = '';
+
     public function mount($record): void
     {
         // BEXIA_V5728B_AJUSTES_INVENTARIO_LINES_FINAL
@@ -46,6 +54,7 @@ class ManageStockAdjustmentLines extends Page
 
         $this->record = StockAdjustment::query()->findOrFail($recordId);
         $this->syncLineInputs();
+        $this->syncHeaderInputs();
     }
 
     protected function resolveStockAdjustmentRecordId($record): int
@@ -106,6 +115,129 @@ class ManageStockAdjustmentLines extends Page
     public function editHeaderUrl(): string
     {
         return StockAdjustmentResource::getUrl('edit', ['record' => $this->record]);
+    }
+
+    public function syncHeaderInputs(): void
+    {
+        $this->headerReason = (string) ($this->record->reason ?? '');
+        $this->headerNotes = (string) ($this->record->notes ?? '');
+        $this->headerAdjustmentAt = $this->record->adjustment_at
+            ? Carbon::parse($this->record->adjustment_at)->format('Y-m-d\TH:i')
+            : now()->format('Y-m-d\TH:i');
+    }
+
+    public function saveHeader(): void
+    {
+        if ((string) $this->record->status !== 'draft') {
+            Notification::make()
+                ->title('No se puede editar encabezado')
+                ->body('El ajuste ya no está en borrador.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $reason = trim($this->headerReason);
+        $notes = trim($this->headerNotes);
+
+        if (mb_strlen($reason) < 5) {
+            Notification::make()
+                ->title('Motivo requerido')
+                ->body('Captura un motivo de al menos 5 caracteres.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if (mb_strlen($notes) < 5) {
+            Notification::make()
+                ->title('Notas requeridas')
+                ->body('Captura notas de al menos 5 caracteres.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        try {
+            $adjustmentAt = Carbon::parse($this->headerAdjustmentAt);
+        } catch (\Throwable) {
+            Notification::make()
+                ->title('Fecha inválida')
+                ->body('Revisa la fecha y hora del ajuste.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $payload = [
+            'reason' => $reason,
+            'notes' => $notes,
+            'updated_at' => now(),
+        ];
+
+        if (Schema::hasColumn('stock_adjustments', 'adjustment_at')) {
+            $payload['adjustment_at'] = $adjustmentAt;
+        }
+
+        if (Schema::hasColumn('stock_adjustments', 'adjustment_date')) {
+            $payload['adjustment_date'] = $adjustmentAt->toDateString();
+        }
+
+        DB::table('stock_adjustments')
+            ->where('id', $this->record->getKey())
+            ->update($payload);
+
+        $this->record->refresh();
+        $this->syncHeaderInputs();
+
+        Notification::make()
+            ->title('Encabezado guardado')
+            ->success()
+            ->send();
+    }
+
+    public function warehouseLabel(): string
+    {
+        if (! $this->record->warehouse_id || ! Schema::hasTable('warehouses')) {
+            return '—';
+        }
+
+        $warehouse = DB::table('warehouses')
+            ->where('id', (int) $this->record->warehouse_id)
+            ->first();
+
+        if (! $warehouse) {
+            return 'Almacén #' . $this->record->warehouse_id;
+        }
+
+        $code = trim((string) ($warehouse->code ?? ''));
+        $name = trim((string) ($warehouse->name ?? ''));
+
+        return trim(($code !== '' ? $code . ' · ' : '') . ($name !== '' ? $name : ('Almacén #' . $warehouse->id)));
+    }
+
+    public function locationLabel(): string
+    {
+        if (! $this->record->location_id || ! Schema::hasTable('stock_locations')) {
+            return '—';
+        }
+
+        $location = DB::table('stock_locations')
+            ->where('id', (int) $this->record->location_id)
+            ->first();
+
+        if (! $location) {
+            return 'Ubicación #' . $this->record->location_id;
+        }
+
+        $code = trim((string) ($location->code ?? ''));
+        $name = trim((string) ($location->name ?? ''));
+
+        return trim(($code !== '' ? $code . ' · ' : '') . ($name !== '' ? $name : ('Ubicación #' . $location->id)));
     }
 
     protected function getHeaderActions(): array
