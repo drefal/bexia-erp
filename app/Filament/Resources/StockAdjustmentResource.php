@@ -60,26 +60,6 @@ class StockAdjustmentResource extends Resource
         );
     }
 
-    // BEXIA_V5728D_NAV_AJUSTES_TO_LINES
-    public static function getNavigationUrl(): string
-    {
-        $companyId = static::currentCompanyId();
-
-        if ($companyId) {
-            $draftId = StockAdjustment::query()
-                ->where('company_id', $companyId)
-                ->where('status', 'draft')
-                ->latest('updated_at')
-                ->value('id');
-
-            if ($draftId) {
-                return static::getUrl('lines', ['record' => $draftId]);
-            }
-        }
-
-        return static::getUrl('create');
-    }
-
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         $user = auth()->user();
@@ -241,7 +221,7 @@ class StockAdjustmentResource extends Resource
                     ->searchable(false),
 
                 Tables\Columns\TextColumn::make('lines_count')
-                    ->label('Líneas')
+                    ->label('Capturar líneas')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
@@ -303,9 +283,9 @@ class StockAdjustmentResource extends Resource
                     ->icon('heroicon-o-list-bullet')
                     ->color('primary')
                     ->url(fn ($record): string => static::getUrl('lines', ['record' => $record])),
-                Tables\Actions\EditAction::make()
-                    ->label('Editar'),
             ])
+            // BEXIA_V5728E_RECORD_URL_TO_LINES
+            ->recordUrl(fn (StockAdjustment $record): string => static::getUrl('lines', ['record' => $record]))
             ->defaultSort('created_at', 'desc');
     }
 

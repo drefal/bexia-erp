@@ -250,12 +250,6 @@ class ManageStockAdjustmentLines extends Page
                 ->color('gray')
                 ->url(fn (): string => StockAdjustmentResource::getUrl('index')),
 
-            Actions\Action::make('editHeader')
-                ->label('Editar encabezado')
-                ->icon('heroicon-o-pencil-square')
-                ->color('gray')
-                ->url(fn (): string => $this->editHeaderUrl()),
-
             Actions\Action::make('pdf')
                 ->label('PDF')
                 ->icon('heroicon-o-document-arrow-down')
