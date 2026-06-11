@@ -2603,9 +2603,7 @@ variants_inner_table')
 
                 Tables\Filters\TernaryFilter::make('is_pos_favorite')
                     ->label('Favorito PDV'),
-
-                // BEXIA_V5729M_FILTERS_ABOVE_CONTENT
-            ], layout: \Filament\Tables\Enums\FiltersLayout::AboveContent)
+            ])
             ->actions([
                 Tables\Actions\EditAction::make()
                     ->label('Editar'),
