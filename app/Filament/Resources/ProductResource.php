@@ -1839,6 +1839,18 @@ Forms\Components\Section::make('Atributos de catálogo')
                                                                 'required' => 'Obligatoria',
                                                             ])
                                                             ->default('none')
+                                                            ->live()
+                                                            // BEXIA_V5729U_LIMPIAR_TRAZABILIDAD_NO_APLICA
+                                                            ->afterStateHydrated(function ($state, \Filament\Forms\Set $set): void {
+                                                                if ((string) ($state ?? 'none') === 'none') {
+                                                                    $set('advanced_tracking_fields', []);
+                                                                }
+                                                            })
+                                                            ->afterStateUpdated(function ($state, \Filament\Forms\Set $set): void {
+                                                                if ((string) ($state ?? 'none') === 'none') {
+                                                                    $set('advanced_tracking_fields', []);
+                                                                }
+                                                            })
                                                             ->helperText('Obligatoria bloquea la recepción si faltan datos. Recomendada solo muestra aviso.'),
 
                                                         Forms\Components\Placeholder::make('advanced_tracking_help')
@@ -1868,6 +1880,8 @@ Forms\Components\Section::make('Atributos de catálogo')
                                                         'xl' => 3,
                                                     ])
                                                     ->gridDirection('row')
+                                                    ->hidden(fn (\Filament\Forms\Get $get): bool => (string) ($get('advanced_tracking_mode') ?? 'none') === 'none')
+                                                    ->dehydrated(true)
                                                     ->helperText('Selecciona los datos que se pedirán durante la recepción de compra.')
                                                     ->columnSpanFull(),
 
