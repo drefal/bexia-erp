@@ -200,6 +200,14 @@ class StockAdjustmentResource extends Resource
     {
         return $table
             ->columns([
+                // BEXIA_V5729Q_ID_LISTADO_AJUSTES_INVENTARIO
+                Tables\Columns\TextColumn::make('id')
+                    ->label('ID')
+                    ->sortable()
+                    ->searchable()
+                    ->copyable()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('reference')
                     ->label('Referencia')
                     ->searchable()
