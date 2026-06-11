@@ -744,6 +744,18 @@ class ProductCatalogImportService
 
         $existing = static::findExistingProduct($companyId, $reference, $sku, $barcode, $data['id_solo_lectura'] ?? null);
 
+        // BEXIA_V5729G2_CONSERVAR_ESTADO_EXISTENTE
+        // En carga masiva, si el producto ya existe, no se cambia su estado activo/inactivo.
+        // Esto evita reactivar variantes archivadas que comparten SKU con su producto padre activo.
+        if ($existing) {
+            $existingIsActive = (bool) ($existing->is_active ?? true);
+            $data['activo'] = $existingIsActive ? '1' : '0';
+            $data['activa'] = $existingIsActive ? '1' : '0';
+            $data['active'] = $existingIsActive ? '1' : '0';
+            $data['is_active'] = $existingIsActive ? '1' : '0';
+            $data['estado'] = $existingIsActive ? 'activo' : 'inactivo';
+        }
+
         if ($action === 'crear' && $existing) {
             throw new \RuntimeException('Ya existe producto con esa referencia/SKU/código.');
         }
