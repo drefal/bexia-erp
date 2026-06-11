@@ -221,7 +221,7 @@ class StockAdjustmentResource extends Resource
                     ->searchable(false),
 
                 Tables\Columns\TextColumn::make('lines_count')
-                    ->label('Capturar líneas')
+                    ->label('Líneas')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
@@ -279,7 +279,7 @@ class StockAdjustmentResource extends Resource
 
                 Tables\Actions\Action::make('lines')
                     // BEXIA_V5727N27A_TABLE_ACTION_LINES
-                    ->label('Líneas')
+                    ->label('Capturar líneas')
                     ->icon('heroicon-o-list-bullet')
                     ->color('primary')
                     ->url(fn ($record): string => static::getUrl('lines', ['record' => $record])),
