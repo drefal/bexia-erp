@@ -283,6 +283,14 @@ class ProductCatalogImportService
             $result = static::processFile($path, $companyId, false);
             $result = static::appendReferenceDuplicationValidation($path, $companyId, $result);
 
+            // BEXIA_V5729F_VALIDACION_APLICACION_SIMULADA
+            // La validacion anterior revisaba formato y duplicados basicos, pero podia dejar pasar
+            // un archivo que al aplicar rompiera indices unicos de productos. Simulamos la aplicacion
+            // dentro de una transaccion y hacemos rollback para detectar el error antes de permitir aplicar.
+            if ((int) ($result['errors'] ?? 0) === 0 && (int) ($result['validated'] ?? 0) > 0) {
+                $result = static::appendApplySimulationValidation($path, $companyId, $result);
+            }
+
             $isClean = (int) ($result['errors'] ?? 0) === 0
                 && (int) ($result['validated'] ?? 0) > 0;
 
@@ -472,6 +480,84 @@ class ProductCatalogImportService
     protected static function modalEscape(string $value): string
     {
         return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    protected static function appendApplySimulationValidation(string $path, int $companyId, array $result): array
+    {
+        if ((int) ($result['errors'] ?? 0) > 0 || (int) ($result['validated'] ?? 0) <= 0) {
+            return $result;
+        }
+
+        try {
+            DB::beginTransaction();
+
+            static::applyFileStrict($path, $companyId);
+
+            while (DB::connection()->transactionLevel() > 0) {
+                DB::rollBack();
+            }
+
+            $result['log_rows'][] = static::logRow(
+                0,
+                'validar',
+                'VALIDACION_APLICACION_OK',
+                '',
+                '',
+                '',
+                '',
+                'La simulacion de aplicacion termino correctamente. No se guardaron cambios durante la validacion.'
+            );
+        } catch (\Throwable $e) {
+            while (DB::connection()->transactionLevel() > 0) {
+                DB::rollBack();
+            }
+
+            $result['errors'] = (int) ($result['errors'] ?? 0) + 1;
+
+            $result['log_rows'][] = static::logRow(
+                0,
+                'validar',
+                'ERROR_APLICACION_SIMULADA',
+                '',
+                '',
+                '',
+                '',
+                static::friendlyImportExceptionMessage($e)
+            );
+
+            \Illuminate\Support\Facades\Log::warning('PRODUCTOS_IMPORT_PREVALIDATION_BLOCKED', [
+                'company_id' => $companyId,
+                'path' => $path,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+        }
+
+        return $result;
+    }
+
+    protected static function friendlyImportExceptionMessage(\Throwable $e): string
+    {
+        $message = $e->getMessage();
+
+        if (str_contains($message, 'products_company_id_sku_active_unique')) {
+            if (preg_match('/Key \(company_id, sku\)=\(([^,]+), ([^)]+)\)/', $message, $matches)) {
+                return 'No se puede aplicar: el SKU "' . trim((string) $matches[2]) . '" ya existe activo en la empresa ' . trim((string) $matches[1]) . '. Corrige el SKU en el Excel o deja esa columna vacia si solo deseas actualizar precio/costos.';
+            }
+
+            return 'No se puede aplicar: el archivo intenta generar un SKU duplicado en productos activos. Corrige el SKU en el Excel o deja esa columna vacia si solo deseas actualizar precio/costos.';
+        }
+
+        if (str_contains($message, 'products_company_internal_reference_active_unique')) {
+            return 'No se puede aplicar: el archivo intenta generar una referencia interna duplicada en productos activos. Corrige referencia_interna en el Excel o dejala vacia si no deseas cambiarla.';
+        }
+
+        if (str_contains($message, 'Unique violation') || str_contains($message, 'duplicate key')) {
+            return 'No se puede aplicar: la simulacion detecto un valor duplicado contra una restriccion unica. Detalle: ' . substr($message, 0, 600);
+        }
+
+        return 'No se puede aplicar. La simulacion detecto este error: ' . substr($message, 0, 600);
     }
 
 
