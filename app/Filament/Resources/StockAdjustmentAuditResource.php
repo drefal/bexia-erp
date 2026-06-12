@@ -51,25 +51,36 @@ class StockAdjustmentAuditResource extends Resource
                 ->schema([
                     Forms\Components\TextInput::make('event')
                         ->label('Evento')
+                        ->formatStateUsing(fn ($state): string => static::auditEventLabel($state))
                         ->disabled(),
 
                     Forms\Components\Textarea::make('description')
                         ->label('Descripción')
+                        ->formatStateUsing(fn ($state): string => static::auditDescriptionLabel($state))
                         ->disabled()
                         ->columnSpanFull(),
 
                     Forms\Components\KeyValue::make('before_data')
                         ->label('Antes')
+                        ->keyLabel('Campo')
+                        ->valueLabel('Valor')
+                        ->formatStateUsing(fn ($state): array => static::auditDataLabels($state))
                         ->disabled()
                         ->columnSpanFull(),
 
                     Forms\Components\KeyValue::make('after_data')
                         ->label('Después')
+                        ->keyLabel('Campo')
+                        ->valueLabel('Valor')
+                        ->formatStateUsing(fn ($state): array => static::auditDataLabels($state))
                         ->disabled()
                         ->columnSpanFull(),
 
                     Forms\Components\KeyValue::make('metadata')
                         ->label('Metadatos')
+                        ->keyLabel('Campo')
+                        ->valueLabel('Valor')
+                        ->formatStateUsing(fn ($state): array => static::auditDataLabels($state))
                         ->disabled()
                         ->columnSpanFull(),
                 ])
@@ -89,10 +100,10 @@ class StockAdjustmentAuditResource extends Resource
 
                 Tables\Columns\TextColumn::make('event')
                     ->label('Evento')
-                    ->formatStateUsing(fn (?string $state): string => static::eventLabel($state))
                     ->badge()
-                    ->sortable()
-                    ->searchable(),
+                    ->formatStateUsing(fn ($state): string => static::auditEventLabel($state))
+                    ->color(fn ($state): string => static::auditEventColor($state))
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('description')
                     ->label('Descripción')
@@ -101,18 +112,19 @@ class StockAdjustmentAuditResource extends Resource
 
                 Tables\Columns\TextColumn::make('stock_adjustment_id')
                     ->label('Ajuste')
-                    ->formatStateUsing(fn ($state): string => $state ? 'Ajuste #' . $state : '—')
+                    ->formatStateUsing(fn ($state): string => static::auditAdjustmentLabel($state))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('stock_adjustment_line_id')
                     ->label('Línea')
-                    ->formatStateUsing(fn ($state): string => $state ? 'Línea #' . $state : '—')
+                    ->formatStateUsing(fn ($state): string => static::auditLineLabel($state))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('user_id')
                     ->label('Usuario')
-                    ->formatStateUsing(fn ($state): string => $state ? 'Usuario #' . $state : 'Sistema')
-                    ->sortable(),
+                    ->formatStateUsing(fn ($state): string => static::auditUserLabel($state))
+                    ->sortable()
+                    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('ip_address')
                     ->label('IP')
@@ -170,4 +182,327 @@ class StockAdjustmentAuditResource extends Resource
             default => $event ?: 'Evento',
         };
     }
+
+    // BEXIA_V57210A_AUDITORIA_AJUSTES_TEXTOS_HUMANOS
+    protected static function auditEventLabel(mixed $event): string
+    {
+        return match ((string) ($event ?? '')) {
+            'created' => 'Creado',
+            'updated' => 'Actualizado',
+            'line_created' => 'Línea creada',
+            'line_updated' => 'Línea actualizada',
+            'line_deleted' => 'Línea eliminada',
+            'confirmed' => 'Confirmado',
+            'cancelled' => 'Cancelado',
+            'deleted' => 'Eliminado',
+            default => trim((string) ($event ?? '')) !== ''
+                ? str((string) $event)->replace('_', ' ')->title()->toString()
+                : 'Sin evento',
+        };
+    }
+
+    protected static function auditEventColor(mixed $event): string
+    {
+        return match ((string) ($event ?? '')) {
+            'confirmed' => 'success',
+            'cancelled', 'deleted', 'line_deleted' => 'danger',
+            'created', 'line_created' => 'info',
+            'updated', 'line_updated' => 'warning',
+            default => 'gray',
+        };
+    }
+
+    protected static function auditDescriptionLabel(mixed $description): string
+    {
+        $description = trim((string) ($description ?? ''));
+
+        return match ($description) {
+            'Stock adjustment created.' => 'Ajuste de inventario creado.',
+            'Stock adjustment updated.' => 'Ajuste de inventario actualizado.',
+            'Stock adjustment confirmed.' => 'Ajuste de inventario confirmado.',
+            'Stock adjustment cancelled.' => 'Ajuste de inventario cancelado.',
+            'Stock adjustment line created.' => 'Línea de ajuste creada.',
+            'Stock adjustment line updated.' => 'Línea de ajuste actualizada.',
+            'Stock adjustment line deleted.' => 'Línea de ajuste eliminada.',
+            default => $description !== '' ? $description : 'Sin descripción',
+        };
+    }
+
+    protected static function auditAdjustmentLabel(mixed $id): string
+    {
+        $id = (int) ($id ?? 0);
+
+        if ($id <= 0) {
+            return 'Sin ajuste';
+        }
+
+        try {
+            $row = \Illuminate\Support\Facades\DB::table('stock_adjustments')
+                ->where('id', $id)
+                ->select('id', 'reference', 'reason', 'status')
+                ->first();
+
+            if ($row) {
+                $reference = trim((string) ($row->reference ?? ''));
+
+                if ($reference !== '') {
+                    return $reference . ' (ID ' . $id . ')';
+                }
+            }
+        } catch (\Throwable) {
+            //
+        }
+
+        return 'Ajuste ID ' . $id;
+    }
+
+    protected static function auditLineLabel(mixed $id): string
+    {
+        $id = (int) ($id ?? 0);
+
+        if ($id <= 0) {
+            return 'Sin línea';
+        }
+
+        try {
+            $line = \Illuminate\Support\Facades\DB::table('stock_adjustment_lines')
+                ->where('id', $id)
+                ->first();
+
+            if (! $line) {
+                return 'Línea ID ' . $id;
+            }
+
+            $productId = null;
+
+            if (property_exists($line, 'product_variant_id') && (int) ($line->product_variant_id ?? 0) > 0) {
+                $productId = (int) $line->product_variant_id;
+            } elseif (property_exists($line, 'product_id') && (int) ($line->product_id ?? 0) > 0) {
+                $productId = (int) $line->product_id;
+            }
+
+            $productLabel = '';
+
+            if ($productId) {
+                $product = \Illuminate\Support\Facades\DB::table('products')
+                    ->where('id', $productId)
+                    ->select('id', 'name', 'internal_reference', 'sku')
+                    ->first();
+
+                if ($product) {
+                    $parts = array_filter([
+                        trim((string) ($product->internal_reference ?? '')),
+                        trim((string) ($product->name ?? '')),
+                    ]);
+
+                    $productLabel = implode(' - ', $parts);
+                }
+            }
+
+            $quantity = property_exists($line, 'quantity')
+                ? rtrim(rtrim(number_format((float) $line->quantity, 4, '.', ''), '0'), '.')
+                : '';
+
+            $pieces = [];
+
+            if ($productLabel !== '') {
+                $pieces[] = $productLabel;
+            }
+
+            if ($quantity !== '') {
+                $pieces[] = 'Cant. ' . $quantity;
+            }
+
+            $pieces[] = 'Línea ID ' . $id;
+
+            return implode(' / ', $pieces);
+        } catch (\Throwable) {
+            return 'Línea ID ' . $id;
+        }
+    }
+
+    protected static function auditUserLabel(mixed $id): string
+    {
+        $id = (int) ($id ?? 0);
+
+        if ($id <= 0) {
+            return 'Sistema';
+        }
+
+        try {
+            $user = \Illuminate\Support\Facades\DB::table('users')
+                ->where('id', $id)
+                ->select('id', 'name', 'email')
+                ->first();
+
+            if ($user) {
+                $name = trim((string) ($user->name ?? ''));
+                $email = trim((string) ($user->email ?? ''));
+
+                if ($name !== '' && $email !== '') {
+                    return $name . ' <' . $email . '>';
+                }
+
+                if ($name !== '') {
+                    return $name;
+                }
+
+                if ($email !== '') {
+                    return $email;
+                }
+            }
+        } catch (\Throwable) {
+            //
+        }
+
+        return 'Usuario ID ' . $id;
+    }
+
+    protected static function auditDataLabels(mixed $state): array
+    {
+        if (is_string($state)) {
+            $decoded = json_decode($state, true);
+            $state = json_last_error() === JSON_ERROR_NONE ? $decoded : [];
+        }
+
+        if (! is_array($state)) {
+            return [];
+        }
+
+        $result = [];
+
+        foreach ($state as $key => $value) {
+            $label = static::auditKeyLabel((string) $key);
+            $result[$label] = static::auditValueLabel((string) $key, $value);
+        }
+
+        return $result;
+    }
+
+    protected static function auditKeyLabel(string $key): string
+    {
+        return match ($key) {
+            'id' => 'ID',
+            'reference' => 'Referencia',
+            'status' => 'Estado',
+            'reason' => 'Motivo',
+            'notes' => 'Notas',
+            'created_at' => 'Fecha creación',
+            'updated_at' => 'Fecha actualización',
+            'confirmed_at' => 'Fecha confirmación',
+            'confirmed_by' => 'Confirmado por',
+            'cancelled_at' => 'Fecha cancelación',
+            'cancelled_by' => 'Cancelado por',
+            'stock_adjustment_id' => 'Ajuste',
+            'stock_adjustment_line_id' => 'Línea',
+            'user_id' => 'Usuario',
+            'product_id' => 'Producto',
+            'product_variant_id' => 'Variante',
+            'quantity' => 'Cantidad',
+            'before_quantity' => 'Cantidad anterior',
+            'after_quantity' => 'Cantidad posterior',
+            'difference_quantity' => 'Diferencia',
+            'warehouse_id' => 'Almacén',
+            'stock_location_id' => 'Ubicación',
+            default => str($key)->replace('_', ' ')->title()->toString(),
+        };
+    }
+
+    protected static function auditValueLabel(string $key, mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return 'Sin valor';
+        }
+
+        if (in_array($key, ['confirmed_by', 'cancelled_by', 'user_id'], true)) {
+            return static::auditUserLabel($value);
+        }
+
+        if ($key === 'stock_adjustment_id') {
+            return static::auditAdjustmentLabel($value);
+        }
+
+        if ($key === 'stock_adjustment_line_id') {
+            return static::auditLineLabel($value);
+        }
+
+        if (in_array($key, ['created_at', 'updated_at', 'confirmed_at', 'cancelled_at'], true)) {
+            return static::auditDateLabel($value);
+        }
+
+        if ($key === 'status') {
+            return static::auditStatusLabel($value);
+        }
+
+        if ($key === 'product_id' || $key === 'product_variant_id') {
+            return static::auditProductLabel($value);
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Sí' : 'No';
+        }
+
+        if (is_array($value) || is_object($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        return (string) $value;
+    }
+
+    protected static function auditStatusLabel(mixed $status): string
+    {
+        return match ((string) ($status ?? '')) {
+            'draft' => 'Borrador',
+            'done' => 'Hecho',
+            'confirmed' => 'Confirmado',
+            'cancelled' => 'Cancelado',
+            'pending' => 'Pendiente',
+            default => trim((string) ($status ?? '')) !== ''
+                ? str((string) $status)->replace('_', ' ')->title()->toString()
+                : 'Sin estado',
+        };
+    }
+
+    protected static function auditDateLabel(mixed $value): string
+    {
+        try {
+            return \Carbon\Carbon::parse((string) $value)
+                ->timezone(config('app.timezone', 'America/Mexico_City'))
+                ->format('d/m/Y H:i');
+        } catch (\Throwable) {
+            return (string) $value;
+        }
+    }
+
+    protected static function auditProductLabel(mixed $id): string
+    {
+        $id = (int) ($id ?? 0);
+
+        if ($id <= 0) {
+            return 'Sin producto';
+        }
+
+        try {
+            $product = \Illuminate\Support\Facades\DB::table('products')
+                ->where('id', $id)
+                ->select('id', 'name', 'internal_reference', 'sku')
+                ->first();
+
+            if ($product) {
+                $parts = array_filter([
+                    trim((string) ($product->internal_reference ?? '')),
+                    trim((string) ($product->name ?? '')),
+                ]);
+
+                if (! empty($parts)) {
+                    return implode(' - ', $parts) . ' (ID ' . $id . ')';
+                }
+            }
+        } catch (\Throwable) {
+            //
+        }
+
+        return 'Producto ID ' . $id;
+    }
+
 }
