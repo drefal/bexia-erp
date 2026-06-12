@@ -13,6 +13,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
+// BEXIA_V57210K_SALIDAS_CONFIG_TENANT_PERMISSIONS
 class ExitWarehouseResource extends Resource
 {
     protected static ?string $model = ExitWarehouse::class;
@@ -29,21 +30,7 @@ protected static ?string $tenantOwnershipRelationshipName = 'company';
 
     protected static function canManageCatalogs(): bool
     {
-        $user = Filament::auth()->user();
-
-        if (! $user) {
-            return false;
-        }
-
-        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-            return true;
-        }
-
-        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-            return true;
-        }
-
-        return $user->can('salidas.configurar');
+        return \App\Support\Security\BexiaTenantPermission::can('salidas.configurar');
     }
 
     public static function canAccess(): bool
@@ -147,34 +134,19 @@ public static function form(Form $form): Form
 
     public static function shouldRegisterNavigation(): bool
     {
-        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
-            'resources.exitwarehouseresource',
-            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
-        );
+        return static::bexiaBaseShouldRegisterNavigation();
     }
+
+    // BEXIA_V57210K2_BYPASS_RUNTIME_SALIDAS_NAV
 
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('salidas.ver')
-                || $user?->can('salidas.ver_todas')
-                || $user?->can('salidas.configurar')
-            );
+        return \App\Support\Security\BexiaTenantPermission::can('salidas.configurar');
     }
 
     public static function canViewAny(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('salidas.ver')
-                || $user?->can('salidas.ver_todas')
-                || $user?->can('salidas.configurar')
-            );
+        return \App\Support\Security\BexiaTenantPermission::can('salidas.configurar');
     }
 
     public static function table(Table $table): Table
