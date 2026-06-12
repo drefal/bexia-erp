@@ -17,6 +17,11 @@ class BexiaTreasurySummaryWidget extends StatsOverviewWidget
 
     public static function canView(): bool
     {
+        // BEXIA_V57210G2_DASHBOARD_WIDGET_PERMISSION
+        if (! \App\Support\Security\BexiaAccess::dashboard()) {
+            return false;
+        }
+
         return static::bexiaDashboardWidgetVisible('treasury_summary');
     }
 

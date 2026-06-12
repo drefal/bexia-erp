@@ -8,6 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+// BEXIA_V57210G2_INVENTORY_NAV
 class InventoryProductTraceability extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-map';
@@ -336,4 +337,19 @@ class InventoryProductTraceability extends Page
             'legacy' => 'Origen legacy',
         ];
     }
+public static function shouldRegisterNavigation(): bool
+{
+    return \App\Support\Security\BexiaAccess::inventory();
+}
+
+public static function canAccess(): bool
+{
+    return \App\Support\Security\BexiaAccess::inventory();
+}
+
+public static function canViewAny(): bool
+{
+    return \App\Support\Security\BexiaAccess::inventory();
+}
+
 }

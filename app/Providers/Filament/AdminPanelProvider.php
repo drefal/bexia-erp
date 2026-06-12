@@ -131,7 +131,7 @@ HTML),
             )
             ->pages([
                 \App\Filament\Pages\SystemOperationLogs::class,
-                Pages\Dashboard::class,
+                \App\Filament\Pages\BexiaDashboard::class,
             ])
             ->discoverResources(
                 in: app_path('Filament/Resources'),
@@ -163,6 +163,8 @@ HTML),
 ])
 ->authMiddleware([
     Authenticate::class,
+                // BEXIA_V57210G2_DASHBOARD_PERMISSION_MIDDLEWARE
+                \App\Http\Middleware\RedirectFilamentDashboardWithoutPermission::class,
     \App\Http\Middleware\SetPermissionTeamFromUserCompany::class,
 ]);
     }

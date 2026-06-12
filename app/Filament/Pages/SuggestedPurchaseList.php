@@ -8,6 +8,7 @@ use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+// BEXIA_V57210G2_INVENTORY_NAV
 class SuggestedPurchaseList extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
@@ -59,12 +60,9 @@ class SuggestedPurchaseList extends Page
     }
 
     public static function shouldRegisterNavigation(): bool
-    {
-        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
-            'pages.suggestedpurchaselist',
-            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
-        );
-    }
+{
+    return \App\Support\Security\BexiaAccess::inventory();
+}
 
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
@@ -77,14 +75,9 @@ class SuggestedPurchaseList extends Page
     }
 
     public static function canAccess(): bool
-    {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('inventory.menu.view')
-            );
-    }
+{
+    return \App\Support\Security\BexiaAccess::inventory();
+}
 
     protected function getHeaderActions(): array
     {
@@ -1234,5 +1227,10 @@ protected static function userCanView(): bool
         return 'SC-' . now()->format('Ymd') . '-' . str_pad((string) $nextId, 5, '0', STR_PAD_LEFT);
     }
 
+
+public static function canViewAny(): bool
+{
+    return \App\Support\Security\BexiaAccess::inventory();
+}
 
 }
