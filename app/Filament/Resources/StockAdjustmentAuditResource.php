@@ -12,6 +12,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
 
+// BEXIA_V57210L_INVENTORY_MENU_PERMISSION
 class StockAdjustmentAuditResource extends Resource
 {
     protected static ?string $model = StockAdjustmentAudit::class;
@@ -503,6 +504,21 @@ class StockAdjustmentAuditResource extends Resource
         }
 
         return 'Producto ID ' . $id;
+    }
+
+public static function shouldRegisterNavigation(): bool
+    {
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+    }
+
+public static function canAccess(): bool
+    {
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+    }
+
+public static function canViewAny(): bool
+    {
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
     }
 
 }

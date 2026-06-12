@@ -8,6 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+// BEXIA_V57210L_INVENTORY_MENU_PERMISSION
 class InventoryAsOfDate extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
@@ -456,4 +457,14 @@ class InventoryAsOfDate extends Page
 
         return null;
     }
+public static function shouldRegisterNavigation(): bool
+    {
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+    }
+
+public static function canAccess(): bool
+    {
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+    }
+
 }
