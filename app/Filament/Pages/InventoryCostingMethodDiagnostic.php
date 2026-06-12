@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+// BEXIA_V57210L_INVENTORY_MENU_PERMISSION
 class InventoryCostingMethodDiagnostic extends Page implements HasTable
 {
     use InteractsWithTable;
@@ -40,7 +41,7 @@ class InventoryCostingMethodDiagnostic extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return auth()->check();
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
     }
 
     public function table(Table $table): Table
@@ -311,4 +312,9 @@ class InventoryCostingMethodDiagnostic extends Page implements HasTable
             default => 'gray',
         };
     }
+public static function shouldRegisterNavigation(): bool
+    {
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+    }
+
 }
