@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\PermissionRegistrar;
 
+// BEXIA_V57210M2_INICIO_WIDGETS_SIN_PERMISO_OPERATIVO
 class DashboardWidgetRegistry
 {
     public function catalog(): array
@@ -130,7 +131,7 @@ class DashboardWidgetRegistry
                 'module' => 'Inicio',
                 'default_visible' => true,
                 'sort_order' => 10,
-                'permissions_any' => ['approvals.approve', 'approvals.view_workflows', 'dashboard.ver'],
+                'permissions_any' => [],
             ],
             'approvals_pending' => [
                 'key' => 'approvals_pending',
@@ -140,7 +141,7 @@ class DashboardWidgetRegistry
                 'default_visible' => true,
                 'sort_order' => 20,
                     'sort' => 20,
-                'permissions_any' => ['approvals.approve', 'dashboard.ver'],
+                'permissions_any' => [],
             ],
             'notices' => [
                 'key' => 'notices',
@@ -150,7 +151,7 @@ class DashboardWidgetRegistry
                 'default_visible' => true,
                 'sort_order' => 30,
                     'sort' => 30,
-                'permissions_any' => ['dashboard.ver'],
+                'permissions_any' => [],
             ],
             'hr_employees_summary' => [
                 'key' => 'hr_employees_summary',
