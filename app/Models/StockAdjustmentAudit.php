@@ -25,4 +25,11 @@ class StockAdjustmentAudit extends Model
         'after_data' => 'array',
         'metadata' => 'array',
     ];
+
+    // BEXIA_V5729Z_STOCK_ADJUSTMENT_AUDIT_COMPANY_RELATION
+    public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Company::class);
+    }
+
 }
