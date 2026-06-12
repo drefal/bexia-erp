@@ -16,6 +16,9 @@ class StockAdjustmentAuditResource extends Resource
 {
     protected static ?string $model = StockAdjustmentAudit::class;
 
+        // BEXIA_V5729Y_TENANT_COMPANY_RELATIONSHIP
+    protected static ?string $tenantOwnershipRelationshipName = 'company';
+
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
 
     protected static ?string $navigationGroup = 'Inventario';
