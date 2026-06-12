@@ -8,7 +8,6 @@ use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-// BEXIA_V57210G2_INVENTORY_NAV
 class ReplenishmentReport extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar-square';
@@ -37,9 +36,12 @@ class ReplenishmentReport extends Page
 
 
     public static function shouldRegisterNavigation(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'pages.replenishmentreport',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
 
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
@@ -52,9 +54,14 @@ class ReplenishmentReport extends Page
     }
 
     public static function canAccess(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.menu.view')
+            );
+    }
 
     protected function getHeaderActions(): array
     {
@@ -657,9 +664,4 @@ protected static function userCanView(): bool
             ? $user->can('inventory.view_replenishment_report') || $user->can('reports.inventory')
             : false;
     }
-public static function canViewAny(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
-
 }

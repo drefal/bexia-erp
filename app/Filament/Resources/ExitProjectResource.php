@@ -13,7 +13,6 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
-// BEXIA_V57210G2_SALIDAS_CONFIG_NAV
 class ExitProjectResource extends Resource
 {
     protected static ?string $model = ExitProject::class;
@@ -48,9 +47,9 @@ protected static ?string $tenantOwnershipRelationshipName = 'company';
     }
 
     public static function canAccess(): bool
-{
-    return \App\Support\Security\BexiaAccess::salidasConfigurar();
-}
+    {
+        return static::canManageCatalogs();
+    }
 
 public static function canCreate(): bool
     {
@@ -140,9 +139,12 @@ public static function form(Form $form): Form
     }
 
     public static function shouldRegisterNavigation(): bool
-{
-    return \App\Support\Security\BexiaAccess::salidasConfigurar();
-}
+    {
+        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+            'resources.exitprojectresource',
+            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+        );
+    }
 
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
@@ -157,9 +159,16 @@ public static function form(Form $form): Form
     }
 
     public static function canViewAny(): bool
-{
-    return \App\Support\Security\BexiaAccess::salidasConfigurar();
-}
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('salidas.ver')
+                || $user?->can('salidas.ver_todas')
+                || $user?->can('salidas.configurar')
+            );
+    }
 
     public static function table(Table $table): Table
     {

@@ -12,7 +12,6 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
 
-// BEXIA_V57210G2_INVENTORY_NAV
 class StockAdjustmentAuditResource extends Resource
 {
     protected static ?string $model = StockAdjustmentAudit::class;
@@ -505,20 +504,5 @@ class StockAdjustmentAuditResource extends Resource
 
         return 'Producto ID ' . $id;
     }
-
-public static function shouldRegisterNavigation(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
-
-public static function canAccess(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
-
-public static function canViewAny(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
 
 }

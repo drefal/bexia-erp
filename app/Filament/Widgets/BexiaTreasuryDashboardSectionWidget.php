@@ -17,11 +17,6 @@ class BexiaTreasuryDashboardSectionWidget extends Widget
 
     public static function canView(): bool
     {
-        // BEXIA_V57210G2_DASHBOARD_WIDGET_PERMISSION
-        if (! \App\Support\Security\BexiaAccess::dashboard()) {
-            return false;
-        }
-
         return app(DashboardSectionData::class)->widgetVisible('treasury_dashboard_section');
     }
 

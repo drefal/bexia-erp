@@ -14,7 +14,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-// BEXIA_V57210G2_INVENTORY_NAV
 class InventoryCostingMethodDiagnostic extends Page implements HasTable
 {
     use InteractsWithTable;
@@ -40,9 +39,9 @@ class InventoryCostingMethodDiagnostic extends Page implements HasTable
     protected array $effectiveCache = [];
 
     public static function canAccess(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
+    {
+        return auth()->check();
+    }
 
     public function table(Table $table): Table
     {
@@ -312,14 +311,4 @@ class InventoryCostingMethodDiagnostic extends Page implements HasTable
             default => 'gray',
         };
     }
-public static function shouldRegisterNavigation(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
-
-public static function canViewAny(): bool
-{
-    return \App\Support\Security\BexiaAccess::inventory();
-}
-
 }

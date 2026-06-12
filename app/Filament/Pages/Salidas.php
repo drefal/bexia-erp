@@ -2,8 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Support\Security\BexiaAccess;
-
 use App\Models\Form;
 use App\Models\FormSubmission;
 use App\Support\DynamicFormBuilder;
@@ -25,7 +23,6 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Pagination\LengthAwarePaginator;
 
-// BEXIA_V57210G2_SALIDAS_TENANT_AWARE
 class Salidas extends Page implements Forms\Contracts\HasForms
 {
     use Forms\Concerns\InteractsWithForms;
@@ -53,12 +50,30 @@ protected static ?string $title = 'Salidas';
 
 private function canAccessSalidas(): bool
 {
-    return BexiaAccess::salidas();
+    $user = Filament::auth()->user();
+
+    if (! $user) {
+        return false;
+    }
+
+    if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
+        return true;
+    }
+
+    if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
+        return true;
+    }
+
+    return $user->can('salidas.ver')
+        || $user->can('salidas.view')
+        || $user->can('salidas.access');
 }
 
 private function canCreateSalidas(): bool
 {
-    return BexiaAccess::can('salidas.create');
+    $user = Filament::auth()->user();
+
+    return $user && $user->can('salidas.create');
 }
 
 private function canManageAllPdfs(): bool
@@ -77,12 +92,40 @@ private function canSendPdf(): bool
 
 public function canDeleteSalidas(): bool
 {
-    return BexiaAccess::can('salidas.delete');
+    $user = Filament::auth()->user();
+
+    if (! $user) {
+        return false;
+    }
+
+    if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
+        return true;
+    }
+
+    if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
+        return true;
+    }
+
+    return $user->can('salidas.delete');
 }
     
 private function canConfigureSalidas(): bool
 {
-    return BexiaAccess::salidasConfigurar();
+    $user = Filament::auth()->user();
+
+    if (! $user) {
+        return false;
+    }
+
+    if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
+        return true;
+    }
+
+    if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
+        return true;
+    }
+
+    return $user->can('salidas.configurar');
 }
 
 private function currentTenantId(): ?int
@@ -1309,7 +1352,10 @@ public function deleteSubmission(int $submissionId): void
 }
 public static function shouldRegisterNavigation(): bool
 {
-    return BexiaAccess::salidas();
+    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
+        'pages.salidas',
+        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
+    );
 }
 
 protected static function bexiaBaseShouldRegisterNavigation(): bool
@@ -1325,18 +1371,15 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
     }
 
     public static function canAccess(): bool
-{
-    return BexiaAccess::salidas();
-}
+    {
+        $user = auth()->user();
 
-private function canViewAllSalidas(): bool
-{
-    return BexiaAccess::can('salidas.ver_todas') || BexiaAccess::can('salidas.configurar');
-}
-
-private function canSendSalidasPdf(): bool
-{
-    return BexiaAccess::can('salidas.enviar_pdf');
-}
+        return auth()->check()
+            && (
+                $user?->can('salidas.ver')
+                || $user?->can('salidas.ver_todas')
+                || $user?->can('salidas.configurar')
+            );
+    }
 
 }
