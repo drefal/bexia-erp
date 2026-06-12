@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Security\BexiaTenantPermission;
+
 use App\Models\Form;
 use App\Models\FormSubmission;
 use App\Support\DynamicFormBuilder;
@@ -23,6 +25,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Pagination\LengthAwarePaginator;
 
+// BEXIA_V57210K_SALIDAS_TENANT_PERMISSIONS
 class Salidas extends Page implements Forms\Contracts\HasForms
 {
     use Forms\Concerns\InteractsWithForms;
@@ -49,84 +52,40 @@ protected static ?string $title = 'Salidas';
     private array $formKeys = ['salidas_gl7', 'salidas'];
 
 private function canAccessSalidas(): bool
-{
-    $user = Filament::auth()->user();
-
-    if (! $user) {
-        return false;
+    {
+        return BexiaTenantPermission::any([
+            'salidas.ver',
+            'salidas.view',
+            'salidas.access',
+            'salidas.ver_todas',
+            'salidas.configurar',
+        ]);
     }
-
-    if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-        return true;
-    }
-
-    if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-        return true;
-    }
-
-    return $user->can('salidas.ver')
-        || $user->can('salidas.view')
-        || $user->can('salidas.access');
-}
 
 private function canCreateSalidas(): bool
-{
-    $user = Filament::auth()->user();
-
-    return $user && $user->can('salidas.create');
-}
+    {
+        return BexiaTenantPermission::can('salidas.create');
+    }
 
 private function canManageAllPdfs(): bool
-{
-    $user = Filament::auth()->user();
-
-    return $user && $user->can('salidas.ver_todas');
-}
+    {
+        return BexiaTenantPermission::any(['salidas.ver_todas', 'salidas.configurar']);
+    }
 
 private function canSendPdf(): bool
-{
-    $user = Filament::auth()->user();
-
-    return $user && $user->can('salidas.enviar_pdf');
-}
+    {
+        return BexiaTenantPermission::can('salidas.enviar_pdf');
+    }
 
 public function canDeleteSalidas(): bool
-{
-    $user = Filament::auth()->user();
-
-    if (! $user) {
-        return false;
+    {
+        return BexiaTenantPermission::can('salidas.delete');
     }
-
-    if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-        return true;
-    }
-
-    if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-        return true;
-    }
-
-    return $user->can('salidas.delete');
-}
     
 private function canConfigureSalidas(): bool
-{
-    $user = Filament::auth()->user();
-
-    if (! $user) {
-        return false;
+    {
+        return BexiaTenantPermission::can('salidas.configurar');
     }
-
-    if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
-        return true;
-    }
-
-    if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-        return true;
-    }
-
-    return $user->can('salidas.configurar');
-}
 
 private function currentTenantId(): ?int
 {
@@ -1351,35 +1310,32 @@ public function deleteSubmission(int $submissionId): void
     $this->dispatch('$refresh');
 }
 public static function shouldRegisterNavigation(): bool
-{
-    return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
-        'pages.salidas',
-        fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
-    );
-}
+    {
+        return static::bexiaBaseShouldRegisterNavigation();
+    }
+
+    // BEXIA_V57210K2_BYPASS_RUNTIME_SALIDAS_NAV
 
 protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('salidas.ver')
-                || $user?->can('salidas.ver_todas')
-                || $user?->can('salidas.configurar')
-            );
+        return BexiaTenantPermission::any([
+            'salidas.ver',
+            'salidas.view',
+            'salidas.access',
+            'salidas.ver_todas',
+            'salidas.configurar',
+        ]);
     }
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('salidas.ver')
-                || $user?->can('salidas.ver_todas')
-                || $user?->can('salidas.configurar')
-            );
+        return BexiaTenantPermission::any([
+            'salidas.ver',
+            'salidas.view',
+            'salidas.access',
+            'salidas.ver_todas',
+            'salidas.configurar',
+        ]);
     }
 
 }
