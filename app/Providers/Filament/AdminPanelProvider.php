@@ -28,15 +28,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(asset('logo.png'))
             ->brandLogoHeight('3rem')
             ->favicon(asset('favicon.png'))
-            ->homeUrl(function (): string {
-                $tenant = filament()->getTenant();
-
-                if ($tenant) {
-                    return url('/admin/' . $tenant->getKey());
-                }
-
-                return url('/admin');
-            })
+            ->homeUrl(fn (): string => \App\Support\Security\SafeAdminUrl::current())
             ->login()
             ->authGuard('web')
             ->viteTheme('resources/css/filament/admin/theme.css')
