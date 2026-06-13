@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\Security\SafeAdminUrl;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -10,79 +11,60 @@ class KeepPathOnTenantSwitch
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $request->isMethod('GET') || ! $request->is('admin/*')) {
-            return $next($request);
-        }
+        $tenantId = $this->tenantIdFromRequest($request);
+        $user = $request->user();
 
-        $segments = $request->segments();
-
-        if (($segments[0] ?? null) !== 'admin') {
-            return $next($request);
-        }
-
-        $tenantId = $segments[1] ?? null;
-
-        if (! $tenantId || ! ctype_digit((string) $tenantId)) {
-            return $next($request);
-        }
-
-        $tenantId = (string) $tenantId;
-        $suffixSegments = array_slice($segments, 2);
-        $suffix = trim(implode('/', $suffixSegments), '/');
-        $isTenantHome = $suffix === '';
-
-        $lastTenantId = (string) session('bexia_last_tenant_id', '');
-        $lastSuffix = trim((string) session('bexia_last_tenant_suffix', ''), '/');
-        $lastQuery = (array) session('bexia_last_tenant_query', []);
-
-        if (
-            $isTenantHome
-            && $lastTenantId !== ''
-            && $lastTenantId !== $tenantId
-            && $lastSuffix !== ''
-            && ! session()->pull('bexia_tenant_switch_skip_redirect', false)
-        ) {
-            session([
-                'bexia_tenant_switch_attempt' => true,
-                'bexia_tenant_switch_attempt_tenant_id' => $tenantId,
-            ]);
-
-            $target = url('/admin/' . $tenantId . '/' . $lastSuffix);
-
-            if (! empty($lastQuery)) {
-                $target .= '?' . http_build_query($lastQuery);
+        if ($tenantId && $user && $this->isRedirectableRequest($request)) {
+            if (! SafeAdminUrl::userCanUseTenant($user, $tenantId)) {
+                return redirect()->to(SafeAdminUrl::forUser($user));
             }
 
-            return redirect()->to($target);
+            $previousTenantId = (int) $request->session()->get('bexia.current_admin_tenant_id', 0);
+
+            if (
+                $previousTenantId > 0
+                && $previousTenantId !== $tenantId
+                && $this->isDeepAdminPath($request)
+            ) {
+                $request->session()->put('bexia.current_admin_tenant_id', $tenantId);
+                $request->session()->put('bexia_safe_admin_tenant_id', $tenantId);
+
+                return redirect()->to(SafeAdminUrl::forUser($user, $tenantId));
+            }
         }
 
         $response = $next($request);
 
-        if (
-            (int) $response->getStatusCode() === 403
-            && session()->pull('bexia_tenant_switch_attempt', false)
-        ) {
-            session([
-                'bexia_tenant_switch_skip_redirect' => true,
-                'bexia_last_tenant_id' => $tenantId,
-                'bexia_last_tenant_suffix' => '',
-                'bexia_last_tenant_query' => [],
-            ]);
-
-            return redirect()->to(url('/admin/' . $tenantId));
-        }
-
-        if ((int) $response->getStatusCode() < 400) {
-            session(['bexia_last_tenant_id' => $tenantId]);
-
-            if (! $isTenantHome) {
-                session([
-                    'bexia_last_tenant_suffix' => $suffix,
-                    'bexia_last_tenant_query' => $request->query(),
-                ]);
-            }
+        if ($tenantId && $user) {
+            $request->session()->put('bexia.current_admin_tenant_id', $tenantId);
+            $request->session()->put('bexia_safe_admin_tenant_id', $tenantId);
         }
 
         return $response;
+    }
+
+    private function tenantIdFromRequest(Request $request): ?int
+    {
+        $tenant = $request->route('tenant');
+
+        if (is_object($tenant) && method_exists($tenant, 'getKey')) {
+            return (int) $tenant->getKey();
+        }
+
+        if (is_numeric($tenant)) {
+            return (int) $tenant;
+        }
+
+        return null;
+    }
+
+    private function isDeepAdminPath(Request $request): bool
+    {
+        return preg_match('#^admin/[^/]+/.+#', trim($request->path(), '/')) === 1;
+    }
+
+    private function isRedirectableRequest(Request $request): bool
+    {
+        return $request->isMethod('GET') || $request->isMethod('HEAD');
     }
 }
