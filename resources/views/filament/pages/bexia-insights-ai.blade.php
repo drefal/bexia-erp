@@ -11,14 +11,22 @@
                     </p>
                 </div>
 
-                <div class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                    MVP seguro
-                </div>
+                @if ($openAiConfigured)
+                    <div class="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
+                        Agent Core + OpenAI activo
+                    </div>
+                @else
+                    <div class="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
+                        Agent Core local
+                    </div>
+                @endif
             </div>
 
-            <div class="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-                Esta primera versión todavía no consulta datos reales ni usa OpenAI. Sirve para validar permisos,
-                menú, estructura y alcance seguro por empresa.
+            <div class="mt-4 rounded-lg bg-blue-50 p-4 text-sm text-blue-900">
+                Puedes preguntar en lenguaje natural. Bexia ejecuta solo herramientas seguras y filtradas por empresa.
+                @if (! $openAiConfigured)
+                    OpenAI todavía no está activado en el .env, por lo que ventas responde en modo local seguro.
+                @endif
             </div>
         </div>
 
@@ -29,12 +37,19 @@
                         Consulta
                     </h3>
 
+                    <div class="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
+                        <span class="rounded-full bg-gray-100 px-3 py-1">¿Cómo vamos en ventas este mes?</span>
+                        <span class="rounded-full bg-gray-100 px-3 py-1">¿Cuánto vendimos hoy en PDV?</span>
+                        <span class="rounded-full bg-gray-100 px-3 py-1">Dame un resumen comercial del año</span>
+                        <span class="rounded-full bg-gray-100 px-3 py-1">¿Qué puedes consultar?</span>
+                    </div>
+
                     <div class="mt-4">
                         <textarea
                             wire:model.defer="question"
                             rows="5"
                             class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
-                            placeholder="Ejemplo: ¿Cómo vamos esta semana en ventas contra la semana pasada?"
+                            placeholder="Pregunta libremente, por ejemplo: ¿cómo vamos en ventas este mes contra lo esperado?"
                         ></textarea>
                     </div>
 
@@ -48,10 +63,16 @@
                         </x-filament::button>
                     </div>
 
-                    @if ($demoAnswer)
-                        <div class="mt-6 rounded-xl border border-primary-100 bg-primary-50 p-4 text-sm text-primary-950">
-                            {{ $demoAnswer }}
+                    @if ($answer)
+                        <div class="mt-6 whitespace-pre-line rounded-xl border border-primary-100 bg-primary-50 p-4 text-sm text-primary-950">
+                            {{ $answer }}
                         </div>
+
+                        @if (! empty($lastResult['mode']))
+                            <div class="mt-2 text-xs text-gray-500">
+                                Modo: {{ $lastResult['mode'] }}
+                            </div>
+                        @endif
                     @endif
                 </div>
             </div>
@@ -67,9 +88,9 @@
                     </div>
 
                     <div class="mt-3 flex flex-wrap gap-2">
-                        @forelse ($allowedCompanyIds as $companyId)
+                        @forelse ($allowedCompanies as $company)
                             <span class="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                                Empresa #{{ $companyId }}
+                                {{ $company['name'] }}
                             </span>
                         @empty
                             <span class="text-sm text-red-600">
@@ -81,15 +102,28 @@
 
                 <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                     <h3 class="text-base font-semibold text-gray-900">
-                        Herramientas planeadas
+                        Herramientas seguras
                     </h3>
 
                     <div class="mt-4 space-y-3">
                         @foreach ($tools as $tool)
                             <div class="rounded-lg border border-gray-100 p-3">
-                                <div class="text-sm font-medium text-gray-900">
-                                    {{ $tool['label'] }}
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {{ $tool['label'] }}
+                                    </div>
+
+                                    @if ($tool['enabled'])
+                                        <span class="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                                            Activa
+                                        </span>
+                                    @else
+                                        <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                                            Pendiente
+                                        </span>
+                                    @endif
                                 </div>
+
                                 <div class="mt-1 text-xs text-gray-500">
                                     {{ $tool['status'] }}
                                 </div>
