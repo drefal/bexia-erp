@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\AiInsights\AiInsightsAgentService;
 use App\Support\AiInsights\AiInsightsSecurityScope;
 use App\Support\AiInsights\AiInsightsToolRegistry;
 use Filament\Facades\Filament;
@@ -25,16 +26,24 @@ class BexiaInsightsAi extends Page
 
     public array $allowedCompanyIds = [];
 
+    public array $allowedCompanies = [];
+
     public array $tools = [];
 
-    public ?string $demoAnswer = null;
+    public ?string $answer = null;
+
+    public ?array $lastResult = null;
+
+    public bool $openAiConfigured = false;
 
     public function mount(): void
     {
         abort_unless(static::canAccess(), 403);
 
         $this->allowedCompanyIds = AiInsightsSecurityScope::allowedCompanyIdsForUser(auth()->user());
+        $this->allowedCompanies = AiInsightsSecurityScope::allowedCompaniesForUser(auth()->user());
         $this->tools = AiInsightsToolRegistry::availableTools();
+        $this->openAiConfigured = app(AiInsightsAgentService::class)->openAiEnabled();
     }
 
     public static function shouldRegisterNavigation(): bool
@@ -54,18 +63,25 @@ class BexiaInsightsAi extends Page
         $question = trim($this->question);
 
         if ($question === '') {
-            $this->demoAnswer = 'Escribe una pregunta para iniciar.';
+            $this->answer = 'Escribe una pregunta para iniciar.';
             return;
         }
 
-        $tenant = Filament::getTenant();
+        $result = app(AiInsightsAgentService::class)->ask(
+            user: auth()->user(),
+            tenantCompanyId: Filament::getTenant()?->getKey(),
+            question: $question,
+            ipAddress: request()->ip(),
+            userAgent: request()->userAgent(),
+        );
 
-        $this->demoAnswer = 'Bexia Insights AI ya está preparado para recibir consultas. '
-            . 'En la siguiente fase conectaremos las herramientas internas seguras. '
-            . 'Tu pregunta fue: "' . $question . '". '
-            . 'Empresas permitidas detectadas: ' . implode(', ', $this->allowedCompanyIds ?: ['ninguna']) . '. '
-            . 'Tenant actual: ' . ($tenant?->getKey() ?? 'sin tenant') . '.';
+        $this->allowedCompanyIds = AiInsightsSecurityScope::allowedCompanyIdsForUser(auth()->user());
+        $this->allowedCompanies = AiInsightsSecurityScope::allowedCompaniesForUser(auth()->user());
+        $this->tools = AiInsightsToolRegistry::availableTools();
+        $this->openAiConfigured = app(AiInsightsAgentService::class)->openAiEnabled();
 
+        $this->answer = $result['answer'] ?? 'No se pudo generar respuesta.';
+        $this->lastResult = $result;
         $this->question = '';
     }
 }

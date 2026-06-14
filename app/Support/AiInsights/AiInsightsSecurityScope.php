@@ -102,6 +102,50 @@ class AiInsightsSecurityScope
             ->all();
     }
 
+
+    public static function allowedCompaniesForUser(?User $user): array
+    {
+        $ids = self::allowedCompanyIdsForUser($user);
+
+        if ($ids === []) {
+            return [];
+        }
+
+        if (! Schema::hasTable('companies')) {
+            return collect($ids)
+                ->map(fn ($id) => [
+                    'id' => (int) $id,
+                    'name' => 'Empresa #' . (int) $id,
+                ])
+                ->values()
+                ->all();
+        }
+
+        $companies = DB::table('companies')
+            ->whereIn('id', $ids)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'name' => (string) ($row->name ?: ('Empresa #' . $row->id)),
+            ])
+            ->values()
+            ->all();
+
+        $foundIds = collect($companies)->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        foreach ($ids as $id) {
+            if (! in_array((int) $id, $foundIds, true)) {
+                $companies[] = [
+                    'id' => (int) $id,
+                    'name' => 'Empresa #' . (int) $id,
+                ];
+            }
+        }
+
+        return $companies;
+    }
+
     public static function canAccess(?User $user): bool
     {
         if (! $user) {
