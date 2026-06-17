@@ -5,11 +5,14 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\SatCfdiDocumentResource\Pages;
 use App\Models\SatCfdiDocument;
 use App\Support\FiscalSat\FiscalSatAccess;
+use App\Support\FiscalSat\SatCfdiXmlImportService;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Storage;
 
 class SatCfdiDocumentResource extends Resource
 {
@@ -25,7 +28,7 @@ class SatCfdiDocumentResource extends Resource
 
     protected static ?string $navigationGroup = 'Fiscal SAT';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 5;
 
     public static function canViewAny(): bool
     {
@@ -79,6 +82,74 @@ class SatCfdiDocumentResource extends Resource
     {
         return $table
             ->defaultSort('issued_at', 'desc')
+            ->headerActions([
+                Tables\Actions\Action::make('importXml')
+                    ->label('Importar XML')
+                    ->icon('heroicon-o-arrow-up-tray')
+                    ->color('primary')
+                    ->visible(fn () => FiscalSatAccess::can('fiscal_sat.cfdi.import'))
+                    ->form([
+                        Forms\Components\Select::make('company_id')
+                            ->label('Empresa')
+                            ->options(fn () => FiscalSatAccess::companyOptions())
+                            ->searchable()
+                            ->required(),
+
+                        Forms\Components\Select::make('direction')
+                            ->label('Dirección fiscal')
+                            ->options([
+                                'issued' => 'Emitido por la empresa',
+                                'received' => 'Recibido por la empresa',
+                            ])
+                            ->required(),
+
+                        Forms\Components\FileUpload::make('xml_file')
+                            ->label('Archivo XML CFDI')
+                            ->disk('local')
+                            ->directory('fiscal-sat/imports/tmp')
+                            ->acceptedFileTypes([
+                                'application/xml',
+                                'text/xml',
+                                'application/octet-stream',
+                            ])
+                            ->maxSize(10240)
+                            ->preserveFilenames()
+                            ->required(),
+
+                        Forms\Components\Placeholder::make('warning')
+                            ->label('Importante')
+                            ->content('Por ahora la carga es manual. El XML se guardará en storage privado y se registrará en el repositorio Fiscal SAT.'),
+                    ])
+                    ->action(function (array $data): void {
+                        $path = $data['xml_file'] ?? null;
+
+                        if (is_array($path)) {
+                            $path = reset($path);
+                        }
+
+                        if (! is_string($path) || $path === '') {
+                            throw new \RuntimeException('No se recibió archivo XML.');
+                        }
+
+                        $fullPath = Storage::disk('local')->path($path);
+
+                        $result = app(SatCfdiXmlImportService::class)->importFromPath(
+                            path: $fullPath,
+                            companyId: (int) $data['company_id'],
+                            direction: (string) $data['direction'],
+                            userId: auth()->id(),
+                            source: 'manual'
+                        );
+
+                        Storage::disk('local')->delete($path);
+
+                        Notification::make()
+                            ->success()
+                            ->title('XML CFDI importado')
+                            ->body('UUID: ' . $result['uuid'] . ' | ' . ($result['direction_label'] ?? $result['direction']) . ' | Total: $' . number_format((float) $result['total'], 2))
+                            ->send();
+                    }),
+            ])
             ->columns([
                 Tables\Columns\TextColumn::make('company.name')
                     ->label('Empresa')
@@ -88,6 +159,11 @@ class SatCfdiDocumentResource extends Resource
                 Tables\Columns\TextColumn::make('direction')
                     ->label('Dirección')
                     ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'issued' => 'Emitido',
+                        'received' => 'Recibido',
+                        default => (string) $state,
+                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('uuid')
@@ -99,6 +175,14 @@ class SatCfdiDocumentResource extends Resource
                 Tables\Columns\TextColumn::make('cfdi_type')
                     ->label('Tipo')
                     ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'I' => 'Ingreso',
+                        'E' => 'Egreso',
+                        'P' => 'Pago',
+                        'N' => 'Nómina',
+                        'T' => 'Traslado',
+                        default => (string) $state,
+                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
