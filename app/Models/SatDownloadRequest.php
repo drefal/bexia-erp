@@ -17,6 +17,7 @@ class SatDownloadRequest extends Model
         'request_uuid',
         'direction',
         'request_kind',
+        'notes',
         'date_from',
         'date_to',
         'status',
@@ -33,10 +34,10 @@ class SatDownloadRequest extends Model
         'date_to' => 'datetime',
         'requested_at' => 'datetime',
         'finished_at' => 'datetime',
-        'payload' => 'array',
+        'metadata' => 'array',
     ];
 
-    public function company(): BelongsTo
+public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
     }
