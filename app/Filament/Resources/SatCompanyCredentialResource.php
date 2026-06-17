@@ -15,6 +15,8 @@ class SatCompanyCredentialResource extends Resource
 {
     protected static ?string $model = SatCompanyCredential::class;
 
+    protected static bool $isScopedToTenant = false;
+
     protected static ?string $navigationIcon = 'heroicon-o-key';
 
     protected static ?string $navigationLabel = 'Configuración SAT';
