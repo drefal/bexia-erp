@@ -6,6 +6,7 @@ use App\Filament\Resources\SatDownloadRequestResource;
 use App\Support\FiscalSat\SatDownloadPackageDownloader;
 use App\Support\FiscalSat\SatDownloadRequestVerifier;
 use App\Support\FiscalSat\SatMetadataPackageImporter;
+use App\Support\FiscalSat\SatXmlPackageImporter;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
@@ -114,6 +115,44 @@ class ViewSatDownloadRequest extends ViewRecord
                 ->disabled()
                 ->visible(fn (): bool => $this->record->request_kind === 'metadata'
                     && filled(data_get($this->record->metadata, 'metadata_processed_at'))),
+
+            Actions\Action::make('xmlAlreadyProcessed')
+                ->label('XML ya procesados')
+                ->icon('heroicon-o-check-circle')
+                ->color('success')
+                ->disabled()
+                ->visible(fn (): bool => $this->record->request_kind === 'xml'
+                    && filled(data_get($this->record->metadata, 'xml_processed_at'))),
+
+            Actions\Action::make('processSatXml')
+                ->label('Procesar XML descargados')
+                ->icon('heroicon-o-document-check')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Procesar XML descargados')
+                ->modalDescription('Se leerán los XML contenidos en los paquetes ZIP descargados y se actualizarán CFDI, conceptos e impuestos.')
+                ->visible(fn (): bool => $this->record->request_kind === 'xml'
+                    && filled(data_get($this->record->metadata, 'downloaded_packages'))
+                    && blank(data_get($this->record->metadata, 'xml_processed_at')))
+                ->action(function (): void {
+                    try {
+                        $result = app(SatXmlPackageImporter::class)->importFromRequest($this->record);
+
+                        $this->record->refresh();
+
+                        Notification::make()
+                            ->title('XML procesados')
+                            ->body($result['message'] ?? 'Los XML fueron procesados correctamente.')
+                            ->success()
+                            ->send();
+                    } catch (\Throwable $e) {
+                        Notification::make()
+                            ->title('No se pudieron procesar los XML')
+                            ->body($e->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
 
             Actions\Action::make('processSatMetadata')
                 ->label('Procesar metadata descargada')
