@@ -74,6 +74,8 @@ class ResicoTaxCalculator
             'issued_ppd_subtotal' => 0.0,
             'received_pue_subtotal' => 0.0,
             'received_ppd_subtotal' => 0.0,
+            'issued_ppd_count' => 0,
+            'received_ppd_count' => 0,
         ];
 
         $details = [];
@@ -122,6 +124,7 @@ class ResicoTaxCalculator
 
                     if ($paymentMethod === 'PPD') {
                         $summary['issued_ppd_subtotal'] += $subtotal;
+                        $summary['issued_ppd_count']++;
                     } else {
                         $summary['issued_pue_subtotal'] += $subtotal;
                     }
@@ -144,6 +147,7 @@ class ResicoTaxCalculator
 
                     if ($paymentMethod === 'PPD') {
                         $summary['received_ppd_subtotal'] += $subtotal;
+                        $summary['received_ppd_count']++;
                     } else {
                         $summary['received_pue_subtotal'] += $subtotal;
                     }
@@ -162,9 +166,12 @@ class ResicoTaxCalculator
                 'id' => $doc->id,
                 'uuid' => $doc->uuid,
                 'direction' => $doc->direction,
+                'direction_label' => $this->directionLabel($doc->direction ?? null),
                 'cfdi_type' => $doc->cfdi_type,
+                'cfdi_type_label' => $this->cfdiTypeLabel($doc->cfdi_type ?? null),
                 'status' => $doc->status,
                 'payment_method' => $doc->payment_method,
+                'payment_method_label' => $this->paymentMethodLabel($doc->payment_method ?? null),
                 'issued_at' => $doc->issued_at,
                 'issuer_rfc' => $doc->issuer_rfc,
                 'issuer_name' => $doc->issuer_name,
@@ -215,6 +222,7 @@ class ResicoTaxCalculator
                 ],
             ],
             'details' => $details,
+            'ppd_details' => array_values(array_filter($details, fn (array $row): bool => ($row['payment_method'] ?? null) === 'PPD')),
             'warnings' => $this->warnings($summary),
         ];
     }
@@ -296,6 +304,36 @@ class ResicoTaxCalculator
         $direction = $this->normalize($direction);
 
         return str_contains($direction, 'RET') || str_contains($direction, 'WITH') || $direction === 'W';
+    }
+
+    private function directionLabel(mixed $direction): string
+    {
+        return match ($this->normalize($direction)) {
+            'ISSUED' => 'Emitido',
+            'RECEIVED' => 'Recibido',
+            default => (string) ($direction ?: 'Sin flujo'),
+        };
+    }
+
+    private function cfdiTypeLabel(mixed $type): string
+    {
+        return match ($this->normalize($type)) {
+            'I' => 'Ingreso',
+            'E' => 'Egreso',
+            'P' => 'Pago',
+            'N' => 'Nómina',
+            'T' => 'Traslado',
+            default => (string) ($type ?: 'Sin tipo'),
+        };
+    }
+
+    private function paymentMethodLabel(mixed $method): string
+    {
+        return match ($this->normalize($method)) {
+            'PUE' => 'Pago en una sola exhibición',
+            'PPD' => 'Pago en parcialidades o diferido',
+            default => (string) ($method ?: 'Sin método'),
+        };
     }
 
     private function resicoRate(float $base): ?float

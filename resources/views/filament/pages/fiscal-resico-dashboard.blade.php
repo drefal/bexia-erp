@@ -4,6 +4,7 @@
         $resico = data_get($report, 'calculation.resico', []);
         $iva = data_get($report, 'calculation.iva', []);
         $details = data_get($report, 'details', []);
+        $ppdDetails = data_get($report, 'ppd_details', []);
         $warnings = data_get($report, 'warnings', []);
 
         $money = fn ($value) => '$' . number_format((float) ($value ?? 0), 2);
@@ -60,7 +61,7 @@
                         {{ $money(data_get($iva, 'iva_estimado_a_pagar')) }}
                     </div>
                     <div class="mt-1 text-xs text-gray-500">
-                        Trasladado - acreditable - retenido
+                        IVA trasladado - IVA acreditable - retenciones.
                     </div>
                 </div>
 
@@ -74,13 +75,13 @@
                     </div>
                 </div>
 
-                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                    <div class="text-sm text-gray-500">Recibidos PPD</div>
-                    <div class="mt-2 text-2xl font-bold text-gray-950 dark:text-white">
-                        {{ $money(data_get($summary, 'received_ppd_subtotal')) }}
+                <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm dark:border-amber-800 dark:bg-amber-950">
+                    <div class="text-sm text-amber-700 dark:text-amber-200">CFDI PPD por revisar</div>
+                    <div class="mt-2 text-2xl font-bold text-amber-900 dark:text-amber-100">
+                        {{ number_format(count($ppdDetails)) }}
                     </div>
-                    <div class="mt-1 text-xs text-gray-500">
-                        Requiere complemento de pago.
+                    <div class="mt-1 text-xs text-amber-700 dark:text-amber-200">
+                        Requieren complemento de pago para confirmar cobro/pago.
                     </div>
                 </div>
             </div>
@@ -88,10 +89,9 @@
             <div class="grid gap-4 md:grid-cols-2">
                 <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                     <h3 class="text-base font-semibold text-gray-950 dark:text-white">ISR RESICO</h3>
-
                     <dl class="mt-4 space-y-3 text-sm">
                         <div class="flex justify-between gap-4">
-                            <dt class="text-gray-500">Ingresos emitidos base</dt>
+                            <dt class="text-gray-500">Base ISR RESICO estimada</dt>
                             <dd class="font-medium">{{ $money(data_get($resico, 'base_isr_resico_estimado')) }}</dd>
                         </div>
                         <div class="flex justify-between gap-4">
@@ -99,7 +99,7 @@
                             <dd class="font-medium">{{ $percent(data_get($resico, 'tasa_resico_mensual')) }}</dd>
                         </div>
                         <div class="flex justify-between gap-4">
-                            <dt class="text-gray-500">ISR causado</dt>
+                            <dt class="text-gray-500">ISR causado estimado</dt>
                             <dd class="font-medium">{{ $money(data_get($resico, 'isr_causado_estimado')) }}</dd>
                         </div>
                         <div class="flex justify-between gap-4">
@@ -115,18 +115,17 @@
 
                 <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                     <h3 class="text-base font-semibold text-gray-950 dark:text-white">IVA</h3>
-
                     <dl class="mt-4 space-y-3 text-sm">
                         <div class="flex justify-between gap-4">
-                            <dt class="text-gray-500">IVA trasladado emitido</dt>
+                            <dt class="text-gray-500">IVA trasladado en facturas emitidas</dt>
                             <dd class="font-medium">{{ $money(data_get($iva, 'iva_trasladado_emitido_neto')) }}</dd>
                         </div>
                         <div class="flex justify-between gap-4">
-                            <dt class="text-gray-500">IVA acreditable recibido</dt>
+                            <dt class="text-gray-500">IVA acreditable en facturas recibidas</dt>
                             <dd class="font-medium">{{ $money(data_get($iva, 'iva_acreditable_recibido_neto')) }}</dd>
                         </div>
                         <div class="flex justify-between gap-4">
-                            <dt class="text-gray-500">Diferencia antes retenciones</dt>
+                            <dt class="text-gray-500">Diferencia antes de retenciones</dt>
                             <dd class="font-medium">{{ $money(data_get($iva, 'iva_diferencia_antes_retenciones')) }}</dd>
                         </div>
                         <div class="flex justify-between gap-4">
@@ -142,29 +141,80 @@
             </div>
 
             <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                <h3 class="text-base font-semibold text-gray-950 dark:text-white">Base de XML</h3>
+                <h3 class="text-base font-semibold text-gray-950 dark:text-white">Base XML del periodo</h3>
+                <p class="mt-1 text-sm text-gray-500">
+                    Separación de facturas emitidas y recibidas con XML completo.
+                </p>
 
                 <div class="mt-4 grid gap-4 md:grid-cols-4">
                     <div>
-                        <div class="text-xs text-gray-500">Emitidos ingreso</div>
+                        <div class="text-xs text-gray-500">Facturas emitidas</div>
                         <div class="text-lg font-semibold">{{ number_format((int) data_get($summary, 'issued_income_count', 0)) }}</div>
                         <div class="text-xs text-gray-500">{{ $money(data_get($summary, 'issued_income_subtotal')) }}</div>
                     </div>
                     <div>
-                        <div class="text-xs text-gray-500">Recibidos ingreso</div>
+                        <div class="text-xs text-gray-500">Facturas recibidas</div>
                         <div class="text-lg font-semibold">{{ number_format((int) data_get($summary, 'received_income_count', 0)) }}</div>
                         <div class="text-xs text-gray-500">{{ $money(data_get($summary, 'received_income_subtotal')) }}</div>
                     </div>
                     <div>
-                        <div class="text-xs text-gray-500">Emitidos PPD</div>
-                        <div class="text-lg font-semibold">{{ $money(data_get($summary, 'issued_ppd_subtotal')) }}</div>
+                        <div class="text-xs text-gray-500">Emitidas PPD</div>
+                        <div class="text-lg font-semibold">{{ number_format((int) data_get($summary, 'issued_ppd_count', 0)) }}</div>
+                        <div class="text-xs text-gray-500">{{ $money(data_get($summary, 'issued_ppd_subtotal')) }}</div>
                     </div>
                     <div>
-                        <div class="text-xs text-gray-500">Recibidos PPD</div>
-                        <div class="text-lg font-semibold">{{ $money(data_get($summary, 'received_ppd_subtotal')) }}</div>
+                        <div class="text-xs text-gray-500">Recibidas PPD</div>
+                        <div class="text-lg font-semibold">{{ number_format((int) data_get($summary, 'received_ppd_count', 0)) }}</div>
+                        <div class="text-xs text-gray-500">{{ $money(data_get($summary, 'received_ppd_subtotal')) }}</div>
                     </div>
                 </div>
             </div>
+
+            @if (! empty($ppdDetails))
+                <div class="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm dark:border-amber-800 dark:bg-gray-900">
+                    <div class="border-b border-amber-200 bg-amber-50 p-5 dark:border-amber-800 dark:bg-amber-950">
+                        <h3 class="text-base font-semibold text-amber-900 dark:text-amber-100">
+                            CFDI PPD pendientes de validar con complemento de pago
+                        </h3>
+                        <p class="mt-1 text-sm text-amber-700 dark:text-amber-200">
+                            Estas facturas están en método PPD. Para cálculo final de IVA/RESICO se debe relacionar el complemento de pago correspondiente.
+                        </p>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-800">
+                                <tr>
+                                    <th class="px-4 py-3 text-left font-medium">Fecha</th>
+                                    <th class="px-4 py-3 text-left font-medium">Flujo</th>
+                                    <th class="px-4 py-3 text-left font-medium">Tipo</th>
+                                    <th class="px-4 py-3 text-left font-medium">UUID</th>
+                                    <th class="px-4 py-3 text-left font-medium">RFC emisor</th>
+                                    <th class="px-4 py-3 text-left font-medium">RFC receptor</th>
+                                    <th class="px-4 py-3 text-right font-medium">Subtotal</th>
+                                    <th class="px-4 py-3 text-right font-medium">IVA</th>
+                                    <th class="px-4 py-3 text-right font-medium">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                                @foreach ($ppdDetails as $row)
+                                    <tr>
+                                        <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'issued_at') }}</td>
+                                        <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'direction_label', data_get($row, 'direction')) }}</td>
+                                        <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'cfdi_type_label', data_get($row, 'cfdi_type')) }}</td>
+                                        <td class="whitespace-nowrap px-4 py-3 font-mono text-xs">{{ data_get($row, 'uuid') }}</td>
+                                        <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'issuer_rfc') }}</td>
+                                        <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'receiver_rfc') }}</td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-right">{{ $money(data_get($row, 'subtotal')) }}</td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-right">{{ $money(data_get($row, 'iva_transferred')) }}</td>
+                                        <td class="whitespace-nowrap px-4 py-3 text-right">{{ $money(data_get($row, 'total')) }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endif
 
             @if (! empty($warnings))
                 <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
@@ -192,8 +242,9 @@
                         <thead class="bg-gray-50 dark:bg-gray-800">
                             <tr>
                                 <th class="px-4 py-3 text-left font-medium">Fecha</th>
-                                <th class="px-4 py-3 text-left font-medium">Tipo</th>
                                 <th class="px-4 py-3 text-left font-medium">Flujo</th>
+                                <th class="px-4 py-3 text-left font-medium">Tipo</th>
+                                <th class="px-4 py-3 text-left font-medium">Método</th>
                                 <th class="px-4 py-3 text-left font-medium">RFC emisor</th>
                                 <th class="px-4 py-3 text-left font-medium">RFC receptor</th>
                                 <th class="px-4 py-3 text-right font-medium">Subtotal</th>
@@ -206,8 +257,9 @@
                             @forelse (array_slice($details, 0, 100) as $row)
                                 <tr>
                                     <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'issued_at') }}</td>
-                                    <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'cfdi_type') }}</td>
-                                    <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'direction') }}</td>
+                                    <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'direction_label', data_get($row, 'direction')) }}</td>
+                                    <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'cfdi_type_label', data_get($row, 'cfdi_type')) }}</td>
+                                    <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'payment_method') }}</td>
                                     <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'issuer_rfc') }}</td>
                                     <td class="whitespace-nowrap px-4 py-3">{{ data_get($row, 'receiver_rfc') }}</td>
                                     <td class="whitespace-nowrap px-4 py-3 text-right">{{ $money(data_get($row, 'subtotal')) }}</td>
@@ -217,7 +269,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="px-4 py-6 text-center text-gray-500">
+                                    <td colspan="10" class="px-4 py-6 text-center text-gray-500">
                                         No hay CFDI con XML para este periodo.
                                     </td>
                                 </tr>
