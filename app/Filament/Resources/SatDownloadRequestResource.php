@@ -5,6 +5,8 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\SatDownloadRequestResource\Pages;
 use App\Models\SatDownloadRequest;
 use App\Support\FiscalSat\FiscalSatAccess;
+use Filament\Forms;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -12,6 +14,8 @@ use Filament\Tables\Table;
 class SatDownloadRequestResource extends Resource
 {
     protected static ?string $model = SatDownloadRequest::class;
+
+    protected static bool $isScopedToTenant = false;
 
     protected static ?string $navigationIcon = 'heroicon-o-arrow-down-tray';
 
@@ -30,6 +34,11 @@ class SatDownloadRequestResource extends Resource
         return FiscalSatAccess::can('fiscal_sat.downloads.view');
     }
 
+    public static function canView($record): bool
+    {
+        return FiscalSatAccess::can('fiscal_sat.downloads.view');
+    }
+
     public static function canCreate(): bool
     {
         return false;
@@ -40,9 +49,89 @@ class SatDownloadRequestResource extends Resource
         return false;
     }
 
+    public static function canDelete($record): bool
+    {
+        return false;
+    }
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Section::make('Solicitud SAT')
+                    ->schema([
+                        Forms\Components\TextInput::make('company.name')
+                            ->label('Empresa')
+                            ->disabled(),
+
+                        Forms\Components\TextInput::make('direction')
+                            ->label('Dirección')
+                            ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                'issued' => 'Emitidos',
+                                'received' => 'Recibidos',
+                                default => (string) $state,
+                            })
+                            ->disabled(),
+
+                        Forms\Components\TextInput::make('request_kind')
+                            ->label('Tipo de solicitud')
+                            ->disabled(),
+
+                        Forms\Components\TextInput::make('status')
+                            ->label('Estado')
+                            ->disabled(),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Section::make('Periodo')
+                    ->schema([
+                        Forms\Components\DateTimePicker::make('date_from')
+                            ->label('Desde')
+                            ->disabled(),
+
+                        Forms\Components\DateTimePicker::make('date_to')
+                            ->label('Hasta')
+                            ->disabled(),
+
+                        Forms\Components\DateTimePicker::make('requested_at')
+                            ->label('Solicitada')
+                            ->disabled(),
+
+                        Forms\Components\DateTimePicker::make('finished_at')
+                            ->label('Finalizada')
+                            ->disabled(),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Section::make('Respuesta SAT')
+                    ->schema([
+                        Forms\Components\TextInput::make('request_uuid')
+                            ->label('UUID solicitud SAT')
+                            ->disabled(),
+
+                        Forms\Components\TextInput::make('sat_status_code')
+                            ->label('Código SAT')
+                            ->disabled(),
+
+                        Forms\Components\Textarea::make('sat_message')
+                            ->label('Mensaje SAT')
+                            ->rows(3)
+                            ->disabled(),
+
+                        Forms\Components\Textarea::make('error_message')
+                            ->label('Error')
+                            ->rows(3)
+                            ->disabled(),
+                    ])
+                    ->columns(1),
+            ]);
+    }
+
     public static function table(Table $table): Table
     {
         return $table
+            ->emptyStateHeading('Sin solicitudes de descarga')
+            ->emptyStateDescription('La conexión automática con SAT se implementará en una fase posterior. Por ahora se puede usar Importar XML.')
             ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('company.name')
@@ -53,6 +142,11 @@ class SatDownloadRequestResource extends Resource
                 Tables\Columns\TextColumn::make('direction')
                     ->label('Dirección')
                     ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'issued' => 'Emitidos',
+                        'received' => 'Recibidos',
+                        default => (string) $state,
+                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('request_kind')

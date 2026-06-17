@@ -18,6 +18,8 @@ class SatCfdiDocumentResource extends Resource
 {
     protected static ?string $model = SatCfdiDocument::class;
 
+    protected static bool $isScopedToTenant = false;
+
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
     protected static ?string $navigationLabel = 'CFDI';
