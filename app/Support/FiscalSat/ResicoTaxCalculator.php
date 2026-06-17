@@ -53,68 +53,97 @@ class ResicoTaxCalculator
             'period' => $period,
             'period_from' => $from,
             'period_to' => $to,
+
             'docs_total_xml' => 0,
             'docs_vigentes' => 0,
             'docs_cancelados_excluidos' => 0,
+
             'issued_income_count' => 0,
+            'issued_egress_count' => 0,
             'received_income_count' => 0,
+            'received_egress_count' => 0,
+
             'issued_income_subtotal' => 0.0,
             'issued_egress_subtotal' => 0.0,
             'received_income_subtotal' => 0.0,
             'received_egress_subtotal' => 0.0,
+
             'issued_iva_transferred' => 0.0,
             'issued_iva_transferred_egress' => 0.0,
             'received_iva_transferred' => 0.0,
             'received_iva_transferred_egress' => 0.0,
+
             'issued_iva_withheld' => 0.0,
             'received_iva_withheld' => 0.0,
             'issued_isr_withheld' => 0.0,
             'received_isr_withheld' => 0.0,
+
             'issued_pue_subtotal' => 0.0,
             'issued_ppd_subtotal' => 0.0,
             'received_pue_subtotal' => 0.0,
             'received_ppd_subtotal' => 0.0,
             'issued_ppd_count' => 0,
             'received_ppd_count' => 0,
+
+            'received_pue_g01_g03_banked_count' => 0,
+            'received_pue_g01_g03_banked_subtotal' => 0.0,
+            'received_pue_g01_g03_banked_iva' => 0.0,
+
+            'received_excluded_from_accreditable_count' => 0,
+            'received_excluded_from_accreditable_subtotal' => 0.0,
+            'received_excluded_from_accreditable_iva' => 0.0,
+
+            'received_payment_cfdi_count' => 0,
+            'received_payment_cfdi_iva_detected' => 0.0,
         ];
 
         $details = [];
 
-        foreach ($documents as $doc) {
+        foreach ($documents as $document) {
             $summary['docs_total_xml']++;
 
-            if ($this->isCancelled($doc->status ?? null)) {
+            if ($this->isCancelled($document->status ?? null)) {
                 $summary['docs_cancelados_excluidos']++;
                 continue;
             }
 
             $summary['docs_vigentes']++;
 
-            $direction = $this->normalize($doc->direction ?? '');
-            $type = $this->normalize($doc->cfdi_type ?? '');
-            $paymentMethod = $this->normalize($doc->payment_method ?? '');
-            $subtotal = $this->amount($doc->subtotal ?? 0);
-            $total = $this->amount($doc->total ?? 0);
+            $direction = $this->normalize($document->direction ?? '');
+            $type = $this->normalize($document->cfdi_type ?? '');
+            $paymentMethod = $this->normalize($document->payment_method ?? '');
+            $paymentForm = $this->normalize($document->payment_form ?? '');
+            $usageCfdi = $this->normalize($document->usage_cfdi ?? '');
+
+            $subtotal = $this->amount($document->subtotal ?? 0);
+            $discount = $this->amount($document->discount ?? 0);
+            $subtotalLessDiscount = max(0.0, $subtotal - $discount);
+            $total = $this->amount($document->total ?? 0);
 
             $ivaTransferred = 0.0;
             $ivaWithheld = 0.0;
             $isrWithheld = 0.0;
 
-            foreach ($taxes->get($doc->id, collect()) as $tax) {
+            foreach ($taxes->get($document->id, collect()) as $tax) {
                 $taxAmount = $this->amount($tax->amount ?? 0);
+                $taxName = $tax->tax ?? null;
+                $taxDirection = $tax->tax_direction ?? null;
 
-                if ($this->isIvaTax($tax->tax ?? null) && $this->isTransferred($tax->tax_direction ?? null)) {
+                if ($this->isIvaTax($taxName) && $this->isTransferred($taxDirection)) {
                     $ivaTransferred += $taxAmount;
                 }
 
-                if ($this->isIvaTax($tax->tax ?? null) && $this->isWithheld($tax->tax_direction ?? null)) {
+                if ($this->isIvaTax($taxName) && $this->isWithheld($taxDirection)) {
                     $ivaWithheld += $taxAmount;
                 }
 
-                if ($this->isIsrTax($tax->tax ?? null) && $this->isWithheld($tax->tax_direction ?? null)) {
+                if ($this->isIsrTax($taxName) && $this->isWithheld($taxDirection)) {
                     $isrWithheld += $taxAmount;
                 }
             }
+
+            $ivaAccreditableLike = false;
+            $ivaExclusionReason = null;
 
             if ($direction === 'ISSUED') {
                 if ($this->isIncomeDoc($type)) {
@@ -131,6 +160,7 @@ class ResicoTaxCalculator
                 }
 
                 if ($this->isEgressDoc($type)) {
+                    $summary['issued_egress_count']++;
                     $summary['issued_egress_subtotal'] += $subtotal;
                     $summary['issued_iva_transferred_egress'] += $ivaTransferred;
                 }
@@ -151,9 +181,31 @@ class ResicoTaxCalculator
                     } else {
                         $summary['received_pue_subtotal'] += $subtotal;
                     }
+
+                    $ivaAccreditableLike = $paymentMethod === 'PUE'
+                        && $this->isIvaAllowedUsage($usageCfdi)
+                        && $this->isBankedPaymentForm($paymentForm);
+
+                    if ($ivaAccreditableLike) {
+                        $summary['received_pue_g01_g03_banked_count']++;
+                        $summary['received_pue_g01_g03_banked_subtotal'] += $subtotalLessDiscount;
+                        $summary['received_pue_g01_g03_banked_iva'] += $ivaTransferred;
+                    } else {
+                        $summary['received_excluded_from_accreditable_count']++;
+                        $summary['received_excluded_from_accreditable_subtotal'] += $subtotalLessDiscount;
+                        $summary['received_excluded_from_accreditable_iva'] += $ivaTransferred;
+                        $ivaExclusionReason = $this->ivaExclusionReason($paymentMethod, $paymentForm, $usageCfdi);
+                    }
+                }
+
+                if ($this->isPaymentDoc($type)) {
+                    $summary['received_payment_cfdi_count']++;
+                    $summary['received_payment_cfdi_iva_detected'] += $ivaTransferred;
+                    $ivaExclusionReason = 'CFDI tipo pago: falta leer complemento pago20';
                 }
 
                 if ($this->isEgressDoc($type)) {
+                    $summary['received_egress_count']++;
                     $summary['received_egress_subtotal'] += $subtotal;
                     $summary['received_iva_transferred_egress'] += $ivaTransferred;
                 }
@@ -163,25 +215,31 @@ class ResicoTaxCalculator
             }
 
             $details[] = [
-                'id' => $doc->id,
-                'uuid' => $doc->uuid,
-                'direction' => $doc->direction,
-                'direction_label' => $this->directionLabel($doc->direction ?? null),
-                'cfdi_type' => $doc->cfdi_type,
-                'cfdi_type_label' => $this->cfdiTypeLabel($doc->cfdi_type ?? null),
-                'status' => $doc->status,
-                'payment_method' => $doc->payment_method,
-                'payment_method_label' => $this->paymentMethodLabel($doc->payment_method ?? null),
-                'issued_at' => $doc->issued_at,
-                'issuer_rfc' => $doc->issuer_rfc,
-                'issuer_name' => $doc->issuer_name,
-                'receiver_rfc' => $doc->receiver_rfc,
-                'receiver_name' => $doc->receiver_name,
+                'id' => $document->id,
+                'uuid' => $document->uuid,
+                'direction' => $document->direction,
+                'direction_label' => $this->directionLabel($document->direction ?? null),
+                'cfdi_type' => $document->cfdi_type,
+                'cfdi_type_label' => $this->cfdiTypeLabel($document->cfdi_type ?? null),
+                'status' => $document->status,
+                'payment_method' => $document->payment_method,
+                'payment_method_label' => $this->paymentMethodLabel($document->payment_method ?? null),
+                'payment_form' => $document->payment_form,
+                'usage_cfdi' => $document->usage_cfdi,
+                'issued_at' => $document->issued_at,
+                'issuer_rfc' => $document->issuer_rfc,
+                'issuer_name' => $document->issuer_name,
+                'receiver_rfc' => $document->receiver_rfc,
+                'receiver_name' => $document->receiver_name,
                 'subtotal' => round($subtotal, 2),
+                'discount' => round($discount, 2),
+                'subtotal_less_discount' => round($subtotalLessDiscount, 2),
                 'iva_transferred' => round($ivaTransferred, 2),
                 'iva_withheld' => round($ivaWithheld, 2),
                 'isr_withheld' => round($isrWithheld, 2),
                 'total' => round($total, 2),
+                'iva_acreditable_estimado' => $ivaAccreditableLike,
+                'iva_exclusion_reason' => $ivaExclusionReason,
             ];
         }
 
@@ -191,33 +249,45 @@ class ResicoTaxCalculator
             }
         }
 
-        $baseResico = max(0.0, $summary['issued_income_subtotal'] - $summary['issued_egress_subtotal']);
-        $rate = $this->resicoRate($baseResico);
-        $isrCausado = $rate === null ? null : round($baseResico * $rate, 2);
+        $baseIsrResico = max(0.0, $summary['issued_income_subtotal'] - $summary['issued_egress_subtotal']);
+        $resicoRate = $this->resicoRate($baseIsrResico);
+        $isrCausado = $resicoRate === null ? null : round($baseIsrResico * $resicoRate, 2);
         $isrRetenido = round($summary['issued_isr_withheld'], 2);
 
-        $ivaTrasladado = round($summary['issued_iva_transferred'] - $summary['issued_iva_transferred_egress'], 2);
-        $ivaAcreditable = round($summary['received_iva_transferred'] - $summary['received_iva_transferred_egress'], 2);
-        $ivaRetenidoClientes = round($summary['issued_iva_withheld'], 2);
-        $ivaDiferencia = round($ivaTrasladado - $ivaAcreditable, 2);
+        $ivaTrasladadoNeto = round($summary['issued_iva_transferred'] - $summary['issued_iva_transferred_egress'], 2);
+        $ivaTotalRecibidoXml = round($summary['received_iva_transferred'] - $summary['received_iva_transferred_egress'], 2);
+        $ivaDeclaracionLike = round(
+            $summary['received_pue_g01_g03_banked_iva'] + $summary['received_payment_cfdi_iva_detected'],
+            2
+        );
+        $ivaNoAcreditablePreliminar = round(max(0.0, $ivaTotalRecibidoXml - $ivaDeclaracionLike), 2);
+        $ivaRetenidoPorClientes = round($summary['issued_iva_withheld'], 2);
+        $ivaAmplioPagar = round($ivaTrasladadoNeto - $ivaTotalRecibidoXml - $ivaRetenidoPorClientes, 2);
+        $ivaDeclaracionLikePagar = round($ivaTrasladadoNeto - $ivaDeclaracionLike - $ivaRetenidoPorClientes, 2);
 
         return [
             'summary' => $summary,
             'calculation' => [
                 'resico' => [
-                    'base_isr_resico_estimado' => round($baseResico, 2),
-                    'tasa_resico_mensual' => $rate,
+                    'base_isr_resico_estimado' => round($baseIsrResico, 2),
+                    'tasa_resico_mensual' => $resicoRate,
                     'isr_causado_estimado' => $isrCausado,
                     'isr_retenido_detectado_emitidos' => $isrRetenido,
                     'isr_estimado_a_pagar' => $isrCausado === null ? null : round(max(0.0, $isrCausado - $isrRetenido), 2),
                     'isr_saldo_favor_por_retenciones' => $isrCausado === null ? null : round(max(0.0, $isrRetenido - $isrCausado), 2),
                 ],
                 'iva' => [
-                    'iva_trasladado_emitido_neto' => $ivaTrasladado,
-                    'iva_acreditable_recibido_neto' => $ivaAcreditable,
-                    'iva_diferencia_antes_retenciones' => $ivaDiferencia,
-                    'iva_retenido_por_clientes_detectado_emitidos' => $ivaRetenidoClientes,
-                    'iva_estimado_a_pagar' => round($ivaDiferencia - $ivaRetenidoClientes, 2),
+                    'iva_trasladado_emitido_neto' => $ivaTrasladadoNeto,
+                    'iva_acreditable_recibido_neto' => $ivaTotalRecibidoXml,
+                    'iva_acreditable_estimado_declaracion' => $ivaDeclaracionLike,
+                    'iva_acreditable_pue_g01_g03_bancarizada' => round($summary['received_pue_g01_g03_banked_iva'], 2),
+                    'iva_complementos_pago_detectado' => round($summary['received_payment_cfdi_iva_detected'], 2),
+                    'iva_complementos_pago_pendiente' => $summary['received_payment_cfdi_count'],
+                    'iva_no_acreditable_preliminar' => $ivaNoAcreditablePreliminar,
+                    'iva_diferencia_antes_retenciones' => round($ivaTrasladadoNeto - $ivaTotalRecibidoXml, 2),
+                    'iva_retenido_por_clientes_detectado_emitidos' => $ivaRetenidoPorClientes,
+                    'iva_estimado_a_pagar' => $ivaAmplioPagar,
+                    'iva_estimado_a_pagar_declaracion_like' => $ivaDeclaracionLikePagar,
                     'iva_retenido_a_proveedores_detectado_recibidos' => round($summary['received_iva_withheld'], 2),
                 ],
             ],
@@ -261,7 +331,7 @@ class ResicoTaxCalculator
     {
         $status = $this->normalize($status);
 
-        return str_contains($status, 'CANCEL') || $status === 'C';
+        return str_contains($status, 'CANCEL') || $status === 'C' || $status === '0';
     }
 
     private function isIncomeDoc(mixed $type): bool
@@ -276,6 +346,13 @@ class ResicoTaxCalculator
         $type = $this->normalize($type);
 
         return $type === 'E' || str_contains($type, 'EGRES');
+    }
+
+    private function isPaymentDoc(mixed $type): bool
+    {
+        $type = $this->normalize($type);
+
+        return $type === 'P' || str_contains($type, 'PAGO');
     }
 
     private function isIvaTax(mixed $tax): bool
@@ -304,6 +381,35 @@ class ResicoTaxCalculator
         $direction = $this->normalize($direction);
 
         return str_contains($direction, 'RET') || str_contains($direction, 'WITH') || $direction === 'W';
+    }
+
+    private function isBankedPaymentForm(mixed $paymentForm): bool
+    {
+        return in_array($this->normalize($paymentForm), ['02', '03', '04', '05', '06', '28', '29'], true);
+    }
+
+    private function isIvaAllowedUsage(mixed $usageCfdi): bool
+    {
+        return in_array($this->normalize($usageCfdi), ['G01', 'G03'], true);
+    }
+
+    private function ivaExclusionReason(mixed $paymentMethod, mixed $paymentForm, mixed $usageCfdi): string
+    {
+        $reasons = [];
+
+        if ($this->normalize($paymentMethod) !== 'PUE') {
+            $reasons[] = 'No es PUE';
+        }
+
+        if (! $this->isIvaAllowedUsage($usageCfdi)) {
+            $reasons[] = 'Uso CFDI no G01/G03';
+        }
+
+        if (! $this->isBankedPaymentForm($paymentForm)) {
+            $reasons[] = 'Forma de pago no bancarizada';
+        }
+
+        return implode('; ', $reasons) ?: 'Incluible para IVA acreditable';
     }
 
     private function directionLabel(mixed $direction): string
@@ -354,15 +460,19 @@ class ResicoTaxCalculator
         $warnings = [
             'Cálculo preliminar interno. No sustituye declaración SAT ni revisión del contador.',
             'RESICO se calcula con XML emitidos vigentes como aproximación de ingresos cobrados.',
-            'IVA acreditable requiere validar pago efectivo, deducibilidad y criterio contable.',
+            'IVA acreditable tipo declaración usa PUE + uso CFDI G01/G03 + forma de pago bancarizada.',
         ];
 
-        if (($summary['issued_ppd_subtotal'] ?? 0) > 0) {
-            $warnings[] = 'Hay CFDI emitidos PPD; falta enlazar complementos de pago.';
+        if (($summary['received_excluded_from_accreditable_iva'] ?? 0) > 0) {
+            $warnings[] = 'Hay IVA recibido que se excluye preliminarmente por método, forma de pago o uso CFDI.';
         }
 
         if (($summary['received_ppd_subtotal'] ?? 0) > 0) {
             $warnings[] = 'Hay CFDI recibidos PPD; falta enlazar complementos de pago para acreditar IVA.';
+        }
+
+        if (($summary['received_payment_cfdi_count'] ?? 0) > 0) {
+            $warnings[] = 'Hay CFDI tipo pago recibidos, pero falta leer el complemento pago20 para sumar el IVA pagado relacionado.';
         }
 
         return $warnings;
