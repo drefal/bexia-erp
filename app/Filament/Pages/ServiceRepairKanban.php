@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Service\ServiceAccess;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Carbon;
@@ -36,7 +37,16 @@ class ServiceRepairKanban extends Page
 
     public static function shouldRegisterNavigation(): bool
     {
-        return auth()->check();
+        return static::canAccess();
+    }
+
+    public static function canAccess(): bool
+    {
+        return ServiceAccess::can([
+            'service.menu.view',
+            'service.repairs.view',
+            'service.repairs.update',
+        ]);
     }
 
     public function columns(): array
@@ -72,8 +82,16 @@ class ServiceRepairKanban extends Page
             return [];
         }
 
-        $rows = DB::table('repair_orders')
-            ->select('repair_orders.*')
+        $query = DB::table('repair_orders')
+            ->select('repair_orders.*');
+
+        $companyId = ServiceAccess::currentCompanyId();
+
+        if ($companyId && Schema::hasColumn('repair_orders', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        $rows = $query
             ->orderByDesc(Schema::hasColumn('repair_orders', 'updated_at') ? 'updated_at' : 'id')
             ->limit(250)
             ->get();
