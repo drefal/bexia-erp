@@ -225,33 +225,89 @@ class RepairOrderPrintController extends Controller
             return [];
         }
 
-        $query = DB::table('service_attachments')->where('repair_order_id', $repairId);
-
-        if ($type === 'solution') {
-            $query->where(function ($q): void {
-                $q->where('stage', 'solution')
-                    ->orWhere('file_path', 'like', 'service/solution-files/%')
-                    ->orWhere('file_path', 'like', 'service/solution-photos/%');
-            });
-        }
-
-        return $query
+        return DB::table('service_attachments')
+            ->where('repair_order_id', $repairId)
             ->orderBy('id')
             ->get()
             ->map(function ($row): array {
                 $path = (string) $this->pick($row, ['file_path', 'path'], '');
                 $name = $this->pick($row, ['file_name', 'filename', 'original_name', 'name'], basename($path));
 
+                $mimeType = strtolower((string) $this->pick($row, ['mime_type', 'mime', 'content_type'], ''));
+                $pathForExtension = parse_url($path, PHP_URL_PATH);
+
+                if (! is_string($pathForExtension) || $pathForExtension === '') {
+                    $pathForExtension = $path;
+                }
+
+                $extension = strtolower((string) pathinfo($pathForExtension, PATHINFO_EXTENSION));
+                $kind = $this->attachmentKind($mimeType, $extension);
+
                 return [
-                    'name' => $name,
+                    'name' => $name ?: 'Archivo adjunto',
                     'path' => $path,
                     'url' => $this->attachmentUrl($path),
                     'stage' => $this->pick($row, ['stage'], ''),
-                    'mime_type' => $this->pick($row, ['mime_type'], ''),
-                    'notes' => $this->pick($row, ['notes'], ''),
+                    'mime_type' => $mimeType,
+                    'extension' => $extension,
+                    'kind' => $kind,
+                    'type_label' => $this->attachmentTypeLabel($kind),
+                    'is_image' => $kind === 'image',
+                    'notes' => $this->pick($row, ['notes', 'description', 'caption'], ''),
+                    'created_at' => $this->formatDate($this->pick($row, ['created_at', 'uploaded_at', 'updated_at'], '')),
                 ];
             })
             ->all();
+    }
+
+    protected function attachmentKind(string $mimeType, string $extension): string
+    {
+        if (Str::startsWith($mimeType, 'image/') || in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'], true)) {
+            return 'image';
+        }
+
+        if ($mimeType === 'application/pdf' || $extension === 'pdf') {
+            return 'pdf';
+        }
+
+        if (Str::startsWith($mimeType, 'video/') || in_array($extension, ['mp4', 'mov', 'avi', 'mkv', 'webm'], true)) {
+            return 'video';
+        }
+
+        if (
+            str_contains($mimeType, 'word')
+            || str_contains($mimeType, 'officedocument.wordprocessingml')
+            || in_array($extension, ['doc', 'docx'], true)
+        ) {
+            return 'word';
+        }
+
+        if (
+            str_contains($mimeType, 'excel')
+            || str_contains($mimeType, 'spreadsheet')
+            || in_array($extension, ['xls', 'xlsx', 'csv'], true)
+        ) {
+            return 'excel';
+        }
+
+        if (in_array($extension, ['zip', 'rar', '7z'], true)) {
+            return 'archive';
+        }
+
+        return 'file';
+    }
+
+    protected function attachmentTypeLabel(string $kind): string
+    {
+        return [
+            'image' => 'Imagen',
+            'pdf' => 'Documento PDF',
+            'video' => 'Video',
+            'word' => 'Documento Word',
+            'excel' => 'Hoja de cálculo',
+            'archive' => 'Archivo comprimido',
+            'file' => 'Archivo adjunto',
+        ][$kind] ?? 'Archivo adjunto';
     }
 
     protected function attachmentUrl(string $path): string
