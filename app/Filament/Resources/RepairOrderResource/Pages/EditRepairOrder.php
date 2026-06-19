@@ -2,6 +2,16 @@
 
 namespace App\Filament\Resources\RepairOrderResource\Pages;
 
+
+
+
+
+
+use App\Filament\Resources\AccountReceivableResource;
+use App\Support\Service\ServiceReceivableCreator;
+use Filament\Notifications\Notification;
+use Filament\Actions\Action;
+use App\Support\Service\ServiceEconomicClosureCalculator;
 use App\Filament\Resources\RepairOrderResource;
 use App\Support\Service\ServiceAccess;
 use Filament\Resources\Pages\EditRecord;
@@ -107,6 +117,10 @@ class EditRepairOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            $this->viewAccountReceivableAction(),
+            $this->createAccountReceivableAction(),
+            $this->viewEconomicSummaryAction(),
+            $this->closeEconomicAction(),
 
             \Filament\Actions\ActionGroup::make([
                 \Filament\Actions\Action::make('print_reception')
@@ -815,5 +829,133 @@ class EditRepairOrder extends EditRecord
         return \App\Support\Service\ServiceAccess::canDeleteRepairDraft($repair);
     }
 
+    protected function closeEconomicAction(): Action
+    {
+        return Action::make('close_economic')
+            ->label('Cierre económico')
+            ->icon('heroicon-o-banknotes')
+            ->color('success')
+            ->requiresConfirmation()
+            ->modalHeading('Calcular cierre económico')
+            ->modalDescription('Calcula refacciones, mano de obra, ganancia, IVA y total final. Si el total supera el presupuesto aprobado, quedará marcado como requiere aprobación.')
+            ->visible(fn (): bool => in_array((string) ($this->record->workflow_stage ?: $this->record->status), [
+                'repaired',
+                'ready_for_delivery',
+                'delivered',
+            ], true))
+            ->visible(fn (): bool => $this->canShowEconomicClosureAction())
+            ->action(function (): void {
+                $result = ServiceEconomicClosureCalculator::recalculate((int) $this->record->getKey(), [
+                    'closed_by' => auth()->id(),
+                    'close' => true,
+                    'tax_rate' => 16,
+                ]);
 
+                $this->record->refresh();
+
+                Notification::make()
+                    ->title('Cierre económico calculado')
+                    ->body('Total final: $' . number_format((float) ($result['economic_total'] ?? 0), 2) . '. Ganancia total: $' . number_format((float) ($result['total_profit_amount'] ?? 0), 2) . '.')
+                    ->success()
+                    ->send();
+            });
+    }
+
+    protected function viewEconomicSummaryAction(): Action
+    {
+        return Action::make('view_economic_summary')
+            ->label('Resumen económico')
+            ->icon('heroicon-o-chart-bar-square')
+            ->color('gray')
+            ->modalWidth('7xl')
+            ->modalHeading('Resumen económico de la reparación')
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Cerrar')
+            ->modalContent(fn () => view('filament.service.repair-order-economic-summary', [
+                'record' => $this->record,
+            ]))
+            ->visible(fn (): bool => (float) ($this->record->economic_total ?? $this->record->total_amount ?? 0) > 0);
+    }
+
+    protected function createAccountReceivableAction(): Action
+    {
+        return Action::make('create_account_receivable')
+            ->label('Crear CxC')
+            ->icon('heroicon-o-document-currency-dollar')
+            ->color('warning')
+            ->requiresConfirmation()
+            ->modalHeading('Crear cuenta por cobrar')
+            ->modalDescription('Se creará una cuenta por cobrar con el total económico de la reparación. Si ya existe una CxC para esta reparación, no se duplicará.')
+            ->modalSubmitActionLabel('Crear CxC')
+            ->visible(function (): bool {
+                $total = (float) ($this->record->total_amount ?? $this->record->economic_total ?? 0);
+                $status = (string) ($this->record->economic_status ?? '');
+
+                return $total > 0
+                    && in_array($status, ['ready_to_charge'], true)
+                    && empty($this->record->account_receivable_id)
+                    && ! (bool) ($this->record->economic_requires_approval ?? false);
+            })
+            ->action(function (): void {
+                $result = ServiceReceivableCreator::createForRepairOrder((int) $this->record->getKey(), [
+                    'created_by' => auth()->id(),
+                ]);
+
+                $this->record->refresh();
+
+                Notification::make()
+                    ->title(($result['created'] ?? false) ? 'Cuenta por cobrar creada' : 'Cuenta por cobrar existente')
+                    ->body(($result['number'] ?? 'CxC') . ' por $' . number_format((float) ($result['total'] ?? 0), 2))
+                    ->success()
+                    ->send();
+            });
+    }
+
+    protected function viewAccountReceivableAction(): Action
+    {
+        return Action::make('view_account_receivable')
+            ->label('Ver CxC')
+            ->icon('heroicon-o-arrow-top-right-on-square')
+            ->color('info')
+            ->url(function (): string {
+                $receivableId = (int) ($this->record->account_receivable_id ?? 0);
+
+                if ($receivableId <= 0) {
+                    return '#';
+                }
+
+                return AccountReceivableResource::getUrl('view', [
+                    'record' => $receivableId,
+                ]);
+            })
+            ->openUrlInNewTab(false)
+            ->visible(fn (): bool => (int) ($this->record->account_receivable_id ?? 0) > 0);
+    }
+
+    protected function canShowEconomicClosureAction(): bool
+    {
+        $record = $this->record ?? null;
+
+        if (! $record) {
+            return false;
+        }
+
+        if ((int) ($record->account_receivable_id ?? 0) > 0) {
+            return false;
+        }
+
+        $economicStatus = (string) ($record->economic_status ?? '');
+
+        if (in_array($economicStatus, ['receivable_created', 'partially_charged', 'charged'], true)) {
+            return false;
+        }
+
+        $paymentStatus = (string) ($record->economic_payment_status ?? '');
+
+        if (in_array($paymentStatus, ['partial', 'paid'], true)) {
+            return false;
+        }
+
+        return true;
+    }
 }

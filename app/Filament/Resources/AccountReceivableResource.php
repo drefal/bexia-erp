@@ -59,25 +59,28 @@ class AccountReceivableResource extends Resource
 
     public static function accountingStatusLabel(?string $state): string
     {
-        return match ($state) {
-            null, '' => 'Pendiente',
-            'pending' => 'Pendiente',
-            'posted' => 'Contabilizada',
+        return match ((string) $state) {
+            'posted' => 'Contabilizado',
+            'not_posted' => 'Pendiente',
+            'posting_error' => 'Error al contabilizar',
             'error' => 'Error',
-            'cancelled' => 'Cancelada',
-            default => (string) $state,
+            'cancelled' => 'Cancelado',
+            default => filled($state) ? ucfirst(str_replace('_', ' ', (string) $state)) : 'Pendiente',
         };
     }
 
+
     public static function accountingStatusColor(?string $state): string
     {
-        return match ($state) {
+        return match ((string) $state) {
             'posted' => 'success',
-            'error' => 'danger',
+            'not_posted' => 'warning',
+            'posting_error', 'error' => 'danger',
             'cancelled' => 'gray',
-            default => 'warning',
+            default => 'gray',
         };
     }
+
 
     public static function form(Form $form): Form
     {

@@ -119,6 +119,26 @@ class RepairOrderResource extends Resource
         return $form
             ->schema([
 
+                Forms\Components\Section::make('Cierre económico y utilidad')
+                    ->description('Captura el costo interno por hora para calcular la ganancia real de mano de obra. La tarifa de venta al cliente sigue siendo la tarifa por hora configurada en la reparación.')
+                    ->schema([
+                        Forms\Components\TextInput::make('labor_internal_hour_cost')
+                            ->label('Costo interno por hora')
+                            ->numeric()
+                            ->prefix('$')
+                            ->step('0.01')
+                            ->minValue(0)
+                            ->disabled(fn ($record): bool => $record && (
+                                (int) ($record->account_receivable_id ?? 0) > 0
+                                || in_array((string) ($record->economic_status ?? ''), ['receivable_created', 'partially_charged', 'charged'], true)
+                                || in_array((string) ($record->economic_payment_status ?? ''), ['partial', 'paid'], true)
+                            ))
+                            ->helperText('Costo real interno de la empresa por cada hora del técnico. Se usa solo para calcular utilidad; no cambia el precio cobrado al cliente.'),
+                    ])
+                    ->columns(1)
+                    ->collapsible(),
+
+
                 \Filament\Forms\Components\Placeholder::make('service_order_status_header')
                     ->label('')
                     ->content(function ($record): \Illuminate\Support\HtmlString {
