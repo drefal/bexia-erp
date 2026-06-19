@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\AccountReceivableResource\Pages;
 
+
+use App\Support\Service\ServiceRepairReceivableSyncer;
 use App\Filament\Resources\AccountReceivableResource;
 use App\Models\AccountReceivable;
 use Filament\Actions;
@@ -342,6 +344,8 @@ class ViewAccountReceivable extends ViewRecord
             app(\App\Support\Accounting\AccountReceivablePaymentAccountingPoster::class)
                 ->postPayment((int) $paymentId, auth()->id());
         });
+
+        ServiceRepairReceivableSyncer::syncFromReceivable((int) $record->id);
 
         return [
             'payment_id' => $paymentId,

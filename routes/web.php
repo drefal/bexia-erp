@@ -512,3 +512,8 @@ Route::post('/admin/{tenant}/dashboard-section-settings/{section}', [\App\Http\C
     ->middleware(['web', 'auth'])
     ->name('bexia.dashboard.section.settings.update');
 
+// V5.73.0g2c11 - Impresiones de Atención y Servicio
+\Illuminate\Support\Facades\Route::middleware(['web', 'auth'])
+    ->get('/admin/{tenant}/service/repair-orders/{record}/print/{type}', [\App\Http\Controllers\Service\RepairOrderPrintController::class, 'show'])
+    ->name('service.repair-orders.print');
+

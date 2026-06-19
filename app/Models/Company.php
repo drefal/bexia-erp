@@ -205,4 +205,25 @@ class Company extends Model implements HasAvatar
     }
 
 
+
+    public function serviceCases(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\ServiceCase::class, 'company_id');
+    }
+
+    public function repairOrders(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\RepairOrder::class, 'company_id');
+    }
+
+    public function serviceCaseEvents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\ServiceCaseEvent::class, 'company_id');
+    }
+
+    public function repairOrderApprovals(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\RepairOrderApproval::class, 'company_id');
+    }
+
 }

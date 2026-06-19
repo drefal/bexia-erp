@@ -40,7 +40,8 @@ class MySentApprovalStatuses extends Page
             ->map(fn ($row): array => [
                 'id' => (int) $row->id,
                 'company_id' => (int) ($row->company_id ?? 0),
-                'document_type' => (string) ($row->document_type ?? ''),
+                'document_type' => $this->documentLabel((string) ($row->document_type ?? '')),
+                'open_url' => $this->serviceApprovalRepairUrl($row),
                 'document_label' => $this->documentLabel((string) ($row->document_type ?? '')),
                 'document_number' => (string) ($row->document_number ?? ''),
                 'approvable_id' => (int) ($row->approvable_id ?? 0),
@@ -54,10 +55,99 @@ class MySentApprovalStatuses extends Page
             ])
             ->all();
     }
+    protected function serviceApprovalRepairUrl(object|array $row): ?string
+    {
+        $type = (string) data_get($row, 'document_type', '');
+
+        if (! in_array($type, [
+            'service_repair_quote_internal',
+            'service_repair_parts_request',
+            'service_repair_warranty',
+            'service_repair_delivery',
+        ], true)) {
+            return null;
+        }
+
+        $repairId = (int) (
+            data_get($row, 'approvable_id')
+            ?: data_get($row, 'repair_order_id')
+            ?: data_get($row, 'document_id')
+            ?: data_get($row, 'record_id')
+            ?: 0
+        );
+
+        $tenantId = null;
+
+        try {
+            $tenant = \Filament\Facades\Filament::getTenant();
+            $tenantId = $tenant ? (int) $tenant->getKey() : null;
+        } catch (\Throwable) {
+            $tenantId = null;
+        }
+
+        if ($repairId <= 0 && filled(data_get($row, 'folio'))) {
+            try {
+                $repair = \Illuminate\Support\Facades\DB::table('repair_orders')
+                    ->where('folio', (string) data_get($row, 'folio'))
+                    ->first();
+
+                if ($repair) {
+                    $repairId = (int) ($repair->id ?? 0);
+                    $tenantId = $tenantId ?: (int) ($repair->company_id ?? 0);
+                }
+            } catch (\Throwable) {
+                $repairId = 0;
+            }
+        }
+
+        if ($repairId > 0 && ! $tenantId) {
+            try {
+                $tenantId = (int) \Illuminate\Support\Facades\DB::table('repair_orders')
+                    ->where('id', $repairId)
+                    ->value('company_id');
+            } catch (\Throwable) {
+                $tenantId = null;
+            }
+        }
+
+        if ($repairId <= 0) {
+            return null;
+        }
+
+        if (! $tenantId) {
+            $tenantId = (int) (data_get($row, 'company_id') ?: 1);
+        }
+
+        return \App\Filament\Resources\RepairOrderResource::getUrl('edit', [
+            'tenant' => $tenantId,
+            'record' => $repairId,
+        ]);
+    }
+
+    protected function openServiceApprovalRepair(object|array $row): void
+    {
+        $url = $this->serviceApprovalRepairUrl($row);
+
+        if (! $url) {
+            \Filament\Notifications\Notification::make()
+                ->title('No se pudo abrir la reparación')
+                ->body('No se encontró el folio o identificador relacionado con esta aprobación.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $this->redirect($url);
+    }
+
+
 
     protected function documentLabel(?string $type): string
-    {
-        return \App\Support\SalesApprovalWorkflow::documentTypeLabel($type);
+     {
+
+        return \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeLabel((string) $type);
+
     }
 
 
@@ -74,6 +164,16 @@ class MySentApprovalStatuses extends Page
 
     protected function documentUrl(object $row): string
     {
+
+        if (in_array((string) ($row->document_type ?? ''), [
+            'service_repair_quote_internal',
+            'service_repair_parts_request',
+            'service_repair_warranty',
+            'service_repair_delivery',
+        ], true)) {
+            return $this->serviceApprovalRepairUrl($row) ?: '#';
+        }
+
         $type = (string) ($row->document_type ?? '');
         $id = (int) ($row->approvable_id ?? 0);
         $tenantId = $this->resolveDocumentCompanyId($row);

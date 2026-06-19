@@ -94,7 +94,8 @@ class ApprovalWorkflowResource extends Resource
 
                         Forms\Components\Select::make('document_type')
                             ->label('Tipo de documento')
-                            ->options(static::documentTypeOptions())
+                            ->options(fn (): array => \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeOptions())
+                            ->getOptionLabelUsing(fn ($value): ?string => filled($value) ? \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeLabel((string) $value) : null)
                             ->required()
                             ->native(false)
                             ->searchable(),
@@ -121,14 +122,19 @@ class ApprovalWorkflowResource extends Resource
                             ->prefix('$')
                             ->numeric()
                             ->minValue(0),
-
-                        Forms\Components\Select::make('applies_to_user_id')
+Forms\Components\Select::make('applies_to_user_id')
                             ->label('Aplica a usuario')
-                            ->options(fn (): array => static::userOptions())
+                            ->placeholder('Cualquier usuario del grupo')
+                            ->helperText('Solo muestra usuarios de la empresa actual o del mismo grupo de empresas.')
                             ->searchable()
                             ->preload()
+                            ->options(fn (): array => \App\Support\Service\ServiceAccess::approvalWorkflowUserOptions())
+                            ->getSearchResultsUsing(fn (string $search): array => \App\Support\Service\ServiceAccess::approvalWorkflowUserOptions($search))
+                            ->getOptionLabelUsing(fn ($value): ?string => filled($value) ? \App\Support\Service\ServiceAccess::approvalWorkflowUserLabel((int) $value) : null)
                             ->native(false)
-                            ->placeholder('Cualquier usuario'),
+                            ->columnSpan(1),
+
+                        
 
                         Forms\Components\Select::make('applies_to_role_name')
                             ->label('Aplica a rol')
@@ -257,9 +263,10 @@ class ApprovalWorkflowResource extends Resource
 
                 Tables\Columns\TextColumn::make('document_type')
                     ->label('Documento')
+
+                    ->formatStateUsing(fn (?string $state): string => \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeLabel($state))
                     ->formatStateUsing(fn (?string $state): string => static::documentTypeOptions()[$state] ?? ($state ?: '—'))
                     ->badge(),
-
                 Tables\Columns\TextColumn::make('priority')
                     ->label('Prioridad')
                     ->sortable(),

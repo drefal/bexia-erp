@@ -164,7 +164,17 @@ public static function canCreate(): bool
 
             Grid::make(12)
                 ->schema([
-                    Section::make('Ficha laboral')
+                    Section::make('Atencion y Servicio')
+                                        ->description('Define si el empleado puede asignarse como tecnico responsable en tickets y reparaciones.')
+                                        ->columns(3)
+                                        ->schema([
+                                            Toggle::make('is_service_technician')
+                                                ->label('Es tecnico de servicio')
+                                                ->helperText('Si esta activo, aparecera en Atencion y Servicio como tecnico responsable.')
+                                                ->inline(false),
+                                        ]),
+
+                                    Section::make('Ficha laboral')
                         ->description('Datos principales del empleado dentro de la empresa actual.')
                         ->schema([
                             Grid::make(12)
@@ -305,13 +315,15 @@ public static function canCreate(): bool
                                             TextInput::make('rfc')
                                                 ->label('RFC')
                                                 ->maxLength(13)
-                                                ->uppercase()
+                                                ->formatStateUsing(fn ($state): ?string => filled($state) ? strtoupper((string) $state) : null)
+                            ->dehydrateStateUsing(fn ($state): ?string => filled($state) ? strtoupper((string) $state) : null)
                                                 ->helperText('RFC del empleado como receptor del CFDI de nómina.'),
 
                                             TextInput::make('curp')
                                                 ->label('CURP')
                                                 ->maxLength(18)
-                                                ->uppercase(),
+                                                ->formatStateUsing(fn ($state): ?string => filled($state) ? strtoupper((string) $state) : null)
+                            ->dehydrateStateUsing(fn ($state): ?string => filled($state) ? strtoupper((string) $state) : null),
 
                                             TextInput::make('social_security_number')
                                                 ->label('NSS')

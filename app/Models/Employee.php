@@ -10,6 +10,7 @@ use App\Support\EmployeeOrganizationResolver;
 class Employee extends Model
 {
     protected $fillable = [
+        'is_service_technician',
         'company_id',
         'avatar_path',
         'user_id',

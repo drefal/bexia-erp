@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+
+use App\Support\Service\ServiceRepairReceivableSyncer;
 use App\Filament\Resources\AccountReceivablePaymentResource\Pages;
 use App\Models\AccountReceivablePayment;
 use Filament\Facades\Filament;
@@ -341,6 +343,8 @@ class AccountReceivablePaymentResource extends Resource
                 'reversal_entry_id' => $reversalEntry?->id,
             ];
         });
+
+        ServiceRepairReceivableSyncer::syncFromPayment((int) $paymentId);
 
         return $result;
     }
