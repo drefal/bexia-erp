@@ -125,6 +125,55 @@
             color: #6b7280;
             font-size: 11px;
         }
+        .evidence-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .evidence-pill {
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 11px;
+        }
+        .evidence-gallery {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .evidence-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 7px;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .evidence-card img {
+            width: 100%;
+            height: 42mm;
+            object-fit: contain;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            display: block;
+            margin-bottom: 6px;
+        }
+        .evidence-name {
+            font-weight: 700;
+            font-size: 11px;
+            overflow-wrap: anywhere;
+        }
+        .evidence-meta {
+            color: #6b7280;
+            font-size: 10px;
+            line-height: 1.35;
+            margin-top: 3px;
+        }
+        .evidence-table td {
+            overflow-wrap: anywhere;
+        }
         .notice {
             border: 1px solid #d1d5db;
             background: #f9fafb;
@@ -245,36 +294,107 @@
             </section>
         @endif
 
-        @if($type === 'solution' || $type === 'internal')
+        @if(count($attachments))
+            @php
+                $evidenceImages = collect($attachments)
+                    ->filter(fn ($attachment) => (bool) ($attachment['is_image'] ?? false))
+                    ->values();
+
+                $visibleImages = $evidenceImages->take(12);
+                $hiddenImageCount = max($evidenceImages->count() - $visibleImages->count(), 0);
+
+                $evidenceOther = collect($attachments)
+                    ->reject(fn ($attachment) => (bool) ($attachment['is_image'] ?? false))
+                    ->values();
+            @endphp
+
             <section class="section">
-                <h2>Fotos y documentos relacionados</h2>
-                @if(count($attachments))
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Archivo</th>
-                                <th style="width: 35mm;">Etapa</th>
-                                <th>Notas</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($attachments as $attachment)
+                <h2>Evidencias adjuntas</h2>
+
+                <div class="evidence-summary">
+                    <div class="evidence-pill">
+                        <strong>{{ $evidenceImages->count() }}</strong><br>
+                        Imágenes adjuntas
+                    </div>
+                    <div class="evidence-pill">
+                        <strong>{{ $evidenceOther->count() }}</strong><br>
+                        Documentos / videos / archivos
+                    </div>
+                    <div class="evidence-pill">
+                        <strong>{{ count($attachments) }}</strong><br>
+                        Evidencias totales
+                    </div>
+                </div>
+
+                @if($visibleImages->count())
+                    <div class="evidence-gallery">
+                        @foreach($visibleImages as $attachment)
+                            <div class="evidence-card">
+                                @if(($attachment['url'] ?? '#') !== '#')
+                                    <img src="{{ $attachment['url'] }}" alt="{{ $attachment['name'] }}">
+                                @else
+                                    <div class="notice">Imagen adjunta sin ruta pública disponible.</div>
+                                @endif
+
+                                <div class="evidence-name">{{ $attachment['name'] }}</div>
+                                <div class="evidence-meta">
+                                    Tipo: {{ $attachment['type_label'] ?? 'Imagen' }}<br>
+                                    Etapa: {{ $attachment['stage'] ?: '—' }}<br>
+                                    Fecha: {{ $attachment['created_at'] ?: '—' }}
+                                    @if(!empty($attachment['notes']))
+                                        <br>Notas: {{ $attachment['notes'] }}
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    @if($hiddenImageCount > 0)
+                        <div class="notice" style="margin-top: 10px;">
+                            Existen {{ $hiddenImageCount }} imagen(es) adicional(es) adjuntas.
+                            No se muestran para mantener la impresión legible.
+                        </div>
+                    @endif
+                @endif
+
+                @if($evidenceOther->count())
+                    <div style="margin-top: 12px;">
+                        <table class="evidence-table">
+                            <thead>
                                 <tr>
-                                    <td>
-                                        @if($attachment['url'] !== '#')
-                                            <a href="{{ $attachment['url'] }}" target="_blank">{{ $attachment['name'] }}</a>
-                                        @else
-                                            {{ $attachment['name'] }}
-                                        @endif
-                                    </td>
-                                    <td>{{ $attachment['stage'] ?: '—' }}</td>
-                                    <td>{{ $attachment['notes'] ?: '—' }}</td>
+                                    <th style="width: 34mm;">Tipo</th>
+                                    <th>Archivo</th>
+                                    <th style="width: 35mm;">Etapa / fecha</th>
+                                    <th>Notas</th>
                                 </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                @else
-                    <div class="notice">Sin fotos/documentos relacionados.</div>
+                            </thead>
+                            <tbody>
+                                @foreach($evidenceOther as $attachment)
+                                    <tr>
+                                        <td>
+                                            <strong>{{ $attachment['type_label'] ?? 'Archivo adjunto' }}</strong><br>
+                                            <span class="small">Existe como evidencia adjunta.</span>
+                                        </td>
+                                        <td>
+                                            {{ $attachment['name'] }}
+                                            @if(!empty($attachment['extension']))
+                                                <br><span class="small">Extensión: .{{ $attachment['extension'] }}</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            {{ $attachment['stage'] ?: '—' }}<br>
+                                            <span class="small">{{ $attachment['created_at'] ?: '—' }}</span>
+                                        </td>
+                                        <td>{{ $attachment['notes'] ?: '—' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+
+                @if(!$visibleImages->count() && !$evidenceOther->count())
+                    <div class="notice">Sin evidencias adjuntas para esta reparación.</div>
                 @endif
             </section>
         @endif
