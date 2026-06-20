@@ -32,46 +32,37 @@ class ListProducts extends ListRecords
 
 
             \Filament\Actions\Action::make('import_products')
-                ->label('Importar productos')
+                ->label('Carga masiva')
                 ->icon('heroicon-o-arrow-up-tray')
                 ->color('primary')
                 ->modalWidth('5xl')
-                ->modalHeading('Importar productos')
-                ->modalDescription('Sube el Excel/CSV. Bexia validará el archivo dentro de este modal. Solo podrás aplicar cambios cuando la validación esté limpia.')
-                ->modalSubmitActionLabel('Procesar importación')
+                ->modalHeading('Carga masiva de productos')
+                ->modalDescription('Primero valida el archivo dentro de este modal. Si la validación queda limpia, se habilita la sección inferior para aplicar la importación.')
+                ->modalSubmitActionLabel('Cerrar')
+                ->modalSubmitAction(fn (\Filament\Actions\StaticAction $action): \Filament\Actions\StaticAction => $action
+                    ->label('Cerrar')
+                    ->color('gray')
+                )
                 ->form([
-                    \Filament\Forms\Components\FileUpload::make('file')
-                        ->label('Archivo Excel/CSV')
-                        ->disk('local')
-                        ->directory('imports/productos')
-                        ->visibility('private')
-                        ->preserveFilenames()
-                        ->acceptedFileTypes([
-                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                            'application/octet-stream',
-                            'text/csv',
-                            'text/plain',
-                            'application/csv',
-                        ])
-                        ->required()
-                        ->live()
-                        ->afterStateUpdated(function ($state, \Filament\Forms\Set $set): void {
-                            $set('validation_ok', false);
-                            $set('validation_hash', '');
-
-                            if (blank($state)) {
-                                $set('validation_html', '<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">Sube un archivo para iniciar la validación.</div>');
-                                return;
-                            }
-
-                            $validation = \App\Support\ProductCatalogImportService::validateForModalFromFilamentUpload($state);
-
-                            $set('validation_ok', (bool) ($validation['ok'] ?? false));
-                            $set('validation_hash', (string) ($validation['hash'] ?? ''));
-                            $set('validation_html', (string) ($validation['html'] ?? ''));
-                            $set('confirm_apply', false);
-                        })
-                        ->helperText('Formatos permitidos: .xlsx o .csv. Usa la plantilla descargada desde Bexia.'),
+                    \Filament\Forms\Components\Section::make('1. Archivo')
+                        ->description('Sube el Excel/CSV y después presiona “Validar archivo”. La validación ya no se ejecuta automáticamente al subir el archivo.')
+                        ->schema([
+                            \Filament\Forms\Components\FileUpload::make('file')
+                                ->label('Archivo Excel/CSV')
+                                ->disk('local')
+                                ->directory('imports/productos')
+                                ->visibility('private')
+                                ->preserveFilenames()
+                                ->acceptedFileTypes([
+                                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                    'application/octet-stream',
+                                    'text/csv',
+                                    'text/plain',
+                                    'application/csv',
+                                ])
+                                ->required()
+                                ->helperText('Si cambias el archivo después de validar, vuelve a presionar Validar archivo antes de aplicar.'),
+                        ]),
 
                     \Filament\Forms\Components\Hidden::make('validation_ok')
                         ->default(false)
@@ -82,26 +73,102 @@ class ListProducts extends ListRecords
                         ->dehydrated(true),
 
                     \Filament\Forms\Components\Hidden::make('validation_html')
-                        ->default('<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">Sube un archivo para iniciar la validación.</div>')
+                        ->default('<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">Sube un archivo y presiona Validar archivo.</div>')
                         ->dehydrated(false),
 
-                    \Filament\Forms\Components\Placeholder::make('validation_summary')
-                        ->label('Resultado de validación')
-                        ->content(fn (\Filament\Forms\Get $get): \Illuminate\Support\HtmlString => new \Illuminate\Support\HtmlString(
-                            (string) ($get('validation_html') ?: '<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">Sube un archivo para iniciar la validación.</div>')
-                        )),
+                    \Filament\Forms\Components\Section::make('2. Validación')
+                        ->description('Bexia revisará estructura, productos existentes, duplicados y simulación de aplicación sin guardar cambios.')
+                        ->schema([
+                            \Filament\Forms\Components\Actions::make([
+                                \Filament\Forms\Components\Actions\Action::make('validate_file_inside_modal')
+                                    ->label('Validar archivo')
+                                    ->icon('heroicon-o-shield-check')
+                                    ->color('warning')
+                                    ->action(function (\Filament\Forms\Get $get, \Filament\Forms\Set $set): void {
+                                        $set('validation_ok', false);
+                                        $set('validation_hash', '');
+                                        $set('confirm_apply', false);
 
-                    \Filament\Forms\Components\Toggle::make('confirm_apply')
-                        ->label('Confirmo aplicar este archivo validado')
-                        ->default(false)
-                        ->visible(fn (\Filament\Forms\Get $get): bool => (bool) $get('validation_ok'))
-                        ->helperText('Solo aparece cuando el archivo no tiene errores de validación.'),
+                                        $file = $get('file');
+
+                                        if (blank($file)) {
+                                            $set('validation_html', '<div class="rounded-lg border border-danger-300 bg-danger-50 p-3 text-sm text-danger-700"><div class="font-semibold">Falta archivo</div><div class="mt-1">Sube un archivo antes de validar.</div></div>');
+
+                                            return;
+                                        }
+
+                                        $validation = \App\Support\ProductCatalogImportService::validateForModalFromFilamentUpload($file);
+
+                                        $set('validation_ok', (bool) ($validation['ok'] ?? false));
+                                        $set('validation_hash', (string) ($validation['hash'] ?? ''));
+                                        $set('validation_html', (string) ($validation['html'] ?? ''));
+                                        $set('confirm_apply', false);
+
+                                        if ((bool) ($validation['ok'] ?? false)) {
+                                            \Filament\Notifications\Notification::make()
+                                                ->title('Validación limpia')
+                                                ->body('El archivo no tiene errores. Puedes aplicar la importación en la sección inferior.')
+                                                ->success()
+                                                ->send();
+                                        } else {
+                                            \Filament\Notifications\Notification::make()
+                                                ->title('Validación con errores')
+                                                ->body('Revisa el resumen del modal. No se aplicará la importación hasta corregir el archivo.')
+                                                ->danger()
+                                                ->send();
+                                        }
+                                    }),
+                            ]),
+
+                            \Filament\Forms\Components\Placeholder::make('validation_summary')
+                                ->label('Resultado')
+                                ->content(fn (\Filament\Forms\Get $get): \Illuminate\Support\HtmlString => new \Illuminate\Support\HtmlString(
+                                    (string) ($get('validation_html') ?: '<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">Sube un archivo y presiona Validar archivo.</div>')
+                                )),
+                        ]),
+
+                    \Filament\Forms\Components\Section::make('3. Aplicación')
+                        ->description('Esta sección solo debe usarse cuando la validación esté limpia. La importación se ejecuta en modo todo-o-nada.')
+                        ->schema([
+                            \Filament\Forms\Components\Placeholder::make('apply_ready_message')
+                                ->label('Estado')
+                                ->visible(fn (\Filament\Forms\Get $get): bool => (bool) $get('validation_ok'))
+                                ->content(fn (): \Illuminate\Support\HtmlString => new \Illuminate\Support\HtmlString(
+                                    '<div class="rounded-lg border border-success-300 bg-success-50 p-3 text-sm text-success-800"><div class="font-semibold">Archivo listo para importar</div><div class="mt-1">Marca la confirmación y presiona Aplicar importación.</div></div>'
+                                )),
+
+                            \Filament\Forms\Components\Placeholder::make('apply_blocked_message')
+                                ->label('Estado')
+                                ->visible(fn (\Filament\Forms\Get $get): bool => ! (bool) $get('validation_ok'))
+                                ->content(fn (): \Illuminate\Support\HtmlString => new \Illuminate\Support\HtmlString(
+                                    '<div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700"><div class="font-semibold">Importación bloqueada</div><div class="mt-1">Primero valida el archivo. Si hay errores, corrige el Excel y vuelve a validarlo.</div></div>'
+                                )),
+
+                            \Filament\Forms\Components\Toggle::make('confirm_apply')
+                                ->label('Confirmo aplicar este archivo validado')
+                                ->default(false)
+                                ->live()
+                                ->visible(fn (\Filament\Forms\Get $get): bool => (bool) $get('validation_ok'))
+                                ->helperText('Bexia volverá a validar antes de aplicar. Si el archivo cambió, se bloqueará la importación.'),
+
+                            \Filament\Forms\Components\Actions::make([
+                                \Filament\Forms\Components\Actions\Action::make('apply_import_inside_modal')
+                                    ->label('Aplicar importación')
+                                    ->icon('heroicon-o-arrow-up-tray')
+                                    ->color('primary')
+                                    ->visible(fn (\Filament\Forms\Get $get): bool => (bool) $get('validation_ok'))
+                                    ->disabled(fn (\Filament\Forms\Get $get): bool => ! (bool) $get('confirm_apply'))
+                                    ->action(function (\Filament\Forms\Get $get): void {
+                                        \App\Support\ProductCatalogImportService::importValidatedModalUpload(
+                                            $get('file'),
+                                            (string) ($get('validation_hash') ?? ''),
+                                            (bool) ($get('confirm_apply') ?? false),
+                                        );
+                                    }),
+                            ]),
+                        ]),
                 ])
-                ->action(fn (array $data) => \App\Support\ProductCatalogImportService::importValidatedModalUpload(
-                    $data['file'] ?? null,
-                    (string) ($data['validation_hash'] ?? ''),
-                    (bool) ($data['confirm_apply'] ?? false),
-                )),
+                ->action(fn (): null => null),
 
 
 

@@ -9,6 +9,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProductCatalogImportService
 {
+    protected static function prepareLongRunningImportRuntime(): void
+    {
+        @set_time_limit(0);
+        @ini_set('memory_limit', '768M');
+    }
+
+
     public static function importFromFilamentUpload(mixed $file, bool $apply = false): StreamedResponse
     {
         $path = static::resolveUploadedPath($file);
@@ -26,6 +33,8 @@ class ProductCatalogImportService
 
     public static function validateFromFilamentUpload(mixed $file): StreamedResponse
     {
+        static::prepareLongRunningImportRuntime();
+
         $path = static::resolveUploadedPath($file);
         $companyId = static::currentCompanyId();
 
@@ -33,11 +42,10 @@ class ProductCatalogImportService
             abort(422, 'No se pudo detectar la empresa actual.');
         }
 
-        $result = static::processFile($path, $companyId, false);
-        $result = static::appendReferenceDuplicationValidation($path, $companyId, $result);
+        $validation = static::validateFileForModal($path, $companyId);
+        $result = (array) ($validation['result'] ?? []);
 
-        $isClean = (int) ($result['errors'] ?? 0) === 0
-            && (int) ($result['validated'] ?? 0) > 0;
+        $isClean = (bool) ($validation['ok'] ?? false);
 
         if ($isClean) {
             session([
@@ -56,7 +64,7 @@ class ProductCatalogImportService
                 '',
                 '',
                 '',
-                'Archivo validado correctamente. Ya puedes usar Procesar validación limpia.'
+                'Archivo validado correctamente. Ya puedes usar Aplicar última validación limpia.'
             );
         } else {
             static::clearCleanValidationSession();
@@ -102,10 +110,12 @@ class ProductCatalogImportService
             abort(422, 'El archivo validado ya no existe o cambió. Vuelve a validarlo.');
         }
 
-        $preflight = static::processFile($path, $companyId, false);
-        $preflight = static::appendReferenceDuplicationValidation($path, $companyId, $preflight);
+        static::prepareLongRunningImportRuntime();
 
-        if ((int) ($preflight['errors'] ?? 0) > 0 || (int) ($preflight['validated'] ?? 0) <= 0) {
+        $preflightValidation = static::validateFileForModal($path, $companyId);
+        $preflight = (array) ($preflightValidation['result'] ?? []);
+
+        if (! (bool) ($preflightValidation['ok'] ?? false)) {
             static::clearCleanValidationSession();
 
             $preflight['log_rows'][] = static::logRow(
@@ -122,7 +132,7 @@ class ProductCatalogImportService
             return static::downloadLog($preflight, false);
         }
 
-        $result = static::processFile($path, $companyId, true);
+        $result = static::applyFileStrict($path, $companyId);
 
         static::clearCleanValidationSession();
 
