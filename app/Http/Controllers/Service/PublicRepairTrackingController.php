@@ -97,6 +97,7 @@ class PublicRepairTrackingController extends Controller
             'stageDetails' => $this->stageDetails($repair, $case, $customer, $product),
             'publicNotes' => $publicNotes,
             'companyLogoUrl' => $companyLogoUrl,
+            'companyFaviconUrl' => $this->faviconUrl($company),
             'updatedAt' => $this->formatDate($repair->updated_at ?? null),
         ]);
     }
@@ -498,6 +499,27 @@ class PublicRepairTrackingController extends Controller
         } catch (\Throwable) {
             return (string) $value;
         }
+    }
+
+    protected function faviconUrl(?object $company): string
+    {
+        foreach (['favicon_path', 'logo_compact_path', 'logo_path'] as $field) {
+            if ($company && property_exists($company, $field) && filled($company->{$field})) {
+                $icon = (string) $company->{$field};
+
+                if (Str::startsWith($icon, ['http://', 'https://'])) {
+                    return $icon;
+                }
+
+                if (Str::startsWith($icon, ['storage/'])) {
+                    return asset($icon);
+                }
+
+                return asset('storage/' . ltrim($icon, '/'));
+            }
+        }
+
+        return 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%23111827%22/%3E%3Ctext x=%2232%22 y=%2242%22 font-family=%22Arial,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 text-anchor=%22middle%22 fill=%22%23ffffff%22%3EB%3C/text%3E%3C/svg%3E';
     }
 
     protected function logoUrl(?object $company): ?string
