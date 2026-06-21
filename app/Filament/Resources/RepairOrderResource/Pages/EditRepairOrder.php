@@ -163,6 +163,17 @@ class EditRepairOrder extends EditRecord
                 ->color('gray')
                 ->button(),
 
+            \Filament\Actions\Action::make('public_tracking_link')
+                ->label('Enlace seguimiento')
+                ->icon('heroicon-o-link')
+                ->color('gray')
+                ->modalHeading('Enlace público de seguimiento')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Cerrar')
+                ->modalContent(fn (): \Illuminate\Contracts\View\View => view('filament.actions.service-public-tracking-link', [
+                    'url' => $this->publicTrackingUrlForRecord($this->record),
+                ])),
+
             \Filament\Actions\Action::make('capture_reception_signature')
                 ->label('Firmar recepción')
                 ->icon('heroicon-o-pencil-square')
@@ -608,6 +619,63 @@ class EditRepairOrder extends EditRecord
             eventType: 'solution_files_uploaded',
             eventDescription: 'Se agregaron fotos y documentos de evidencia de la solución.'
         );
+    }
+
+    protected function ensurePublicTrackingTokenForRecord(object $record): ?string
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_token')) {
+            return null;
+        }
+
+        $token = (string) ($record->public_tracking_token ?? '');
+
+        if ($token !== '') {
+            return $token;
+        }
+
+        $repairId = $record->getKey();
+
+        if (! $repairId) {
+            return null;
+        }
+
+        do {
+            $token = \Illuminate\Support\Str::random(48);
+            $exists = \Illuminate\Support\Facades\DB::table('repair_orders')
+                ->where('public_tracking_token', $token)
+                ->exists();
+        } while ($exists);
+
+        $payload = [
+            'public_tracking_token' => $token,
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_enabled')) {
+            $payload['public_tracking_enabled'] = true;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_token_created_at')) {
+            $payload['public_tracking_token_created_at'] = now();
+        }
+
+        \Illuminate\Support\Facades\DB::table('repair_orders')
+            ->where('id', $repairId)
+            ->update($payload);
+
+        $record->public_tracking_token = $token;
+
+        return $token;
+    }
+
+    protected function publicTrackingUrlForRecord(object $record): string
+    {
+        $token = $this->ensurePublicTrackingTokenForRecord($record);
+
+        if (! $token) {
+            return 'No disponible';
+        }
+
+        return route('public.service.tracking.show', ['token' => $token]);
     }
 
     protected function saveReceptionFilesForRepair(object $record, array $paths): void
