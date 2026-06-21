@@ -306,6 +306,30 @@
                 $evidenceOther = collect($attachments)
                     ->reject(fn ($attachment) => (bool) ($attachment['is_image'] ?? false))
                     ->values();
+
+                $stageLabels = [
+                    'reparacion' => 'Reparación',
+                    'reception' => 'Recepción',
+                    'reception_signature' => 'Firma digital de recepción',
+                    'quote' => 'Presupuesto',
+                    'quote_approved' => 'Presupuesto aprobado',
+                    'solution' => 'Solución',
+                    'delivery' => 'Entrega',
+                    'delivery_signature' => 'Firma digital de entrega',
+                ];
+
+                $stageLabel = function ($stage) use ($stageLabels): string {
+                    $stage = trim((string) ($stage ?? ''));
+
+                    if ($stage === '') {
+                        return '—';
+                    }
+
+                    return $stageLabels[$stage]
+                        ?? (string) \Illuminate\Support\Str::of($stage)
+                            ->replace('_', ' ')
+                            ->title();
+                };
             @endphp
 
             <section class="section">
@@ -339,7 +363,7 @@
                                 <div class="evidence-name">{{ $attachment['type_label'] ?? 'Evidencia fotográfica' }}</div>
                                 <div class="evidence-meta">
                                     Evidencia adjunta al expediente<br>
-                                    Etapa: {{ $attachment['stage'] ?: '—' }}<br>
+                                    Etapa: {{ $stageLabel($attachment['stage'] ?? null) }}<br>
                                     Fecha: {{ $attachment['created_at'] ?: '—' }}
                                     @if(!empty($attachment['notes']))
                                         <br>Notas: {{ $attachment['notes'] }}
@@ -382,7 +406,7 @@
                                             @endif
                                         </td>
                                         <td>
-                                            {{ $attachment['stage'] ?: '—' }}<br>
+                                            {{ $stageLabel($attachment['stage'] ?? null) }}<br>
                                             <span class="small">{{ $attachment['created_at'] ?: '—' }}</span>
                                         </td>
                                         <td>{{ $attachment['notes'] ?: '—' }}</td>
