@@ -199,7 +199,47 @@
             background: #fff;
             border: 1px solid #e5e7eb;
         }
-        .tracking-url {
+        
+        .document-subtitle {
+            margin-top: 4px;
+            font-size: 12px;
+            color: #4b5563;
+            line-height: 1.4;
+        }
+
+        .document-notice {
+            margin: 12px 0 16px;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            background: #f9fafb;
+            color: #374151;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .customer-safe-label {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            border: 1px solid #d1d5db;
+            font-size: 10px;
+            color: #374151;
+            background: #ffffff;
+        }
+
+        .document-footer-note {
+            margin-top: 16px;
+            font-size: 10px;
+            color: #6b7280;
+            line-height: 1.35;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 8px;
+        }
+
+
+.tracking-url {
             overflow-wrap: anywhere;
             color: #374151;
             font-size: 10px;
@@ -217,9 +257,125 @@
             }
             a { color: #111827; text-decoration: none; }
         }
+    
+        /* V5.78.1c - ajuste de espaciado para documentos ATC */
+        body {
+            line-height: 1.45;
+        }
+
+        header,
+        .header,
+        .document-header {
+            margin-bottom: 18px !important;
+            padding-bottom: 12px !important;
+            overflow: visible !important;
+            gap: 16px !important;
+        }
+
+        h1,
+        .title,
+        .document-title {
+            line-height: 1.2 !important;
+            margin-bottom: 6px !important;
+        }
+
+        .document-subtitle {
+            display: block !important;
+            clear: both !important;
+            margin: 8px 0 0 !important;
+            padding: 0 !important;
+            line-height: 1.45 !important;
+            max-width: 100% !important;
+            white-space: normal !important;
+        }
+
+        .customer-safe-label {
+            display: inline-flex !important;
+            align-items: center !important;
+            width: auto !important;
+            max-width: 100% !important;
+            clear: both !important;
+            margin: 8px 0 4px !important;
+            line-height: 1.25 !important;
+            white-space: normal !important;
+            position: static !important;
+        }
+
+        .document-notice {
+            display: block !important;
+            clear: both !important;
+            margin: 18px 0 20px !important;
+            padding: 12px 14px !important;
+            line-height: 1.5 !important;
+            position: static !important;
+        }
+
+        section {
+            margin-bottom: 16px;
+        }
+
+        .tracking-box {
+            margin-top: 18px !important;
+            margin-bottom: 18px !important;
+        }
+
+        .signatures {
+            margin-top: 28px !important;
+            gap: 24px !important;
+        }
+
+        .signature {
+            min-height: 72px !important;
+            padding-top: 18px !important;
+        }
+
+        .document-footer-note {
+            clear: both !important;
+            margin-top: 22px !important;
+            padding-top: 10px !important;
+            line-height: 1.4 !important;
+        }
+
     </style>
 </head>
 <body>
+@php
+    $documentType = $type ?? '';
+    $customerDocument = in_array($documentType, ['reception', 'quote', 'solution', 'delivery'], true);
+
+    $documentSubtitles = [
+        'reception' => 'Acuse formal de recepción del equipo o producto para revisión técnica.',
+        'quote' => 'Documento de presupuesto para autorización del cliente.',
+        'internal' => 'Orden interna de trabajo para seguimiento operativo del área de servicio.',
+        'solution' => 'Comprobante de diagnóstico, solución y trabajo realizado.',
+        'delivery' => 'Comprobante de entrega final con conformidad del cliente.',
+    ];
+
+    $documentWarnings = [
+        'reception' => 'El equipo se recibe para diagnóstico. La recepción no implica autorización automática de reparación ni aceptación de presupuesto.',
+        'quote' => 'El presupuesto queda sujeto a autorización del cliente. Los importes pueden ajustarse si se detectan condiciones no visibles durante el diagnóstico.',
+        'internal' => 'Documento de uso interno. Puede contener notas operativas y de seguimiento técnico.',
+        'solution' => 'Este documento resume la solución aplicada y las evidencias registradas para el cliente.',
+        'delivery' => 'Con la entrega, el cliente confirma la recepción del equipo o producto en las condiciones indicadas.',
+    ];
+
+    $signatureLabels = [
+        'reception' => ['Entrega el equipo', 'Recibe en servicio'],
+        'quote' => ['Autoriza cliente', 'Responsable servicio'],
+        'internal' => ['Técnico asignado', 'Supervisor'],
+        'solution' => ['Técnico responsable', 'Supervisor / Cliente'],
+        'delivery' => ['Entrega servicio', 'Recibe cliente'],
+    ];
+
+    $leftSignature = $signatureLabels[$documentType][0] ?? 'Responsable';
+    $rightSignature = $signatureLabels[$documentType][1] ?? 'Cliente';
+
+    $showTrackingBox = ! empty($trackingUrl) && in_array($documentType, ['reception', 'quote', 'delivery'], true);
+
+    $stageNotice = $documentWarnings[$documentType] ?? '';
+@endphp
+
+
     <div class="toolbar">
         <button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button>
     </div>
@@ -231,6 +387,12 @@
                     <img src="{{ $logoUrl }}" class="logo" alt="Logo">
                 @endif
                 <h1>{{ $document['title'] }}</h1>
+                <div class="document-subtitle">{{ $documentSubtitles[$documentType] ?? '' }}</div>
+                @if($customerDocument)
+                    <span class="customer-safe-label">Documento visible para cliente</span>
+                @else
+                    <span class="customer-safe-label">Documento interno</span>
+                @endif
                 <div class="subtitle">{{ $document['subtitle'] }}</div>
             </div>
 
@@ -245,6 +407,10 @@
                 @endif
             </div>
         </header>
+
+        @if(!empty($stageNotice))
+            <section class="document-notice">{{ $stageNotice }}</section>
+        @endif
 
         <section class="section">
             <h2>Datos principales</h2>
@@ -447,7 +613,7 @@
             </section>
         @endif
 
-        @if($type === 'reception')
+        @if($showTrackingBox)
             @if(!empty($trackingUrl))
                 <section class="section">
                     <h2>Seguimiento en línea</h2>
@@ -497,11 +663,11 @@
         <section class="signatures">
             <div class="signature">
                 Cliente / recibe<br>
-                <span class="small">Nombre y firma</span>
+                <span class="small">{{ $leftSignature }}</span>
             </div>
             <div class="signature">
                 Empresa / responsable<br>
-                <span class="small">Nombre y firma</span>
+                <span class="small">{{ $rightSignature }}</span>
             </div>
         </section>
     </main>

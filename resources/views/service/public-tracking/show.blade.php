@@ -4,9 +4,7 @@
     <meta charset="utf-8">
     <title>Seguimiento de reparación - {{ $rows['Folio'] ?? 'Servicio' }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" href="{{ $companyFaviconUrl ?? '' }}">
-    <link rel="shortcut icon" href="{{ $companyFaviconUrl ?? '' }}">
-    <meta name="theme-color" content="#111827">
+<meta name="theme-color" content="#111827">
     <style>
         * { box-sizing: border-box; }
         body {

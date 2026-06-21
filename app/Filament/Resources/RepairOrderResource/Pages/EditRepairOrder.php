@@ -163,79 +163,88 @@ class EditRepairOrder extends EditRecord
                 ->color('gray')
                 ->button(),
 
-            \Filament\Actions\Action::make('public_tracking_link')
-                ->label('Enlace seguimiento')
+            \Filament\Actions\ActionGroup::make([
+                \Filament\Actions\Action::make('public_tracking_link')
+                    ->label('Enlace')
+                    ->icon('heroicon-o-link')
+                    ->color('gray')
+                    ->modalHeading('Enlace público de seguimiento')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Cerrar')
+                    ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.view')
+                        && (
+                            ! $this->recordHasPublicTrackingTokenForRecord($this->record)
+                            || $this->publicTrackingEnabledForRecord($this->record)
+                        ))
+                    ->modalContent(fn (): \Illuminate\Contracts\View\View => view('filament.actions.service-public-tracking-link', [
+                        'url' => $this->publicTrackingUrlForRecord($this->record),
+                    ])),
+
+                \Filament\Actions\Action::make('regenerate_public_tracking_link')
+                    ->label('Regenerar enlace')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Regenerar enlace público')
+                    ->modalDescription('El enlace anterior dejará de funcionar. El cliente solo podrá consultar el nuevo enlace.')
+                    ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.regenerate')
+                        && $this->recordHasPublicTrackingTokenForRecord($this->record))
+                    ->action(function (): void {
+                        $this->regeneratePublicTrackingTokenForRecord($this->record);
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('Enlace público regenerado')
+                            ->body('El enlace anterior fue invalidado.')
+                            ->success()
+                            ->send();
+                    }),
+
+                \Filament\Actions\Action::make('disable_public_tracking_link')
+                    ->label('Desactivar enlace')
+                    ->icon('heroicon-o-lock-closed')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Desactivar enlace público')
+                    ->modalDescription('La URL pública dejará de estar disponible para el cliente.')
+                    ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.disable')
+                        && $this->recordHasPublicTrackingTokenForRecord($this->record)
+                        && $this->publicTrackingEnabledForRecord($this->record))
+                    ->action(function (): void {
+                        $this->setPublicTrackingEnabledForRecord($this->record, false);
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('Enlace público desactivado')
+                            ->body('El cliente ya no podrá consultar esta URL.')
+                            ->success()
+                            ->send();
+                    }),
+
+                \Filament\Actions\Action::make('enable_public_tracking_link')
+                    ->label('Activar enlace')
+                    ->icon('heroicon-o-lock-open')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Activar enlace público')
+                    ->modalDescription('La URL pública volverá a estar disponible para el cliente.')
+                    ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.disable')
+                        && $this->recordHasPublicTrackingTokenForRecord($this->record)
+                        && ! $this->publicTrackingEnabledForRecord($this->record))
+                    ->action(function (): void {
+                        $this->setPublicTrackingEnabledForRecord($this->record, true);
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('Enlace público activado')
+                            ->success()
+                            ->send();
+                    }),
+            ])
+                ->button()
+                ->label('Enlaces')
                 ->icon('heroicon-o-link')
                 ->color('gray')
-                ->modalHeading('Enlace público de seguimiento')
-                ->modalSubmitAction(false)
-                ->modalCancelActionLabel('Cerrar')
                 ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.view')
-                    && (
-                        ! $this->recordHasPublicTrackingTokenForRecord($this->record)
-                        || $this->publicTrackingEnabledForRecord($this->record)
-                    ))
-                ->modalContent(fn (): \Illuminate\Contracts\View\View => view('filament.actions.service-public-tracking-link', [
-                    'url' => $this->publicTrackingUrlForRecord($this->record),
-                ])),
-
-            \Filament\Actions\Action::make('regenerate_public_tracking_link')
-                ->label('Regenerar enlace')
-                ->icon('heroicon-o-arrow-path')
-                ->color('warning')
-                ->requiresConfirmation()
-                ->modalHeading('Regenerar enlace público')
-                ->modalDescription('El enlace anterior dejará de funcionar. El cliente solo podrá consultar el nuevo enlace.')
-                ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.regenerate')
-                    && $this->recordHasPublicTrackingTokenForRecord($this->record))
-                ->action(function (): void {
-                    $this->regeneratePublicTrackingTokenForRecord($this->record);
-
-                    \Filament\Notifications\Notification::make()
-                        ->title('Enlace público regenerado')
-                        ->body('El enlace anterior fue invalidado.')
-                        ->success()
-                        ->send();
-                }),
-
-            \Filament\Actions\Action::make('disable_public_tracking_link')
-                ->label('Desactivar enlace')
-                ->icon('heroicon-o-lock-closed')
-                ->color('danger')
-                ->requiresConfirmation()
-                ->modalHeading('Desactivar enlace público')
-                ->modalDescription('La URL pública dejará de estar disponible para el cliente.')
-                ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.disable')
-                    && $this->recordHasPublicTrackingTokenForRecord($this->record)
-                    && $this->publicTrackingEnabledForRecord($this->record))
-                ->action(function (): void {
-                    $this->setPublicTrackingEnabledForRecord($this->record, false);
-
-                    \Filament\Notifications\Notification::make()
-                        ->title('Enlace público desactivado')
-                        ->body('El cliente ya no podrá consultar esta URL.')
-                        ->success()
-                        ->send();
-                }),
-
-            \Filament\Actions\Action::make('enable_public_tracking_link')
-                ->label('Activar enlace')
-                ->icon('heroicon-o-lock-open')
-                ->color('success')
-                ->requiresConfirmation()
-                ->modalHeading('Activar enlace público')
-                ->modalDescription('La URL pública volverá a estar disponible para el cliente.')
-                ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.disable')
-                    && $this->recordHasPublicTrackingTokenForRecord($this->record)
-                    && ! $this->publicTrackingEnabledForRecord($this->record))
-                ->action(function (): void {
-                    $this->setPublicTrackingEnabledForRecord($this->record, true);
-
-                    \Filament\Notifications\Notification::make()
-                        ->title('Enlace público activado')
-                        ->success()
-                        ->send();
-                }),
+                    || $this->canUsePublicTracking('service.repairs.public_tracking.regenerate')
+                    || $this->canUsePublicTracking('service.repairs.public_tracking.disable')),
 
             \Filament\Actions\Action::make('capture_reception_signature')
                 ->label('Firmar recepción')
