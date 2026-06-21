@@ -170,9 +170,72 @@ class EditRepairOrder extends EditRecord
                 ->modalHeading('Enlace público de seguimiento')
                 ->modalSubmitAction(false)
                 ->modalCancelActionLabel('Cerrar')
+                ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.view')
+                    && (
+                        ! $this->recordHasPublicTrackingTokenForRecord($this->record)
+                        || $this->publicTrackingEnabledForRecord($this->record)
+                    ))
                 ->modalContent(fn (): \Illuminate\Contracts\View\View => view('filament.actions.service-public-tracking-link', [
                     'url' => $this->publicTrackingUrlForRecord($this->record),
                 ])),
+
+            \Filament\Actions\Action::make('regenerate_public_tracking_link')
+                ->label('Regenerar enlace')
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Regenerar enlace público')
+                ->modalDescription('El enlace anterior dejará de funcionar. El cliente solo podrá consultar el nuevo enlace.')
+                ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.regenerate')
+                    && $this->recordHasPublicTrackingTokenForRecord($this->record))
+                ->action(function (): void {
+                    $this->regeneratePublicTrackingTokenForRecord($this->record);
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('Enlace público regenerado')
+                        ->body('El enlace anterior fue invalidado.')
+                        ->success()
+                        ->send();
+                }),
+
+            \Filament\Actions\Action::make('disable_public_tracking_link')
+                ->label('Desactivar enlace')
+                ->icon('heroicon-o-lock-closed')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading('Desactivar enlace público')
+                ->modalDescription('La URL pública dejará de estar disponible para el cliente.')
+                ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.disable')
+                    && $this->recordHasPublicTrackingTokenForRecord($this->record)
+                    && $this->publicTrackingEnabledForRecord($this->record))
+                ->action(function (): void {
+                    $this->setPublicTrackingEnabledForRecord($this->record, false);
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('Enlace público desactivado')
+                        ->body('El cliente ya no podrá consultar esta URL.')
+                        ->success()
+                        ->send();
+                }),
+
+            \Filament\Actions\Action::make('enable_public_tracking_link')
+                ->label('Activar enlace')
+                ->icon('heroicon-o-lock-open')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Activar enlace público')
+                ->modalDescription('La URL pública volverá a estar disponible para el cliente.')
+                ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.disable')
+                    && $this->recordHasPublicTrackingTokenForRecord($this->record)
+                    && ! $this->publicTrackingEnabledForRecord($this->record))
+                ->action(function (): void {
+                    $this->setPublicTrackingEnabledForRecord($this->record, true);
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('Enlace público activado')
+                        ->success()
+                        ->send();
+                }),
 
             \Filament\Actions\Action::make('capture_reception_signature')
                 ->label('Firmar recepción')
@@ -621,6 +684,171 @@ class EditRepairOrder extends EditRecord
         );
     }
 
+
+    protected function canUsePublicTracking(string $permission): bool
+    {
+        return \App\Support\Service\ServiceAccess::can($permission);
+    }
+
+    protected function recordHasPublicTrackingTokenForRecord(object $record): bool
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_token')) {
+            return false;
+        }
+
+        $repairId = $record->getKey();
+
+        if (! $repairId) {
+            return false;
+        }
+
+        return filled(\Illuminate\Support\Facades\DB::table('repair_orders')
+            ->where('id', $repairId)
+            ->value('public_tracking_token'));
+    }
+
+    protected function publicTrackingEnabledForRecord(object $record): bool
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_enabled')) {
+            return true;
+        }
+
+        $repairId = $record->getKey();
+
+        if (! $repairId) {
+            return false;
+        }
+
+        return (bool) \Illuminate\Support\Facades\DB::table('repair_orders')
+            ->where('id', $repairId)
+            ->value('public_tracking_enabled');
+    }
+
+    protected function regeneratePublicTrackingTokenForRecord(object $record): ?string
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_token')) {
+            return null;
+        }
+
+        $repairId = $record->getKey();
+
+        if (! $repairId) {
+            return null;
+        }
+
+        do {
+            $token = \Illuminate\Support\Str::random(48);
+            $exists = \Illuminate\Support\Facades\DB::table('repair_orders')
+                ->where('public_tracking_token', $token)
+                ->where('id', '!=', $repairId)
+                ->exists();
+        } while ($exists);
+
+        $payload = [
+            'public_tracking_token' => $token,
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_enabled')) {
+            $payload['public_tracking_enabled'] = true;
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_token_created_at')) {
+            $payload['public_tracking_token_created_at'] = now();
+        }
+
+        \Illuminate\Support\Facades\DB::table('repair_orders')
+            ->where('id', $repairId)
+            ->update($payload);
+
+        $record->public_tracking_token = $token;
+        $record->public_tracking_enabled = true;
+
+        $this->logPublicTrackingEventForRecord(
+            $record,
+            'public_tracking_regenerated',
+            'Se regeneró el enlace público de seguimiento.'
+        );
+
+        return $token;
+    }
+
+    protected function setPublicTrackingEnabledForRecord(object $record, bool $enabled): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_enabled')) {
+            return;
+        }
+
+        $repairId = $record->getKey();
+
+        if (! $repairId) {
+            return;
+        }
+
+        if ($enabled && ! $this->recordHasPublicTrackingTokenForRecord($record)) {
+            $this->regeneratePublicTrackingTokenForRecord($record);
+
+            return;
+        }
+
+        \Illuminate\Support\Facades\DB::table('repair_orders')
+            ->where('id', $repairId)
+            ->update([
+                'public_tracking_enabled' => $enabled,
+            ]);
+
+        $record->public_tracking_enabled = $enabled;
+
+        $this->logPublicTrackingEventForRecord(
+            $record,
+            $enabled ? 'public_tracking_enabled' : 'public_tracking_disabled',
+            $enabled
+                ? 'Se activó el enlace público de seguimiento.'
+                : 'Se desactivó el enlace público de seguimiento.'
+        );
+    }
+
+    protected function logPublicTrackingEventForRecord(object $record, string $eventType, string $notes): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('service_case_events')) {
+            return;
+        }
+
+        $columns = \Illuminate\Support\Facades\Schema::getColumnListing('service_case_events');
+
+        $payload = [
+            'event_type' => $eventType,
+            'notes' => $notes,
+        ];
+
+        $map = [
+            'company_id' => $record->company_id ?? null,
+            'service_case_id' => $record->service_case_id ?? null,
+            'repair_order_id' => $record->getKey(),
+            'performed_by' => auth()->id(),
+            'performed_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        foreach ($map as $column => $value) {
+            if (in_array($column, $columns, true)) {
+                $payload[$column] = $value;
+            }
+        }
+
+        $safe = [];
+
+        foreach ($payload as $column => $value) {
+            if (in_array($column, $columns, true)) {
+                $safe[$column] = $value;
+            }
+        }
+
+        if ($safe !== []) {
+            \Illuminate\Support\Facades\DB::table('service_case_events')->insert($safe);
+        }
+    }
+
     protected function ensurePublicTrackingTokenForRecord(object $record): ?string
     {
         if (! \Illuminate\Support\Facades\Schema::hasColumn('repair_orders', 'public_tracking_token')) {
@@ -663,6 +891,13 @@ class EditRepairOrder extends EditRecord
             ->update($payload);
 
         $record->public_tracking_token = $token;
+        $record->public_tracking_enabled = true;
+
+        $this->logPublicTrackingEventForRecord(
+            $record,
+            'public_tracking_created',
+            'Se generó el enlace público de seguimiento.'
+        );
 
         return $token;
     }
