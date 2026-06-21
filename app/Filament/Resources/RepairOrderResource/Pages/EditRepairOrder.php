@@ -163,6 +163,67 @@ class EditRepairOrder extends EditRecord
                 ->color('gray')
                 ->button(),
 
+            \Filament\Actions\Action::make('capture_reception_signature')
+                ->label('Firmar recepción')
+                ->icon('heroicon-o-pencil-square')
+                ->color('primary')
+                ->modalHeading('Firma digital de recepción')
+                ->modalSubmitActionLabel('Guardar firma de recepción')
+                ->visible(fn (): bool => ! $this->repairHasAttachmentStage($this->record, 'reception_signature'))
+                ->form([
+                    \Filament\Forms\Components\TextInput::make('received_from')
+                        ->label('Nombre de quien entrega')
+                        ->helperText('Persona que entrega el equipo/producto para diagnóstico o reparación.')
+                        ->required()
+                        ->maxLength(255),
+
+                    \Filament\Forms\Components\Textarea::make('reception_notes')
+                        ->label('Observaciones de recepción')
+                        ->rows(3)
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\FileUpload::make('reception_files')
+                        ->label('Evidencia de recepción')
+                        ->helperText('Opcional: sube foto del equipo recibido, accesorios, estado físico o documento relacionado. Primero sube la evidencia y al final firma.')
+                        ->acceptedFileTypes([
+                            'image/jpeg',
+                            'image/png',
+                            'image/webp',
+                            'image/gif',
+                            'application/pdf',
+                            'application/msword',
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                            'application/vnd.ms-excel',
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            'text/plain',
+                            'text/csv',
+                        ])
+                        ->disk('public')
+                        ->directory('service/reception-files')
+                        ->multiple()
+                        ->reorderable()
+                        ->downloadable()
+                        ->openable()
+                        ->imagePreviewHeight('120')
+                        ->maxFiles(10)
+                        ->maxSize(10240)
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\ViewField::make('reception_signature_data')
+                        ->label('Firma digital de recepción')
+                        ->view('filament.forms.components.signature-pad')
+                        ->required()
+                        ->dehydrated(true)
+                        ->helperText('Firma al final, después de subir la evidencia, para evitar que el upload reinicie el recuadro.')
+                        ->validationMessages([
+                            'required' => 'Captura la firma digital de quien entrega.',
+                        ])
+                        ->columnSpanFull(),
+                ])
+                ->action(function (array $data): void {
+                    $this->captureRepairReceptionSignature($data);
+                }),
+
 
 
 
@@ -549,6 +610,18 @@ class EditRepairOrder extends EditRecord
         );
     }
 
+    protected function saveReceptionFilesForRepair(object $record, array $paths): void
+    {
+        $this->saveServiceStageFilesForRepair(
+            record: $record,
+            paths: $paths,
+            stage: 'reception',
+            notes: 'Evidencia de recepción',
+            eventType: 'reception_files_uploaded',
+            eventDescription: 'Se agregaron fotos y documentos de evidencia de recepción.'
+        );
+    }
+
     protected function saveDeliveryFilesForRepair(object $record, array $paths): void
     {
         $this->saveServiceStageFilesForRepair(
@@ -591,6 +664,89 @@ class EditRepairOrder extends EditRecord
             eventType: 'delivery_signature_captured',
             eventDescription: 'Se capturó firma digital de entrega.'
         );
+    }
+
+    protected function saveReceptionSignatureForRepair(object $record, mixed $signatureData, ?string $receivedFrom = null, ?string $receptionNotes = null): void
+    {
+        if (! is_string($signatureData) || trim($signatureData) === '') {
+            return;
+        }
+
+        if (! str_starts_with($signatureData, 'data:image/png;base64,')) {
+            return;
+        }
+
+        $encoded = substr($signatureData, strlen('data:image/png;base64,'));
+        $binary = base64_decode($encoded, true);
+
+        if ($binary === false || $binary === '') {
+            return;
+        }
+
+        $folio = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string) ($record->folio ?? ('repair_' . $record->getKey())));
+        $filePath = 'service/signatures/reception/' . $folio . '-' . now()->format('YmdHis') . '.png';
+
+        \Illuminate\Support\Facades\Storage::disk('public')->put($filePath, $binary);
+
+        $notes = 'Firma digital de recepción';
+
+        if (filled($receivedFrom)) {
+            $notes .= ' - Entrega: ' . trim((string) $receivedFrom);
+        }
+
+        if (filled($receptionNotes)) {
+            $notes .= ' - Observaciones: ' . trim((string) $receptionNotes);
+        }
+
+        $this->saveServiceStageFilesForRepair(
+            record: $record,
+            paths: [$filePath],
+            stage: 'reception_signature',
+            notes: $notes,
+            eventType: 'reception_signature_captured',
+            eventDescription: $notes
+        );
+    }
+
+    protected function captureRepairReceptionSignature(array $data): void
+    {
+        $record = $this->record;
+
+        if (! $record) {
+            \Filament\Notifications\Notification::make()
+                ->title('No se encontró la reparación')
+                ->body('Recarga la pantalla e intenta nuevamente.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        if ($this->repairHasAttachmentStage($record, 'reception_signature')) {
+            \Filament\Notifications\Notification::make()
+                ->title('Recepción ya firmada')
+                ->body('Esta reparación ya tiene firma digital de recepción registrada.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $this->saveReceptionFilesForRepair($record, (array) ($data['reception_files'] ?? []));
+        $this->saveReceptionSignatureForRepair(
+            $record,
+            $data['reception_signature_data'] ?? null,
+            $data['received_from'] ?? null,
+            $data['reception_notes'] ?? null
+        );
+
+        $record->refresh();
+
+        \Filament\Notifications\Notification::make()
+            ->title('Firma de recepción guardada')
+            ->body('La firma digital de recepción quedó guardada en el expediente.')
+            ->success()
+            ->send();
     }
 
     protected function saveServiceStageFilesForRepair(
