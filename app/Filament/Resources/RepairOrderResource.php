@@ -360,6 +360,13 @@ Forms\Components\Hidden::make('status')
                         Forms\Components\DateTimePicker::make('promised_at')
                             ->label('Fecha prometida'),
 
+                        Forms\Components\Placeholder::make('sla_status_display')
+                            ->label('Semáforo SLA')
+                            ->content(fn ($record): string => $record
+                                ? \App\Support\Service\ServiceRepairSla::summary($record)
+                                : 'Se calculará al guardar')
+                            ->visible(fn ($record): bool => (bool) $record),
+
                         Forms\Components\DateTimePicker::make('warranty_expires_at')
                             ->label('Vence garantia'),
                     ]),
@@ -934,6 +941,14 @@ Forms\Components\Hidden::make('status')
                     ->label('Real')
                     ->money('MXN')
                     ->sortable()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('sla_status_virtual')
+                    ->label('SLA')
+                    ->getStateUsing(fn ($record): string => \App\Support\Service\ServiceRepairSla::label($record))
+                    ->badge()
+                    ->color(fn ($record): string => \App\Support\Service\ServiceRepairSla::color($record))
+                    ->description(fn ($record): string => \App\Support\Service\ServiceRepairSla::description($record))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('promised_at')
