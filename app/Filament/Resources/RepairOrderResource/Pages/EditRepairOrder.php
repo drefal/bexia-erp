@@ -228,6 +228,17 @@ class EditRepairOrder extends EditRecord
                         ->maxFiles(10)
                         ->maxSize(10240)
                         ->columnSpanFull(),
+
+                    \Filament\Forms\Components\ViewField::make('delivery_signature_data')
+                        ->label('Firma digital de entrega')
+                        ->view('filament.forms.components.signature-pad')
+                        ->required()
+                        ->dehydrated(true)
+                        ->helperText('Firma después de subir la evidencia para evitar que el upload reinicie el recuadro.')
+                        ->validationMessages([
+                            'required' => 'Captura la firma digital de quien recibe.',
+                        ])
+                        ->columnSpanFull(),
                 ])
                 ->action(function (array $data): void {
                     $this->deliverRepairToCustomer($data);
@@ -518,29 +529,6 @@ class EditRepairOrder extends EditRecord
                     $this->redirect($this->getResource()::getUrl('edit', ['record' => $record]));
                 }),
 
-            \Filament\Actions\Action::make('stage_deliver_repair')
-                ->label('Entregar')
-                ->icon('heroicon-o-archive-box')
-                ->color('gray')
-                ->requiresConfirmation()
-                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?: '') === 'ready_for_delivery')
-                ->action(function (): void {
-                    $record = $this->record;
-
-                    $record->update([
-                        'workflow_stage' => 'delivered',
-                        'status' => 'delivered',
-                        'delivered_at' => now(),
-                    ]);
-
-                    \Filament\Notifications\Notification::make()
-                        ->title('Reparacion entregada')
-                        ->body('La reparacion quedo cerrada.')
-                        ->success()
-                        ->send();
-
-                    $this->redirect($this->getResource()::getUrl('edit', ['record' => $record]));
-                }),
 
             \Filament\Actions\DeleteAction::make()
     ->visible(fn (): bool => $this->canDeleteRepairDraftAction()),
@@ -570,6 +558,38 @@ class EditRepairOrder extends EditRecord
             notes: 'Evidencia de entrega',
             eventType: 'delivery_files_uploaded',
             eventDescription: 'Se agregaron fotos y documentos de evidencia de entrega.'
+        );
+    }
+
+    protected function saveDeliverySignatureForRepair(object $record, mixed $signatureData): void
+    {
+        if (! is_string($signatureData) || trim($signatureData) === '') {
+            return;
+        }
+
+        if (! str_starts_with($signatureData, 'data:image/png;base64,')) {
+            return;
+        }
+
+        $encoded = substr($signatureData, strlen('data:image/png;base64,'));
+        $binary = base64_decode($encoded, true);
+
+        if ($binary === false || $binary === '') {
+            return;
+        }
+
+        $folio = preg_replace('/[^A-Za-z0-9_\-]/', '_', (string) ($record->folio ?? ('repair_' . $record->getKey())));
+        $filePath = 'service/signatures/delivery/' . $folio . '-' . now()->format('YmdHis') . '.png';
+
+        \Illuminate\Support\Facades\Storage::disk('public')->put($filePath, $binary);
+
+        $this->saveServiceStageFilesForRepair(
+            record: $record,
+            paths: [$filePath],
+            stage: 'delivery_signature',
+            notes: 'Firma digital de entrega',
+            eventType: 'delivery_signature_captured',
+            eventDescription: 'Se capturó firma digital de entrega.'
         );
     }
 
@@ -734,6 +754,7 @@ class EditRepairOrder extends EditRecord
             ->update($payload);
 
         $this->saveDeliveryFilesForRepair($record, (array) ($data['delivery_files'] ?? []));
+        $this->saveDeliverySignatureForRepair($record, $data['delivery_signature_data'] ?? null);
 
         $this->createServiceRepairTransitionEvent(
             $record,
