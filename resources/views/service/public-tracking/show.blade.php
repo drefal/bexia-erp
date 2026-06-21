@@ -64,6 +64,16 @@
             color: #4b5563;
             line-height: 1.45;
         }
+        .section {
+            margin-top: 22px;
+        }
+        .section:first-child {
+            margin-top: 0;
+        }
+        .section h2 {
+            margin: 0 0 10px;
+            font-size: 17px;
+        }
         .grid {
             display: grid;
             grid-template-columns: 180px 1fr;
@@ -85,6 +95,15 @@
         }
         .value {
             white-space: pre-wrap;
+        }
+        .notice {
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            color: #374151;
+            font-size: 13px;
+            line-height: 1.45;
         }
         .timeline {
             display: grid;
@@ -119,21 +138,79 @@
             font-size: 12px;
             margin-top: 2px;
         }
-        .section {
-            margin-top: 22px;
+        .stage-grid {
+            display: grid;
+            gap: 12px;
         }
-        .section h2 {
-            margin: 0 0 10px;
-            font-size: 17px;
-        }
-        .notice {
-            padding: 12px;
-            border-radius: 12px;
+        .stage-card {
             border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .stage-head {
+            padding: 12px 14px;
             background: #f9fafb;
-            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        .stage-title {
+            font-weight: 800;
+            font-size: 15px;
+        }
+        .stage-status {
+            color: #4b5563;
+            font-size: 12px;
+            text-align: right;
+        }
+        .stage-body {
+            padding: 12px 14px;
+        }
+        .mini-grid {
+            display: grid;
+            grid-template-columns: 190px 1fr;
+            border: 1px solid #eef2f7;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .mini-label,
+        .mini-value {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eef2f7;
             font-size: 13px;
-            line-height: 1.45;
+        }
+        .mini-label {
+            background: #fbfbfc;
+            font-weight: 700;
+            color: #374151;
+            border-right: 1px solid #eef2f7;
+        }
+        .mini-value {
+            white-space: pre-wrap;
+        }
+        .event-list {
+            margin-top: 10px;
+            display: grid;
+            gap: 6px;
+        }
+        .event-item {
+            border-left: 3px solid #d1d5db;
+            padding: 7px 9px;
+            background: #f9fafb;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #374151;
+        }
+        .event-title {
+            font-weight: 700;
+            color: #111827;
+        }
+        .event-meta {
+            color: #6b7280;
+            margin-top: 2px;
         }
         .footer {
             padding: 16px 22px;
@@ -144,8 +221,10 @@
         }
         @media (max-width: 680px) {
             .header { align-items: flex-start; flex-direction: column; }
-            .grid { grid-template-columns: 1fr; }
-            .label { border-right: 0; }
+            .grid, .mini-grid { grid-template-columns: 1fr; }
+            .label, .mini-label { border-right: 0; }
+            .stage-head { flex-direction: column; }
+            .stage-status { text-align: left; }
         }
     </style>
 </head>
@@ -169,34 +248,9 @@
                     <div class="status-message">{{ $customerStatus['message'] }}</div>
                 </section>
 
-                <section class="section">
-                    <h2>Datos del servicio</h2>
-                    <div class="grid">
-                        @foreach($rows as $label => $value)
-                            <div class="label">{{ $label }}</div>
-                            <div class="value">{{ filled($value) ? $value : '—' }}</div>
-                        @endforeach
-                    </div>
-                </section>
-
-                <section class="section">
-                    <h2>Avance</h2>
-                    <div class="timeline">
-                        @foreach($timeline as $step)
-                            <div class="step {{ $step['done'] ? 'done' : '' }}">
-                                <div class="dot"></div>
-                                <div>
-                                    <div class="step-title">{{ $step['label'] }}</div>
-                                    <div class="step-date">{{ filled($step['date']) ? $step['date'] : 'Pendiente' }}</div>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </section>
-
                 @if(filled($publicNotes['reported_problem'] ?? '') || filled($publicNotes['received_condition'] ?? '') || filled($publicNotes['resolution'] ?? ''))
                     <section class="section">
-                        <h2>Información visible para cliente</h2>
+                        <h2>Información visible para el cliente</h2>
 
                         @if(filled($publicNotes['reported_problem'] ?? ''))
                             <div class="notice" style="margin-bottom: 8px;">
@@ -222,8 +276,73 @@
                 @endif
 
                 <section class="section">
+                    <h2>Datos del servicio</h2>
+                    <div class="grid">
+                        @foreach($rows as $label => $value)
+                            <div class="label">{{ $label }}</div>
+                            <div class="value">{{ filled($value) ? $value : '—' }}</div>
+                        @endforeach
+                    </div>
+                </section>
+
+                <section class="section">
+                    <h2>Avance general</h2>
+                    <div class="timeline">
+                        @foreach($timeline as $step)
+                            <div class="step {{ $step['done'] ? 'done' : '' }}">
+                                <div class="dot"></div>
+                                <div>
+                                    <div class="step-title">{{ $step['label'] }}</div>
+                                    <div class="step-date">{{ filled($step['date']) ? $step['date'] : 'Pendiente' }}</div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </section>
+
+                @if(!empty($stageDetails))
+                    <section class="section">
+                        <h2>Detalle por etapa</h2>
+
+                        <div class="stage-grid">
+                            @foreach($stageDetails as $stage)
+                                <article class="stage-card">
+                                    <div class="stage-head">
+                                        <div class="stage-title">{{ $stage['title'] }}</div>
+                                        <div class="stage-status">{{ $stage['status'] }}</div>
+                                    </div>
+
+                                    <div class="stage-body">
+                                        @if(!empty($stage['items']))
+                                            <div class="mini-grid">
+                                                @foreach($stage['items'] as $label => $value)
+                                                    <div class="mini-label">{{ $label }}</div>
+                                                    <div class="mini-value">{{ filled($value) ? $value : '—' }}</div>
+                                                @endforeach
+                                            </div>
+                                        @endif
+
+                                        @if(!empty($stage['events']))
+                                            <div class="event-list">
+                                                @foreach($stage['events'] as $event)
+                                                    <div class="event-item">
+                                                        <div class="event-title">{{ $event['label'] }}</div>
+                                                        <div class="event-meta">{{ filled($event['date']) ? $event['date'] : 'Sin fecha' }}</div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </div>
+                                </article>
+                            @endforeach
+                        </div>
+                    </section>
+                @endif
+
+                <section class="section">
                     <div class="notice">
-                        Esta página muestra información de seguimiento. Para aclaraciones, cambios o entrega física del equipo, comunícate directamente con la empresa.
+                        Esta página muestra información pública de seguimiento. No incluye notas internas, usuarios internos ni información administrativa reservada.
+                        Para aclaraciones, cambios o entrega física del equipo, comunícate directamente con la empresa.
                     </div>
                 </section>
             </main>
