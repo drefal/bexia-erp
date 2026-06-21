@@ -336,9 +336,9 @@
                                     <div class="notice">Imagen adjunta sin ruta pública disponible.</div>
                                 @endif
 
-                                <div class="evidence-name">{{ $attachment['name'] }}</div>
+                                <div class="evidence-name">{{ $attachment['type_label'] ?? 'Evidencia fotográfica' }}</div>
                                 <div class="evidence-meta">
-                                    Tipo: {{ $attachment['type_label'] ?? 'Imagen' }}<br>
+                                    Evidencia adjunta al expediente<br>
                                     Etapa: {{ $attachment['stage'] ?: '—' }}<br>
                                     Fecha: {{ $attachment['created_at'] ?: '—' }}
                                     @if(!empty($attachment['notes']))
@@ -376,9 +376,9 @@
                                             <span class="small">Existe como evidencia adjunta.</span>
                                         </td>
                                         <td>
-                                            {{ $attachment['name'] }}
+                                            Evidencia adjunta al expediente
                                             @if(!empty($attachment['extension']))
-                                                <br><span class="small">Extensión: .{{ $attachment['extension'] }}</span>
+                                                <br><span class="small">Tipo de archivo: .{{ $attachment['extension'] }}</span>
                                             @endif
                                         </td>
                                         <td>
