@@ -307,6 +307,18 @@ Route::post('/pos/sessions/{session}/price-list-changes', [\App\Http\Controllers
 
 
 
+
+/*
+|--------------------------------------------------------------------------
+| Portal público de seguimiento de reparaciones / ATC
+|--------------------------------------------------------------------------
+| V5.77.3b - Consulta pública segura por token.
+*/
+Route::middleware(['web'])->get(
+    '/servicio/seguimiento/{token}',
+    \App\Http\Controllers\Service\PublicRepairTrackingController::class
+)->name('public.service.tracking.show');
+
 /*
  * BEXIA_V5528A_PUBLIC_INVOICE_PORTAL_VALIDATE_TICKET
  * Portal público de autofacturación. Fase 1: validar ticket por folio + total.

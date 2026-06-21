@@ -181,6 +181,30 @@
             font-size: 11px;
             line-height: 1.45;
         }
+        .tracking-box {
+            display: grid;
+            grid-template-columns: 34mm 1fr;
+            gap: 12px;
+            align-items: center;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            padding: 10px;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+        .tracking-box img {
+            width: 32mm;
+            height: 32mm;
+            object-fit: contain;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+        }
+        .tracking-url {
+            overflow-wrap: anywhere;
+            color: #374151;
+            font-size: 10px;
+            margin-top: 4px;
+        }
         @media print {
             body { background: #fff; }
             .toolbar { display: none; }
@@ -424,6 +448,23 @@
         @endif
 
         @if($type === 'reception')
+            @if(!empty($trackingUrl))
+                <section class="section">
+                    <h2>Seguimiento en línea</h2>
+                    <div class="tracking-box">
+                        <div>
+                            @if(!empty($trackingQrDataUri))
+                                <img src="{{ $trackingQrDataUri }}" alt="QR seguimiento reparación">
+                            @endif
+                        </div>
+                        <div>
+                            Escanea el código QR para consultar el estado actualizado de esta reparación.
+                            <div class="tracking-url">{{ $trackingUrl }}</div>
+                        </div>
+                    </div>
+                </section>
+            @endif
+
             <section class="section">
                 <h2>Condiciones de recepción</h2>
                 <div class="notice">

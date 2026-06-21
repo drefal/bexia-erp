@@ -100,6 +100,8 @@ class RepairOrderPrintController extends Controller
             'attachments' => $attachments,
             'totals' => $totals,
             'logoUrl' => $logoUrl,
+            'trackingUrl' => $this->publicTrackingUrl($repair),
+            'trackingQrDataUri' => $this->publicTrackingQrDataUri($repair),
             'printedAt' => now(),
         ]);
     }
@@ -430,6 +432,86 @@ class RepairOrderPrintController extends Controller
             'delivered' => 'Entregado',
             'cancelled' => 'Cancelado',
         ][$stage] ?? $stage;
+    }
+
+    protected function ensurePublicTrackingToken(object $repair): ?string
+    {
+        if (! Schema::hasColumn('repair_orders', 'public_tracking_token')) {
+            return null;
+        }
+
+        $token = (string) ($repair->public_tracking_token ?? '');
+
+        if ($token !== '') {
+            return $token;
+        }
+
+        $repairId = $this->pick($repair, ['id']);
+
+        if (! $repairId) {
+            return null;
+        }
+
+        do {
+            $token = Str::random(48);
+            $exists = DB::table('repair_orders')
+                ->where('public_tracking_token', $token)
+                ->exists();
+        } while ($exists);
+
+        $payload = [
+            'public_tracking_token' => $token,
+        ];
+
+        if (Schema::hasColumn('repair_orders', 'public_tracking_enabled')) {
+            $payload['public_tracking_enabled'] = true;
+        }
+
+        if (Schema::hasColumn('repair_orders', 'public_tracking_token_created_at')) {
+            $payload['public_tracking_token_created_at'] = now();
+        }
+
+        DB::table('repair_orders')
+            ->where('id', $repairId)
+            ->update($payload);
+
+        $repair->public_tracking_token = $token;
+
+        return $token;
+    }
+
+    protected function publicTrackingUrl(object $repair): ?string
+    {
+        $token = $this->ensurePublicTrackingToken($repair);
+
+        if (! $token) {
+            return null;
+        }
+
+        return route('public.service.tracking.show', ['token' => $token]);
+    }
+
+    protected function publicTrackingQrDataUri(object $repair): ?string
+    {
+        $url = $this->publicTrackingUrl($repair);
+
+        if (! $url) {
+            return null;
+        }
+
+        try {
+            $renderer = new \BaconQrCode\Renderer\ImageRenderer(
+                new \BaconQrCode\Renderer\RendererStyle\RendererStyle(180),
+                new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
+            );
+
+            $writer = new \BaconQrCode\Writer($renderer);
+            $svg = $writer->writeString($url);
+
+            return 'data:image/svg+xml;base64,' . base64_encode($svg);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     protected function logoUrl(?object $company): ?string
