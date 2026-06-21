@@ -165,41 +165,6 @@ class EditRepairOrder extends EditRecord
 
 
 
-            \Filament\Actions\Action::make('mark_ready_for_delivery_fixed')
-                ->label('Marcar listo para entrega')
-                ->icon('heroicon-o-check-circle')
-                ->color('warning')
-                ->requiresConfirmation()
-                ->modalHeading('Marcar como listo para entrega')
-                ->modalDescription('La reparación quedará lista para que el cliente pueda recogerla.')
-                ->visible(fn (): bool => (string) (\Illuminate\Support\Facades\DB::table('repair_orders')->where('id', $this->record->getKey())->value('workflow_stage') ?? '') === 'repaired')
-                ->action(function (): void {
-                    $this->markRepairReadyForDelivery();
-                }),
-
-            \Filament\Actions\Action::make('deliver_to_customer_fixed')
-                ->label('Entregar al cliente')
-                ->icon('heroicon-o-truck')
-                ->color('success')
-                ->modalHeading('Entregar al cliente')
-                ->modalSubmitActionLabel('Confirmar entrega')
-                ->visible(fn (): bool => (string) (\Illuminate\Support\Facades\DB::table('repair_orders')->where('id', $this->record->getKey())->value('workflow_stage') ?? '') === 'ready_for_delivery')
-                ->form([
-                    \Filament\Forms\Components\TextInput::make('delivered_to')
-                        ->label('Nombre de quien recibe')
-                        ->required()
-                        ->maxLength(255),
-
-                    \Filament\Forms\Components\Textarea::make('delivery_notes')
-                        ->label('Observaciones de entrega')
-                        ->rows(4)
-                        ->columnSpanFull(),
-                ])
-                ->action(function (array $data): void {
-                    $this->deliverRepairToCustomer($data);
-                }),
-
-
 
             \Filament\Actions\Action::make('mark_ready_for_delivery')
                 ->label('Marcar listo para entrega')
@@ -229,6 +194,39 @@ class EditRepairOrder extends EditRecord
                     \Filament\Forms\Components\Textarea::make('delivery_notes')
                         ->label('Observaciones de entrega')
                         ->rows(4)
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\FileUpload::make('delivery_files')
+                        ->label('Evidencia obligatoria de entrega')
+                        ->required()
+                        ->minFiles(1)
+                        ->validationMessages([
+                            'required' => 'Agrega al menos una foto o archivo de evidencia de entrega.',
+                            'min' => 'Agrega al menos una foto o archivo de evidencia de entrega.',
+                        ])
+                        ->acceptedFileTypes([
+                            'image/jpeg',
+                            'image/png',
+                            'image/webp',
+                            'image/gif',
+                            'application/pdf',
+                            'application/msword',
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                            'application/vnd.ms-excel',
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            'text/plain',
+                            'text/csv',
+                        ])
+                        ->helperText('Obligatorio: sube una foto del producto entregado, firma física escaneada, acuse o documento relacionado.')
+                        ->disk('public')
+                        ->directory('service/delivery-files')
+                        ->multiple()
+                        ->reorderable()
+                        ->downloadable()
+                        ->openable()
+                        ->imagePreviewHeight('120')
+                        ->maxFiles(10)
+                        ->maxSize(10240)
                         ->columnSpanFull(),
                 ])
                 ->action(function (array $data): void {
@@ -415,7 +413,13 @@ class EditRepairOrder extends EditRecord
                         ->rows(4),
 
                     \Filament\Forms\Components\FileUpload::make('solution_files')
-                        ->label('Fotos y documentos de la solución')
+                        ->label('Evidencia obligatoria de la solución')
+                        ->required()
+                        ->minFiles(1)
+                        ->validationMessages([
+                            'required' => 'Agrega al menos una foto o archivo de evidencia de la solución.',
+                            'min' => 'Agrega al menos una foto o archivo de evidencia de la solución.',
+                        ])
                         ->acceptedFileTypes([
                             'image/jpeg',
                             'image/png',
@@ -429,7 +433,7 @@ class EditRepairOrder extends EditRecord
                             'text/plain',
                             'text/csv',
                         ])
-                        ->helperText('Sube fotos, PDF, Word, Excel, TXT o CSV como evidencia del trabajo realizado.')
+                        ->helperText('Obligatorio: sube al menos una foto, PDF, Word, Excel, TXT o CSV como evidencia del trabajo realizado.')
                         ->disk('public')
                         ->directory('service/solution-files')
                         ->multiple()
@@ -451,6 +455,8 @@ class EditRepairOrder extends EditRecord
                         'resolution' => $data['resolution'] ?? $record->resolution,
                         'repair_finished_at' => now(),
                     ]);
+
+                    $this->saveSolutionFilesForRepair($record, (array) ($data['solution_files'] ?? []));
 
                     \Filament\Notifications\Notification::make()
                         ->title('Reparacion marcada como reparada')
@@ -545,6 +551,36 @@ class EditRepairOrder extends EditRecord
 
     protected function saveSolutionFilesForRepair(object $record, array $paths): void
     {
+        $this->saveServiceStageFilesForRepair(
+            record: $record,
+            paths: $paths,
+            stage: 'solution',
+            notes: 'Evidencia de solución',
+            eventType: 'solution_files_uploaded',
+            eventDescription: 'Se agregaron fotos y documentos de evidencia de la solución.'
+        );
+    }
+
+    protected function saveDeliveryFilesForRepair(object $record, array $paths): void
+    {
+        $this->saveServiceStageFilesForRepair(
+            record: $record,
+            paths: $paths,
+            stage: 'delivery',
+            notes: 'Evidencia de entrega',
+            eventType: 'delivery_files_uploaded',
+            eventDescription: 'Se agregaron fotos y documentos de evidencia de entrega.'
+        );
+    }
+
+    protected function saveServiceStageFilesForRepair(
+        object $record,
+        array $paths,
+        string $stage,
+        string $notes,
+        string $eventType,
+        string $eventDescription
+    ): void {
         $paths = array_values(array_filter($paths));
 
         if ($paths === []) {
@@ -558,38 +594,29 @@ class EditRepairOrder extends EditRecord
         $columns = \Illuminate\Support\Facades\Schema::getColumnListing('service_attachments');
         $now = now();
 
-        foreach ($paths as $path) {
-            if (is_array($path)) {
-                $path = $path['path'] ?? $path['file'] ?? $path['name'] ?? null;
+        foreach ($paths as $filePath) {
+            if (is_array($filePath)) {
+                $filePath = $filePath['path'] ?? $filePath['file'] ?? $filePath['name'] ?? null;
             }
 
-            if (! is_string($path) || trim($path) === '') {
+            if (! is_string($filePath) || trim($filePath) === '') {
                 continue;
             }
 
-            $name = basename($path);
+            $name = basename($filePath);
 
             $payload = [
                 'company_id' => $record->company_id ?? null,
                 'service_case_id' => $record->service_case_id ?? null,
                 'repair_order_id' => $record->id ?? null,
-                'stage' => 'solution',
-                'disk' => 'public',
-                'path' => $path,
-                'file_path' => $path,
+                'stage' => $stage,
+                'file_path' => $filePath,
                 'file_name' => $name,
-                'filename' => $name,
-                'original_name' => $name,
-                'name' => $name,
                 'mime_type' => null,
                 'is_customer_visible' => false,
-                'file_type' => 'solution_file',
-                'category' => 'solution',
-                'tag' => 'solution',
                 'uploaded_by' => auth()->id(),
-                'user_id' => auth()->id(),
                 'created_at' => $now,
-                'notes' => 'Evidencia de solución',
+                'notes' => $notes,
                 'updated_at' => $now,
             ];
 
@@ -607,9 +634,10 @@ class EditRepairOrder extends EditRecord
                 'company_id' => $record->company_id ?? null,
                 'service_case_id' => $record->service_case_id ?? null,
                 'repair_order_id' => $record->id ?? null,
-                'event_type' => 'solution_files_uploaded',
-                'description' => 'Se agregaron fotos y documentos de evidencia de la solución.',
-                'user_id' => auth()->id(),
+                'event_type' => $eventType,
+                'notes' => $eventDescription,
+                'performed_by' => auth()->id(),
+                'performed_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -620,6 +648,18 @@ class EditRepairOrder extends EditRecord
                 \Illuminate\Support\Facades\DB::table('service_case_events')->insert($event);
             }
         }
+    }
+
+    protected function repairHasAttachmentStage(object $record, string $stage): bool
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('service_attachments')) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\DB::table('service_attachments')
+            ->where('repair_order_id', $record->getKey())
+            ->where('stage', $stage)
+            ->exists();
     }
 
 
@@ -637,6 +677,17 @@ class EditRepairOrder extends EditRecord
     protected function markRepairReadyForDelivery(): void
     {
         $record = $this->record;
+
+        if (! $this->repairHasAttachmentStage($record, 'solution')) {
+            \Filament\Notifications\Notification::make()
+                ->title('Falta evidencia de solución')
+                ->body('Para marcar como listo para entrega, primero agrega evidencia al marcar la reparación como reparada.')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
         $now = now();
 
         $payload = $this->repairOrderPayloadForExistingColumns([
@@ -681,6 +732,8 @@ class EditRepairOrder extends EditRecord
         \Illuminate\Support\Facades\DB::table('repair_orders')
             ->where('id', $record->getKey())
             ->update($payload);
+
+        $this->saveDeliveryFilesForRepair($record, (array) ($data['delivery_files'] ?? []));
 
         $this->createServiceRepairTransitionEvent(
             $record,
