@@ -1737,7 +1737,7 @@ HTML;
 
         $html = '';
         $html .= '<div style="font-size:14px;line-height:1.45;">';
-        $html .= '<p><strong>No se puede confirmar el ajuste.</strong></p>';
+        
         $html .= '<p>Se encontraron <strong>' . $invalidLines->count() . ' linea(s)</strong> con relaciones invalidas. Mientras existan estas lineas, Bexia no confirmara el ajuste ni generara movimientos de inventario.</p>';
         $html .= $itemsHtml;
         $html .= $moreHtml;
