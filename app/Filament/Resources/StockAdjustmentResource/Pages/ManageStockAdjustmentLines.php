@@ -13,6 +13,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
+use Filament\Support\Enums\MaxWidth;
+use Illuminate\Support\HtmlString;
 
 class ManageStockAdjustmentLines extends Page
 {
@@ -270,24 +272,33 @@ class ManageStockAdjustmentLines extends Page
 
             Actions\Action::make('confirmAdjustment')
                 ->label('Confirmar ajuste')
-                ->icon('heroicon-o-check-badge')
-                ->color('success')
-                ->tooltip('Actualiza existencias y bloquea el ajuste.')
+                ->color('primary')
                 ->requiresConfirmation()
-                ->modalHeading('Confirmar ajuste de inventario')
-                ->modalDescription('Al confirmar, se actualizarán las existencias y el ajuste quedará bloqueado.')
-                ->modalSubmitActionLabel('Confirmar ajuste')
-                ->visible(fn (): bool => (string) $this->record->status === 'draft')
+                ->modalWidth(MaxWidth::FourExtraLarge)
+                ->closeModalByClickingAway(false)
+                ->modalHeading(fn (): string => StockAdjustmentResource::v5783f4HasInvalidAdjustmentLines($this->record)
+                    ? 'No se puede confirmar el ajuste'
+                    : 'Confirmar ajuste')
+                ->modalDescription(fn (): HtmlString => StockAdjustmentResource::v5783f4HasInvalidAdjustmentLines($this->record)
+                    ? StockAdjustmentResource::v5783f4InvalidAdjustmentLinesHtml($this->record)
+                    : new HtmlString('<p>Se generaran los movimientos de inventario del ajuste. Esta accion no debe ejecutarse si aun faltan correcciones en las lineas.</p>'))
+                ->modalIcon(fn (): string => StockAdjustmentResource::v5783f4HasInvalidAdjustmentLines($this->record)
+                    ? 'heroicon-o-exclamation-triangle'
+                    : 'heroicon-o-check-circle')
+                ->modalSubmitAction(fn ($action) => StockAdjustmentResource::v5783f4HasInvalidAdjustmentLines($this->record)
+                    ? false
+                    : $action->label('Confirmar ajuste'))
+                ->modalCancelAction(fn ($action) => $action->label(
+                    StockAdjustmentResource::v5783f4HasInvalidAdjustmentLines($this->record)
+                        ? 'Cerrar'
+                        : 'Cancelar'
+                ))
                 ->action(function (): void {
+                    if (StockAdjustmentResource::v5783f4HasInvalidAdjustmentLines($this->record)) {
+                        return;
+                    }
+
                     StockAdjustmentResource::confirmAdjustment($this->record);
-
-                    Notification::make()
-                        ->title('Ajuste confirmado')
-                        ->body('Las existencias fueron actualizadas.')
-                        ->success()
-                        ->send();
-
-                    $this->redirect(StockAdjustmentResource::getUrl('index'));
                 }),
         ];
     }

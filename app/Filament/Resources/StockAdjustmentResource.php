@@ -310,7 +310,7 @@ class StockAdjustmentResource extends Resource
     public static function confirmAdjustment(StockAdjustment $adjustment): void
     {
 
-        if (self::v5783fNotifyInvalidAdjustmentLinesBeforeConfirm($adjustment)) {
+        if (self::v5783f4HasInvalidAdjustmentLines($adjustment)) {
             return;
         }
 
@@ -1655,6 +1655,104 @@ HTML;
             ])
             ->orderBy('l.id')
             ->get();
+    }
+
+
+
+    public static function v5783f4HasInvalidAdjustmentLines(StockAdjustment $record): bool
+    {
+        return self::v5783f4InvalidAdjustmentLines($record)->isNotEmpty();
+    }
+
+    public static function v5783f4InvalidAdjustmentLines(StockAdjustment $record): \Illuminate\Support\Collection
+    {
+        return \Illuminate\Support\Facades\DB::table('stock_adjustment_lines as l')
+            ->leftJoin('products as p', 'p.id', '=', 'l.product_id')
+            ->leftJoin('products as v', 'v.id', '=', 'l.product_variant_id')
+            ->where('l.stock_adjustment_id', $record->id)
+            ->where(function ($query): void {
+                $query
+                    ->whereNull('p.id')
+                    ->orWhere(function ($variantQuery): void {
+                        $variantQuery
+                            ->whereNotNull('l.product_variant_id')
+                            ->whereNull('v.id');
+                    });
+            })
+            ->select([
+                'l.id as line_id',
+                'l.product_id',
+                'p.name as product_name',
+                'l.product_variant_id',
+                'l.current_quantity',
+                'l.counted_quantity',
+                'l.difference_quantity',
+                'l.unit_cost',
+                \Illuminate\Support\Facades\DB::raw("
+                    case
+                        when p.id is null then 'Producto inexistente'
+                        when l.product_variant_id is not null and v.id is null then 'Variante inexistente'
+                        else 'Relacion invalida'
+                    end as problem
+                "),
+            ])
+            ->orderBy('l.id')
+            ->get();
+    }
+
+    public static function v5783f4InvalidAdjustmentLinesHtml(StockAdjustment $record): \Illuminate\Support\HtmlString
+    {
+        $invalidLines = self::v5783f4InvalidAdjustmentLines($record);
+
+        if ($invalidLines->isEmpty()) {
+            return new \Illuminate\Support\HtmlString('<p>No se detectaron relaciones invalidas.</p>');
+        }
+
+        $itemsHtml = '';
+
+        foreach ($invalidLines->take(20) as $line) {
+            $lineId = htmlspecialchars((string) $line->line_id, ENT_QUOTES, 'UTF-8');
+            $problem = htmlspecialchars((string) $line->problem, ENT_QUOTES, 'UTF-8');
+            $productName = htmlspecialchars((string) ($line->product_name ?: 'Producto sin nombre'), ENT_QUOTES, 'UTF-8');
+            $productId = htmlspecialchars((string) $line->product_id, ENT_QUOTES, 'UTF-8');
+            $variantId = htmlspecialchars((string) ($line->product_variant_id ?: 'Sin variante'), ENT_QUOTES, 'UTF-8');
+            $counted = htmlspecialchars(number_format((float) $line->counted_quantity, 2), ENT_QUOTES, 'UTF-8');
+            $difference = htmlspecialchars(number_format((float) $line->difference_quantity, 2), ENT_QUOTES, 'UTF-8');
+            $cost = $line->unit_cost === null
+                ? 'Sin costo'
+                : '$' . number_format((float) $line->unit_cost, 2);
+
+            $itemsHtml .= '<div style="border:1px solid #fecaca;background:#fef2f2;border-radius:10px;padding:12px;margin-top:10px;">';
+            $itemsHtml .= '<div><strong>Linea ' . $lineId . ': ' . $problem . '</strong></div>';
+            $itemsHtml .= '<div>Producto: ' . $productName . '</div>';
+            $itemsHtml .= '<div>Producto ID: ' . $productId . ' · Variante ID: ' . $variantId . '</div>';
+            $itemsHtml .= '<div>Cantidad contada: ' . $counted . ' · Diferencia: ' . $difference . '</div>';
+            $itemsHtml .= '<div>Costo: ' . htmlspecialchars($cost, ENT_QUOTES, 'UTF-8') . '</div>';
+            $itemsHtml .= '</div>';
+        }
+
+        $moreHtml = $invalidLines->count() > 20
+            ? '<p style="margin-top:10px;"><strong>Hay mas lineas con problema.</strong> Se muestran las primeras 20.</p>'
+            : '';
+
+        $html = '';
+        $html .= '<div style="font-size:14px;line-height:1.45;">';
+        $html .= '<p><strong>No se puede confirmar el ajuste.</strong></p>';
+        $html .= '<p>Se encontraron <strong>' . $invalidLines->count() . ' linea(s)</strong> con relaciones invalidas. Mientras existan estas lineas, Bexia no confirmara el ajuste ni generara movimientos de inventario.</p>';
+        $html .= $itemsHtml;
+        $html .= $moreHtml;
+        $html .= '<div style="margin-top:14px;">';
+        $html .= '<strong>Como corregirlo:</strong>';
+        $html .= '<ol style="padding-left:18px;margin-top:6px;">';
+        $html .= '<li>Abre la linea indicada.</li>';
+        $html .= '<li>Selecciona una variante valida del producto, o elimina la variante si el ajuste debe afectar al producto padre.</li>';
+        $html .= '<li>Guarda los cambios de la tabla y vuelve a confirmar.</li>';
+        $html .= '</ol>';
+        $html .= '</div>';
+        $html .= '<p style="margin-top:14px;color:#b91c1c;"><strong>No se hizo ningun movimiento de inventario.</strong></p>';
+        $html .= '</div>';
+
+        return new \Illuminate\Support\HtmlString($html);
     }
 
 
