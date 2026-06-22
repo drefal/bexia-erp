@@ -309,6 +309,11 @@ class StockAdjustmentResource extends Resource
 
     public static function confirmAdjustment(StockAdjustment $adjustment): void
     {
+
+        if (self::v5783fNotifyInvalidAdjustmentLinesBeforeConfirm($record)) {
+            return;
+        }
+
         if ($adjustment->status !== 'draft') {
             return;
         }
@@ -1546,5 +1551,111 @@ public static function canCreate(): bool
 
         return array_intersect_key($data, array_flip($columns));
     }
+
+
+    protected static function v5783fNotifyInvalidAdjustmentLinesBeforeConfirm($record): bool
+    {
+        $invalidLines = self::v5783fInvalidAdjustmentLinesBeforeConfirm($record);
+
+        if ($invalidLines->isEmpty()) {
+            return false;
+        }
+
+        $reference = htmlspecialchars((string) ($record->reference ?: ('#' . $record->id)), ENT_QUOTES, 'UTF-8');
+        $total = $invalidLines->count();
+
+        $itemsHtml = $invalidLines->take(12)->map(function ($line): string {
+            $lineId = htmlspecialchars((string) $line->line_id, ENT_QUOTES, 'UTF-8');
+            $problem = htmlspecialchars((string) $line->problem, ENT_QUOTES, 'UTF-8');
+            $productName = htmlspecialchars((string) ($line->product_name ?: 'Producto sin nombre'), ENT_QUOTES, 'UTF-8');
+            $productId = htmlspecialchars((string) $line->product_id, ENT_QUOTES, 'UTF-8');
+            $variantId = htmlspecialchars((string) ($line->product_variant_id ?: 'Sin variante'), ENT_QUOTES, 'UTF-8');
+            $counted = number_format((float) $line->counted_quantity, 2);
+            $difference = number_format((float) $line->difference_quantity, 2);
+            $unitCost = $line->unit_cost === null ? 'Sin costo' : '$' . number_format((float) $line->unit_cost, 2);
+
+            return <<<HTML
+<li style="margin-bottom: 10px;">
+    <strong>Línea {$lineId}: {$problem}</strong><br>
+    Producto: {$productName}<br>
+    Producto ID: {$productId} · Variante ID: {$variantId}<br>
+    Cantidad contada: {$counted} · Diferencia: {$difference} · Costo: {$unitCost}
+</li>
+HTML;
+        })->implode('');
+
+        $moreHtml = $total > 12
+            ? '<p style="margin-top: 10px;"><strong>Hay más líneas con problema.</strong> Se muestran las primeras 12.</p>'
+            : '';
+
+        $html = <<<HTML
+<div>
+    <p><strong>No se puede confirmar el ajuste {$reference}.</strong></p>
+    <p>Se encontraron {$total} línea(s) con relaciones inválidas. Si se confirma así, Bexia no puede generar los movimientos de inventario correctamente.</p>
+
+    <ul style="padding-left: 18px; margin-top: 10px;">
+        {$itemsHtml}
+    </ul>
+
+    {$moreHtml}
+
+    <p style="margin-top: 12px;"><strong>Cómo corregirlo:</strong></p>
+    <ol style="padding-left: 18px;">
+        <li>Abre la línea indicada.</li>
+        <li>Selecciona una variante válida del producto, o elimina la variante si el ajuste debe afectar al producto padre.</li>
+        <li>Guarda los cambios de la tabla y vuelve a confirmar.</li>
+    </ol>
+
+    <p style="margin-top: 12px;"><strong>No se hizo ningún movimiento de inventario.</strong></p>
+</div>
+HTML;
+
+        \Filament\Notifications\Notification::make()
+            ->danger()
+            ->title('No se puede confirmar el ajuste')
+            ->body(new \Illuminate\Support\HtmlString($html))
+            ->persistent()
+            ->send();
+
+        return true;
+    }
+
+    protected static function v5783fInvalidAdjustmentLinesBeforeConfirm($record): \Illuminate\Support\Collection
+    {
+        return \Illuminate\Support\Facades\DB::table('stock_adjustment_lines as l')
+            ->leftJoin('products as p', 'p.id', '=', 'l.product_id')
+            ->leftJoin('products as v', 'v.id', '=', 'l.product_variant_id')
+            ->where('l.stock_adjustment_id', $record->id)
+            ->where(function ($query): void {
+                $query
+                    ->whereNull('p.id')
+                    ->orWhere(function ($variantQuery): void {
+                        $variantQuery
+                            ->whereNotNull('l.product_variant_id')
+                            ->whereNull('v.id');
+                    });
+            })
+            ->select([
+                'l.id as line_id',
+                'l.product_id',
+                'p.name as product_name',
+                'p.sku as product_sku',
+                'l.product_variant_id',
+                'l.current_quantity',
+                'l.counted_quantity',
+                'l.difference_quantity',
+                'l.unit_cost',
+                \Illuminate\Support\Facades\DB::raw("
+                    case
+                        when p.id is null then 'Producto inexistente'
+                        when l.product_variant_id is not null and v.id is null then 'Variante inexistente'
+                        else 'Relación inválida'
+                    end as problem
+                "),
+            ])
+            ->orderBy('l.id')
+            ->get();
+    }
+
 
 }
