@@ -310,7 +310,7 @@ class StockAdjustmentResource extends Resource
     public static function confirmAdjustment(StockAdjustment $adjustment): void
     {
 
-        if (self::v5783fNotifyInvalidAdjustmentLinesBeforeConfirm($record)) {
+        if (self::v5783fNotifyInvalidAdjustmentLinesBeforeConfirm($adjustment)) {
             return;
         }
 
