@@ -4,13 +4,17 @@ namespace App\Filament\Pages;
 
 use App\Models\Employee;
 use App\Models\EmployeeAttendance;
+use App\Models\HrAttendanceLocation;
+use App\Support\Attendance\GeofenceDistance;
 use App\Support\EmployeeAttendanceIncidentSync;
 use App\Support\EmployeeWorkScheduleResolver;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class MyTimeClock extends Page
 {
@@ -36,6 +40,14 @@ class MyTimeClock extends Page
 
     public string $currentTime = '';
 
+    public ?float $browserLatitude = null;
+
+    public ?float $browserLongitude = null;
+
+    public ?int $browserAccuracy = null;
+
+    public ?string $browserLocationError = null;
+
     public static function shouldRegisterNavigation(): bool
     {
         return static::employeeForCurrentUserQuery()->exists();
@@ -57,7 +69,7 @@ class MyTimeClock extends Page
         $this->currentTime = now()->format('H:i:s');
 
         $this->employee = static::employeeForCurrentUserQuery()
-            ->with(['hrWorkSchedule'])
+            ->with(['hrWorkSchedule', 'branch'])
             ->first();
 
         if (! $this->employee) {
@@ -73,6 +85,14 @@ class MyTimeClock extends Page
             ->where('employee_id', $this->employee->id)
             ->whereDate('attendance_date', $this->todayDate)
             ->first();
+    }
+
+    public function setBrowserLocation(?float $latitude = null, ?float $longitude = null, ?int $accuracy = null, ?string $error = null): void
+    {
+        $this->browserLatitude = $latitude;
+        $this->browserLongitude = $longitude;
+        $this->browserAccuracy = $accuracy;
+        $this->browserLocationError = $error ? trim($error) : null;
     }
 
     public function clockIn(): void
@@ -99,27 +119,30 @@ class MyTimeClock extends Page
             return;
         }
 
+        $locationPayload = $this->buildLocationPayload('clock_in');
+
         $attendance = $this->todayAttendance ?: new EmployeeAttendance();
 
-        $attendance->fill([
+        $payload = [
             'company_id' => $this->employee->company_id,
             'employee_id' => $this->employee->id,
             'attendance_date' => $this->todayDate,
             'clock_in_at' => now(),
-            'source' => 'clock',
-            'notes' => trim((string) (($attendance->notes ?? '') . PHP_EOL . 'Entrada registrada desde Mi checador por usuario #' . auth()->id())),
+            'source' => 'mobile',
+            'notes' => $this->appendNote($attendance->notes ?? null, 'Entrada registrada desde Mi checador por usuario #' . auth()->id() . $this->locationNote($locationPayload)),
             'created_by_user_id' => $attendance->exists ? ($attendance->created_by_user_id ?: auth()->id()) : auth()->id(),
             'updated_by_user_id' => auth()->id(),
-        ]);
+        ];
 
+        $attendance->fill(array_merge($payload, $locationPayload));
         $attendance->save();
 
         $this->refreshClockState();
 
         Notification::make()
             ->title('Entrada registrada')
-            ->body('Hora: ' . $attendance->clock_in_at?->format('H:i:s') . ' · Estado: ' . $this->statusLabel($attendance->status))
-            ->success()
+            ->body('Hora: ' . $attendance->clock_in_at?->format('H:i:s') . ' · Geocerca: ' . $this->locationStatusLabel($attendance->clock_in_location_status))
+            ->color($this->locationNotificationColor($attendance->clock_in_location_status))
             ->send();
     }
 
@@ -156,19 +179,21 @@ class MyTimeClock extends Page
             return;
         }
 
-        $this->todayAttendance->forceFill([
+        $locationPayload = $this->buildLocationPayload('clock_out');
+
+        $this->todayAttendance->forceFill(array_merge([
             'clock_out_at' => now(),
-            'source' => $this->todayAttendance->source ?: 'clock',
-            'notes' => trim((string) (($this->todayAttendance->notes ?? '') . PHP_EOL . 'Salida registrada desde Mi checador por usuario #' . auth()->id())),
+            'source' => $this->todayAttendance->source ?: 'mobile',
+            'notes' => $this->appendNote($this->todayAttendance->notes ?? null, 'Salida registrada desde Mi checador por usuario #' . auth()->id() . $this->locationNote($locationPayload)),
             'updated_by_user_id' => auth()->id(),
-        ])->save();
+        ], $locationPayload))->save();
 
         $this->refreshClockState();
 
         Notification::make()
             ->title('Salida registrada')
-            ->body('Hora: ' . $this->todayAttendance->clock_out_at?->format('H:i:s') . ' · Estado: ' . $this->statusLabel($this->todayAttendance->status))
-            ->success()
+            ->body('Hora: ' . $this->todayAttendance->clock_out_at?->format('H:i:s') . ' · Geocerca: ' . $this->locationStatusLabel($this->todayAttendance->clock_out_location_status))
+            ->color($this->locationNotificationColor($this->todayAttendance->clock_out_location_status))
             ->send();
     }
 
@@ -271,6 +296,59 @@ class MyTimeClock extends Page
             && EmployeeAttendanceIncidentSync::isEligible($this->todayAttendance);
     }
 
+    public function hasGeofenceConfigured(): bool
+    {
+        if (! $this->employee || ! Schema::hasTable('hr_attendance_locations')) {
+            return false;
+        }
+
+        return $this->geofenceQuery()->exists();
+    }
+
+    public function locationStatusLabel(?string $status): string
+    {
+        return match ((string) $status) {
+            'inside' => 'Dentro de geocerca',
+            'outside' => 'Fuera de geocerca',
+            'poor_accuracy' => 'Precisión GPS baja',
+            'no_location' => 'Sin ubicación del celular',
+            'no_geofence' => 'Sin geocerca configurada',
+            'manual' => 'Manual',
+            default => 'Sin validar',
+        };
+    }
+
+    public function locationStatusColor(?string $status): string
+    {
+        return match ((string) $status) {
+            'inside' => 'success',
+            'outside', 'poor_accuracy' => 'warning',
+            'no_location', 'no_geofence' => 'danger',
+            default => 'gray',
+        };
+    }
+
+    public function clockInLocationLabel(): string
+    {
+        return $this->locationStatusLabel($this->todayAttendance?->clock_in_location_status);
+    }
+
+    public function clockOutLocationLabel(): string
+    {
+        return $this->locationStatusLabel($this->todayAttendance?->clock_out_location_status);
+    }
+
+    public function browserLocationLabel(): string
+    {
+        if ($this->browserLatitude === null || $this->browserLongitude === null) {
+            return $this->browserLocationError ?: 'Ubicación pendiente. Al checar se solicitará permiso de ubicación.';
+        }
+
+        $accuracy = $this->browserAccuracy !== null ? ' · precisión aprox. ' . $this->browserAccuracy . ' m' : '';
+
+        return number_format($this->browserLatitude, 7) . ', ' . number_format($this->browserLongitude, 7) . $accuracy;
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -279,15 +357,18 @@ class MyTimeClock extends Page
                 ->icon('heroicon-o-arrow-right-on-rectangle')
                 ->color('success')
                 ->visible(fn (): bool => $this->canClockIn())
-                ->action('clockIn'),
+                ->extraAttributes([
+                    'x-on:click.prevent' => 'bexiaClockWithLocation("clockIn")',
+                ]),
 
             Action::make('clock_out')
                 ->label('Registrar salida')
                 ->icon('heroicon-o-arrow-left-on-rectangle')
                 ->color('warning')
                 ->visible(fn (): bool => $this->canClockOut())
-                ->requiresConfirmation()
-                ->action('clockOut'),
+                ->extraAttributes([
+                    'x-on:click.prevent' => 'bexiaClockWithLocation("clockOut")',
+                ]),
 
             Action::make('generate_incident')
                 ->label('Generar incidencia')
@@ -305,6 +386,138 @@ class MyTimeClock extends Page
             ->where('user_id', auth()->id())
             ->where('active', true)
             ->orderBy('id');
+    }
+
+    protected function geofenceQuery()
+    {
+        $query = HrAttendanceLocation::query()
+            ->where('company_id', $this->employee->company_id)
+            ->where('is_active', true)
+            ->where('allow_mobile_clock_in', true);
+
+        if ($this->employee->branch_id) {
+            $query->where(function ($query): void {
+                $query->where('branch_id', $this->employee->branch_id)
+                    ->orWhereNull('branch_id');
+            });
+        }
+
+        return $query;
+    }
+
+    protected function nearestGeofence(?float $latitude, ?float $longitude): ?array
+    {
+        if ($latitude === null || $longitude === null || ! $this->employee || ! Schema::hasTable('hr_attendance_locations')) {
+            return null;
+        }
+
+        $locations = $this->geofenceQuery()->get();
+
+        if ($locations->isEmpty()) {
+            return null;
+        }
+
+        $nearest = null;
+
+        foreach ($locations as $location) {
+            $distance = GeofenceDistance::meters(
+                $latitude,
+                $longitude,
+                (float) $location->latitude,
+                (float) $location->longitude,
+            );
+
+            if (! $nearest || $distance < $nearest['distance_meters']) {
+                $nearest = [
+                    'location' => $location,
+                    'distance_meters' => $distance,
+                ];
+            }
+        }
+
+        return $nearest;
+    }
+
+    protected function buildLocationPayload(string $direction): array
+    {
+        $prefix = $direction === 'clock_out' ? 'clock_out' : 'clock_in';
+        $latitude = $this->browserLatitude;
+        $longitude = $this->browserLongitude;
+        $accuracy = $this->browserAccuracy;
+
+        $payload = [
+            $prefix . '_method' => 'mobile',
+            $prefix . '_ip_address' => request()->ip(),
+            $prefix . '_user_agent' => substr((string) request()->userAgent(), 0, 1000),
+        ];
+
+        if ($latitude === null || $longitude === null) {
+            $payload[$prefix . '_location_status'] = 'no_location';
+            $payload['mobile_review_status'] = 'pending';
+
+            return $payload;
+        }
+
+        $payload[$prefix . '_latitude'] = $latitude;
+        $payload[$prefix . '_longitude'] = $longitude;
+        $payload[$prefix . '_accuracy_meters'] = $accuracy;
+
+        $nearest = $this->nearestGeofence($latitude, $longitude);
+
+        if (! $nearest) {
+            $payload[$prefix . '_location_status'] = 'no_geofence';
+            $payload['mobile_review_status'] = 'pending';
+
+            return $payload;
+        }
+
+        /** @var HrAttendanceLocation $location */
+        $location = $nearest['location'];
+        $distance = (int) $nearest['distance_meters'];
+        $status = GeofenceDistance::status(
+            $distance,
+            (int) $location->radius_meters,
+            $accuracy,
+            $location->accuracy_required_meters ? (int) $location->accuracy_required_meters : null,
+        );
+
+        $payload[$prefix . '_hr_attendance_location_id'] = $location->id;
+        $payload[$prefix . '_distance_meters'] = $distance;
+        $payload[$prefix . '_location_status'] = $status;
+
+        $payload['mobile_review_status'] = $status === 'inside'
+            ? ($this->todayAttendance?->mobile_review_status ?: 'accepted')
+            : 'pending';
+
+        return $payload;
+    }
+
+    protected function appendNote(?string $current, string $line): string
+    {
+        return trim(trim((string) $current) . PHP_EOL . $line);
+    }
+
+    protected function locationNote(array $payload): string
+    {
+        $status = (string) ($payload['clock_in_location_status'] ?? $payload['clock_out_location_status'] ?? '');
+        $distance = $payload['clock_in_distance_meters'] ?? $payload['clock_out_distance_meters'] ?? null;
+
+        $note = ' · Geocerca: ' . $this->locationStatusLabel($status);
+
+        if ($distance !== null) {
+            $note .= ' · Distancia: ' . $distance . ' m';
+        }
+
+        return $note;
+    }
+
+    protected function locationNotificationColor(?string $status): string
+    {
+        return match ((string) $status) {
+            'inside' => 'success',
+            'outside', 'poor_accuracy' => 'warning',
+            default => 'danger',
+        };
     }
 
     protected function formatScheduleDateTime(mixed $value): string

@@ -100,12 +100,12 @@ class EmployeeIncidentResource extends Resource
 
     public static function canDelete(Model $record): bool
     {
-        return static::bexiaCanIncidenciaPermission('rrhh.incidencias.eliminar');
+        return false;
     }
 
     public static function canDeleteAny(): bool
     {
-        return static::bexiaCanIncidenciaPermission('rrhh.incidencias.eliminar');
+        return false;
     }
 
     public static function getEloquentQuery(): Builder
@@ -208,18 +208,26 @@ class EmployeeIncidentResource extends Resource
                                     ->columnSpanFull(),
 
                                 Toggle::make('requires_approval')
-                                    ->label('Requiere aprobación'),
+                                    ->label('Requiere aprobación')
+                                    ->visible(false)
+                                    ->dehydrated(false),
 
                                 Toggle::make('affects_payroll')
-                                    ->label('Afecta nómina'),
+                                    ->label('Afecta nómina')
+                                    ->visible(false)
+                                    ->dehydrated(false),
 
                                 TextInput::make('payroll_amount')
                                     ->label('Monto nómina')
+                                    ->visible(false)
+                                    ->dehydrated(false)
                                     ->numeric()
                                     ->prefix('$'),
 
                                 FileUpload::make('attachment_path')
                                     ->label('Soporte / evidencia')
+                                    ->visible(false)
+                                    ->dehydrated(false)
                                     ->disk('public')
                                     ->directory('employee-incidents')
                                     ->visibility('public')
@@ -234,6 +242,8 @@ class EmployeeIncidentResource extends Resource
 
                                 Textarea::make('resolution_notes')
                                     ->label('Notas de resolución')
+                                    ->visible(false)
+                                    ->dehydrated(false)
                                     ->rows(3)
                                     ->columnSpanFull(),
                             ]),
@@ -438,7 +448,7 @@ class EmployeeIncidentResource extends Resource
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('quantity')
-                    ->label('Cantidad')
+                    ->label('Cantidad / Monto / Minutos')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('quantity_unit')
@@ -516,10 +526,8 @@ class EmployeeIncidentResource extends Resource
                     }),
 
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()->label('Eliminar'),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make()->label('Eliminar seleccionados'),
             ]);
     }
 

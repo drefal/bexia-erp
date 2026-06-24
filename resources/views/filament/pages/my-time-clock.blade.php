@@ -1,11 +1,70 @@
 <x-filament-panels::page>
-    <div class="space-y-6">
+    <div
+        class="space-y-6"
+        x-data="{
+            locating: false,
+            lastMessage: @js($this->browserLocationLabel()),
+            async bexiaClockWithLocation(actionName) {
+                this.locating = true;
+                this.lastMessage = 'Solicitando ubicación del celular...';
+
+                const sendWithoutLocation = async (message) => {
+                    this.lastMessage = message;
+                    await $wire.setBrowserLocation(null, null, null, message);
+                    await $wire.call(actionName);
+                    this.locating = false;
+                };
+
+                if (! navigator.geolocation) {
+                    await sendWithoutLocation('Este navegador no soporta geolocalización. La checada quedará pendiente de revisión.');
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const latitude = position.coords.latitude;
+                        const longitude = position.coords.longitude;
+                        const accuracy = Math.round(position.coords.accuracy || 0);
+
+                        this.lastMessage = latitude.toFixed(7) + ', ' + longitude.toFixed(7) + ' · precisión aprox. ' + accuracy + ' m';
+
+                        await $wire.setBrowserLocation(latitude, longitude, accuracy, null);
+                        await $wire.call(actionName);
+
+                        this.locating = false;
+                    },
+                    async (error) => {
+                        let message = 'No se pudo obtener la ubicación. La checada quedará pendiente de revisión.';
+
+                        if (error.code === 1) {
+                            message = 'Permiso de ubicación rechazado. La checada quedará pendiente de revisión.';
+                        } else if (error.code === 2) {
+                            message = 'Ubicación no disponible. La checada quedará pendiente de revisión.';
+                        } else if (error.code === 3) {
+                            message = 'Tiempo agotado al obtener ubicación. La checada quedará pendiente de revisión.';
+                        }
+
+                        await sendWithoutLocation(message);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 12000,
+                        maximumAge: 0
+                    }
+                );
+            }
+        }"
+    >
         @if (! $this->employee)
             <div class="rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
                 <div class="text-lg font-semibold">No tienes empleado ligado</div>
                 <p class="mt-1 text-sm">Pide a RRHH o al administrador que vincule tu usuario con un empleado activo.</p>
             </div>
         @else
+            <div x-show="locating" class="rounded-xl border border-sky-300 bg-sky-50 p-4 text-sm text-sky-900 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-100">
+                Obteniendo ubicación del celular. Acepta el permiso del navegador para validar la geocerca.
+            </div>
+
             <div class="grid gap-4 md:grid-cols-3">
                 <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                     <div class="text-sm text-gray-500">Empleado</div>
@@ -37,7 +96,10 @@
                     <div>
                         <div class="text-lg font-semibold">Registro de hoy</div>
                         <div class="mt-1 text-sm text-gray-500">
-                            Usa los botones superiores para registrar entrada o salida. El estado se calcula automáticamente contra el horario operativo.
+                            Usa los botones superiores para registrar entrada o salida. Desde celular se solicitará ubicación para validar geocerca.
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            Última ubicación del navegador: <span x-text="lastMessage"></span>
                         </div>
                     </div>
 
@@ -52,6 +114,12 @@
                         </span>
                     </div>
                 </div>
+
+                @if (! $this->hasGeofenceConfigured())
+                    <div class="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+                        No hay geocerca activa configurada para este empleado/empresa/sucursal. La checada móvil se guardará, pero quedará pendiente de revisión hasta configurar RRHH &gt; Geocercas asistencia.
+                    </div>
+                @endif
 
                 <div class="mt-5 grid gap-4 md:grid-cols-4">
                     <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
@@ -100,6 +168,36 @@
                         <div class="mt-1 text-lg font-semibold">{{ $this->todayAttendance?->overtime_minutes ?: 0 }} min</div>
                     </div>
                 </div>
+
+                <div class="mt-5 grid gap-4 md:grid-cols-3">
+                    <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
+                        <div class="text-xs uppercase tracking-wide text-gray-500">Geocerca entrada</div>
+                        <div class="mt-1 text-lg font-semibold">{{ $this->clockInLocationLabel() }}</div>
+                        @if ($this->todayAttendance?->clock_in_distance_meters !== null)
+                            <div class="mt-1 text-xs text-gray-500">Distancia: {{ $this->todayAttendance->clock_in_distance_meters }} m</div>
+                        @endif
+                    </div>
+
+                    <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
+                        <div class="text-xs uppercase tracking-wide text-gray-500">Geocerca salida</div>
+                        <div class="mt-1 text-lg font-semibold">{{ $this->clockOutLocationLabel() }}</div>
+                        @if ($this->todayAttendance?->clock_out_distance_meters !== null)
+                            <div class="mt-1 text-xs text-gray-500">Distancia: {{ $this->todayAttendance->clock_out_distance_meters }} m</div>
+                        @endif
+                    </div>
+
+                    <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
+                        <div class="text-xs uppercase tracking-wide text-gray-500">Revisión móvil</div>
+                        <div class="mt-1 text-lg font-semibold">
+                            {{ match($this->todayAttendance?->mobile_review_status) {
+                                'accepted' => 'Aceptada',
+                                'pending' => 'Pendiente',
+                                'rejected' => 'Rechazada',
+                                default => 'Sin revisión'
+                            } }}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -117,6 +215,7 @@
                             <th class="px-4 py-3 text-left font-semibold">Horas</th>
                             <th class="px-4 py-3 text-left font-semibold">Retardo</th>
                             <th class="px-4 py-3 text-left font-semibold">Extra</th>
+                            <th class="px-4 py-3 text-left font-semibold">Geo entrada</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -129,10 +228,11 @@
                                 <td class="px-4 py-3">{{ $attendance->worked_hours }}</td>
                                 <td class="px-4 py-3">{{ $attendance->late_minutes }} min</td>
                                 <td class="px-4 py-3">{{ $attendance->overtime_minutes }} min</td>
+                                <td class="px-4 py-3">{{ $this->locationStatusLabel($attendance->clock_in_location_status) }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="px-4 py-6 text-center text-gray-500">
+                                <td colspan="8" class="px-4 py-6 text-center text-gray-500">
                                     Todavía no hay asistencias registradas.
                                 </td>
                             </tr>

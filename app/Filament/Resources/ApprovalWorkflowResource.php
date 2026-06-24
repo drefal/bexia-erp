@@ -344,7 +344,7 @@ public static function documentTypeOptions(): array
         return [
             'specific_user' => 'Usuario específico',
             'role' => 'Rol específico',
-            'requester_manager' => 'Coordinador del solicitante',
+            'requester_manager' => 'Jefe directo / supervisor',
             'company_admin' => 'Admin de empresa',
             'group_admin' => 'Admin de grupo',
             'warehouse_responsible' => 'Responsable de almacén',

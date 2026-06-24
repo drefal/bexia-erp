@@ -13,6 +13,8 @@ class Company extends Model implements HasAvatar
 {
     protected $fillable = [
         'name',
+        'attendance_same_device_block_minutes',
+        'attendance_qr_guard_enabled',
         'business_name',
         'slug',
         'active',
@@ -65,9 +67,16 @@ class Company extends Model implements HasAvatar
         'billing_csd_last_test_status',
         'billing_csd_last_test_message',
         'billing_csd_last_test_at',
-];
+        'attendance_qr_enabled',
+        'attendance_geofence_enabled',
+        'attendance_allow_outside_geofence',
+        'attendance_review_outside_geofence',
+        'attendance_default_radius_meters',
+        'attendance_default_accuracy_meters',];
 
     protected $casts = [
+        'attendance_qr_guard_enabled' => 'boolean',
+        'attendance_same_device_block_minutes' => 'integer',
         'active' => 'boolean',
         'free_trial' => 'boolean',
         'max_branches' => 'integer',
@@ -77,7 +86,12 @@ class Company extends Model implements HasAvatar
         'sat_constancia_uploaded_at' => 'datetime',
         'sat_constancia_parsed_at' => 'datetime',
         'sat_constancia_parsed_data' => 'array',
-    ];
+        'attendance_qr_enabled' => 'boolean',
+        'attendance_geofence_enabled' => 'boolean',
+        'attendance_allow_outside_geofence' => 'boolean',
+        'attendance_review_outside_geofence' => 'boolean',
+        'attendance_default_radius_meters' => 'integer',
+        'attendance_default_accuracy_meters' => 'integer',];
 
     public function organization(): BelongsTo
     {

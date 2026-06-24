@@ -14,6 +14,7 @@ class Employee extends Model
         'company_id',
         'avatar_path',
         'user_id',
+        'supervisor_user_id',
         'manager_employee_id',
         'coach_employee_id',
         'branch_id',
@@ -46,6 +47,10 @@ class Employee extends Model
 
         'pin_code',
         'badge_id',
+        'attendance_qr_token',
+        'attendance_qr_enabled',
+        'attendance_qr_generated_at',
+        'attendance_pin',
         'hourly_cost',
         'fleet_card',
 
@@ -99,6 +104,8 @@ class Employee extends Model
         'is_pos_cashier' => 'boolean',
         'active' => 'boolean',
         'flexible_hours' => 'boolean',
+        'attendance_qr_enabled' => 'boolean',
+        'attendance_qr_generated_at' => 'datetime',
         'birth_date' => 'date',
         'hire_date' => 'date',
         'termination_date' => 'date',
@@ -323,5 +330,31 @@ class Employee extends Model
             $this->attributes['pos_pin_hash'] = Hash::make($value);
         }
     }
+
+
+    public function supervisorUser()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'supervisor_user_id');
+    }
+
+    public function attendanceLocations()
+    {
+        return $this->belongsToMany(
+            \App\Models\HrAttendanceLocation::class,
+            'employee_attendance_location_assignments',
+            'employee_id',
+            'hr_attendance_location_id'
+        )
+            ->withPivot(['company_id', 'is_active', 'notes', 'created_by_user_id', 'updated_by_user_id'])
+            ->withTimestamps();
+    }
+
+    public function activeAttendanceLocations()
+    {
+        return $this->attendanceLocations()
+            ->wherePivot('is_active', true)
+            ->where('hr_attendance_locations.is_active', true);
+    }
+
 
 }
