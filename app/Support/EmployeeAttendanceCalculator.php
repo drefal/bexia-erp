@@ -136,9 +136,9 @@ class EmployeeAttendanceCalculator
         }
 
         $breakMinutes = max(0, (int) ($attendance->break_minutes ?? 0));
-        $minutes = max(0, $clockIn->diffInMinutes($clockOut) - $breakMinutes);
+        $minutes = max(0, (int) round($clockIn->diffInMinutes($clockOut)) - $breakMinutes);
 
-        $attendance->worked_minutes = $minutes;
+        $attendance->worked_minutes = (int) round($minutes);
         $attendance->worked_hours = round($minutes / 60, 2);
     }
 
@@ -147,7 +147,7 @@ class EmployeeAttendanceCalculator
         $limit = $expected->addMinutes(max(0, $tolerance));
 
         return $actual->greaterThan($limit)
-            ? $limit->diffInMinutes($actual)
+            ? (int) round($limit->diffInMinutes($actual))
             : 0;
     }
 
@@ -156,7 +156,7 @@ class EmployeeAttendanceCalculator
         $limit = $expected->subMinutes(max(0, $tolerance));
 
         return $actual->lessThan($limit)
-            ? $actual->diffInMinutes($limit)
+            ? (int) round($actual->diffInMinutes($limit))
             : 0;
     }
 }

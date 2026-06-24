@@ -241,6 +241,61 @@ public static function canCreate(): bool
                 ])
                 ->columns(2),
 
+            Section::make('Asistencia móvil / QR')
+                ->description('Configura el registro de asistencia por QR, geocerca y control básico de dispositivo.')
+                ->schema([
+                    Toggle::make('attendance_qr_enabled')
+                        ->label('Permitir asistencia por QR')
+                        ->default(true)
+                        ->helperText('Si está apagado, los enlaces QR de empleados no deben usarse para registrar asistencia.'),
+
+                    Toggle::make('attendance_geofence_enabled')
+                        ->label('Validar geocerca')
+                        ->default(true)
+                        ->helperText('Activa la validación de ubicación contra las geocercas registradas.'),
+
+                    Toggle::make('attendance_allow_outside_geofence')
+                        ->label('Permitir registro fuera de geocerca')
+                        ->default(true)
+                        ->helperText('Si está apagado, se bloqueará el registro cuando el empleado esté fuera de la geocerca permitida.'),
+
+                    Toggle::make('attendance_review_outside_geofence')
+                        ->label('Mandar fuera de geocerca a revisión')
+                        ->default(true)
+                        ->helperText('Si está activo, los registros fuera de geocerca quedan marcados para revisión administrativa.'),
+
+                    TextInput::make('attendance_default_radius_meters')
+                        ->label('Radio sugerido de geocerca (metros)')
+                        ->numeric()
+                        ->minValue(10)
+                        ->maxValue(5000)
+                        ->default(200)
+                        ->helperText('Valor sugerido para nuevas geocercas.'),
+
+                    TextInput::make('attendance_default_accuracy_meters')
+                        ->label('Precisión GPS requerida (metros)')
+                        ->numeric()
+                        ->minValue(10)
+                        ->maxValue(5000)
+                        ->default(150)
+                        ->helperText('Precisión máxima aceptable del GPS del dispositivo.'),
+
+                    Toggle::make('attendance_qr_guard_enabled')
+                        ->label('Bloquear uso sospechoso del mismo dispositivo')
+                        ->default(true)
+                        ->helperText('Evita que el mismo celular/tablet registre asistencia de varios empleados en pocos minutos.'),
+
+                    TextInput::make('attendance_same_device_block_minutes')
+                        ->label('Minutos de bloqueo por mismo dispositivo')
+                        ->numeric()
+                        ->minValue(0)
+                        ->maxValue(1440)
+                        ->default(10)
+                        ->helperText('0 desactiva la ventana de bloqueo por tiempo.'),
+                ])
+                ->columns(2),
+
+
             Section::make('Configuración PAC / Timbrado')
                 ->description('Credenciales sensibles para timbrado CFDI. Solo visible para superadmin del sistema.')
                 ->visible(fn (): bool => static::currentUserIsSystemAdmin())
@@ -323,6 +378,7 @@ public static function canCreate(): bool
                         ->content(fn (?Company $record): string => static::csdDataText($record)),
                 ])
                 ->columns(2),
+
 
             Section::make('Branding')
                 ->schema([

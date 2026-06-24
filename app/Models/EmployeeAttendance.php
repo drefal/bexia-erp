@@ -25,6 +25,36 @@ class EmployeeAttendance extends Model
         'early_leave_minutes',
         'overtime_minutes',
         'source',
+        'clock_in_method',
+        'clock_out_method',
+        'clock_in_hr_attendance_location_id',
+        'clock_out_hr_attendance_location_id',
+        'clock_in_latitude',
+        'clock_in_longitude',
+        'clock_in_accuracy_meters',
+        'clock_in_distance_meters',
+        'clock_in_location_status',
+        'clock_out_latitude',
+        'clock_out_longitude',
+        'clock_out_accuracy_meters',
+        'clock_out_distance_meters',
+        'clock_out_location_status',
+        'mobile_review_status',
+        'mobile_reviewed_by_user_id',
+        'mobile_reviewed_at',
+        'mobile_review_notes',
+        'clock_in_ip_address',
+        'clock_out_ip_address',
+        'clock_in_user_agent',
+        'clock_out_user_agent',
+        'clock_in_device_fingerprint',
+        'clock_out_device_fingerprint',
+        'clock_in_device_info',
+        'clock_out_device_info',
+        'clock_in_device_guard_status',
+        'clock_out_device_guard_status',
+        'clock_in_device_guard_message',
+        'clock_out_device_guard_message',
         'notes',
         'created_by_user_id',
         'updated_by_user_id',
@@ -43,6 +73,17 @@ class EmployeeAttendance extends Model
         'late_minutes' => 'integer',
         'early_leave_minutes' => 'integer',
         'overtime_minutes' => 'integer',
+        'clock_in_latitude' => 'decimal:7',
+        'clock_in_longitude' => 'decimal:7',
+        'clock_in_accuracy_meters' => 'integer',
+        'clock_in_distance_meters' => 'integer',
+        'clock_out_latitude' => 'decimal:7',
+        'clock_out_longitude' => 'decimal:7',
+        'clock_out_accuracy_meters' => 'integer',
+        'clock_out_distance_meters' => 'integer',
+        'mobile_reviewed_at' => 'datetime',
+        'clock_in_device_info' => 'array',
+        'clock_out_device_info' => 'array',
     ];
 
     protected static function booted(): void
@@ -65,6 +106,22 @@ class EmployeeAttendance extends Model
     public function workSchedule()
     {
         return $this->belongsTo(\App\Models\HrWorkSchedule::class, 'hr_work_schedule_id');
+    }
+
+
+    public function clockInAttendanceLocation()
+    {
+        return $this->belongsTo(\App\Models\HrAttendanceLocation::class, 'clock_in_hr_attendance_location_id');
+    }
+
+    public function clockOutAttendanceLocation()
+    {
+        return $this->belongsTo(\App\Models\HrAttendanceLocation::class, 'clock_out_hr_attendance_location_id');
+    }
+
+    public function mobileReviewedBy()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'mobile_reviewed_by_user_id');
     }
 
 
@@ -104,4 +161,22 @@ class EmployeeAttendance extends Model
             'no_schedule' => 'Sin horario',
         ];
     }
+    public function setWorkedMinutesAttribute($value): void
+    {
+        if ($value === null || $value === '') {
+            $this->attributes['worked_minutes'] = null;
+
+            return;
+        }
+
+        if (is_numeric($value)) {
+            $this->attributes['worked_minutes'] = (int) round((float) $value);
+
+            return;
+        }
+
+        $this->attributes['worked_minutes'] = $value;
+    }
+
+
 }

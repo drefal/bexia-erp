@@ -48,6 +48,7 @@ class MySentApprovalStatuses extends Page
                 'status' => (string) ($row->status ?? ''),
                 'status_label' => $this->statusLabel((string) ($row->status ?? '')),
                 'amount_total' => (float) ($row->amount_total ?? 0),
+                'amount_display' => number_format((float) ($row->amount_total ?? 0), 2),
                 'sent_at' => (string) ($row->sent_at ?? ''),
                 'completed_at' => (string) ($row->completed_at ?? ''),
                 'last_decision_reason' => (string) ($row->last_decision_reason ?? ''),
@@ -140,17 +141,6 @@ class MySentApprovalStatuses extends Page
 
         $this->redirect($url);
     }
-
-
-
-    protected function documentLabel(?string $type): string
-     {
-
-        return \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeLabel((string) $type);
-
-    }
-
-
     protected function statusLabel(string $status): string
     {
         return match ($status) {
@@ -158,6 +148,7 @@ class MySentApprovalStatuses extends Page
             'approved' => 'Aprobado',
             'rejected' => 'Rechazado',
             'cancelled' => 'Cancelado',
+            'employee_incident' => 'Incidencia RRHH',
             default => $status ?: '—',
         };
     }
@@ -254,6 +245,53 @@ class MySentApprovalStatuses extends Page
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
         return false;
+    }
+
+
+    protected function documentTypeLabel(?string $type): string
+    {
+        return match ((string) $type) {
+            'employee_incident' => 'Incidencia RRHH',
+            'purchase_order' => 'Orden de compra',
+            'sale_quote' => 'Cotización de venta',
+            'sales_quote' => 'Cotización de venta',
+            'sale_order' => 'Pedido de venta',
+            'treasury_cash_transfer_request' => 'Traspaso de efectivo',
+            'service_repair_request' => 'Orden de servicio',
+            'service_repair_delivery' => 'Entrega de servicio',
+            default => \Illuminate\Support\Str::headline((string) $type),
+        };
+    }
+
+
+    protected function documentLabel(?string $type): string
+    {
+        return match ((string) $type) {
+            'employee_incident' => 'Incidencia RRHH',
+            'purchase_order' => 'Orden de compra',
+            'sale_quote', 'sales_quote' => 'Cotización de venta',
+            'sale_order', 'sales_order' => 'Pedido de venta',
+            'treasury_cash_transfer_request' => 'Traspaso de efectivo',
+            'service_repair_request' => 'Orden de servicio',
+            'service_repair_delivery' => 'Entrega de servicio',
+            default => \Illuminate\Support\Str::headline((string) $type),
+        };
+    }
+
+
+    protected function approvalAmountLabel(object $row): string
+    {
+        $amount = $row->amount_total ?? null;
+
+        if ($amount === null || $amount === '') {
+            return '-';
+        }
+
+        if ((string) ($row->document_type ?? '') === 'employee_incident') {
+            return number_format((float) $amount, 2);
+        }
+
+        return number_format((float) $amount, 2);
     }
 
 

@@ -469,6 +469,21 @@ Route::middleware(['web', 'auth'])->group(function (): void {
 
 
 use App\Http\Controllers\InventoryProductKardexExportController;
+use App\Http\Controllers\Attendance\PublicEmployeeAttendanceController;
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Asistencia publica por QR de empleado
+|--------------------------------------------------------------------------
+| Debe ir antes de rutas Filament/catch-all para evitar 404 por orden.
+*/
+Route::get('/asistencia/empleado/{token}', [PublicEmployeeAttendanceController::class, 'show'])
+    ->name('attendance.employee.show');
+
+Route::post('/asistencia/empleado/{token}/registrar', [PublicEmployeeAttendanceController::class, 'store'])
+    ->name('attendance.employee.store');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/inventario/kardex-producto/imprimir', [InventoryProductKardexExportController::class, 'print'])
@@ -528,4 +543,6 @@ Route::post('/admin/{tenant}/dashboard-section-settings/{section}', [\App\Http\C
 \Illuminate\Support\Facades\Route::middleware(['web', 'auth'])
     ->get('/admin/{tenant}/service/repair-orders/{record}/print/{type}', [\App\Http\Controllers\Service\RepairOrderPrintController::class, 'show'])
     ->name('service.repair-orders.print');
+
+
 

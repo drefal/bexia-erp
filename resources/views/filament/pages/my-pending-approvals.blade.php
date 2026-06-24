@@ -19,7 +19,7 @@
                             <th class="px-4 py-3 text-left font-semibold">Folio</th>
                             <th class="px-4 py-3 text-left font-semibold">Etapa</th>
                             <th class="px-4 py-3 text-left font-semibold">Solicitante</th>
-                            <th class="px-4 py-3 text-right font-semibold">Monto</th>
+                            <th class="px-4 py-3 text-right font-semibold">Cantidad / Monto / Minutos</th>
                             <th class="px-4 py-3 text-left font-semibold">Enviado</th>
                             <th class="px-4 py-3 text-right font-semibold">Acción</th>
                         </tr>
@@ -42,7 +42,7 @@
                                 <td class="px-4 py-3 align-top">{{ $row['requester_name'] ?: '—' }}</td>
 
                                 <td class="px-4 py-3 align-top text-right">
-                                    $ {{ number_format((float) $row['amount_total'], 2) }}
+                                    {{ number_format((float) $row['amount_total'], 2) }}
                                 </td>
 
                                 <td class="px-4 py-3 align-top">

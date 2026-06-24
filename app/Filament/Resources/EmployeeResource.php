@@ -36,7 +36,10 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\HtmlString;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class EmployeeResource extends Resource
 {
@@ -548,6 +551,30 @@ public static function canCreate(): bool
                                                 ->options(fn () => self::userOptions())
                                                 ->searchable()
                                                 ->preload(),
+                                \Filament\Forms\Components\Select::make('supervisor_user_id')
+                                    ->label('Supervisor / jefe directo')
+                                    ->helperText('Usuario de Bexia que revisará incidencias del empleado antes de RRHH. Debe tener acceso a la empresa.')
+                                    ->options(fn (): array => static::supervisorUserOptions())
+                                    ->searchable()
+                                    ->preload()
+                                    ->native(false),
+
+                    \Filament\Forms\Components\Select::make('attendanceLocations')
+                        ->label('Geocercas permitidas')
+                        ->relationship(
+                            name: 'attendanceLocations',
+                            titleAttribute: 'name',
+                            modifyQueryUsing: fn ($query) => $query
+                                ->where('hr_attendance_locations.company_id', Filament::getTenant()?->getKey())
+                                ->where('hr_attendance_locations.is_active', true)
+                                ->orderBy('hr_attendance_locations.name')
+                        )
+                        ->multiple()
+                        ->preload()
+                        ->searchable()
+                        ->helperText('Si no seleccionas ninguna, el empleado podrá validar contra cualquier geocerca activa de la empresa. Si seleccionas una o varias, solo esas serán válidas para su asistencia.'),
+
+
 
                                             Toggle::make('active')
                                                 ->label('Activo')
@@ -580,6 +607,40 @@ public static function canCreate(): bool
 
                             Tabs\Tab::make('Punto de venta')
                                 ->schema([
+                                    Section::make('Credencial QR / asistencia publica')
+                                        ->description('Permite que el empleado registre asistencia desde una liga QR sin necesitar usuario de Bexia.')
+                                        ->schema([
+                                            Forms\Components\Toggle::make('attendance_qr_enabled')
+                                                ->label('QR de asistencia activo')
+                                                ->default(true),
+
+                                            Forms\Components\TextInput::make('attendance_qr_token')
+                                                ->label('Token QR')
+                                                ->disabled()
+                                                ->dehydrated(false)
+                                                ->helperText('Identificador seguro usado en la liga publica del empleado.'),
+
+                                            Forms\Components\Placeholder::make('attendance_qr_url')
+                                                ->label('Liga QR')
+                                                ->content(function (?Employee $record): HtmlString {
+                                                    if (! $record?->attendance_qr_token) {
+                                                        return new HtmlString('<span class="text-gray-500">Se generara al guardar o ejecutar la migracion.</span>');
+                                                    }
+
+                                                    $url = url('/asistencia/empleado/' . $record->attendance_qr_token);
+
+                                                    return new HtmlString('<div class="space-y-2"><code class="block rounded bg-gray-100 p-2 text-xs dark:bg-gray-800">' . e($url) . '</code><a href="' . e($url) . '" target="_blank" class="text-primary-600 underline">Abrir liga de asistencia</a></div>');
+                                                })
+                                                ->columnSpanFull(),
+
+                                            Forms\Components\TextInput::make('attendance_pin')
+                                                ->label('PIN opcional')
+                                                ->password()
+                                                ->revealable()
+                                                ->helperText('Reservado para una validacion adicional futura. Por ahora el acceso usa QR/token.'),
+                                        ])
+                                        ->columns(2),
+
                                     Section::make('Asistencia / Punto de venta')
                                         ->schema([
                                             TextInput::make('pin_code')
@@ -731,6 +792,18 @@ public static function canCreate(): bool
                     ->searchable()
                     ->sortable(),
 
+                Tables\Columns\IconColumn::make('attendance_qr_enabled')
+                    ->label('QR')
+                    ->boolean()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('attendance_qr_token')
+                    ->label('Liga QR')
+                    ->formatStateUsing(fn (?string $state): string => filled($state) ? 'Disponible' : 'Sin token')
+                    ->badge()
+                    ->color(fn (?string $state): string => filled($state) ? 'success' : 'danger')
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('hrJobPosition.name')
                     ->label('Puesto RRHH')
                     ->searchable()
@@ -782,6 +855,79 @@ public static function canCreate(): bool
                     ->sortable(),
             ])
             ->actions([
+                Tables\Actions\Action::make('copy_attendance_qr_link')
+                    ->label('Liga QR')
+                    ->icon('heroicon-o-qr-code')
+                    ->color('info')
+                    ->modalHeading('Liga QR de asistencia')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Cerrar')
+                    ->modalContent(function (Employee $record): HtmlString {
+                        if (! $record->attendance_qr_token) {
+                            return new HtmlString('<div class="text-sm text-danger-600">Este empleado no tiene token QR.</div>');
+                        }
+
+                        $url = url('/asistencia/empleado/' . $record->attendance_qr_token);
+
+                        try {
+                            $renderer = new \BaconQrCode\Renderer\ImageRenderer(
+                                new \BaconQrCode\Renderer\RendererStyle\RendererStyle(260),
+                                new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
+                            );
+
+                            $writer = new \BaconQrCode\Writer($renderer);
+                            $qrSvg = $writer->writeString($url);
+                            $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+
+                            return new HtmlString(
+                                '<div class="space-y-4">'
+                                . '<p class="text-sm text-gray-700 dark:text-gray-300">Usa esta liga o escanea el QR desde celular/tablet para registrar asistencia.</p>'
+                                . '<div class="flex justify-center">'
+                                . '<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700">'
+                                . '<img src="' . e($qrDataUri) . '" alt="QR de asistencia" class="h-64 w-64" />'
+                                . '</div>'
+                                . '</div>'
+                                . '<div class="space-y-2">'
+                                . '<div class="text-xs font-medium text-gray-600 dark:text-gray-400">Liga QR</div>'
+                                . '<code class="block break-all rounded bg-gray-100 p-3 text-xs dark:bg-gray-800">' . e($url) . '</code>'
+                                . '<a href="' . e($url) . '" target="_blank" class="text-primary-600 underline">Abrir liga</a>'
+                                . '</div>'
+                                . '</div>'
+                            );
+                        } catch (\Throwable $e) {
+                            report($e);
+
+                            return new HtmlString(
+                                '<div class="space-y-3">'
+                                . '<p class="text-sm">No se pudo generar el QR visual, pero la liga sigue disponible.</p>'
+                                . '<code class="block break-all rounded bg-gray-100 p-3 text-xs dark:bg-gray-800">' . e($url) . '</code>'
+                                . '<a href="' . e($url) . '" target="_blank" class="text-primary-600 underline">Abrir liga</a>'
+                                . '</div>'
+                            );
+                        }
+                    }),
+
+                Tables\Actions\Action::make('regenerate_attendance_qr')
+                    ->label('Regenerar QR')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Regenerar token QR')
+                    ->modalDescription('La liga anterior dejara de funcionar. Usa esto si se perdio una credencial o se sospecha mal uso.')
+                    ->action(function (Employee $record): void {
+                        $record->forceFill([
+                            'attendance_qr_token' => Str::random(48),
+                            'attendance_qr_enabled' => true,
+                            'attendance_qr_generated_at' => now(),
+                        ])->save();
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('QR regenerado')
+                            ->body('La liga anterior fue invalidada.')
+                            ->success()
+                            ->send();
+                    }),
+
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()->label('Eliminar'),
             ]);
@@ -808,4 +954,30 @@ public static function canCreate(): bool
             'edit' => Pages\EditEmployee::route('/{record}/edit'),
         ];
     }
+
+    protected static function supervisorUserOptions(): array
+    {
+        $tenantId = \Filament\Facades\Filament::getTenant()?->getKey();
+
+        $query = \App\Models\User::query()
+            ->orderBy('name')
+            ->orderBy('email');
+
+        if ($tenantId && \Illuminate\Support\Facades\Schema::hasColumn('users', 'company_id')) {
+            $query->where(function ($query) use ($tenantId): void {
+                $query->where('company_id', $tenantId)
+                    ->orWhereNull('company_id');
+            });
+        }
+
+        $users = $query->limit(500)->get(['id', 'name', 'email']);
+
+        return $users
+            ->mapWithKeys(function ($user): array {
+                $label = trim(($user->name ?: 'Usuario') . ' <' . ($user->email ?: 'sin email') . '>');
+                return [$user->id => $label];
+            })
+            ->toArray();
+    }
+
 }

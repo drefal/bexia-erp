@@ -81,26 +81,6 @@ class EmployeeAttendanceResource extends Resource
         return static::bexiaCanAsistenciaPermission('rrhh.asistencias.ver');
     }
 
-    public static function canCreate(): bool
-    {
-        return static::bexiaCanAsistenciaPermission('rrhh.asistencias.crear');
-    }
-
-    public static function canEdit(Model $record): bool
-    {
-        return static::bexiaCanAsistenciaPermission('rrhh.asistencias.editar');
-    }
-
-    public static function canDelete(Model $record): bool
-    {
-        return static::bexiaCanAsistenciaPermission('rrhh.asistencias.eliminar');
-    }
-
-    public static function canDeleteAny(): bool
-    {
-        return static::bexiaCanAsistenciaPermission('rrhh.asistencias.eliminar');
-    }
-
     public static function getEloquentQuery(): Builder
     {
         $tenantId = Filament::getTenant()?->getKey();
@@ -187,6 +167,167 @@ class EmployeeAttendanceResource extends Resource
     {
         return $table
             ->columns([
+
+                // v5790l_qr_geofence_device_columns
+                \Filament\Tables\Columns\TextColumn::make('source')
+                    // v5790l6_origen_qr_get_state
+                    ->getStateUsing(fn ($record): string => match ($record->source) {
+                        'qr_link' => 'QR',
+                        'clock' => 'Checador',
+                        'manual' => 'Manual',
+                        default => $record->source ? str($record->source)->headline()->toString() : '—',
+                    })
+                    ->label('Origen')
+                    // v5790l4_origen_qr_state
+                    ->state(fn ($record): string => match ($record->source) {
+                        'qr_link' => 'QR',
+                        'clock' => 'Checador',
+                        'manual' => 'Manual',
+                        default => $record->source ? str($record->source)->headline()->toString() : '—',
+                    })
+                    // v5790l1_origen_qr_label
+                    
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'qr_link' => 'QR',
+                        'clock' => 'Checador',
+                        'manual' => 'Manual',
+                        default => $state ? str($state)->headline()->toString() : '—',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'QR' => 'success',
+                        'Checador' => 'info',
+                        'Manual' => 'gray',
+                        'qr_link' => 'success',
+                        'clock' => 'info',
+                        'manual' => 'gray',
+                        default => 'gray',
+                    })
+                    ->toggleable(),
+
+                \Filament\Tables\Columns\TextColumn::make('mobile_review_status')
+                    ->label('Rev. móvil')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'accepted' => 'Aceptada',
+                        'pending' => 'Pendiente',
+                        'rejected' => 'Rechazada',
+                        default => $state ? str($state)->headline()->toString() : '—',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'accepted' => 'success',
+                        'pending' => 'warning',
+                        'rejected' => 'danger',
+                        default => 'gray',
+                    })
+                    ->toggleable(),
+
+                \Filament\Tables\Columns\TextColumn::make('clock_in_location_status')
+                    ->label('Geo entrada')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'inside' => 'Dentro',
+                        'outside' => 'Fuera',
+                        'poor_accuracy' => 'GPS bajo',
+                        'no_location' => 'Sin ubicación',
+                        'no_geofence' => 'Sin geocerca',
+                        default => $state ? str($state)->headline()->toString() : '—',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'inside' => 'success',
+                        'outside' => 'danger',
+                        'poor_accuracy' => 'warning',
+                        'no_location' => 'gray',
+                        'no_geofence' => 'warning',
+                        default => 'gray',
+                    })
+                    ->toggleable(),
+
+                \Filament\Tables\Columns\TextColumn::make('clock_out_location_status')
+                    ->label('Geo salida')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'inside' => 'Dentro',
+                        'outside' => 'Fuera',
+                        'poor_accuracy' => 'GPS bajo',
+                        'no_location' => 'Sin ubicación',
+                        'no_geofence' => 'Sin geocerca',
+                        default => $state ? str($state)->headline()->toString() : '—',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'inside' => 'success',
+                        'outside' => 'danger',
+                        'poor_accuracy' => 'warning',
+                        'no_location' => 'gray',
+                        'no_geofence' => 'warning',
+                        default => 'gray',
+                    })
+                    ->toggleable(),
+
+                \Filament\Tables\Columns\TextColumn::make('clock_in_distance_meters')
+                    ->label('Dist. entrada')
+                    ->formatStateUsing(fn ($state): string => $state === null ? '—' : ((int) $state) . ' m')
+                    ->alignEnd()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                \Filament\Tables\Columns\TextColumn::make('clock_out_distance_meters')
+                    ->label('Dist. salida')
+                    ->formatStateUsing(fn ($state): string => $state === null ? '—' : ((int) $state) . ' m')
+                    ->alignEnd()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                \Filament\Tables\Columns\TextColumn::make('clock_in_device_guard_status')
+                    ->label('Guard entrada')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'ok' => 'OK',
+                        'no_fingerprint' => 'Sin huella',
+                        'disabled_by_company' => 'Desactivado',
+                        'blocked_same_device_other_employee' => 'Bloqueado',
+                        'schema_not_ready' => 'Sin esquema',
+                        default => $state ? str($state)->headline()->toString() : '—',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'ok' => 'success',
+                        'blocked_same_device_other_employee' => 'danger',
+                        'no_fingerprint' => 'warning',
+                        'disabled_by_company' => 'gray',
+                        default => 'gray',
+                    })
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                \Filament\Tables\Columns\TextColumn::make('clock_out_device_guard_status')
+                    ->label('Guard salida')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'ok' => 'OK',
+                        'no_fingerprint' => 'Sin huella',
+                        'disabled_by_company' => 'Desactivado',
+                        'blocked_same_device_other_employee' => 'Bloqueado',
+                        'schema_not_ready' => 'Sin esquema',
+                        default => $state ? str($state)->headline()->toString() : '—',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'ok' => 'success',
+                        'blocked_same_device_other_employee' => 'danger',
+                        'no_fingerprint' => 'warning',
+                        'disabled_by_company' => 'gray',
+                        default => 'gray',
+                    })
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                \Filament\Tables\Columns\TextColumn::make('clock_in_device_fingerprint')
+                    ->label('Equipo entrada')
+                    ->formatStateUsing(fn (?string $state): string => $state ? substr($state, 0, 10) . '…' : '—')
+                    ->copyable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                \Filament\Tables\Columns\TextColumn::make('clock_out_device_fingerprint')
+                    ->label('Equipo salida')
+                    ->formatStateUsing(fn (?string $state): string => $state ? substr($state, 0, 10) . '…' : '—')
+                    ->copyable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('attendance_date')
                     ->label('Fecha')
                     ->date('d/m/Y')
@@ -247,11 +388,69 @@ class EmployeeAttendanceResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('source')
+                    // v5790l6_origen_qr_get_state
+                    ->getStateUsing(fn ($record): string => match ($record->source) {
+                        'qr_link' => 'QR',
+                        'clock' => 'Checador',
+                        'manual' => 'Manual',
+                        default => $record->source ? str($record->source)->headline()->toString() : '—',
+                    })
                     ->label('Origen')
                     ->badge()
                     ->toggleable(),
             ])
             ->filters([
+
+                // v5790l_qr_geofence_device_filters
+                \Filament\Tables\Filters\SelectFilter::make('source')
+                    ->label('Origen')
+                    ->options([
+                        'qr_link' => 'QR',
+                        'clock' => 'Mi checador',
+                        'manual' => 'Manual',
+                    ]),
+
+                \Filament\Tables\Filters\SelectFilter::make('mobile_review_status')
+                    ->label('Revisión móvil')
+                    ->options([
+                        'accepted' => 'Aceptada',
+                        'pending' => 'Pendiente',
+                        'rejected' => 'Rechazada',
+                    ]),
+
+                \Filament\Tables\Filters\Filter::make('qr_mobile')
+                    ->label('Solo QR / móvil')
+                    ->query(fn ($query) => $query->where(function ($query): void {
+                        $query->where('source', 'qr_link')
+                            ->orWhere('clock_in_method', 'qr_link')
+                            ->orWhere('clock_out_method', 'qr_link')
+                            ->orWhereNotNull('clock_in_latitude')
+                            ->orWhereNotNull('clock_out_latitude');
+                    })),
+
+                \Filament\Tables\Filters\Filter::make('outside_geofence')
+                    ->label('Fuera de geocerca')
+                    ->query(fn ($query) => $query->where(function ($query): void {
+                        $query->where('clock_in_location_status', 'outside')
+                            ->orWhere('clock_out_location_status', 'outside');
+                    })),
+
+                \Filament\Tables\Filters\Filter::make('inside_geofence')
+                    ->label('Dentro de geocerca')
+                    ->query(fn ($query) => $query->where(function ($query): void {
+                        $query->where('clock_in_location_status', 'inside')
+                            ->orWhere('clock_out_location_status', 'inside');
+                    })),
+
+                \Filament\Tables\Filters\Filter::make('device_suspicious')
+                    ->label('Dispositivo sospechoso')
+                    ->query(fn ($query) => $query->where(function ($query): void {
+                        $query->where('clock_in_device_guard_status', 'blocked_same_device_other_employee')
+                            ->orWhere('clock_out_device_guard_status', 'blocked_same_device_other_employee')
+                            ->orWhere('clock_in_device_guard_status', 'no_fingerprint')
+                            ->orWhere('clock_out_device_guard_status', 'no_fingerprint');
+                    })),
+
                 SelectFilter::make('status')
                     ->label('Estado')
                     ->options(EmployeeAttendance::statusOptions()),
@@ -275,6 +474,37 @@ class EmployeeAttendanceResource extends Resource
                     ->query(fn (Builder $query): Builder => $query->where('overtime_minutes', '>', 0)),
             ])
             ->actions([
+
+                // v5790l_qr_geofence_device_actions
+                \Filament\Tables\Actions\Action::make('mobile_review')
+                    ->label('Revisión móvil')
+                    ->icon('heroicon-o-shield-check')
+                    ->color('warning')
+                    ->visible(fn ($record): bool => in_array($record->mobile_review_status, ['pending', 'rejected', null], true))
+                    ->form([
+                        \Filament\Forms\Components\Select::make('mobile_review_status')
+                            ->label('Resultado')
+                            ->options([
+                                'accepted' => 'Aceptar',
+                                'pending' => 'Mantener pendiente',
+                                'rejected' => 'Rechazar',
+                            ])
+                            ->default(fn ($record): string => $record->mobile_review_status ?: 'pending')
+                            ->required(),
+
+                        \Filament\Forms\Components\Textarea::make('mobile_review_notes')
+                            ->label('Notas de revisión')
+                            ->rows(3),
+                    ])
+                    ->action(function ($record, array $data): void {
+                        $record->forceFill([
+                            'mobile_review_status' => $data['mobile_review_status'],
+                            'mobile_review_notes' => $data['mobile_review_notes'] ?? null,
+                            'mobile_reviewed_by_user_id' => auth()->id(),
+                            'mobile_reviewed_at' => now(),
+                        ])->save();
+                    }),
+
                 Tables\Actions\Action::make('generate_incident')
                     ->label('Generar incidencia')
                     ->icon('heroicon-o-exclamation-triangle')
@@ -308,7 +538,7 @@ class EmployeeAttendanceResource extends Resource
                         }
                     }),
 
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()->visible(fn (): bool => static::canManageAttendanceRecords()),
                 Tables\Actions\DeleteAction::make()->label('Eliminar'),
             ])
             ->bulkActions([
@@ -361,4 +591,68 @@ class EmployeeAttendanceResource extends Resource
             'edit' => Pages\EditEmployeeAttendance::route('/{record}/edit'),
         ];
     }
+    // v5790l1_can_manage_attendance_records
+    // v5790l2_can_manage_attendance_records
+    // v5790l3_can_manage_attendance_records
+    protected static function canManageAttendanceRecords(): bool
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'hasRole')) {
+            try {
+                if (
+                    $user->hasRole('super_admin')
+                    || $user->hasRole('superadmin')
+                    || $user->hasRole('Super Admin')
+                    || $user->hasRole('SuperAdmin')
+                ) {
+                    return true;
+                }
+            } catch (\Throwable) {
+                // Continuar con relación de roles.
+            }
+        }
+
+        try {
+            if (method_exists($user, 'roles')) {
+                return $user->roles()
+                    ->where(function ($query): void {
+                        $query->whereRaw('LOWER(name) = ?', ['super_admin'])
+                            ->orWhereRaw('LOWER(name) = ?', ['superadmin'])
+                            ->orWhereRaw('LOWER(name) = ?', ['super admin']);
+                    })
+                    ->exists();
+            }
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return false;
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::canManageAttendanceRecords();
+    }
+
+    public static function canEdit($record): bool
+    {
+        return static::canManageAttendanceRecords();
+    }
+
+    public static function canDelete($record): bool
+    {
+        return static::canManageAttendanceRecords();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::canManageAttendanceRecords();
+    }
+
+
 }

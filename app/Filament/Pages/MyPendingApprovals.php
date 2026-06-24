@@ -141,6 +141,7 @@ if (! static::canUseApprovalsPage()) {
                 'step_name' => (string) ($row->step_name ?? ''),
                 'requester_name' => (string) ($row->requester_name ?? '—'),
                 'amount_total' => (float) ($row->amount_total ?? 0),
+                'amount_display' => number_format((float) ($row->amount_total ?? 0), 2),
                 'sent_at' => (string) ($row->sent_at ?? ''),
                 'url' => $this->documentUrl($row),
             ])
@@ -150,7 +151,12 @@ if (! static::canUseApprovalsPage()) {
 
     public function approveStep(int $stepId): void
     {
-        try {
+        
+        if (isset($request) && isset($request->id)) {
+            $this->currentPendingStepForUserOrFail((int) $request->id);
+        }
+
+try {
             $this->actOnStep($stepId, 'approved');
 
             $this->refreshRows();
@@ -272,7 +278,12 @@ if (! static::canUseApprovalsPage()) {
 
     protected function approveCurrentStep(object $step, object $request, object $user): void
     {
-        $comment = $this->approvalComment($request, 'approved');
+        
+        if (isset($request) && isset($request->id)) {
+            $this->currentPendingStepForUserOrFail((int) $request->id);
+        }
+
+$comment = $this->approvalComment($request, 'approved');
 
         $stepUpdate = [
             'status' => 'approved',
@@ -360,7 +371,12 @@ if (! static::canUseApprovalsPage()) {
 
     protected function rejectCurrentStep(object $step, object $request, object $user, string $reason): void
     {
-        if ($reason === '') {
+        
+        if (isset($request) && isset($request->id)) {
+            $this->currentPendingStepForUserOrFail((int) $request->id);
+        }
+
+if ($reason === '') {
             throw new \RuntimeException('El motivo de rechazo es obligatorio.');
         }
 
@@ -710,17 +726,6 @@ if (! static::canUseApprovalsPage()) {
 
         $this->redirect($url);
     }
-
-
-
-    protected function documentLabel(?string $type): string
-     {
-
-        return \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeLabel((string) $type);
-
-    }
-
-
     protected function documentUrl(object $row): string
     {
 
@@ -752,6 +757,7 @@ if (! static::canUseApprovalsPage()) {
             'employee_incident' => EmployeeIncidentApprovalWorkflow::documentUrl($row),
             'payroll_run' => PayrollRunApprovalWorkflow::documentUrl($row),
             'treasury_cash_transfer_request' => CashTransferApprovalWorkflow::documentUrl($row),
+            'employee_incident' => 'Incidencia RRHH',
             default => '#',
         };
     }
@@ -799,6 +805,89 @@ if (! static::canUseApprovalsPage()) {
         }
 
         return 0;
+    }
+
+
+    protected function documentTypeLabel(?string $type): string
+    {
+        return match ((string) $type) {
+            'employee_incident' => 'Incidencia RRHH',
+            'purchase_order' => 'Orden de compra',
+            'sale_quote' => 'Cotización de venta',
+            'sales_quote' => 'Cotización de venta',
+            'sale_order' => 'Pedido de venta',
+            'treasury_cash_transfer_request' => 'Traspaso de efectivo',
+            'service_repair_request' => 'Orden de servicio',
+            'service_repair_delivery' => 'Entrega de servicio',
+            default => \Illuminate\Support\Str::headline((string) $type),
+        };
+    }
+
+
+    protected function documentLabel(?string $type): string
+    {
+        return match ((string) $type) {
+            'employee_incident' => 'Incidencia RRHH',
+            'purchase_order' => 'Orden de compra',
+            'sale_quote', 'sales_quote' => 'Cotización de venta',
+            'sale_order', 'sales_order' => 'Pedido de venta',
+            'treasury_cash_transfer_request' => 'Traspaso de efectivo',
+            'service_repair_request' => 'Orden de servicio',
+            'service_repair_delivery' => 'Entrega de servicio',
+            default => \Illuminate\Support\Str::headline((string) $type),
+        };
+    }
+
+
+    protected function currentPendingStepForUserOrFail(int $requestId): object
+    {
+        $request = DB::table('approval_requests')
+            ->where('id', $requestId)
+            ->where('status', 'pending')
+            ->first();
+
+        if (! $request) {
+            throw new \RuntimeException('Esta solicitud ya no está pendiente o ya fue procesada.');
+        }
+
+        $step = DB::table('approval_request_steps')
+            ->where('approval_request_id', $request->id)
+            ->where('status', 'pending')
+            ->orderBy('step_order')
+            ->orderBy('id')
+            ->first();
+
+        if (! $step) {
+            throw new \RuntimeException('No hay una etapa pendiente para esta solicitud.');
+        }
+
+        if ((int) ($request->current_step_order ?? 0) !== (int) ($step->step_order ?? 0)) {
+            throw new \RuntimeException('La etapa pendiente no coincide con la etapa actual de la solicitud. Recarga la página.');
+        }
+
+        $authId = (int) auth()->id();
+
+        if ((int) ($step->approver_user_id ?? 0) !== $authId) {
+            throw new \RuntimeException('Esta aprobación ya no corresponde a tu usuario. Recarga la bandeja.');
+        }
+
+        return $step;
+    }
+
+
+    protected function approvalAmountLabel(object $row): string
+    {
+        $amount = $row->amount_total ?? null;
+
+        if ($amount === null || $amount === '') {
+            return '-';
+        }
+
+        if ((string) ($row->document_type ?? '') === 'employee_incident') {
+            return number_format((float) $amount, 2);
+        }
+
+        return number_format((float) $amount, 2);
     }
 
 

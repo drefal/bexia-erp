@@ -303,27 +303,26 @@ class EmployeeIncidentApprovalWorkflow
 
     protected static function requesterManagerId(EmployeeIncident $incident): ?int
     {
-        if (class_exists(EmployeeOrganizationResolver::class)) {
-            $employeeManagerUserId = EmployeeOrganizationResolver::approvalManagerUserIdForIncident($incident);
+        /*
+         * V5.79.0n2c
+         * Para incidencias RRHH, el aprobador tipo requester_manager
+         * se resuelve desde el supervisor_user_id del empleado afectado.
+         * No debe depender del usuario que generó/envió la solicitud.
+         */
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('employees')
+            && \Illuminate\Support\Facades\Schema::hasColumn('employees', 'supervisor_user_id')
+        ) {
+            $supervisorUserId = \Illuminate\Support\Facades\DB::table('employees')
+                ->where('id', $incident->employee_id)
+                ->value('supervisor_user_id');
 
-            if ($employeeManagerUserId) {
-                return $employeeManagerUserId;
+            if (! blank($supervisorUserId)) {
+                return (int) $supervisorUserId;
             }
         }
 
-        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'approval_manager_user_id')) {
-            return null;
-        }
-
-        $requesterId = (int) (($incident->created_by_user_id ?? null) ?: auth()->id());
-
-        if ($requesterId <= 0) {
-            return null;
-        }
-
-        $managerId = DB::table('users')->where('id', $requesterId)->value('approval_manager_user_id');
-
-        return $managerId ? (int) $managerId : null;
+        return null;
     }
 
     public static function markApproved(object $request, ?int $userId = null, ?string $comment = null): void
