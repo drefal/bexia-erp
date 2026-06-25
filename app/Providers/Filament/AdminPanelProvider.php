@@ -404,6 +404,170 @@ class AdminPanelProvider extends PanelProvider
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12) !important;
 }
 /* BEXIA_TOPBAR_HEADER_PREMIUM_V5_79_9B_END */
+/* BEXIA_DASHBOARD_CARDS_PREMIUM_V5_79_10B_START */
+:root {
+    --bexia-dashboard-bg: #f8fafc;
+    --bexia-card-bg: #ffffff;
+    --bexia-card-bg-soft: #fbfdff;
+    --bexia-card-border: #e2e8f0;
+    --bexia-card-border-soft: #edf2f7;
+    --bexia-card-text: #0f172a;
+    --bexia-card-muted: #64748b;
+    --bexia-card-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+    --bexia-card-shadow-hover: 0 16px 34px rgba(15, 23, 42, 0.075);
+    --bexia-card-radius: 20px;
+}
+
+/* Fondo general del área de trabajo */
+.fi-main,
+.fi-main-ctn,
+.fi-page {
+    background:
+        radial-gradient(circle at top right, rgba(148, 163, 184, 0.10), transparent 28rem),
+        linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+}
+
+/* Separación general del contenido */
+.fi-main {
+    color: var(--bexia-card-text) !important;
+}
+
+/* Cards, widgets y secciones principales */
+.fi-widget,
+.fi-section,
+.fi-card,
+.fi-in-card,
+.fi-simple-page-section {
+    background: linear-gradient(180deg, var(--bexia-card-bg) 0%, var(--bexia-card-bg-soft) 100%) !important;
+    border: 1px solid var(--bexia-card-border) !important;
+    border-radius: var(--bexia-card-radius) !important;
+    box-shadow: var(--bexia-card-shadow) !important;
+    overflow: hidden !important;
+    transition:
+        box-shadow .16s ease,
+        border-color .16s ease,
+        transform .12s ease,
+        background-color .16s ease !important;
+}
+
+.fi-widget:hover,
+.fi-section:hover,
+.fi-card:hover {
+    border-color: #cbd5e1 !important;
+    box-shadow: var(--bexia-card-shadow-hover) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Encabezados dentro de widgets/secciones */
+.fi-widget .fi-section-header,
+.fi-section .fi-section-header,
+.fi-widget header,
+.fi-section header {
+    border-bottom-color: var(--bexia-card-border-soft) !important;
+}
+
+.fi-widget h2,
+.fi-widget h3,
+.fi-section h2,
+.fi-section h3,
+.fi-header-heading {
+    color: var(--bexia-card-text) !important;
+    letter-spacing: -0.02em !important;
+}
+
+/* Texto secundario */
+.fi-widget p,
+.fi-section p,
+.fi-widget .text-gray-500,
+.fi-widget .text-gray-600,
+.fi-section .text-gray-500,
+.fi-section .text-gray-600 {
+    color: var(--bexia-card-muted) !important;
+}
+
+/* StatsOverviewWidget: tarjetas de indicadores */
+.fi-wi-stats-overview-stat,
+.fi-wi-stats-overview .fi-wi-stats-overview-stat,
+.fi-wi-stats-overview-stat-card {
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%) !important;
+    border: 1px solid var(--bexia-card-border) !important;
+    border-radius: 20px !important;
+    box-shadow: var(--bexia-card-shadow) !important;
+    overflow: hidden !important;
+    transition:
+        box-shadow .16s ease,
+        border-color .16s ease,
+        transform .12s ease !important;
+}
+
+.fi-wi-stats-overview-stat:hover,
+.fi-wi-stats-overview .fi-wi-stats-overview-stat:hover,
+.fi-wi-stats-overview-stat-card:hover {
+    border-color: #cbd5e1 !important;
+    box-shadow: var(--bexia-card-shadow-hover) !important;
+    transform: translateY(-1px) !important;
+}
+
+.fi-wi-stats-overview-stat-label,
+.fi-wi-stats-overview-stat .fi-wi-stats-overview-stat-label {
+    color: #64748b !important;
+    font-weight: 700 !important;
+}
+
+.fi-wi-stats-overview-stat-value,
+.fi-wi-stats-overview-stat .fi-wi-stats-overview-stat-value {
+    color: #0f172a !important;
+    letter-spacing: -0.03em !important;
+}
+
+/* Tablas dentro de widgets: solo contenedor, no rediseñar tablas todavía */
+.fi-widget .fi-ta,
+.fi-section .fi-ta {
+    border-radius: 18px !important;
+    border-color: var(--bexia-card-border-soft) !important;
+    box-shadow: none !important;
+}
+
+/* Bloques custom Bexia del escritorio */
+[class*="bexia"][class*="dashboard"],
+[class*="bexia"][class*="widget"],
+[class*="bexia"][class*="section"] {
+    box-sizing: border-box !important;
+}
+
+/* Headers/separadores custom del escritorio */
+.bexia-dashboard-section,
+.bexia-dashboard-section-header,
+.bexia-dashboard-section-widget {
+    border-radius: 20px !important;
+}
+
+/* Evitar que el hover afecte modales o dropdowns de forma agresiva */
+.fi-modal-window,
+.fi-dropdown-panel {
+    transform: none !important;
+}
+
+/* Mantener responsive natural */
+@media (max-width: 768px) {
+    .fi-widget,
+    .fi-section,
+    .fi-card,
+    .fi-in-card,
+    .fi-wi-stats-overview-stat,
+    .fi-wi-stats-overview-stat-card {
+        border-radius: 18px !important;
+    }
+
+    .fi-widget:hover,
+    .fi-section:hover,
+    .fi-card:hover,
+    .fi-wi-stats-overview-stat:hover,
+    .fi-wi-stats-overview-stat-card:hover {
+        transform: none !important;
+    }
+}
+/* BEXIA_DASHBOARD_CARDS_PREMIUM_V5_79_10B_END */
 </style>
 <script>
 (function () {
