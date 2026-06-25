@@ -46,7 +46,7 @@ class EmployeeIncidentResource extends Resource
 
     protected static ?string $pluralModelLabel = 'incidencias';
 
-    protected static ?int $navigationSort = 16;
+    protected static ?int $navigationSort = 21;
 
     protected static bool $isScopedToTenant = false;
 

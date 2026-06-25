@@ -39,7 +39,7 @@ class EmployeeAttendanceResource extends Resource
 
     protected static ?string $pluralModelLabel = 'asistencias';
 
-    protected static ?int $navigationSort = 21;
+    protected static ?int $navigationSort = 22;
 
     protected static bool $isScopedToTenant = false;
 

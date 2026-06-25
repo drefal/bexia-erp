@@ -24,7 +24,7 @@ class AttendanceReport extends Page
 
     protected static ?string $slug = 'rrhh/reporte-asistencia';
 
-    protected static ?int $navigationSort = 22;
+    protected static ?int $navigationSort = 23;
 
     protected static string $view = 'filament.pages.attendance-report';
 

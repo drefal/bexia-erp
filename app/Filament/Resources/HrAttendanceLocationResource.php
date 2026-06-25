@@ -33,7 +33,7 @@ class HrAttendanceLocationResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Geocercas de asistencia';
 
-    protected static ?int $navigationSort = 38;
+    protected static ?int $navigationSort = 24;
 
     protected static function bexiaCanGeofencePermission(string $permission): bool
     {
