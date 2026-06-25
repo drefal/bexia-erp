@@ -209,11 +209,28 @@ class PublicEmployeeAttendanceController extends Controller
                 (float) $location->longitude,
             );
 
-            if (! $nearest || $distance < $nearest['distance_meters']) {
+            $isPolygon = method_exists($location, 'usesPolygonGeofence') && $location->usesPolygonGeofence();
+            $insidePolygon = false;
+
+            if ($isPolygon && method_exists($location, 'polygonPoints')) {
+                $insidePolygon = GeofenceDistance::pointInPolygon(
+                    $latitude,
+                    $longitude,
+                    $location->polygonPoints(),
+                );
+            }
+
+            if (! $nearest || $insidePolygon || $distance < $nearest['distance_meters']) {
                 $nearest = [
                     'location' => $location,
                     'distance_meters' => $distance,
+                    'inside_polygon' => $insidePolygon,
+                    'geofence_type' => $isPolygon ? 'polygon' : 'circle',
                 ];
+
+                if ($insidePolygon) {
+                    break;
+                }
             }
         }
 
@@ -393,12 +410,25 @@ class PublicEmployeeAttendanceController extends Controller
         $location = $nearest['location'];
         $distance = (int) $nearest['distance_meters'];
 
-        $status = GeofenceDistance::status(
-            $distance,
-            (int) $location->radius_meters,
-            $accuracy,
-            $location->accuracy_required_meters ? (int) $location->accuracy_required_meters : null,
-        );
+        $location = $nearest['location'];
+        $accuracyRequired = $location->accuracy_required_meters ? (int) $location->accuracy_required_meters : null;
+
+        if (($nearest['geofence_type'] ?? 'circle') === 'polygon' && method_exists($location, 'polygonPoints')) {
+            $status = GeofenceDistance::polygonStatus(
+                $latitude,
+                $longitude,
+                $location->polygonPoints(),
+                $accuracy,
+                $accuracyRequired,
+            );
+        } else {
+            $status = GeofenceDistance::status(
+                $nearest['distance_meters'],
+                (int) $location->radius_meters,
+                $accuracy,
+                $accuracyRequired,
+            );
+        }
 
         $payload[$prefix . '_hr_attendance_location_id'] = $location->id;
         $payload[$prefix . '_distance_meters'] = $distance;
