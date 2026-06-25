@@ -812,6 +812,708 @@ class AdminPanelProvider extends PanelProvider
     }
 }
 /* BEXIA_TABLES_LISTS_PREMIUM_V5_79_11B_END */
+/* BEXIA_FORMS_MODALS_PREMIUM_V5_79_12B_START */
+:root {
+    --bexia-form-bg: #ffffff;
+    --bexia-form-soft: #f8fafc;
+    --bexia-form-soft-2: #f1f5f9;
+    --bexia-form-border: #dbe3ee;
+    --bexia-form-border-soft: #edf2f7;
+    --bexia-form-text: #0f172a;
+    --bexia-form-muted: #64748b;
+    --bexia-form-primary: #2563eb;
+    --bexia-form-primary-dark: #1d4ed8;
+    --bexia-form-danger: #dc2626;
+    --bexia-form-success: #16a34a;
+    --bexia-form-warning: #d97706;
+    --bexia-form-radius: 16px;
+    --bexia-form-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+    --bexia-modal-shadow: 0 28px 70px rgba(15, 23, 42, 0.20);
+}
+
+/* Contenedores de formularios */
+.fi-fo,
+.fi-form,
+.fi-form > div {
+    gap: 1rem !important;
+}
+
+/* Sections dentro de forms */
+.fi-fo .fi-section,
+.fi-form .fi-section {
+    border-radius: 20px !important;
+    border: 1px solid var(--bexia-form-border-soft) !important;
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%) !important;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035) !important;
+}
+
+.fi-fo .fi-section-header,
+.fi-form .fi-section-header,
+.fi-fo .fi-section header,
+.fi-form .fi-section header {
+    border-color: var(--bexia-form-border-soft) !important;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
+}
+
+.fi-fo .fi-section h2,
+.fi-fo .fi-section h3,
+.fi-form .fi-section h2,
+.fi-form .fi-section h3 {
+    color: #0f172a !important;
+    font-weight: 850 !important;
+    letter-spacing: -0.025em !important;
+}
+
+.fi-fo .fi-section p,
+.fi-form .fi-section p,
+.fi-fo .fi-section-description,
+.fi-form .fi-section-description {
+    color: var(--bexia-form-muted) !important;
+}
+
+/* Labels y ayudas */
+.fi-fo-field-wrp-label,
+.fi-fo-field-wrp-label label,
+.fi-fo-field-wrp-label span,
+.fi-fieldset legend,
+.fi-label {
+    color: #334155 !important;
+    font-weight: 750 !important;
+    letter-spacing: -0.01em !important;
+}
+
+.fi-fo-field-wrp-hint,
+.fi-fo-field-wrp-helper-text,
+.fi-fo-field-wrp-error-message,
+.fi-help-text {
+    font-size: .78rem !important;
+}
+
+.fi-fo-field-wrp-helper-text,
+.fi-help-text {
+    color: #64748b !important;
+}
+
+.fi-fo-field-wrp-error-message {
+    color: #dc2626 !important;
+    font-weight: 700 !important;
+}
+
+/* Wrappers e inputs */
+.fi-input-wrp,
+.fi-select-input,
+.fi-textarea,
+.fi-fo input:not([type="checkbox"]):not([type="radio"]),
+.fi-fo select,
+.fi-fo textarea,
+.fi-modal-window input:not([type="checkbox"]):not([type="radio"]),
+.fi-modal-window select,
+.fi-modal-window textarea {
+    border-radius: var(--bexia-form-radius) !important;
+    border-color: var(--bexia-form-border) !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    min-height: 2.75rem !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.85),
+        0 1px 2px rgba(15, 23, 42, 0.035) !important;
+}
+
+.fi-input-wrp:hover,
+.fi-select-input:hover,
+.fi-textarea:hover {
+    border-color: #cbd5e1 !important;
+}
+
+.fi-input-wrp:focus-within,
+.fi-select-input:focus,
+.fi-textarea:focus,
+.fi-fo input:not([type="checkbox"]):not([type="radio"]):focus,
+.fi-fo select:focus,
+.fi-fo textarea:focus,
+.fi-modal-window input:not([type="checkbox"]):not([type="radio"]):focus,
+.fi-modal-window select:focus,
+.fi-modal-window textarea:focus {
+    border-color: rgba(37, 99, 235, 0.85) !important;
+    box-shadow:
+        0 0 0 4px rgba(37, 99, 235, 0.11),
+        0 8px 20px rgba(15, 23, 42, 0.055) !important;
+}
+
+.fi-input,
+.fi-select-input,
+.fi-textarea {
+    color: #0f172a !important;
+}
+
+.fi-input::placeholder,
+.fi-textarea::placeholder,
+.fi-fo input::placeholder,
+.fi-fo textarea::placeholder {
+    color: #94a3b8 !important;
+}
+
+/* Selects buscables / Choices */
+.fi-fo .choices,
+.fi-modal-window .choices {
+    border-radius: var(--bexia-form-radius) !important;
+}
+
+.fi-fo .choices__inner,
+.fi-modal-window .choices__inner {
+    border-radius: var(--bexia-form-radius) !important;
+    border-color: var(--bexia-form-border) !important;
+    background: #ffffff !important;
+    min-height: 2.75rem !important;
+}
+
+.fi-fo .choices__list--dropdown,
+.fi-modal-window .choices__list--dropdown {
+    border-radius: 16px !important;
+    border-color: var(--bexia-form-border) !important;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12) !important;
+    overflow: hidden !important;
+}
+
+/* Textareas */
+.fi-textarea,
+textarea.fi-textarea,
+.fi-fo textarea,
+.fi-modal-window textarea {
+    min-height: 6.5rem !important;
+    line-height: 1.45 !important;
+}
+
+/* Toggles */
+.fi-fo-toggle,
+.fi-toggle {
+    align-items: center !important;
+}
+
+.fi-fo-toggle button,
+.fi-toggle button,
+button[role="switch"] {
+    border-radius: 999px !important;
+    border: 1px solid #cbd5e1 !important;
+    background: #e2e8f0 !important;
+    box-shadow:
+        inset 0 1px 2px rgba(15, 23, 42, 0.10),
+        0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.fi-fo-toggle button[aria-checked="true"],
+.fi-toggle button[aria-checked="true"],
+button[role="switch"][aria-checked="true"] {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    border-color: #1d4ed8 !important;
+    box-shadow:
+        0 8px 18px rgba(37, 99, 235, 0.26),
+        inset 0 1px 1px rgba(255, 255, 255, 0.18) !important;
+}
+
+.fi-fo-toggle button > span,
+.fi-toggle button > span,
+button[role="switch"] > span {
+    background: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18) !important;
+}
+
+/* Checkboxes/radios normales: no deformar tablas */
+.fi-fo input[type="checkbox"]:not([role="switch"]),
+.fi-modal-window input[type="checkbox"]:not([role="switch"]),
+.fi-fo input[type="radio"],
+.fi-modal-window input[type="radio"] {
+    border-color: #94a3b8 !important;
+}
+
+.fi-fo input[type="checkbox"]:checked,
+.fi-modal-window input[type="checkbox"]:checked,
+.fi-fo input[type="radio"]:checked,
+.fi-modal-window input[type="radio"]:checked {
+    background-color: #2563eb !important;
+    border-color: #2563eb !important;
+}
+
+/* Tabs en formularios */
+.fi-tabs {
+    border-radius: 18px !important;
+    background: #f8fafc !important;
+    border: 1px solid var(--bexia-form-border-soft) !important;
+    padding: .25rem !important;
+}
+
+.fi-tabs-item {
+    border-radius: 14px !important;
+    font-weight: 750 !important;
+    color: #64748b !important;
+}
+
+.fi-tabs-item:hover {
+    background: #eef2f7 !important;
+    color: #0f172a !important;
+}
+
+.fi-tabs-item.fi-active,
+.fi-tabs-item[aria-selected="true"] {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow:
+        0 6px 14px rgba(15, 23, 42, 0.07),
+        inset 0 0 0 1px rgba(148, 163, 184, 0.18) !important;
+}
+
+/* Fieldsets, repeaters y file uploads */
+.fi-fieldset,
+.fi-fo-repeater,
+.fi-fo-repeater-item,
+.fi-fo-file-upload,
+.fi-fo-builder,
+.fi-fo-wizard {
+    border-radius: 18px !important;
+    border-color: var(--bexia-form-border-soft) !important;
+    background: #ffffff !important;
+}
+
+.fi-fo-repeater-item,
+.fi-fo-file-upload {
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.035) !important;
+}
+
+/* Placeholders/infolist dentro de forms */
+.fi-fo-placeholder,
+.fi-in-entry,
+.fi-in-text-entry {
+    color: #334155 !important;
+}
+
+.fi-fo-placeholder .text-gray-500,
+.fi-in-entry .text-gray-500 {
+    color: #64748b !important;
+}
+
+/* Modales */
+.fi-modal-window {
+    border-radius: 24px !important;
+    border: 1px solid rgba(226, 232, 240, 0.95) !important;
+    background: #ffffff !important;
+    box-shadow: var(--bexia-modal-shadow) !important;
+    overflow: hidden !important;
+}
+
+.fi-modal-header {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
+    border-bottom: 1px solid var(--bexia-form-border-soft) !important;
+}
+
+.fi-modal-heading {
+    color: #0f172a !important;
+    font-weight: 850 !important;
+    letter-spacing: -0.025em !important;
+}
+
+.fi-modal-description {
+    color: #64748b !important;
+    line-height: 1.45 !important;
+}
+
+.fi-modal-content {
+    background: #ffffff !important;
+}
+
+.fi-modal-footer {
+    background: #fbfdff !important;
+    border-top: 1px solid var(--bexia-form-border-soft) !important;
+}
+
+/* Botones de formularios y modales */
+.fi-form-actions .fi-btn,
+.fi-modal-footer .fi-btn,
+.fi-ac-actions .fi-btn,
+.fi-modal-window .fi-btn {
+    border-radius: 15px !important;
+    min-height: 2.65rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.01em !important;
+}
+
+.fi-form-actions .fi-btn.fi-color-primary,
+.fi-modal-footer .fi-btn.fi-color-primary,
+.fi-modal-window .fi-btn.fi-color-primary,
+.fi-btn.fi-color-primary {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    color: #ffffff !important;
+    box-shadow:
+        0 12px 26px rgba(37, 99, 235, 0.24),
+        0 4px 10px rgba(37, 99, 235, 0.12) !important;
+}
+
+.fi-form-actions .fi-btn.fi-color-primary *,
+.fi-modal-footer .fi-btn.fi-color-primary *,
+.fi-modal-window .fi-btn.fi-color-primary *,
+.fi-btn.fi-color-primary * {
+    color: #ffffff !important;
+}
+
+.fi-form-actions .fi-btn.fi-color-gray,
+.fi-modal-footer .fi-btn.fi-color-gray,
+.fi-modal-window .fi-btn.fi-color-gray,
+.fi-btn.fi-color-gray {
+    background: #ffffff !important;
+    color: #334155 !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.055) !important;
+}
+
+.fi-form-actions .fi-btn.fi-color-gray:hover,
+.fi-modal-footer .fi-btn.fi-color-gray:hover,
+.fi-modal-window .fi-btn.fi-color-gray:hover,
+.fi-btn.fi-color-gray:hover {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    border-color: #94a3b8 !important;
+}
+
+/* Estados peligrosos se conservan rojos */
+.fi-btn.fi-color-danger,
+.fi-modal-footer .fi-btn.fi-color-danger,
+.fi-modal-window .fi-btn.fi-color-danger {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 12px 26px rgba(220, 38, 38, 0.22) !important;
+}
+
+.fi-btn.fi-color-success,
+.fi-modal-footer .fi-btn.fi-color-success,
+.fi-modal-window .fi-btn.fi-color-success {
+    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 12px 26px rgba(22, 163, 74, 0.20) !important;
+}
+
+.fi-btn.fi-color-warning,
+.fi-modal-footer .fi-btn.fi-color-warning,
+.fi-modal-window .fi-btn.fi-color-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 12px 26px rgba(245, 158, 11, 0.20) !important;
+}
+
+/* Date/time picker y dropdowns de campos */
+.fi-dropdown-panel,
+.fi-select-panel,
+.fi-fo-date-time-picker-panel {
+    border-radius: 18px !important;
+    border-color: var(--bexia-form-border) !important;
+    box-shadow: 0 18px 44px rgba(15, 23, 42, 0.13) !important;
+}
+
+/* No tocar login premium */
+.fi-simple-main .fi-input-wrp,
+.fi-simple-main .fi-form-actions,
+.fi-simple-main .fi-btn {
+    /* mantiene reglas previas del login */
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .fi-modal-window {
+        border-radius: 20px !important;
+    }
+
+    .fi-fo .fi-section,
+    .fi-form .fi-section {
+        border-radius: 18px !important;
+    }
+
+    .fi-tabs {
+        overflow-x: auto !important;
+    }
+}
+
+/* BEXIA_FORM_FIELD_CONTRAST_V5_79_12B2_START */
+:root {
+    --bexia-field-border-strong: #cbd5e1;
+    --bexia-field-border-strong-hover: #94a3b8;
+    --bexia-field-border-strong-focus: #64748b;
+    --bexia-field-shadow-strong: 0 1px 2px rgba(15, 23, 42, 0.055);
+    --bexia-field-focus-ring-strong: 0 0 0 3px rgba(100, 116, 139, 0.13);
+}
+
+/* Refuerzo visible de contorno en formularios y modales */
+.fi-fo .fi-input-wrp,
+.fi-form .fi-input-wrp,
+.fi-modal-window .fi-input-wrp,
+.fi-fo .fi-select-input,
+.fi-form .fi-select-input,
+.fi-modal-window .fi-select-input,
+.fi-fo .fi-textarea,
+.fi-form .fi-textarea,
+.fi-modal-window .fi-textarea,
+.fi-fo input:not([type="checkbox"]):not([type="radio"]),
+.fi-form input:not([type="checkbox"]):not([type="radio"]),
+.fi-modal-window input:not([type="checkbox"]):not([type="radio"]),
+.fi-fo select,
+.fi-form select,
+.fi-modal-window select,
+.fi-fo textarea,
+.fi-form textarea,
+.fi-modal-window textarea {
+    border: 1px solid var(--bexia-field-border-strong) !important;
+    background: #ffffff !important;
+    box-shadow: var(--bexia-field-shadow-strong) !important;
+}
+
+.fi-fo .fi-input-wrp:hover,
+.fi-form .fi-input-wrp:hover,
+.fi-modal-window .fi-input-wrp:hover,
+.fi-fo .fi-select-input:hover,
+.fi-form .fi-select-input:hover,
+.fi-modal-window .fi-select-input:hover,
+.fi-fo .fi-textarea:hover,
+.fi-form .fi-textarea:hover,
+.fi-modal-window .fi-textarea:hover {
+    border-color: var(--bexia-field-border-strong-hover) !important;
+}
+
+.fi-fo .fi-input-wrp:focus-within,
+.fi-form .fi-input-wrp:focus-within,
+.fi-modal-window .fi-input-wrp:focus-within,
+.fi-fo .fi-select-input:focus,
+.fi-form .fi-select-input:focus,
+.fi-modal-window .fi-select-input:focus,
+.fi-fo .fi-textarea:focus,
+.fi-form .fi-textarea:focus,
+.fi-modal-window .fi-textarea:focus,
+.fi-fo input:not([type="checkbox"]):not([type="radio"]):focus,
+.fi-form input:not([type="checkbox"]):not([type="radio"]):focus,
+.fi-modal-window input:not([type="checkbox"]):not([type="radio"]):focus,
+.fi-fo select:focus,
+.fi-form select:focus,
+.fi-modal-window select:focus,
+.fi-fo textarea:focus,
+.fi-form textarea:focus,
+.fi-modal-window textarea:focus {
+    border-color: var(--bexia-field-border-strong-focus) !important;
+    box-shadow:
+        var(--bexia-field-focus-ring-strong),
+        var(--bexia-field-shadow-strong) !important;
+}
+
+/* Selects buscables tipo Choices/TomSelect */
+.fi-fo .choices__inner,
+.fi-form .choices__inner,
+.fi-modal-window .choices__inner,
+.fi-fo .ts-control,
+.fi-form .ts-control,
+.fi-modal-window .ts-control {
+    border: 1px solid var(--bexia-field-border-strong) !important;
+    background: #ffffff !important;
+    box-shadow: var(--bexia-field-shadow-strong) !important;
+}
+
+.fi-fo .choices.is-focused .choices__inner,
+.fi-form .choices.is-focused .choices__inner,
+.fi-modal-window .choices.is-focused .choices__inner,
+.fi-fo .ts-wrapper.focus .ts-control,
+.fi-form .ts-wrapper.focus .ts-control,
+.fi-modal-window .ts-wrapper.focus .ts-control {
+    border-color: var(--bexia-field-border-strong-focus) !important;
+    box-shadow:
+        var(--bexia-field-focus-ring-strong),
+        var(--bexia-field-shadow-strong) !important;
+}
+
+/* Mantener disabled más claro pero todavía visible */
+.fi-fo .fi-input-wrp:has(input:disabled),
+.fi-form .fi-input-wrp:has(input:disabled),
+.fi-modal-window .fi-input-wrp:has(input:disabled),
+.fi-fo input:disabled,
+.fi-form input:disabled,
+.fi-modal-window input:disabled,
+.fi-fo textarea:disabled,
+.fi-form textarea:disabled,
+.fi-modal-window textarea:disabled {
+    background: #f8fafc !important;
+    border-color: #d6dee9 !important;
+    color: #64748b !important;
+}
+/* BEXIA_FORM_FIELD_CONTRAST_V5_79_12B2_END */
+
+/* BEXIA_SELECT_DOUBLE_BORDER_FIX_V5_79_12B3_START */
+
+/* 1) Quitar el borde/sombra del contenedor externo solo en selects mejorados */
+.fi-fo .fi-input-wrp:has(.choices__inner),
+.fi-form .fi-input-wrp:has(.choices__inner),
+.fi-modal-window .fi-input-wrp:has(.choices__inner),
+.fi-fo .fi-input-wrp:has(.ts-control),
+.fi-form .fi-input-wrp:has(.ts-control),
+.fi-modal-window .fi-input-wrp:has(.ts-control),
+.fi-fo .fi-input-wrp:has(.fi-select-input),
+.fi-form .fi-input-wrp:has(.fi-select-input),
+.fi-modal-window .fi-input-wrp:has(.fi-select-input) {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* 2) Dejar un solo contorno limpio y redondeado en el control interno */
+.fi-fo .choices__inner,
+.fi-form .choices__inner,
+.fi-modal-window .choices__inner,
+.fi-fo .ts-control,
+.fi-form .ts-control,
+.fi-modal-window .ts-control,
+.fi-fo .fi-select-input,
+.fi-form .fi-select-input,
+.fi-modal-window .fi-select-input {
+    border: 1px solid var(--bexia-field-border-strong) !important;
+    border-radius: 0.75rem !important;
+    background: #ffffff !important;
+    box-shadow: var(--bexia-field-shadow-strong) !important;
+    min-height: 2.75rem !important;
+}
+
+/* 3) Hover/focus del control interno */
+.fi-fo .choices__inner:hover,
+.fi-form .choices__inner:hover,
+.fi-modal-window .choices__inner:hover,
+.fi-fo .ts-control:hover,
+.fi-form .ts-control:hover,
+.fi-modal-window .ts-control:hover,
+.fi-fo .fi-select-input:hover,
+.fi-form .fi-select-input:hover,
+.fi-modal-window .fi-select-input:hover {
+    border-color: var(--bexia-field-border-strong-hover) !important;
+}
+
+.fi-fo .choices.is-focused .choices__inner,
+.fi-form .choices.is-focused .choices__inner,
+.fi-modal-window .choices.is-focused .choices__inner,
+.fi-fo .ts-wrapper.focus .ts-control,
+.fi-form .ts-wrapper.focus .ts-control,
+.fi-modal-window .ts-wrapper.focus .ts-control,
+.fi-fo .fi-select-input:focus,
+.fi-form .fi-select-input:focus,
+.fi-modal-window .fi-select-input:focus,
+.fi-fo .fi-input-wrp:has(.choices__inner):focus-within .choices__inner,
+.fi-form .fi-input-wrp:has(.choices__inner):focus-within .choices__inner,
+.fi-modal-window .fi-input-wrp:has(.choices__inner):focus-within .choices__inner,
+.fi-fo .fi-input-wrp:has(.ts-control):focus-within .ts-control,
+.fi-form .fi-input-wrp:has(.ts-control):focus-within .ts-control,
+.fi-modal-window .fi-input-wrp:has(.ts-control):focus-within .ts-control {
+    border-color: var(--bexia-field-border-strong-focus) !important;
+    box-shadow:
+        var(--bexia-field-focus-ring-strong),
+        var(--bexia-field-shadow-strong) !important;
+}
+
+/* 4) Afinar padding interno para que no se vea apretado */
+.fi-fo .choices__inner,
+.fi-form .choices__inner,
+.fi-modal-window .choices__inner {
+    padding-top: 0.22rem !important;
+    padding-bottom: 0.22rem !important;
+}
+
+.fi-fo .choices[data-type*="select-one"] .choices__inner,
+.fi-form .choices[data-type*="select-one"] .choices__inner,
+.fi-modal-window .choices[data-type*="select-one"] .choices__inner {
+    padding-bottom: 0.22rem !important;
+}
+
+/* BEXIA_SELECT_DOUBLE_BORDER_FIX_V5_79_12B3_END */
+
+/* BEXIA_SELECT_VERTICAL_ALIGN_FIX_V5_79_12B5_START */
+
+/* Centrado vertical de selects/dropdowns Filament */
+.fi-fo .fi-select-input,
+.fi-form .fi-select-input,
+.fi-modal-window .fi-select-input {
+    min-height: 2.75rem !important;
+    height: 2.75rem !important;
+    line-height: 1.25rem !important;
+    padding-top: 0.68rem !important;
+    padding-bottom: 0.68rem !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Choices.js: texto seleccionado centrado */
+.fi-fo .choices__inner,
+.fi-form .choices__inner,
+.fi-modal-window .choices__inner {
+    min-height: 2.75rem !important;
+    height: 2.75rem !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 0.75rem !important;
+}
+
+.fi-fo .choices__list--single,
+.fi-form .choices__list--single,
+.fi-modal-window .choices__list--single {
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 !important;
+    min-height: 2.65rem !important;
+    line-height: 1.25rem !important;
+}
+
+.fi-fo .choices__item--selectable,
+.fi-form .choices__item--selectable,
+.fi-modal-window .choices__item--selectable {
+    display: flex !important;
+    align-items: center !important;
+    min-height: 1.5rem !important;
+    line-height: 1.25rem !important;
+}
+
+/* TomSelect: texto seleccionado centrado */
+.fi-fo .ts-control,
+.fi-form .ts-control,
+.fi-modal-window .ts-control {
+    min-height: 2.75rem !important;
+    height: 2.75rem !important;
+    display: flex !important;
+    align-items: center !important;
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+    line-height: 1.25rem !important;
+}
+
+.fi-fo .ts-control > input,
+.fi-form .ts-control > input,
+.fi-modal-window .ts-control > input,
+.fi-fo .ts-control .item,
+.fi-form .ts-control .item,
+.fi-modal-window .ts-control .item {
+    line-height: 1.25rem !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+/* Select con botón limpiar X / iconos */
+.fi-fo .fi-input-wrp:has(.fi-select-input),
+.fi-form .fi-input-wrp:has(.fi-select-input),
+.fi-modal-window .fi-input-wrp:has(.fi-select-input) {
+    min-height: 2.75rem !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+.fi-fo .fi-input-wrp:has(.fi-select-input) .fi-input-wrp-prefix,
+.fi-form .fi-input-wrp:has(.fi-select-input) .fi-input-wrp-prefix,
+.fi-modal-window .fi-input-wrp:has(.fi-select-input) .fi-input-wrp-prefix,
+.fi-fo .fi-input-wrp:has(.fi-select-input) .fi-input-wrp-suffix,
+.fi-form .fi-input-wrp:has(.fi-select-input) .fi-input-wrp-suffix,
+.fi-modal-window .fi-input-wrp:has(.fi-select-input) .fi-input-wrp-suffix {
+    display: flex !important;
+    align-items: center !important;
+    min-height: 2.75rem !important;
+}
+
+/* BEXIA_SELECT_VERTICAL_ALIGN_FIX_V5_79_12B5_END */\n/* BEXIA_FORMS_MODALS_PREMIUM_V5_79_12B_END */
 </style>
 <script>
 (function () {
