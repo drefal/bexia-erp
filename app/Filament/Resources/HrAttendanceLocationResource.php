@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\HrAttendanceLocationResource\Pages;
 use App\Models\Branch;
+use App\Models\Employee;
 use App\Models\HrAttendanceLocation;
 use Filament\Facades\Filament;
 use Filament\Forms;
@@ -12,6 +13,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 class HrAttendanceLocationResource extends Resource
 {
@@ -201,6 +203,72 @@ class HrAttendanceLocationResource extends Resource
                             ->maxValue(5000)
                             ->helperText('Opcional. Si el celular reporta peor precisión, se marca para revisión.'),
                     ]),
+
+
+
+                Forms\Components\Section::make('Empleados asignados')
+                    ->description('Selecciona los empleados que podrán checar usando esta geocerca. Después presiona Guardar cambios.')
+                    ->schema([
+                        Forms\Components\Placeholder::make('assigned_employees_summary')
+                            ->label('Resumen actual')
+                            ->content(function (?HrAttendanceLocation $record): string {
+                                if (! $record?->exists) {
+                                    return 'Guarda primero la geocerca para asignar empleados.';
+                                }
+
+                                $active = DB::table('employee_attendance_location_assignments')
+                                    ->where('company_id', $record->company_id)
+                                    ->where('hr_attendance_location_id', $record->id)
+                                    ->where('is_active', true)
+                                    ->count();
+
+                                return 'Empleados activos asignados: ' . $active;
+                            }),
+
+                        Forms\Components\Select::make('assigned_employee_ids')
+                            ->label('Empleados asignados a esta geocerca')
+                            ->helperText('Puedes seleccionar uno o varios empleados. Al guardar, se reemplaza la asignación activa de esta geocerca.')
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->dehydrated(false)
+                            ->options(function (?HrAttendanceLocation $record): array {
+                                $companyId = $record?->company_id ?? Filament::getTenant()?->id;
+
+                                if (! $companyId) {
+                                    return [];
+                                }
+
+                                return Employee::query()
+                                    ->where('company_id', $companyId)
+                                    ->where('active', true)
+                                    ->orderBy('name')
+                                    ->get()
+                                    ->mapWithKeys(fn (Employee $employee): array => [
+                                        $employee->id => trim(($employee->employee_number ? $employee->employee_number . ' - ' : '') . $employee->name),
+                                    ])
+                                    ->all();
+                            })
+                            ->afterStateHydrated(function (Forms\Components\Select $component, ?HrAttendanceLocation $record): void {
+                                if (! $record?->exists) {
+                                    $component->state([]);
+
+                                    return;
+                                }
+
+                                $component->state(
+                                    DB::table('employee_attendance_location_assignments')
+                                        ->where('company_id', $record->company_id)
+                                        ->where('hr_attendance_location_id', $record->id)
+                                        ->where('is_active', true)
+                                        ->pluck('employee_id')
+                                        ->map(fn ($id) => (string) $id)
+                                        ->values()
+                                        ->all()
+                                );
+                            }),
+                    ])
+                    ->columns(1),
 
                 Forms\Components\Section::make('Reglas')
                     ->columns(3)
