@@ -212,6 +212,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
 
 
                 Forms\Components\Tabs::make('Detalle')
+                    ->extraAttributes(['class' => 'bexia-sale-order-resource-tabs'])
                     ->columnSpanFull()
                     ->tabs([
                         Forms\Components\Tabs\Tab::make('Líneas')
@@ -1663,7 +1664,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
         };
 
         $html = sprintf(
-            '<div style="display:inline-block;padding:6px 9px;border-radius:10px;background:%s;color:%s;font-weight:700;font-size:12px;line-height:1.2;">%s %s<br><span style="font-weight:500;font-size:11px;">Costo: $%s · Margen: %s%%</span></div>',
+            '<div class="bexia-sale-order-margin-preview" style="display:inline-block;padding:6px 9px;border-radius:10px;background:%s;color:%s;font-weight:700;font-size:12px;line-height:1.2;">%s %s<br><span style="font-weight:500;font-size:11px;">Costo: $%s · Margen: %s%%</span></div>',
             $background,
             $color,
             $icon,
@@ -2419,6 +2420,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
     {
         return [
             \Filament\Forms\Components\Placeholder::make('pending_pos_ticket_notice')
+                ->extraAttributes(['class' => 'bexia-sale-order-modal-block bexia-sale-order-pending-pos-ticket-field'])
                 ->label('')
                 ->content(fn () => self::quotePendingPosTicketNotice($record))
                 ->visible(function () use ($record): bool {
@@ -2433,6 +2435,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                 }),
 
             \Filament\Forms\Components\Placeholder::make('quote_summary')
+                ->extraAttributes(['class' => 'bexia-sale-order-modal-block bexia-sale-order-quote-summary-field'])
                 ->label('Cotización')
                 ->content(function () use ($record): \Illuminate\Support\HtmlString {
                     $number = htmlspecialchars((string) ($record->number ?? 'Sin folio'), ENT_QUOTES, 'UTF-8');
@@ -2458,13 +2461,14 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                 ->helperText('Solo se muestran PDVs activos con sesión abierta. Al generar el ticket se validará la existencia contra el almacén y ubicación configurados en ese PDV.'),
 
             \Filament\Forms\Components\Placeholder::make('pos_validation_preview')
+                ->extraAttributes(['class' => 'bexia-sale-order-modal-block bexia-sale-order-pos-validation-field'])
                 ->label('Validación')
                 ->content(function (\Filament\Forms\Get $get) use ($record): \Illuminate\Support\HtmlString {
                     $posPointId = (int) ($get('pos_point_id') ?? 0);
 
                     if ($posPointId <= 0) {
                         return new \Illuminate\Support\HtmlString(
-                            '<div style="padding:10px;border-radius:10px;background:#f8fafc;color:#64748b;">Selecciona un PDV con sesión abierta para validar existencia.</div>'
+                            '<div class="bexia-sale-order-pos-validation bexia-sale-order-pos-validation--neutral" style="padding:10px;border-radius:10px;background:#f8fafc;color:#64748b;">Selecciona un PDV con sesión abierta para validar existencia.</div>'
                         );
                     }
 
@@ -2473,7 +2477,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                             ->validateQuoteForPosPoint((int) $record->getKey(), $posPointId);
                     } catch (\Throwable $e) {
                         return new \Illuminate\Support\HtmlString(
-                            '<div style="padding:10px;border-radius:10px;background:#fef2f2;color:#991b1b;">'
+                            '<div class="bexia-sale-order-pos-validation bexia-sale-order-pos-validation--danger" style="padding:10px;border-radius:10px;background:#fef2f2;color:#991b1b;">'
                             . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8')
                             . '</div>'
                         );
@@ -2484,7 +2488,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                     $stockLines = $result['stock_lines'] ?? [];
 
                     if (! empty($errors)) {
-                        $html = '<div style="padding:10px;border-radius:10px;background:#fef2f2;color:#991b1b;">';
+                        $html = '<div class="bexia-sale-order-pos-validation bexia-sale-order-pos-validation--danger-list" style="padding:10px;border-radius:10px;background:#fef2f2;color:#991b1b;">';
                         $html .= '<strong>No se puede generar el ticket pendiente:</strong><ul style="margin:6px 0 0 18px;">';
 
                         foreach ($errors as $error) {
@@ -2496,7 +2500,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                         return new \Illuminate\Support\HtmlString($html);
                     }
 
-                    $html = '<div style="padding:10px;border-radius:10px;background:#ecfdf5;color:#065f46;">';
+                    $html = '<div class="bexia-sale-order-pos-validation bexia-sale-order-pos-validation--success" style="padding:10px;border-radius:10px;background:#ecfdf5;color:#065f46;">';
                     $html .= '<strong>Validación correcta.</strong><br>El PDV tiene sesión abierta y la existencia es suficiente para los productos inventariables.';
 
                     if (! empty($warnings)) {
@@ -2510,7 +2514,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
                     }
 
                     if (! empty($stockLines)) {
-                        $html .= '<div style="margin-top:8px;font-size:12px;color:#065f46;">';
+                        $html .= '<div class="bexia-sale-order-stock-lines" style="margin-top:8px;font-size:12px;color:#065f46;">';
 
                         foreach ($stockLines as $line) {
                             $product = htmlspecialchars((string) ($line['product_name'] ?? 'Producto'), ENT_QUOTES, 'UTF-8');
@@ -2583,7 +2587,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
         $html .= 'PDV: ' . $pos . '<br>';
         $html .= 'Total: $' . $total . '<br>';
 
-        $html .= '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">';
+        $html .= '<div class="bexia-sale-order-pending-pos-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">';
 
         if ($printUrl) {
             $html .= '<a href="' . htmlspecialchars($printUrl, ENT_QUOTES, 'UTF-8') . '" target="_blank" style="display:inline-block;padding:7px 10px;border-radius:8px;background:#2563eb;color:white;text-decoration:none;font-weight:600;">Imprimir ticket</a>';
@@ -3200,7 +3204,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
 
         if (empty($data)) {
             return new \Illuminate\Support\HtmlString(
-                '<div style="padding:12px;border-radius:12px;background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;">'
+                '<div class="bexia-sale-order-pos-tracking-empty" style="padding:12px;border-radius:12px;background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;">'
                 . 'Esta cotización todavía no tiene ticket PDV generado.'
                 . '</div>'
             );
@@ -3226,8 +3230,8 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             ? '#ecfdf5'
             : '#fffbeb';
 
-        $html = '<div style="padding:14px;border-radius:14px;background:#ffffff;border:1px solid #e5e7eb;">';
-        $html .= '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px;">';
+        $html = '<div class="bexia-sale-order-pos-tracking-card" style="padding:14px;border-radius:14px;background:#ffffff;border:1px solid #e5e7eb;">';
+        $html .= '<div class="bexia-sale-order-pos-tracking-header" style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px;">';
         $html .= '<div>';
         $html .= '<div style="font-size:13px;color:#64748b;">Seguimiento PDV</div>';
         $html .= '<div style="font-size:18px;font-weight:700;color:#0f172a;">' . ($ticket !== '' ? $ticket : 'Ticket PDV') . '</div>';
@@ -3246,7 +3250,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             'Estado inventario' => $inventory,
         ];
 
-        $html .= '<div style="display:grid;grid-template-columns:180px 1fr;gap:7px 12px;font-size:13px;">';
+        $html .= '<div class="bexia-sale-order-pos-tracking-grid" style="display:grid;grid-template-columns:180px 1fr;gap:7px 12px;font-size:13px;">';
 
         foreach ($rows as $label => $value) {
             if ($value === '') {
@@ -3283,6 +3287,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             ->modalWidth('2xl')
             ->form([
                 \Filament\Forms\Components\Placeholder::make('quote_pos_tracking')
+                    ->extraAttributes(['class' => 'bexia-sale-order-modal-block bexia-sale-order-pos-tracking-field'])
                     ->label('')
                     ->content(fn () => self::quotePosTrackingHtml($record)),
             ]);
@@ -3301,6 +3306,7 @@ protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
             ->modalWidth('2xl')
             ->form(fn (SaleOrder $record): array => [
                 \Filament\Forms\Components\Placeholder::make('quote_pos_tracking')
+                    ->extraAttributes(['class' => 'bexia-sale-order-modal-block bexia-sale-order-pos-tracking-field'])
                     ->label('')
                     ->content(fn () => self::quotePosTrackingHtml($record)),
             ]);
