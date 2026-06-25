@@ -1121,6 +1121,7 @@ public static function canCreate(): bool
                     ->columnSpanFull(),
 
                 Forms\Components\Tabs::make('Producto')
+                            ->extraAttributes(['class' => 'bexia-product-resource-tabs'])
                     ->tabs([
                         Forms\Components\Tabs\Tab::make('Información general')
                             ->schema([
@@ -1462,6 +1463,7 @@ Forms\Components\Section::make('Atributos de catálogo')
                                 ->visible(fn (?\Illuminate\Database\Eloquent\Model $record): bool => ! request()->filled('parent_product_id') && ! (bool) ($record?->is_variant ?? false))
 ->schema([
                                         Forms\Components\Repeater::make('attributeAssignments')
+                                            ->extraAttributes(['class' => 'bexia-product-resource-repeater bexia-product-attribute-repeater'])
                                             ->label('Atributos del producto')
                                             ->relationship('attributeAssignments')
                                             ->schema([
@@ -1507,6 +1509,7 @@ Forms\Components\Section::make('Atributos de catálogo')
                                     ->description('Puedes agregar varias imágenes. Para variantes, captura imágenes específicas en la variante. Si una variante no tiene imagen, después podrá heredar la imagen del producto base.')
                                     ->schema([
                                         Forms\Components\Repeater::make('images')
+                                            ->extraAttributes(['class' => 'bexia-product-resource-repeater bexia-product-images-repeater'])
                                             ->label('Imágenes del producto')
                                             ->relationship('images')
                                             ->schema([
@@ -1622,6 +1625,7 @@ Forms\Components\Section::make('Atributos de catálogo')
                                         ->description('Configura las unidades de compra y su equivalencia contra la unidad base del producto.')
                                         ->schema([
                                             Forms\Components\Repeater::make('purchaseUnits')
+                                                ->extraAttributes(['class' => 'bexia-product-resource-repeater bexia-product-purchase-units-repeater'])
                                                 ->label('')
                                                 ->relationship('purchaseUnits')
                                                 ->schema([
@@ -2973,7 +2977,8 @@ public static function getPages(): array
             return new HtmlString('<span style="color:#6b7280;">Aún no hay compras registradas para este producto.</span>');
         }
 
-        $html = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+        $html = '<div class="bexia-product-resource-table-wrap" role="region" aria-label="Últimas compras" tabindex="0">';
+        $html .= '<table class="bexia-product-resource-table" style="width:100%;border-collapse:collapse;font-size:12px;">';
         $html .= '<thead><tr>';
         $html .= '<th style="text-align:left;border-bottom:1px solid #e5e7eb;padding:4px;">Fecha</th>';
         $html .= '<th style="text-align:left;border-bottom:1px solid #e5e7eb;padding:4px;">Proveedor</th>';
@@ -2992,7 +2997,7 @@ public static function getPages(): array
             $html .= '</tr>';
         }
 
-        $html .= '</tbody></table>';
+        $html .= '</tbody></table></div>';
 
         return new HtmlString($html);
     }

@@ -1853,4 +1853,107 @@ button[role="switch"] > span {
 }
 
 /* BEXIA_RESPONSIVE_MOBILE_TABLET_V5_79_13B_END */
+
+/* BEXIA_PRODUCT_RESOURCE_RESPONSIVE_V5_79_18C3_START */
+/*
+ * ProductResource responsive refinements.
+ * Alcance: formulario de productos, tabs, repeaters y tablas HTML internas.
+ * No cambia datos ni permisos; solo evita desbordes horizontales en pantallas chicas.
+ */
+.bexia-product-resource-tabs {
+    max-width: 100% !important;
+}
+
+.bexia-product-resource-tabs .fi-tabs,
+.bexia-product-resource-tabs [role="tablist"] {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+}
+
+.bexia-product-resource-tabs [role="tab"] {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+}
+
+.bexia-product-resource-repeater,
+.bexia-product-resource-repeater .fi-fo-repeater,
+.bexia-product-resource-repeater .fi-fo-repeater-item,
+.bexia-product-resource-repeater .fi-fo-component-ctn {
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+}
+
+.bexia-product-resource-repeater .fi-fo-field-wrp,
+.bexia-product-resource-repeater .fi-input-wrp,
+.bexia-product-resource-repeater .fi-select-input,
+.bexia-product-resource-repeater input:not([type="checkbox"]):not([type="radio"]),
+.bexia-product-resource-repeater select,
+.bexia-product-resource-repeater textarea {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+.bexia-product-resource-table-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 12px !important;
+}
+
+.bexia-product-resource-table {
+    width: 100% !important;
+    min-width: 680px !important;
+}
+
+.bexia-product-resource-table th,
+.bexia-product-resource-table td {
+    white-space: nowrap !important;
+}
+
+@media (max-width: 1024px) {
+    .bexia-product-resource-tabs .fi-section,
+    .bexia-product-resource-tabs .fi-fo-component-ctn,
+    .bexia-product-resource-tabs .fi-grid,
+    .bexia-product-resource-tabs .grid {
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-product-resource-tabs .fi-section,
+    .bexia-product-resource-tabs .fi-fo-repeater-item {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .bexia-product-resource-table {
+        min-width: 620px !important;
+        font-size: 11px !important;
+    }
+
+    .bexia-product-resource-table th,
+    .bexia-product-resource-table td {
+        padding: 5px !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-product-resource-tabs [role="tab"] {
+        font-size: 0.78rem !important;
+        padding-left: 0.7rem !important;
+        padding-right: 0.7rem !important;
+    }
+
+    .bexia-product-resource-repeater .fi-fo-repeater-item {
+        border-radius: 14px !important;
+    }
+}
+/* BEXIA_PRODUCT_RESOURCE_RESPONSIVE_V5_79_18C3_END */
+
 </style>
