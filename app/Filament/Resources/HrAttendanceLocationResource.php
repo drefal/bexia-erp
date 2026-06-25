@@ -17,6 +17,10 @@ class HrAttendanceLocationResource extends Resource
 {
     protected static ?string $model = HrAttendanceLocation::class;
 
+    protected static ?string $tenantOwnershipRelationshipName = 'company';
+
+    protected static ?string $tenantRelationshipName = 'hrAttendanceLocations';
+
     protected static ?string $navigationIcon = 'heroicon-o-map-pin';
 
     protected static ?string $navigationGroup = 'RRHH';
@@ -131,6 +135,17 @@ class HrAttendanceLocationResource extends Resource
                             ->rows(2)
                             ->columnSpanFull(),
 
+                        Forms\Components\Select::make('geofence_type')
+                            ->label('Tipo de geocerca')
+                            ->options([
+                                'circle' => 'Círculo: centro + radio',
+                                'polygon' => 'Polígono: forma dibujada por puntos',
+                            ])
+                            ->default('circle')
+                            ->required()
+                            ->live()
+                            ->helperText('Puedes capturar el polígono escribiendo coordenadas JSON o usando el mapa visual inferior.'),
+
                         Forms\Components\TextInput::make('latitude')
                             ->label('Latitud')
                             ->numeric()
@@ -149,7 +164,35 @@ class HrAttendanceLocationResource extends Resource
                             ->minValue(10)
                             ->maxValue(5000)
                             ->default(100)
-                            ->required(),
+                            ->required()
+                            ->visible(fn (Forms\Get $get): bool => ($get('geofence_type') ?: 'circle') === 'circle'),
+
+                        Forms\Components\Textarea::make('polygon_coordinates')
+                            ->label('Coordenadas del polígono')
+                            ->rows(8)
+                            ->columnSpanFull()
+                            ->visible(fn (Forms\Get $get): bool => ($get('geofence_type') ?: 'circle') === 'polygon')
+                            ->helperText('Formato: [[lat,lng],[lat,lng],[lat,lng]]. Ejemplo: [[19.357633,-99.107700],[19.357567,-99.106894],[19.358600,-99.106870],[19.358673,-99.107488]]')
+                            ->dehydrateStateUsing(function ($state) {
+                                if (blank($state)) {
+                                    return null;
+                                }
+
+                                if (is_array($state)) {
+                                    return $state;
+                                }
+
+                                $decoded = json_decode((string) $state, true);
+
+                                return is_array($decoded) ? $decoded : null;
+                            })
+                            ->formatStateUsing(fn ($state) => is_array($state) ? json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : $state),
+
+                        Forms\Components\ViewField::make('geofence_map_picker')
+                            ->label('Mapa')
+                            ->view('filament.forms.components.geofence-map-picker')
+                            ->dehydrated(false)
+                            ->columnSpanFull(),
 
                         Forms\Components\TextInput::make('accuracy_required_meters')
                             ->label('Precisión GPS máxima aceptada')
@@ -201,6 +244,12 @@ class HrAttendanceLocationResource extends Resource
                     ->searchable()
                     ->toggleable(),
 
+                Tables\Columns\TextColumn::make('geofence_type')
+                    ->label('Tipo')
+                    ->formatStateUsing(fn (?string $state): string => $state === 'polygon' ? 'Polígono' : 'Círculo')
+                    ->badge()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('latitude')
                     ->label('Latitud')
                     ->toggleable(),
@@ -212,7 +261,8 @@ class HrAttendanceLocationResource extends Resource
                 Tables\Columns\TextColumn::make('radius_meters')
                     ->label('Radio')
                     ->suffix(' m')
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
 
                 Tables\Columns\IconColumn::make('allow_mobile_clock_in')
                     ->label('Móvil')
@@ -242,8 +292,68 @@ class HrAttendanceLocationResource extends Resource
             ->defaultSort('name');
     }
 
+
+    protected static function normalizePolygonCoordinates(array $data): array
+    {
+        $type = $data['geofence_type'] ?? 'circle';
+
+        if ($type !== 'polygon') {
+            $data['polygon_coordinates'] = null;
+
+            return $data;
+        }
+
+        $points = $data['polygon_coordinates'] ?? null;
+
+        if (is_string($points)) {
+            $decoded = json_decode($points, true);
+            $points = is_array($decoded) ? $decoded : null;
+        }
+
+        if (! is_array($points) || count($points) < 3) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'polygon_coordinates' => 'El polígono debe tener al menos 3 puntos en formato [[lat,lng],[lat,lng],[lat,lng]].',
+            ]);
+        }
+
+        $normalized = collect($points)
+            ->map(function ($point): ?array {
+                if (! is_array($point) || count($point) < 2) {
+                    return null;
+                }
+
+                $lat = (float) $point[0];
+                $lng = (float) $point[1];
+
+                if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+                    return null;
+                }
+
+                return [$lat, $lng];
+            })
+            ->filter()
+            ->values()
+            ->all();
+
+        if (count($normalized) < 3) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'polygon_coordinates' => 'El polígono debe tener al menos 3 puntos válidos.',
+            ]);
+        }
+
+        $data['polygon_coordinates'] = $normalized;
+
+        if (empty($data['radius_meters'])) {
+            $data['radius_meters'] = 100;
+        }
+
+        return $data;
+    }
+
     public static function mutateFormDataBeforeCreate(array $data): array
     {
+        $data = static::normalizePolygonCoordinates($data);
+
         $data['company_id'] = $data['company_id'] ?? Filament::getTenant()?->getKey();
         $data['created_by_user_id'] = auth()->id();
         $data['updated_by_user_id'] = auth()->id();
@@ -253,6 +363,8 @@ class HrAttendanceLocationResource extends Resource
 
     public static function mutateFormDataBeforeSave(array $data): array
     {
+        $data = static::normalizePolygonCoordinates($data);
+
         $data['updated_by_user_id'] = auth()->id();
 
         return $data;

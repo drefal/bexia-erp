@@ -13,9 +13,11 @@ class HrAttendanceLocation extends Model
         'name',
         'code',
         'address',
+        'geofence_type',
         'latitude',
         'longitude',
         'radius_meters',
+        'polygon_coordinates',
         'accuracy_required_meters',
         'allow_mobile_clock_in',
         'requires_review_when_outside',
@@ -29,11 +31,47 @@ class HrAttendanceLocation extends Model
         'latitude' => 'decimal:7',
         'longitude' => 'decimal:7',
         'radius_meters' => 'integer',
+        'polygon_coordinates' => 'array',
         'accuracy_required_meters' => 'integer',
         'allow_mobile_clock_in' => 'boolean',
         'requires_review_when_outside' => 'boolean',
         'is_active' => 'boolean',
     ];
+
+
+    public function usesPolygonGeofence(): bool
+    {
+        return ($this->geofence_type ?: 'circle') === 'polygon';
+    }
+
+    public function polygonPoints(): array
+    {
+        $points = $this->polygon_coordinates;
+
+        if (is_string($points)) {
+            $decoded = json_decode($points, true);
+            $points = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($points)) {
+            return [];
+        }
+
+        return collect($points)
+            ->map(function ($point): ?array {
+                if (! is_array($point) || count($point) < 2) {
+                    return null;
+                }
+
+                return [
+                    (float) $point[0],
+                    (float) $point[1],
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
 
     public function company(): BelongsTo
     {

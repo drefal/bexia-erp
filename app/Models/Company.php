@@ -240,4 +240,11 @@ class Company extends Model implements HasAvatar
         return $this->hasMany(\App\Models\RepairOrderApproval::class, 'company_id');
     }
 
+
+    public function hrAttendanceLocations(): HasMany
+    {
+        return $this->hasMany(HrAttendanceLocation::class);
+    }
+
+
 }

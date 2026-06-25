@@ -30,6 +30,49 @@ final class GeofenceDistance
         return $distanceMeters <= $radiusMeters ? 'inside' : 'outside';
     }
 
+
+    /**
+     * @param array<int, array{0: float|int|string, 1: float|int|string}> $polygon
+     */
+    public static function pointInPolygon(float $latitude, float $longitude, array $polygon): bool
+    {
+        $points = array_values(array_filter($polygon, fn ($point) => is_array($point) && count($point) >= 2));
+
+        if (count($points) < 3) {
+            return false;
+        }
+
+        $inside = false;
+        $j = count($points) - 1;
+
+        for ($i = 0, $count = count($points); $i < $count; $i++) {
+            $latI = (float) $points[$i][0];
+            $lngI = (float) $points[$i][1];
+            $latJ = (float) $points[$j][0];
+            $lngJ = (float) $points[$j][1];
+
+            $intersects = (($lngI > $longitude) !== ($lngJ > $longitude))
+                && ($latitude < ($latJ - $latI) * ($longitude - $lngI) / (($lngJ - $lngI) ?: 0.0000000001) + $latI);
+
+            if ($intersects) {
+                $inside = ! $inside;
+            }
+
+            $j = $i;
+        }
+
+        return $inside;
+    }
+
+    public static function polygonStatus(float $latitude, float $longitude, array $polygon, ?int $accuracyMeters = null, ?int $accuracyRequiredMeters = null): string
+    {
+        if ($accuracyRequiredMeters !== null && $accuracyMeters !== null && $accuracyMeters > $accuracyRequiredMeters) {
+            return 'poor_accuracy';
+        }
+
+        return static::pointInPolygon($latitude, $longitude, $polygon) ? 'inside' : 'outside';
+    }
+
     public static function label(?string $status): string
     {
         return match ($status) {
