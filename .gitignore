@@ -86,3 +86,16 @@ resumen_*.txt
 !/.gitattributes
 !/.gitignore
 !/.env.example
+
+# BEXIA_BACKUP_TEMP_FILES_START
+# Backups temporales generados por scripts de mantenimiento Bexia.
+*.bak
+*.bak_*
+*.broken_*
+*.disabled_*
+*.orig
+*.old
+*.tmp
+*~
+# BEXIA_BACKUP_TEMP_FILES_END
+
