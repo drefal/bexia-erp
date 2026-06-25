@@ -1956,4 +1956,142 @@ button[role="switch"] > span {
 }
 /* BEXIA_PRODUCT_RESOURCE_RESPONSIVE_V5_79_18C3_END */
 
+
+/* BEXIA_SALE_ORDER_RESOURCE_RESPONSIVE_V5_79_19C_START */
+/*
+ * SaleOrderResource responsive refinements.
+ * Alcance: formulario de venta, tabs de detalle, previews de margen,
+ * modales de cotización a PDV y seguimiento PDV.
+ * No cambia datos, totales, estados ni permisos; solo evita desbordes visuales.
+ */
+.bexia-sale-order-resource-tabs {
+    max-width: 100% !important;
+}
+
+.bexia-sale-order-resource-tabs .fi-tabs,
+.bexia-sale-order-resource-tabs [role="tablist"] {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+}
+
+.bexia-sale-order-resource-tabs [role="tab"] {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+}
+
+.bexia-sale-order-resource-tabs .fi-section,
+.bexia-sale-order-resource-tabs .fi-fo-component-ctn,
+.bexia-sale-order-resource-tabs .fi-grid,
+.bexia-sale-order-resource-tabs .grid {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+.bexia-sale-order-modal-block,
+.bexia-sale-order-quote-summary,
+.bexia-sale-order-pos-validation,
+.bexia-sale-order-pending-pos-ticket,
+.bexia-sale-order-pos-tracking-empty,
+.bexia-sale-order-pos-tracking-card,
+.bexia-sale-order-stock-lines {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+}
+
+.bexia-sale-order-pos-validation ul {
+    max-width: 100% !important;
+    padding-left: 1.15rem !important;
+}
+
+.bexia-sale-order-pos-validation li,
+.bexia-sale-order-stock-lines {
+    line-height: 1.45 !important;
+}
+
+.bexia-sale-order-pending-pos-actions {
+    max-width: 100% !important;
+}
+
+.bexia-sale-order-pending-pos-actions a {
+    max-width: 100% !important;
+    text-align: center !important;
+    white-space: normal !important;
+}
+
+.bexia-sale-order-pos-tracking-header {
+    max-width: 100% !important;
+}
+
+.bexia-sale-order-pos-tracking-grid {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    grid-template-columns: minmax(130px, 180px) minmax(0, 1fr) !important;
+}
+
+.bexia-sale-order-pos-tracking-grid > div {
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.bexia-sale-order-margin-preview {
+    max-width: 100% !important;
+    white-space: normal !important;
+}
+
+@media (max-width: 768px) {
+    .bexia-sale-order-resource-tabs [role="tab"] {
+        font-size: 0.8rem !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    .bexia-sale-order-resource-tabs .fi-section {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .bexia-sale-order-modal-block {
+        overflow-x: hidden !important;
+    }
+
+    .bexia-sale-order-pos-tracking-grid {
+        grid-template-columns: 1fr !important;
+        gap: 4px 0 !important;
+    }
+
+    .bexia-sale-order-pos-tracking-grid > div:nth-child(odd) {
+        font-size: 0.74rem !important;
+        margin-top: 0.35rem !important;
+    }
+
+    .bexia-sale-order-pos-tracking-grid > div:nth-child(even) {
+        font-size: 0.86rem !important;
+    }
+
+    .bexia-sale-order-margin-preview {
+        display: block !important;
+        width: 100% !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-sale-order-quote-summary,
+    .bexia-sale-order-pos-validation,
+    .bexia-sale-order-pending-pos-ticket,
+    .bexia-sale-order-pos-tracking-empty,
+    .bexia-sale-order-pos-tracking-card {
+        font-size: 0.86rem !important;
+    }
+
+    .bexia-sale-order-pos-tracking-card {
+        padding: 0.85rem !important;
+    }
+}
+/* BEXIA_SALE_ORDER_RESOURCE_RESPONSIVE_V5_79_19C_END */
+
 </style>
