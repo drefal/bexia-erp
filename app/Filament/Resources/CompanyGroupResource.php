@@ -59,6 +59,17 @@ public static function canCreate(): bool
         return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
+    // BEXIA_V57917C_COMPANY_GROUP_DELETE_PERMISSIONS
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return auth()->check() && auth()->user()->isSystemAdmin();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return auth()->check() && auth()->user()->isSystemAdmin();
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([

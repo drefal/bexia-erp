@@ -47,6 +47,34 @@ public static function getNavigationLabel(): string
         return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
+    // BEXIA_V57917C_ORG_CRUD_PERMISSIONS
+    protected static function bexiaCanManageOrganizations(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::bexiaCanManageOrganizations();
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::bexiaCanManageOrganizations();
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::bexiaCanManageOrganizations();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::bexiaCanManageOrganizations();
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([

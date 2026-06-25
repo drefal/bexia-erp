@@ -17,7 +17,56 @@ class OrganizationResource extends Resource
 {
     protected static ?string $model = Organization::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-building-library';
+
+    // BEXIA_V57917C_ADMIN_ORG_NAV
+    protected static ?string $navigationGroup = 'Configuración Bexia';
+
+    protected static ?int $navigationSort = 10;
+
+    protected static ?string $navigationLabel = 'Clientes Bexia';
+
+    protected static ?string $modelLabel = 'Cliente Bexia';
+
+    protected static ?string $pluralModelLabel = 'Clientes Bexia';
+
+    // BEXIA_V57917C_ADMIN_ORG_PERMISSIONS
+    protected static function bexiaCanManageGlobalOrganizations(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::bexiaCanManageGlobalOrganizations();
+    }
+
+    public static function canViewAny(): bool
+    {
+        return static::bexiaCanManageGlobalOrganizations();
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::bexiaCanManageGlobalOrganizations();
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::bexiaCanManageGlobalOrganizations();
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::bexiaCanManageGlobalOrganizations();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::bexiaCanManageGlobalOrganizations();
+    }
 
     public static function form(Form $form): Form
     {
