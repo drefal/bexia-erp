@@ -142,6 +142,7 @@ public static function canCreate(): bool
         return $form->schema([
 
                 Forms\Components\Section::make('Accesos operativos / PDV')
+                    ->extraAttributes(['class' => 'bexia-employee-operational-section'])
                     ->description('Define si el empleado puede operar como cajero o vendedor en PDV. Los permisos específicos por caja se asignan en Punto de Venta > Personal de cajas.')
                     ->columns(3)
                     ->schema([
@@ -260,6 +261,7 @@ public static function canCreate(): bool
                         ->columnSpanFull(),
 
                     Tabs::make('EmpleadoTabs')
+                        ->extraAttributes(['class' => 'bexia-employee-resource-tabs'])
                         ->tabs([
                             Tabs\Tab::make('Trabajo y horario')
                                 ->schema([
@@ -306,6 +308,7 @@ public static function canCreate(): bool
                             Tabs\Tab::make('Insignias recibidas')
                                 ->schema([
                                     Placeholder::make('badges_placeholder')
+                                        ->extraAttributes(['class' => 'bexia-employee-badges-placeholder'])
                                         ->label('Insignias')
                                         ->content('Módulo pendiente. Aquí se podrán mostrar insignias y reconocimientos del empleado.'),
                                 ]),
@@ -608,6 +611,7 @@ public static function canCreate(): bool
                             Tabs\Tab::make('Punto de venta')
                                 ->schema([
                                     Section::make('Credencial QR / asistencia publica')
+                                        ->extraAttributes(['class' => 'bexia-employee-attendance-qr-section'])
                                         ->description('Permite que el empleado registre asistencia desde una liga QR sin necesitar usuario de Bexia.')
                                         ->schema([
                                             Forms\Components\Toggle::make('attendance_qr_enabled')
@@ -621,15 +625,16 @@ public static function canCreate(): bool
                                                 ->helperText('Identificador seguro usado en la liga publica del empleado.'),
 
                                             Forms\Components\Placeholder::make('attendance_qr_url')
+                                                ->extraAttributes(['class' => 'bexia-employee-attendance-qr-url-field'])
                                                 ->label('Liga QR')
                                                 ->content(function (?Employee $record): HtmlString {
                                                     if (! $record?->attendance_qr_token) {
-                                                        return new HtmlString('<span class="text-gray-500">Se generara al guardar o ejecutar la migracion.</span>');
+                                                        return new HtmlString('<span class="bexia-employee-attendance-qr-empty text-gray-500">Se generara al guardar o ejecutar la migracion.</span>');
                                                     }
 
                                                     $url = url('/asistencia/empleado/' . $record->attendance_qr_token);
 
-                                                    return new HtmlString('<div class="space-y-2"><code class="block rounded bg-gray-100 p-2 text-xs dark:bg-gray-800">' . e($url) . '</code><a href="' . e($url) . '" target="_blank" class="text-primary-600 underline">Abrir liga de asistencia</a></div>');
+                                                    return new HtmlString('<div class="bexia-employee-attendance-qr-url space-y-2"><code class="bexia-employee-qr-code-line block rounded bg-gray-100 p-2 text-xs dark:bg-gray-800">' . e($url) . '</code><a href="' . e($url) . '" target="_blank" class="bexia-employee-qr-link text-primary-600 underline">Abrir liga de asistencia</a></div>');
                                                 })
                                                 ->columnSpanFull(),
 
@@ -642,6 +647,7 @@ public static function canCreate(): bool
                                         ->columns(2),
 
                                     Section::make('Asistencia / Punto de venta')
+                                        ->extraAttributes(['class' => 'bexia-employee-attendance-pos-section'])
                                         ->schema([
                                             TextInput::make('pin_code')
                                                 ->label('Código NIP')
@@ -864,7 +870,7 @@ public static function canCreate(): bool
                     ->modalCancelActionLabel('Cerrar')
                     ->modalContent(function (Employee $record): HtmlString {
                         if (! $record->attendance_qr_token) {
-                            return new HtmlString('<div class="text-sm text-danger-600">Este empleado no tiene token QR.</div>');
+                            return new HtmlString('<div class="bexia-employee-qr-modal-empty text-sm text-danger-600">Este empleado no tiene token QR.</div>');
                         }
 
                         $url = url('/asistencia/empleado/' . $record->attendance_qr_token);
@@ -880,17 +886,17 @@ public static function canCreate(): bool
                             $qrDataUri = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
 
                             return new HtmlString(
-                                '<div class="space-y-4">'
+                                '<div class="bexia-employee-qr-modal space-y-4">'
                                 . '<p class="text-sm text-gray-700 dark:text-gray-300">Usa esta liga o escanea el QR desde celular/tablet para registrar asistencia.</p>'
-                                . '<div class="flex justify-center">'
-                                . '<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700">'
-                                . '<img src="' . e($qrDataUri) . '" alt="QR de asistencia" class="h-64 w-64" />'
+                                . '<div class="bexia-employee-qr-modal-image-wrap flex justify-center">'
+                                . '<div class="bexia-employee-qr-modal-image-card rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700">'
+                                . '<img src="' . e($qrDataUri) . '" alt="QR de asistencia" class="bexia-employee-qr-modal-img h-64 w-64" />'
                                 . '</div>'
                                 . '</div>'
-                                . '<div class="space-y-2">'
+                                . '<div class="bexia-employee-qr-modal-link space-y-2">'
                                 . '<div class="text-xs font-medium text-gray-600 dark:text-gray-400">Liga QR</div>'
-                                . '<code class="block break-all rounded bg-gray-100 p-3 text-xs dark:bg-gray-800">' . e($url) . '</code>'
-                                . '<a href="' . e($url) . '" target="_blank" class="text-primary-600 underline">Abrir liga</a>'
+                                . '<code class="bexia-employee-qr-code-line block break-all rounded bg-gray-100 p-3 text-xs dark:bg-gray-800">' . e($url) . '</code>'
+                                . '<a href="' . e($url) . '" target="_blank" class="bexia-employee-qr-link text-primary-600 underline">Abrir liga</a>'
                                 . '</div>'
                                 . '</div>'
                             );
@@ -898,10 +904,10 @@ public static function canCreate(): bool
                             report($e);
 
                             return new HtmlString(
-                                '<div class="space-y-3">'
+                                '<div class="bexia-employee-qr-modal-fallback space-y-3">'
                                 . '<p class="text-sm">No se pudo generar el QR visual, pero la liga sigue disponible.</p>'
-                                . '<code class="block break-all rounded bg-gray-100 p-3 text-xs dark:bg-gray-800">' . e($url) . '</code>'
-                                . '<a href="' . e($url) . '" target="_blank" class="text-primary-600 underline">Abrir liga</a>'
+                                . '<code class="bexia-employee-qr-code-line block break-all rounded bg-gray-100 p-3 text-xs dark:bg-gray-800">' . e($url) . '</code>'
+                                . '<a href="' . e($url) . '" target="_blank" class="bexia-employee-qr-link text-primary-600 underline">Abrir liga</a>'
                                 . '</div>'
                             );
                         }

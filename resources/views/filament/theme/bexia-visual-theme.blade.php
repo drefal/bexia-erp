@@ -2094,4 +2094,136 @@ button[role="switch"] > span {
 }
 /* BEXIA_SALE_ORDER_RESOURCE_RESPONSIVE_V5_79_19C_END */
 
+
+/* BEXIA_EMPLOYEE_RESOURCE_RESPONSIVE_V5_79_20C_START */
+/*
+ * EmployeeResource responsive refinements.
+ * Alcance: formulario de empleado, tabs, secciones RRHH/PDV,
+ * placeholder de insignias y liga/modal QR de asistencia.
+ * No cambia tokens, asistencia, permisos, datos ni acciones.
+ */
+.bexia-employee-operational-section,
+.bexia-employee-resource-tabs,
+.bexia-employee-attendance-qr-section,
+.bexia-employee-attendance-pos-section,
+.bexia-employee-badges-placeholder,
+.bexia-employee-attendance-qr-url-field {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-employee-resource-tabs .fi-tabs,
+.bexia-employee-resource-tabs [role="tablist"] {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+}
+
+.bexia-employee-resource-tabs [role="tab"] {
+    flex: 0 0 auto !important;
+    white-space: nowrap !important;
+}
+
+.bexia-employee-resource-tabs .fi-section,
+.bexia-employee-resource-tabs .fi-fo-component-ctn,
+.bexia-employee-resource-tabs .fi-grid,
+.bexia-employee-resource-tabs .grid,
+.bexia-employee-operational-section .fi-grid,
+.bexia-employee-attendance-qr-section .fi-grid,
+.bexia-employee-attendance-pos-section .fi-grid {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
+.bexia-employee-attendance-qr-url,
+.bexia-employee-attendance-qr-empty,
+.bexia-employee-qr-modal,
+.bexia-employee-qr-modal-empty,
+.bexia-employee-qr-modal-link,
+.bexia-employee-qr-modal-fallback,
+.bexia-employee-badges-placeholder {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+}
+
+.bexia-employee-qr-code-line {
+    display: block !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    white-space: pre-wrap !important;
+    word-break: break-all !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+.bexia-employee-qr-link {
+    display: inline-flex !important;
+    max-width: 100% !important;
+    overflow-wrap: anywhere !important;
+}
+
+.bexia-employee-qr-modal-image-wrap {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+.bexia-employee-qr-modal-image-card {
+    max-width: 100% !important;
+    width: max-content !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.bexia-employee-qr-modal-img {
+    max-width: min(16rem, 100%) !important;
+    height: auto !important;
+}
+
+@media (max-width: 768px) {
+    .bexia-employee-resource-tabs [role="tab"] {
+        font-size: 0.8rem !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    .bexia-employee-resource-tabs .fi-section,
+    .bexia-employee-operational-section,
+    .bexia-employee-attendance-qr-section,
+    .bexia-employee-attendance-pos-section {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .bexia-employee-qr-modal-image-card {
+        width: 100% !important;
+        padding: 0.75rem !important;
+    }
+
+    .bexia-employee-qr-modal-img {
+        width: 100% !important;
+        max-width: 14rem !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-employee-attendance-qr-url,
+    .bexia-employee-qr-modal,
+    .bexia-employee-qr-modal-fallback,
+    .bexia-employee-qr-modal-empty {
+        font-size: 0.86rem !important;
+    }
+
+    .bexia-employee-qr-code-line {
+        font-size: 0.72rem !important;
+        padding: 0.65rem !important;
+    }
+}
+/* BEXIA_EMPLOYEE_RESOURCE_RESPONSIVE_V5_79_20C_END */
+
 </style>
