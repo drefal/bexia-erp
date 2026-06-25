@@ -242,59 +242,67 @@ public static function canCreate(): bool
                 ->columns(2),
 
             Section::make('Asistencia móvil / QR')
-                ->description('Configura el registro de asistencia por QR, geocerca y control básico de dispositivo.')
+                ->description('Configura cómo se permiten las checadas por QR, geocerca, revisión de ubicaciones y bloqueo por dispositivo para esta empresa.')
+                ->icon('heroicon-o-qr-code')
+                ->columns(2)
                 ->schema([
                     Toggle::make('attendance_qr_enabled')
-                        ->label('Permitir asistencia por QR')
+                        ->label('Permitir checadas por QR')
+                        ->helperText('Activa o desactiva el acceso público de asistencia por QR para los empleados de esta empresa.')
                         ->default(true)
-                        ->helperText('Si está apagado, los enlaces QR de empleados no deben usarse para registrar asistencia.'),
+                        ->inline(false),
 
                     Toggle::make('attendance_geofence_enabled')
                         ->label('Validar geocerca')
+                        ->helperText('Si está activo, cada checada móvil se evalúa contra las geocercas asignadas o activas de la empresa.')
                         ->default(true)
-                        ->helperText('Activa la validación de ubicación contra las geocercas registradas.'),
+                        ->inline(false),
 
                     Toggle::make('attendance_allow_outside_geofence')
-                        ->label('Permitir registro fuera de geocerca')
+                        ->label('Permitir checar fuera de geocerca')
+                        ->helperText('Si se desactiva, el empleado no podrá registrar la checada cuando esté fuera de la zona permitida.')
                         ->default(true)
-                        ->helperText('Si está apagado, se bloqueará el registro cuando el empleado esté fuera de la geocerca permitida.'),
+                        ->inline(false),
 
                     Toggle::make('attendance_review_outside_geofence')
-                        ->label('Mandar fuera de geocerca a revisión')
+                        ->label('Mandar a revisión si está fuera')
+                        ->helperText('Si está activo, la checada fuera de geocerca queda pendiente para revisión de RRHH o jefe directo.')
                         ->default(true)
-                        ->helperText('Si está activo, los registros fuera de geocerca quedan marcados para revisión administrativa.'),
+                        ->inline(false),
 
                     TextInput::make('attendance_default_radius_meters')
-                        ->label('Radio sugerido de geocerca (metros)')
+                        ->label('Radio por defecto')
+                        ->helperText('Radio inicial en metros para nuevas geocercas de tipo círculo.')
                         ->numeric()
                         ->minValue(10)
                         ->maxValue(5000)
                         ->default(200)
-                        ->helperText('Valor sugerido para nuevas geocercas.'),
+                        ->suffix('m'),
 
                     TextInput::make('attendance_default_accuracy_meters')
-                        ->label('Precisión GPS requerida (metros)')
+                        ->label('Precisión GPS máxima aceptada')
+                        ->helperText('Precisión máxima reportada por el celular. Si el GPS es menos preciso, la asistencia puede quedar en revisión.')
                         ->numeric()
                         ->minValue(10)
                         ->maxValue(5000)
                         ->default(150)
-                        ->helperText('Precisión máxima aceptable del GPS del dispositivo.'),
+                        ->suffix('m'),
 
                     Toggle::make('attendance_qr_guard_enabled')
-                        ->label('Bloquear uso sospechoso del mismo dispositivo')
+                        ->label('Bloquear mismo dispositivo entre empleados')
+                        ->helperText('Evita que un mismo celular registre asistencia para empleados distintos dentro del periodo configurado.')
                         ->default(true)
-                        ->helperText('Evita que el mismo celular/tablet registre asistencia de varios empleados en pocos minutos.'),
+                        ->inline(false),
 
                     TextInput::make('attendance_same_device_block_minutes')
-                        ->label('Minutos de bloqueo por mismo dispositivo')
+                        ->label('Minutos de bloqueo por dispositivo')
+                        ->helperText('Tiempo durante el cual el mismo dispositivo no podrá registrar otro empleado distinto.')
                         ->numeric()
-                        ->minValue(0)
+                        ->minValue(1)
                         ->maxValue(1440)
                         ->default(10)
-                        ->helperText('0 desactiva la ventana de bloqueo por tiempo.'),
-                ])
-                ->columns(2),
-
+                        ->suffix('min'),
+                ]),
 
             Section::make('Configuración PAC / Timbrado')
                 ->description('Credenciales sensibles para timbrado CFDI. Solo visible para superadmin del sistema.')
