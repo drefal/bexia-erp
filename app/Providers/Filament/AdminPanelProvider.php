@@ -1514,6 +1514,426 @@ button[role="switch"] > span {
 }
 
 /* BEXIA_SELECT_VERTICAL_ALIGN_FIX_V5_79_12B5_END */\n/* BEXIA_FORMS_MODALS_PREMIUM_V5_79_12B_END */
+
+/* BEXIA_RESPONSIVE_MOBILE_TABLET_V5_79_13B_START */
+
+/* Ajuste general para tablet */
+@media (max-width: 1024px) {
+    .fi-main,
+    .fi-main-ctn,
+    .fi-page {
+        min-width: 0 !important;
+        overflow-x: hidden !important;
+    }
+
+    .fi-page {
+        padding-inline: 1rem !important;
+    }
+
+    .fi-topbar {
+        min-width: 0 !important;
+    }
+
+    .fi-topbar nav {
+        min-width: 0 !important;
+        gap: .5rem !important;
+    }
+
+    .fi-header,
+    .fi-page-header,
+    .fi-header-heading {
+        min-width: 0 !important;
+    }
+
+    .fi-header-heading,
+    .fi-header-heading h1,
+    .fi-header-heading h2 {
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
+    }
+
+    .fi-header-actions,
+    .fi-ac,
+    .fi-ac-actions {
+        flex-wrap: wrap !important;
+        gap: .5rem !important;
+    }
+
+    .fi-modal-window {
+        width: calc(100vw - 2rem) !important;
+        max-width: calc(100vw - 2rem) !important;
+    }
+}
+
+/* Ajuste principal para móvil */
+@media (max-width: 768px) {
+    html,
+    body {
+        overflow-x: hidden !important;
+    }
+
+    .fi-main,
+    .fi-main-ctn {
+        min-width: 0 !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+    }
+
+    .fi-main {
+        padding-top: .25rem !important;
+    }
+
+    .fi-page {
+        width: 100% !important;
+        max-width: 100vw !important;
+        min-width: 0 !important;
+        padding: .75rem !important;
+        gap: .75rem !important;
+    }
+
+    .fi-header {
+        gap: .75rem !important;
+    }
+
+    .fi-header,
+    .fi-header > div,
+    .fi-page-header,
+    .fi-page-header > div {
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    .fi-header-heading h1,
+    .fi-header-heading h2,
+    .fi-header-heading {
+        font-size: 1.2rem !important;
+        line-height: 1.3 !important;
+        letter-spacing: -0.025em !important;
+        overflow-wrap: anywhere !important;
+    }
+
+    .fi-breadcrumbs,
+    .fi-breadcrumbs ol {
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        scrollbar-width: thin !important;
+    }
+
+    /* Topbar móvil */
+    .fi-topbar {
+        min-height: 3.5rem !important;
+        padding-inline: .5rem !important;
+        border-bottom: 1px solid rgba(226, 232, 240, 0.9) !important;
+    }
+
+    .fi-topbar nav {
+        min-width: 0 !important;
+        width: 100% !important;
+        gap: .35rem !important;
+    }
+
+    .fi-topbar .fi-icon-btn,
+    .fi-topbar button {
+        min-width: 2.35rem !important;
+        min-height: 2.35rem !important;
+        border-radius: .85rem !important;
+    }
+
+    .fi-topbar .fi-dropdown-trigger,
+    .fi-topbar .fi-user-menu-trigger {
+        min-width: 0 !important;
+    }
+
+    .bexia-topbar-company-switcher,
+    .bexia-approval-topbar,
+    .bexia-approval-topbar__inner {
+        max-width: 100% !important;
+        min-width: 0 !important;
+        overflow-x: auto !important;
+        scrollbar-width: thin !important;
+    }
+
+    .bexia-approval-topbar__link {
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* Cards/widgets en móvil */
+    .fi-widget,
+    .fi-section,
+    .fi-card,
+    .fi-in-card,
+    .fi-simple-page-section,
+    .bexia-dashboard-section,
+    .bexia-dashboard-section-widget {
+        border-radius: 16px !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    .fi-section-content,
+    .fi-card-content {
+        min-width: 0 !important;
+    }
+
+    /* Tablas: scroll horizontal seguro */
+    .fi-ta {
+        max-width: 100% !important;
+        overflow: hidden !important;
+        border-radius: 16px !important;
+    }
+
+    .fi-ta-header,
+    .fi-ta-header-toolbar,
+    .fi-ta-toolbar,
+    .fi-ta-filters,
+    .fi-ta-selection-indicator {
+        flex-wrap: wrap !important;
+        gap: .5rem !important;
+        padding: .75rem !important;
+    }
+
+    .fi-ta-content,
+    .fi-ta-table-wrap,
+    .fi-ta-table-container,
+    .fi-ta .overflow-x-auto {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: thin !important;
+    }
+
+    .fi-ta-table {
+        min-width: 720px !important;
+    }
+
+    .fi-ta-table th,
+    .fi-ta-table td {
+        padding: .65rem .75rem !important;
+        font-size: .82rem !important;
+        white-space: nowrap !important;
+    }
+
+    .fi-ta-table th[data-column="select"],
+    .fi-ta-table td[data-column="select"] {
+        min-width: 42px !important;
+        max-width: 42px !important;
+    }
+
+    .fi-ta-pagination {
+        flex-wrap: wrap !important;
+        gap: .5rem !important;
+        padding: .75rem !important;
+    }
+
+    .fi-ta-pagination > div {
+        min-width: 0 !important;
+    }
+
+    /* Formularios */
+    .fi-fo,
+    .fi-form,
+    .fi-form > div {
+        gap: .8rem !important;
+        min-width: 0 !important;
+    }
+
+    .fi-fo .fi-section,
+    .fi-form .fi-section {
+        border-radius: 16px !important;
+    }
+
+    .fi-fo .grid,
+    .fi-form .grid,
+    .fi-section .grid {
+        min-width: 0 !important;
+    }
+
+    .fi-input-wrp,
+    .fi-select-input,
+    .fi-textarea,
+    .fi-fo input:not([type="checkbox"]):not([type="radio"]),
+    .fi-fo select,
+    .fi-fo textarea {
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Tabs */
+    .fi-tabs {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        scrollbar-width: thin !important;
+    }
+
+    .fi-tabs-item {
+        flex: 0 0 auto !important;
+        white-space: nowrap !important;
+    }
+
+    /* Modales */
+    .fi-modal,
+    .fi-modal-window {
+        max-width: calc(100vw - 1rem) !important;
+    }
+
+    .fi-modal-window {
+        width: calc(100vw - 1rem) !important;
+        border-radius: 18px !important;
+        margin-inline: .5rem !important;
+        max-height: calc(100vh - 1rem) !important;
+    }
+
+    .fi-modal-header,
+    .fi-modal-content,
+    .fi-modal-footer {
+        padding-inline: 1rem !important;
+    }
+
+    .fi-modal-heading {
+        font-size: 1.05rem !important;
+        line-height: 1.3 !important;
+    }
+
+    .fi-modal-footer,
+    .fi-modal-footer .fi-ac,
+    .fi-modal-footer .fi-ac-actions {
+        flex-wrap: wrap !important;
+        gap: .5rem !important;
+    }
+
+    .fi-modal-footer .fi-btn,
+    .fi-form-actions .fi-btn {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+
+    /* Botones/actions */
+    .fi-btn {
+        min-height: 2.55rem !important;
+        border-radius: .85rem !important;
+    }
+
+    .fi-ac,
+    .fi-ac-actions,
+    .fi-form-actions {
+        flex-wrap: wrap !important;
+        gap: .5rem !important;
+    }
+
+    /* Mapas geocerca */
+    .bexia-geofence-map {
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+    }
+
+    .bexia-geofence-map .leaflet-container {
+        height: 360px !important;
+        min-height: 360px !important;
+        max-height: 65vh !important;
+        border-radius: 14px !important;
+    }
+
+    .bexia-geofence-map .leaflet-control-zoom a {
+        width: 34px !important;
+        height: 34px !important;
+        line-height: 34px !important;
+    }
+
+    /* Páginas custom con tablas manuales */
+    .fi-page table:not(.fi-ta-table):not(.flatpickr-calendar table) {
+        min-width: 720px !important;
+    }
+
+    .fi-page .overflow-x-auto,
+    .fi-page [style*="overflow-x"] {
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: thin !important;
+    }
+
+    /* Evitar que textos largos rompan layouts */
+    code,
+    pre,
+    .fi-in-text-entry,
+    .fi-fo-placeholder,
+    .fi-ta-text {
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
+    }
+}
+
+/* Móvil pequeño */
+@media (max-width: 480px) {
+    .fi-page {
+        padding: .6rem !important;
+    }
+
+    .fi-header-heading h1,
+    .fi-header-heading h2,
+    .fi-header-heading {
+        font-size: 1.08rem !important;
+    }
+
+    .fi-section,
+    .fi-card,
+    .fi-ta,
+    .fi-modal-window {
+        border-radius: 14px !important;
+    }
+
+    .fi-ta-table {
+        min-width: 680px !important;
+    }
+
+    .fi-ta-table th,
+    .fi-ta-table td {
+        padding: .58rem .65rem !important;
+        font-size: .78rem !important;
+    }
+
+    .fi-modal-window {
+        width: calc(100vw - .5rem) !important;
+        max-width: calc(100vw - .5rem) !important;
+        margin-inline: .25rem !important;
+    }
+
+    .fi-modal-header,
+    .fi-modal-content,
+    .fi-modal-footer {
+        padding-inline: .85rem !important;
+    }
+
+    .bexia-geofence-map .leaflet-container {
+        height: 320px !important;
+        min-height: 320px !important;
+    }
+
+    .fi-form-actions,
+    .fi-modal-footer .fi-ac-actions {
+        width: 100% !important;
+    }
+}
+
+/* Landscape de teléfono */
+@media (max-width: 900px) and (orientation: landscape) {
+    .fi-modal-window {
+        max-height: calc(100vh - .75rem) !important;
+    }
+
+    .bexia-geofence-map .leaflet-container {
+        height: 300px !important;
+        min-height: 300px !important;
+    }
+}
+
+/* BEXIA_RESPONSIVE_MOBILE_TABLET_V5_79_13B_END */
 </style>
 <script>
 (function () {
