@@ -568,6 +568,250 @@ class AdminPanelProvider extends PanelProvider
     }
 }
 /* BEXIA_DASHBOARD_CARDS_PREMIUM_V5_79_10B_END */
+/* BEXIA_TABLES_LISTS_PREMIUM_V5_79_11B_START */
+:root {
+    --bexia-table-bg: #ffffff;
+    --bexia-table-soft: #f8fafc;
+    --bexia-table-soft-2: #f1f5f9;
+    --bexia-table-border: #e2e8f0;
+    --bexia-table-border-soft: #edf2f7;
+    --bexia-table-text: #0f172a;
+    --bexia-table-muted: #64748b;
+    --bexia-table-hover: #f8fafc;
+    --bexia-table-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+}
+
+/* Contenedor general de tablas Filament */
+.fi-ta {
+    background: var(--bexia-table-bg) !important;
+    border: 1px solid var(--bexia-table-border) !important;
+    border-radius: 20px !important;
+    box-shadow: var(--bexia-table-shadow) !important;
+    overflow: hidden !important;
+}
+
+/* Header superior de tabla: buscador, filtros, acciones */
+.fi-ta-header,
+.fi-ta-header-toolbar,
+.fi-ta-toolbar,
+.fi-ta-filters,
+.fi-ta-selection-indicator {
+    background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%) !important;
+    border-color: var(--bexia-table-border-soft) !important;
+}
+
+.fi-ta-header {
+    padding-block: .9rem !important;
+}
+
+/* Inputs de búsqueda dentro de tablas */
+.fi-ta .fi-input-wrp,
+.fi-ta .fi-select-input,
+.fi-ta input:not([type="checkbox"]):not([type="radio"]),
+.fi-ta select {
+    border-radius: 14px !important;
+    border-color: #dbe3ee !important;
+    background: #ffffff !important;
+}
+
+.fi-ta .fi-input-wrp:focus-within {
+    border-color: #94a3b8 !important;
+    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16) !important;
+}
+
+/* Tabla */
+.fi-ta-table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    background: #ffffff !important;
+}
+
+/* Encabezados */
+.fi-ta-table thead,
+.fi-ta-table thead tr,
+.fi-ta-table th,
+.fi-ta-header-cell {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    color: #475569 !important;
+    border-color: var(--bexia-table-border) !important;
+}
+
+.fi-ta-table th,
+.fi-ta-header-cell {
+    font-size: .72rem !important;
+    font-weight: 800 !important;
+    letter-spacing: .04em !important;
+    text-transform: uppercase !important;
+    white-space: nowrap !important;
+}
+
+/* Celdas */
+.fi-ta-table td,
+.fi-ta-cell {
+    color: var(--bexia-table-text) !important;
+    border-color: var(--bexia-table-border-soft) !important;
+    vertical-align: middle !important;
+}
+
+.fi-ta-table td,
+.fi-ta-table th {
+    padding-top: .72rem !important;
+    padding-bottom: .72rem !important;
+}
+
+/* Filas */
+.fi-ta-table tbody tr {
+    background: #ffffff !important;
+    transition:
+        background-color .14s ease,
+        box-shadow .14s ease !important;
+}
+
+.fi-ta-table tbody tr:hover {
+    background: var(--bexia-table-hover) !important;
+}
+
+.fi-ta-table tbody tr:hover td {
+    color: #0f172a !important;
+}
+
+/* Texto secundario y truncado */
+.fi-ta-text,
+.fi-ta-cell .text-gray-500,
+.fi-ta-cell .text-gray-600,
+.fi-ta-cell .text-sm {
+    color: var(--bexia-table-muted) !important;
+}
+
+.fi-ta-text strong,
+.fi-ta-cell strong,
+.fi-ta-cell .font-medium,
+.fi-ta-cell .font-semibold {
+    color: #0f172a !important;
+}
+
+/* Badges dentro de tablas */
+.fi-ta .fi-badge {
+    border-radius: 999px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.01em !important;
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Icon buttons y acciones de fila */
+.fi-ta .fi-icon-btn,
+.fi-ta .fi-ac-icon-btn,
+.fi-ta .fi-dropdown-trigger button {
+    border-radius: 12px !important;
+    color: #64748b !important;
+}
+
+.fi-ta .fi-icon-btn:hover,
+.fi-ta .fi-ac-icon-btn:hover,
+.fi-ta .fi-dropdown-trigger button:hover {
+    background: #eef2f7 !important;
+    color: #0f172a !important;
+}
+
+/* Botones de acción en header/listados */
+.fi-ta .fi-btn {
+    border-radius: 14px !important;
+    min-height: 2.45rem !important;
+}
+
+/* Filtros desplegados */
+.fi-ta .fi-dropdown-panel,
+.fi-ta-filters .fi-section,
+.fi-ta-filters .fi-fieldset {
+    border-radius: 18px !important;
+    border-color: var(--bexia-table-border) !important;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.11) !important;
+}
+
+/* Paginación */
+.fi-pagination,
+.fi-ta-pagination {
+    background: #ffffff !important;
+    border-top: 1px solid var(--bexia-table-border-soft) !important;
+}
+
+.fi-pagination .fi-btn,
+.fi-ta-pagination .fi-btn,
+.fi-pagination button,
+.fi-ta-pagination button {
+    border-radius: 12px !important;
+}
+
+/* Estado vacío */
+.fi-ta-empty-state {
+    background:
+        radial-gradient(circle at top, rgba(148, 163, 184, 0.10), transparent 18rem),
+        #ffffff !important;
+}
+
+.fi-ta-empty-state-heading {
+    color: #0f172a !important;
+    font-weight: 800 !important;
+}
+
+.fi-ta-empty-state-description {
+    color: #64748b !important;
+}
+
+/* Checkboxes de tabla: conservar fix previo */
+.fi-ta-table th[data-column="select"],
+.fi-ta-table td[data-column="select"] {
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    text-align: center !important;
+}
+
+.fi-ta-table th[data-column="select"] input[type="checkbox"],
+.fi-ta-table td[data-column="select"] input[type="checkbox"] {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
+    min-height: 16px !important;
+    max-width: 16px !important;
+    max-height: 16px !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    display: block !important;
+    flex: none !important;
+}
+
+/* Tablas HTML custom dentro de páginas Filament, sin tocar PDFs/exports */
+.fi-page table:not(.fi-ta-table):not(.flatpickr-calendar table) {
+    border-radius: 16px !important;
+}
+
+.fi-page table:not(.fi-ta-table):not(.flatpickr-calendar table) thead {
+    background: #f8fafc !important;
+}
+
+.fi-page table:not(.fi-ta-table):not(.flatpickr-calendar table) th {
+    color: #475569 !important;
+    font-weight: 800 !important;
+}
+
+.fi-page table:not(.fi-ta-table):not(.flatpickr-calendar table) tbody tr:hover {
+    background: #f8fafc !important;
+}
+
+/* Móvil: no forzar transformaciones ni anchos raros */
+@media (max-width: 768px) {
+    .fi-ta {
+        border-radius: 18px !important;
+    }
+
+    .fi-ta-table th,
+    .fi-ta-table td {
+        padding-top: .65rem !important;
+        padding-bottom: .65rem !important;
+    }
+}
+/* BEXIA_TABLES_LISTS_PREMIUM_V5_79_11B_END */
 </style>
 <script>
 (function () {
