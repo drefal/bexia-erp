@@ -66,6 +66,44 @@ class EmployeeAttendanceResource extends Resource
             || $user->can('company.update');
     }
 
+
+    public static function canReviewMobileAttendance(?EmployeeAttendance $record = null): bool
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if ((bool) ($user->is_system_admin ?? false)) {
+            return true;
+        }
+
+        if (($user->email ?? null) === 'admin@bexiaerp.com') {
+            return true;
+        }
+
+        if (
+            $user->can('rrhh.asistencias.revisar_movil')
+            || $user->can('rrhh.asistencias.editar')
+            || $user->can('company.update')
+        ) {
+            return true;
+        }
+
+        if ($record) {
+            $employee = $record->relationLoaded('employee')
+                ? $record->employee
+                : $record->employee()->first();
+
+            if ($employee && (int) ($employee->supervisor_user_id ?? 0) === (int) $user->id) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function shouldRegisterNavigation(): bool
     {
         return static::bexiaCanAsistenciaPermission('rrhh.asistencias.ver');
@@ -142,6 +180,76 @@ class EmployeeAttendanceResource extends Resource
                                     ->rows(3)
                                     ->columnSpanFull(),
                             ]),
+                    ]),
+
+                Section::make('Revisión móvil / geocerca')
+                    ->description('Revisión operativa de la ubicación reportada por QR o checador móvil. No sustituye el flujo formal de aprobación de incidencias.')
+                    ->visible(fn (?EmployeeAttendance $record): bool => (bool) $record && (
+                        $record->mobile_review_status !== null
+                        || $record->clock_in_location_status !== null
+                        || $record->clock_out_location_status !== null
+                        || $record->clock_in_latitude !== null
+                        || $record->clock_out_latitude !== null
+                    ))
+                    ->schema([
+                        Grid::make(3)
+                            ->schema([
+                                Select::make('mobile_review_status')
+                                    ->label('Estado revisión móvil')
+                                    ->options([
+                                        'accepted' => 'Aceptada',
+                                        'pending' => 'Pendiente',
+                                        'rejected' => 'Rechazada',
+                                    ])
+                                    ->native(false)
+                                    ->disabled(fn (?EmployeeAttendance $record): bool => ! static::canReviewMobileAttendance($record))
+                                    ->helperText('La ubicación se revisa aquí; las incidencias mantienen su propio flujo de aprobación.'),
+
+                                Placeholder::make('mobile_reviewed_by_label')
+                                    ->label('Revisado por')
+                                    ->content(fn (?EmployeeAttendance $record): string => $record?->mobileReviewer?->name ?? '—'),
+
+                                Placeholder::make('mobile_reviewed_at_label')
+                                    ->label('Revisado el')
+                                    ->content(fn (?EmployeeAttendance $record): string => $record?->mobile_reviewed_at?->format('d/m/Y H:i') ?? '—'),
+
+                                Placeholder::make('clock_in_geo_summary')
+                                    ->label('Entrada / geocerca')
+                                    ->content(fn (?EmployeeAttendance $record): string => $record
+                                        ? 'Estado: ' . match ($record->clock_in_location_status) {
+                                            'inside' => 'Dentro',
+                                            'outside' => 'Fuera',
+                                            'poor_accuracy' => 'GPS bajo',
+                                            'no_location' => 'Sin ubicación',
+                                            'no_geofence' => 'Sin geocerca',
+                                            default => $record->clock_in_location_status ?: '—',
+                                        } . ' · Distancia: ' . ($record->clock_in_distance_meters !== null ? ((int) $record->clock_in_distance_meters) . ' m' : '—') . ' · Precisión: ' . ($record->clock_in_accuracy_meters !== null ? ((int) $record->clock_in_accuracy_meters) . ' m' : '—')
+                                        : '—'),
+
+                                Placeholder::make('clock_out_geo_summary')
+                                    ->label('Salida / geocerca')
+                                    ->content(fn (?EmployeeAttendance $record): string => $record
+                                        ? 'Estado: ' . match ($record->clock_out_location_status) {
+                                            'inside' => 'Dentro',
+                                            'outside' => 'Fuera',
+                                            'poor_accuracy' => 'GPS bajo',
+                                            'no_location' => 'Sin ubicación',
+                                            'no_geofence' => 'Sin geocerca',
+                                            default => $record->clock_out_location_status ?: '—',
+                                        } . ' · Distancia: ' . ($record->clock_out_distance_meters !== null ? ((int) $record->clock_out_distance_meters) . ' m' : '—') . ' · Precisión: ' . ($record->clock_out_accuracy_meters !== null ? ((int) $record->clock_out_accuracy_meters) . ' m' : '—')
+                                        : '—'),
+
+                                Placeholder::make('mobile_reviewer_rule')
+                                    ->label('Quién puede revisar')
+                                    ->content('Super Admin, admin de empresa, RRHH autorizado o jefe directo del empleado.'),
+                            ]),
+
+                        Textarea::make('mobile_review_notes')
+                            ->label('Notas de revisión móvil')
+                            ->rows(3)
+                            ->disabled(fn (?EmployeeAttendance $record): bool => ! static::canReviewMobileAttendance($record))
+                            ->required(fn (\Filament\Forms\Get $get): bool => $get('mobile_review_status') === 'rejected')
+                            ->columnSpanFull(),
                     ]),
             ]);
     }
@@ -418,6 +526,15 @@ class EmployeeAttendanceResource extends Resource
                         'rejected' => 'Rechazada',
                     ]),
 
+                \Filament\Tables\Filters\Filter::make('pending_mobile_outside')
+                    ->label('Pendientes fuera de geocerca')
+                    ->query(fn ($query) => $query
+                        ->where('mobile_review_status', 'pending')
+                        ->where(function ($query): void {
+                            $query->where('clock_in_location_status', 'outside')
+                                ->orWhere('clock_out_location_status', 'outside');
+                        })),
+
                 \Filament\Tables\Filters\Filter::make('qr_mobile')
                     ->label('Solo QR / móvil')
                     ->query(fn ($query) => $query->where(function ($query): void {
@@ -473,73 +590,17 @@ class EmployeeAttendanceResource extends Resource
                     ->label('Con horas extra')
                     ->query(fn (Builder $query): Builder => $query->where('overtime_minutes', '>', 0)),
             ])
+            ->recordUrl(fn (EmployeeAttendance $record): string => static::getUrl('edit', ['record' => $record]))
             ->actions([
 
-                // v5790l_qr_geofence_device_actions
-                \Filament\Tables\Actions\Action::make('mobile_review')
-                    ->label('Revisión móvil')
-                    ->icon('heroicon-o-shield-check')
-                    ->color('warning')
-                    ->visible(fn ($record): bool => in_array($record->mobile_review_status, ['pending', 'rejected', null], true))
-                    ->form([
-                        \Filament\Forms\Components\Select::make('mobile_review_status')
-                            ->label('Resultado')
-                            ->options([
-                                'accepted' => 'Aceptar',
-                                'pending' => 'Mantener pendiente',
-                                'rejected' => 'Rechazar',
-                            ])
-                            ->default(fn ($record): string => $record->mobile_review_status ?: 'pending')
-                            ->required(),
+                Tables\Actions\Action::make('open_attendance_review')
+                    ->label('Abrir / revisar')
+                    ->icon('heroicon-o-eye')
+                    ->color('info')
+                    ->url(fn (EmployeeAttendance $record): string => static::getUrl('edit', ['record' => $record]))
+                    ->visible(fn (EmployeeAttendance $record): bool => static::canEdit($record)),
 
-                        \Filament\Forms\Components\Textarea::make('mobile_review_notes')
-                            ->label('Notas de revisión')
-                            ->rows(3),
-                    ])
-                    ->action(function ($record, array $data): void {
-                        $record->forceFill([
-                            'mobile_review_status' => $data['mobile_review_status'],
-                            'mobile_review_notes' => $data['mobile_review_notes'] ?? null,
-                            'mobile_reviewed_by_user_id' => auth()->id(),
-                            'mobile_reviewed_at' => now(),
-                        ])->save();
-                    }),
-
-                Tables\Actions\Action::make('generate_incident')
-                    ->label('Generar incidencia')
-                    ->icon('heroicon-o-exclamation-triangle')
-                    ->requiresConfirmation()
-                    ->visible(fn (EmployeeAttendance $record): bool => EmployeeAttendanceIncidentSync::isEligible($record))
-                    ->action(function (EmployeeAttendance $record): void {
-                        try {
-                            $incident = EmployeeAttendanceIncidentSync::sync($record, auth()->id(), true);
-
-                            if (! $incident) {
-                                Notification::make()
-                                    ->title('No aplica incidencia')
-                                    ->body('Esta asistencia no genera Retardo o Falta.')
-                                    ->warning()
-                                    ->send();
-
-                                return;
-                            }
-
-                            Notification::make()
-                                ->title('Incidencia generada')
-                                ->body('Incidencia #' . $incident->id . ' · Estado: ' . $incident->status)
-                                ->success()
-                                ->send();
-                        } catch (\Throwable $e) {
-                            Notification::make()
-                                ->title('No se pudo generar la incidencia')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
-
-                Tables\Actions\EditAction::make()->visible(fn (): bool => static::canManageAttendanceRecords()),
-                Tables\Actions\DeleteAction::make()->label('Eliminar'),
+                Tables\Actions\DeleteAction::make()->label('Eliminar')->visible(fn (): bool => static::canManageAttendanceRecords()),
             ])
             ->bulkActions([
                 Tables\Actions\BulkAction::make('generate_incidents')
@@ -594,6 +655,13 @@ class EmployeeAttendanceResource extends Resource
     // v5790l1_can_manage_attendance_records
     // v5790l2_can_manage_attendance_records
     // v5790l3_can_manage_attendance_records
+
+    public static function canEdit(Model $record): bool
+    {
+        return static::canManageAttendanceRecords()
+            || static::canReviewMobileAttendance($record);
+    }
+
     protected static function canManageAttendanceRecords(): bool
     {
         $user = auth()->user();
@@ -635,11 +703,6 @@ class EmployeeAttendanceResource extends Resource
     }
 
     public static function canCreate(): bool
-    {
-        return static::canManageAttendanceRecords();
-    }
-
-    public static function canEdit($record): bool
     {
         return static::canManageAttendanceRecords();
     }
