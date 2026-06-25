@@ -85,6 +85,7 @@ class EmployeeAttendanceResource extends Resource
 
         if (
             $user->can('rrhh.asistencias.revisar_movil')
+            || $user->can('rrhh.asistencias.revisar_geocerca')
             || $user->can('rrhh.asistencias.editar')
             || $user->can('company.update')
         ) {
