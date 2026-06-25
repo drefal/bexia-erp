@@ -23,6 +23,34 @@ class CompanyResource extends Resource
     protected static ?string $modelLabel = 'Empresa';
     protected static ?string $pluralModelLabel = 'Empresas';
 
+    // BEXIA_V57917C_ADMIN_COMPANY_PERMISSIONS
+    protected static function bexiaCanManageGlobalCompanies(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::bexiaCanManageGlobalCompanies();
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::bexiaCanManageGlobalCompanies();
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::bexiaCanManageGlobalCompanies();
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::bexiaCanManageGlobalCompanies();
+    }
+
     public static function form(Form $form): Form
     {
         return $form

@@ -59,6 +59,12 @@ class AiInsightUserAccessResource extends Resource
         return AiInsightsSecurityScope::canManageAccess(auth()->user());
     }
 
+    // BEXIA_V57917C_AI_INSIGHTS_DELETE_ANY
+    public static function canDeleteAny(): bool
+    {
+        return AiInsightsSecurityScope::canManageAccess(auth()->user());
+    }
+
     public static function form(Form $form): Form
     {
         return $form
