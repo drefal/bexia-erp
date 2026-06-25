@@ -186,6 +186,224 @@ class AdminPanelProvider extends PanelProvider
     background: var(--bexia-sidebar-bg) !important;
 }
 /* BEXIA_SIDEBAR_DARK_V5_79_8B_END */
+/* BEXIA_TOPBAR_HEADER_PREMIUM_V5_79_9B_START */
+:root {
+    --bexia-topbar-bg: rgba(255, 255, 255, 0.96);
+    --bexia-topbar-border: #e2e8f0;
+    --bexia-topbar-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+    --bexia-topbar-text: #0f172a;
+    --bexia-topbar-muted: #64748b;
+    --bexia-topbar-soft: #f8fafc;
+    --bexia-topbar-soft-2: #eef2f7;
+    --bexia-topbar-accent: #1f2937;
+}
+
+/* Topbar general: más limpia y alineada con el sidebar premium */
+.fi-topbar {
+    background: var(--bexia-topbar-bg) !important;
+    border-bottom: 1px solid var(--bexia-topbar-border) !important;
+    box-shadow: var(--bexia-topbar-shadow) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+}
+
+.fi-topbar nav {
+    min-height: 4.25rem !important;
+}
+
+/* Botones e iconos generales del topbar */
+.fi-topbar .fi-icon-btn,
+.fi-topbar button,
+.fi-topbar a {
+    transition: background-color .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease !important;
+}
+
+.fi-topbar .fi-icon-btn {
+    border-radius: 14px !important;
+    color: var(--bexia-topbar-muted) !important;
+}
+
+.fi-topbar .fi-icon-btn:hover,
+.fi-topbar .fi-icon-btn:focus-visible {
+    background: var(--bexia-topbar-soft-2) !important;
+    color: var(--bexia-topbar-text) !important;
+}
+
+/* Header del sidebar: conserva logo blanco, pero más premium */
+.fi-sidebar-header {
+    min-height: 4.25rem !important;
+    padding-inline: 1rem !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035) !important;
+}
+
+.fi-sidebar-header .fi-logo,
+.fi-sidebar-header img {
+    max-height: 3rem !important;
+}
+
+/* Botón para colapsar sidebar */
+.fi-sidebar-header .fi-icon-btn,
+.fi-sidebar-header button {
+    border-radius: 12px !important;
+    color: #64748b !important;
+}
+
+.fi-sidebar-header .fi-icon-btn:hover,
+.fi-sidebar-header button:hover {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+/* Topbar: enlaces de aprobaciones/avisos/enviados */
+.bexia-approval-topbar {
+    gap: .45rem !important;
+    align-items: center !important;
+}
+
+/* Base limpia, sin borrar los tonos funcionales */
+.bexia-approval-topbar__link {
+    min-height: 2.35rem !important;
+    border-radius: 999px !important;
+    border-width: 1px !important;
+    border-style: solid !important;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.035) !important;
+}
+
+.bexia-approval-topbar__link:hover,
+.bexia-approval-topbar__link:focus-visible {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.07) !important;
+}
+
+/* Tono amarillo/ambar: conservar avisos o pendientes */
+.bexia-approval-topbar__link.is-amber {
+    background: #fffbeb !important;
+    border-color: #fcd34d !important;
+    color: #92400e !important;
+}
+
+.bexia-approval-topbar__link.is-amber:hover,
+.bexia-approval-topbar__link.is-amber:focus-visible {
+    background: #fef3c7 !important;
+    border-color: #f59e0b !important;
+    color: #78350f !important;
+}
+
+.bexia-approval-topbar__link.is-amber *,
+.bexia-approval-topbar__link.is-amber span {
+    color: #92400e !important;
+}
+
+/* Tono azul: conservar enviados/informativos */
+.bexia-approval-topbar__link.is-blue {
+    background: #eff6ff !important;
+    border-color: #bfdbfe !important;
+    color: #1d4ed8 !important;
+}
+
+.bexia-approval-topbar__link.is-blue:hover,
+.bexia-approval-topbar__link.is-blue:focus-visible {
+    background: #dbeafe !important;
+    border-color: #60a5fa !important;
+    color: #1e40af !important;
+}
+
+.bexia-approval-topbar__link.is-blue *,
+.bexia-approval-topbar__link.is-blue span {
+    color: #1d4ed8 !important;
+}
+
+/* Activo con color por tono, no negro genérico */
+.bexia-approval-topbar__link.is-active.is-amber {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+    border-color: #d97706 !important;
+    color: #ffffff !important;
+    box-shadow: 0 8px 18px rgba(217, 119, 6, 0.20) !important;
+}
+
+.bexia-approval-topbar__link.is-active.is-blue {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    border-color: #1d4ed8 !important;
+    color: #ffffff !important;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18) !important;
+}
+
+.bexia-approval-topbar__link.is-active:not(.is-amber):not(.is-blue) {
+    background: linear-gradient(135deg, #111827 0%, #1f2937 100%) !important;
+    border-color: #334155 !important;
+    color: #ffffff !important;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16) !important;
+}
+
+.bexia-approval-topbar__link.is-active *,
+.bexia-approval-topbar__link.is-active span {
+    color: #ffffff !important;
+}
+
+/* Badges por tono */
+.bexia-approval-topbar__badge {
+    border-radius: 999px !important;
+    font-weight: 700 !important;
+}
+
+.bexia-approval-topbar__badge.is-amber {
+    background: #f59e0b !important;
+    color: #ffffff !important;
+}
+
+.bexia-approval-topbar__badge.is-blue {
+    background: #2563eb !important;
+    color: #ffffff !important;
+}
+
+.bexia-approval-topbar__link.is-active .bexia-approval-topbar__badge {
+    background: rgba(255, 255, 255, 0.22) !important;
+    color: #ffffff !important;
+}
+
+/* Selector de empresa */
+.bexia-topbar-company-switcher {
+    min-height: 2.65rem !important;
+    border-radius: 999px !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #ffffff !important;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04) !important;
+}
+
+.bexia-topbar-company-switcher:hover {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06) !important;
+}
+
+.bexia-topbar-company-switcher__logo-wrap,
+.bexia-topbar-company-switcher__fallback {
+    border-radius: 999px !important;
+}
+
+.bexia-topbar-company-switcher__select {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+}
+
+.bexia-topbar-company-switcher__arrow {
+    color: #64748b !important;
+}
+
+/* Nombre de usuario / menú usuario */
+.fi-topbar .fi-dropdown-trigger,
+.fi-topbar .fi-user-menu-trigger {
+    border-radius: 999px !important;
+}
+
+.fi-topbar .fi-dropdown-panel {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 18px !important;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12) !important;
+}
+/* BEXIA_TOPBAR_HEADER_PREMIUM_V5_79_9B_END */
 </style>
 <script>
 (function () {
