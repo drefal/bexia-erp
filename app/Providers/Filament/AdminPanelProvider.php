@@ -80,6 +80,113 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
                 fn (): HtmlString => new HtmlString(<<<'HTML'
+<style>
+/* BEXIA_SIDEBAR_DARK_V5_79_8B_START */
+:root {
+    --bexia-sidebar-bg: #0b1220;
+    --bexia-sidebar-bg-2: #111827;
+    --bexia-sidebar-border: #263244;
+    --bexia-sidebar-text: #e5e7eb;
+    --bexia-sidebar-muted: #94a3b8;
+    --bexia-sidebar-active: #2563eb;
+    --bexia-sidebar-active-2: #334155;
+}
+
+/* Sidebar negro suave premium, conservando cabecera clara para que el logo BexiaERP se lea bien */
+.fi-sidebar {
+    background: linear-gradient(180deg, var(--bexia-sidebar-bg) 0%, var(--bexia-sidebar-bg-2) 100%) !important;
+    border-right: 1px solid var(--bexia-sidebar-border) !important;
+}
+
+.fi-sidebar-header {
+    background: #ffffff !important;
+    border-bottom: 1px solid #e5e7eb !important;
+}
+
+.fi-sidebar-nav,
+.fi-sidebar-nav-groups {
+    background: transparent !important;
+}
+
+/* Grupos y textos */
+.fi-sidebar .fi-sidebar-group-label,
+.fi-sidebar .fi-sidebar-group-button,
+.fi-sidebar .fi-sidebar-item-label,
+.fi-sidebar .fi-sidebar-item-button,
+.fi-sidebar .fi-sidebar-item-button span {
+    color: var(--bexia-sidebar-text) !important;
+}
+
+.fi-sidebar .fi-sidebar-group-label {
+    color: #cbd5e1 !important;
+    font-weight: 700 !important;
+    letter-spacing: .01em !important;
+}
+
+.fi-sidebar .fi-sidebar-item-icon,
+.fi-sidebar .fi-sidebar-group-collapse-button,
+.fi-sidebar svg {
+    color: var(--bexia-sidebar-muted) !important;
+}
+
+/* Items */
+.fi-sidebar .fi-sidebar-item-button {
+    border-radius: 14px !important;
+    margin-inline: 0.25rem !important;
+    transition: background-color .15s ease, color .15s ease, box-shadow .15s ease !important;
+}
+
+.fi-sidebar .fi-sidebar-item-button:hover {
+    background: rgba(255, 255, 255, 0.09) !important;
+}
+
+.fi-sidebar .fi-sidebar-item-button:hover,
+.fi-sidebar .fi-sidebar-item-button:hover *,
+.fi-sidebar .fi-sidebar-item-button:hover svg {
+    color: #ffffff !important;
+}
+
+/* Activo */
+.fi-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-button,
+.fi-sidebar .fi-sidebar-item-button.fi-active,
+.fi-sidebar .fi-sidebar-item-button[aria-current="page"],
+.fi-sidebar .fi-sidebar-item[aria-current="page"] > .fi-sidebar-item-button {
+    background: linear-gradient(90deg, #1f2937 0%, #111827 100%) !important;
+    background-color: #1f2937 !important;
+    border: 1px solid rgba(148, 163, 184, 0.18) !important;
+    color: #f8fafc !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025), 0 8px 18px rgba(0, 0, 0, 0.16) !important;
+}
+
+.fi-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-button *,
+.fi-sidebar .fi-sidebar-item-button.fi-active *,
+.fi-sidebar .fi-sidebar-item-button[aria-current="page"] *,
+.fi-sidebar .fi-sidebar-item[aria-current="page"] > .fi-sidebar-item-button * {
+    color: #f8fafc !important;
+}
+
+.fi-sidebar .fi-sidebar-item.fi-active > .fi-sidebar-item-button svg,
+.fi-sidebar .fi-sidebar-item-button.fi-active svg,
+.fi-sidebar .fi-sidebar-item-button[aria-current="page"] svg,
+.fi-sidebar .fi-sidebar-item[aria-current="page"] > .fi-sidebar-item-button svg {
+    color: #bfdbfe !important;
+}
+
+/* Scrollbar */
+.fi-sidebar nav {
+    scrollbar-color: #475569 var(--bexia-sidebar-bg) !important;
+}
+
+.fi-sidebar ::-webkit-scrollbar-thumb {
+    background: #475569 !important;
+    border-radius: 999px !important;
+}
+
+.fi-sidebar ::-webkit-scrollbar-track {
+    background: var(--bexia-sidebar-bg) !important;
+}
+/* BEXIA_SIDEBAR_DARK_V5_79_8B_END */
+</style>
 <script>
 (function () {
     const forceLight = function () {
