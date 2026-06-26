@@ -2744,4 +2744,276 @@ button[role="switch"] > span {
 }
 /* BEXIA_POS_POINT_RESOURCE_RESPONSIVE_V5_79_23C_END */
 
+
+/* BEXIA_REPAIR_ORDER_RESOURCE_RESPONSIVE_V5_79_24C_START */
+/*
+ * RepairOrderResource responsive refinements.
+ * Alcance: secciones densas de reparacion, header de estado,
+ * repeater de refacciones/materiales, folio destacado y cargas de archivos.
+ * No cambia flujo, permisos, calculos, firmas, PDF, eventos ni estados.
+ */
+.bexia-repair-order-economic-section,
+.bexia-repair-order-delivery-section,
+.bexia-repair-order-time-section,
+.bexia-repair-order-general-section,
+.bexia-repair-order-product-section,
+.bexia-repair-order-diagnosis-section,
+.bexia-repair-order-costs-section,
+.bexia-repair-order-status-header-field,
+.bexia-repair-order-parts-repeater,
+.bexia-repair-order-resolution-locked-notice,
+.bexia-repair-order-attachments-upload,
+.bexia-repair-order-folio-input {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-repair-order-economic-section .fi-grid,
+.bexia-repair-order-delivery-section .fi-grid,
+.bexia-repair-order-time-section .fi-grid,
+.bexia-repair-order-general-section .fi-grid,
+.bexia-repair-order-product-section .fi-grid,
+.bexia-repair-order-diagnosis-section .fi-grid,
+.bexia-repair-order-costs-section .fi-grid,
+.bexia-repair-order-economic-section .fi-fo-component-ctn,
+.bexia-repair-order-delivery-section .fi-fo-component-ctn,
+.bexia-repair-order-time-section .fi-fo-component-ctn,
+.bexia-repair-order-general-section .fi-fo-component-ctn,
+.bexia-repair-order-product-section .fi-fo-component-ctn,
+.bexia-repair-order-diagnosis-section .fi-fo-component-ctn,
+.bexia-repair-order-costs-section .fi-fo-component-ctn {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-repair-order-status-header {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+    margin-bottom: 0.875rem !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-repair-order-status-card {
+    border-radius: 0.875rem !important;
+    padding: 0.75rem 0.875rem !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.bexia-repair-order-status-label {
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+}
+
+.bexia-repair-order-status-value {
+    font-size: 1.125rem !important;
+    font-weight: 800 !important;
+    margin-top: 0.125rem !important;
+    line-height: 1.2 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.bexia-repair-order-status-card--folio,
+.bexia-repair-order-folio-input .fi-input-wrp {
+    background: #fef3c7 !important;
+    border: 1px solid #f59e0b !important;
+    color: #78350f !important;
+    border-radius: 0.75rem !important;
+}
+
+.bexia-repair-order-status-card--quote-draft {
+    background: #fef3c7 !important;
+    border: 1px solid #f59e0b !important;
+    color: #78350f !important;
+}
+
+.bexia-repair-order-status-card--pending-approval {
+    background: #ffedd5 !important;
+    border: 1px solid #fb923c !important;
+    color: #7c2d12 !important;
+}
+
+.bexia-repair-order-status-card--quote-approved {
+    background: #dbeafe !important;
+    border: 1px solid #93c5fd !important;
+    color: #1e3a8a !important;
+}
+
+.bexia-repair-order-status-card--in-repair {
+    background: #e0e7ff !important;
+    border: 1px solid #818cf8 !important;
+    color: #312e81 !important;
+}
+
+.bexia-repair-order-status-card--repaired {
+    background: #dcfce7 !important;
+    border: 1px solid #22c55e !important;
+    color: #14532d !important;
+}
+
+.bexia-repair-order-status-card--supervisor-review {
+    background: #fae8ff !important;
+    border: 1px solid #d946ef !important;
+    color: #701a75 !important;
+}
+
+.bexia-repair-order-status-card--ready-for-delivery {
+    background: #ccfbf1 !important;
+    border: 1px solid #14b8a6 !important;
+    color: #134e4a !important;
+}
+
+.bexia-repair-order-status-card--delivered {
+    background: #f3f4f6 !important;
+    border: 1px solid #9ca3af !important;
+    color: #111827 !important;
+}
+
+.bexia-repair-order-status-card--cancelled {
+    background: #fee2e2 !important;
+    border: 1px solid #ef4444 !important;
+    color: #7f1d1d !important;
+}
+
+.bexia-repair-order-status-card--default {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+.dark .bexia-repair-order-status-card--folio,
+.dark .bexia-repair-order-folio-input .fi-input-wrp,
+.dark .bexia-repair-order-status-card--quote-draft {
+    background: rgba(120, 53, 15, 0.35) !important;
+    border-color: #f59e0b !important;
+    color: #fde68a !important;
+}
+
+.dark .bexia-repair-order-status-card--pending-approval {
+    background: rgba(124, 45, 18, 0.35) !important;
+    border-color: #fb923c !important;
+    color: #fed7aa !important;
+}
+
+.dark .bexia-repair-order-status-card--quote-approved {
+    background: rgba(30, 58, 138, 0.35) !important;
+    border-color: #93c5fd !important;
+    color: #bfdbfe !important;
+}
+
+.dark .bexia-repair-order-status-card--in-repair {
+    background: rgba(49, 46, 129, 0.35) !important;
+    border-color: #818cf8 !important;
+    color: #c7d2fe !important;
+}
+
+.dark .bexia-repair-order-status-card--repaired {
+    background: rgba(20, 83, 45, 0.35) !important;
+    border-color: #22c55e !important;
+    color: #bbf7d0 !important;
+}
+
+.dark .bexia-repair-order-status-card--supervisor-review {
+    background: rgba(112, 26, 117, 0.35) !important;
+    border-color: #d946ef !important;
+    color: #f5d0fe !important;
+}
+
+.dark .bexia-repair-order-status-card--ready-for-delivery {
+    background: rgba(19, 78, 74, 0.35) !important;
+    border-color: #14b8a6 !important;
+    color: #99f6e4 !important;
+}
+
+.dark .bexia-repair-order-status-card--delivered,
+.dark .bexia-repair-order-status-card--default {
+    background: rgba(31, 41, 55, 0.85) !important;
+    border-color: #6b7280 !important;
+    color: #f9fafb !important;
+}
+
+.dark .bexia-repair-order-status-card--cancelled {
+    background: rgba(127, 29, 29, 0.35) !important;
+    border-color: #ef4444 !important;
+    color: #fecaca !important;
+}
+
+.bexia-repair-order-parts-repeater .fi-fo-repeater-item,
+.bexia-repair-order-parts-repeater .fi-fo-repeater-item-content,
+.bexia-repair-order-parts-repeater .fi-grid,
+.bexia-repair-order-parts-repeater .fi-fo-component-ctn,
+.bexia-repair-order-parts-repeater .fi-input-wrp,
+.bexia-repair-order-parts-repeater .fi-select-input,
+.bexia-repair-order-parts-repeater .choices,
+.bexia-repair-order-parts-repeater .choices__inner {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-repair-order-diagnosis-section textarea,
+.bexia-repair-order-product-section input,
+.bexia-repair-order-general-section input,
+.bexia-repair-order-costs-section input,
+.bexia-repair-order-economic-section input,
+.bexia-repair-order-parts-repeater input {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-repair-order-resolution-locked-notice,
+.bexia-repair-order-attachments-upload,
+.bexia-repair-order-economic-section .fi-fo-field-wrp-helper-text,
+.bexia-repair-order-general-section .fi-fo-field-wrp-helper-text,
+.bexia-repair-order-product-section .fi-fo-field-wrp-helper-text,
+.bexia-repair-order-diagnosis-section .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+}
+
+@media (max-width: 768px) {
+    .bexia-repair-order-status-header {
+        grid-template-columns: 1fr !important;
+    }
+
+    .bexia-repair-order-status-value {
+        font-size: 1rem !important;
+    }
+
+    .bexia-repair-order-economic-section,
+    .bexia-repair-order-delivery-section,
+    .bexia-repair-order-time-section,
+    .bexia-repair-order-general-section,
+    .bexia-repair-order-product-section,
+    .bexia-repair-order-diagnosis-section,
+    .bexia-repair-order-costs-section {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .bexia-repair-order-parts-repeater .fi-fo-repeater-item {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-repair-order-diagnosis-section textarea {
+        min-height: 7rem !important;
+    }
+
+    .bexia-repair-order-status-label,
+    .bexia-repair-order-resolution-locked-notice,
+    .bexia-repair-order-economic-section .fi-fo-field-wrp-helper-text,
+    .bexia-repair-order-product-section .fi-fo-field-wrp-helper-text,
+    .bexia-repair-order-diagnosis-section .fi-fo-field-wrp-helper-text {
+        font-size: 0.8125rem !important;
+    }
+}
+/* BEXIA_REPAIR_ORDER_RESOURCE_RESPONSIVE_V5_79_24C_END */
+
 </style>

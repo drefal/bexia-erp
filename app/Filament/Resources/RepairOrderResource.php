@@ -120,6 +120,7 @@ class RepairOrderResource extends Resource
             ->schema([
 
                 Forms\Components\Section::make('Cierre económico y utilidad')
+                    ->extraAttributes(['class' => 'bexia-repair-order-economic-section'])
                     ->description('Captura el costo interno por hora para calcular la ganancia real de mano de obra. La tarifa de venta al cliente sigue siendo la tarifa por hora configurada en la reparación.')
                     ->schema([
                         Forms\Components\TextInput::make('labor_internal_hour_cost')
@@ -140,6 +141,7 @@ class RepairOrderResource extends Resource
 
 
                 \Filament\Forms\Components\Placeholder::make('service_order_status_header')
+                    ->extraAttributes(['class' => 'bexia-repair-order-status-header-field'])
                     ->label('')
                     ->content(function ($record): \Illuminate\Support\HtmlString {
                         $folio = e((string) ($record?->folio ?? 'Nueva orden'));
@@ -157,30 +159,30 @@ class RepairOrderResource extends Resource
                             'cancelled' => 'Cancelado',
                         ];
 
-                        $styles = [
-                            'quote_draft' => 'background:#fef3c7;border:1px solid #f59e0b;color:#78350f;',
-                            'pending_approval' => 'background:#ffedd5;border:1px solid #fb923c;color:#7c2d12;',
-                            'quote_approved' => 'background:#dbeafe;border:1px solid #60a5fa;color:#1e3a8a;',
-                            'in_repair' => 'background:#e0e7ff;border:1px solid #818cf8;color:#312e81;',
-                            'repaired' => 'background:#dcfce7;border:1px solid #22c55e;color:#14532d;',
-                            'supervisor_review' => 'background:#fae8ff;border:1px solid #d946ef;color:#701a75;',
-                            'ready_for_delivery' => 'background:#ccfbf1;border:1px solid #14b8a6;color:#134e4a;',
-                            'delivered' => 'background:#f3f4f6;border:1px solid #9ca3af;color:#111827;',
-                            'cancelled' => 'background:#fee2e2;border:1px solid #ef4444;color:#7f1d1d;',
+                        $stageClasses = [
+                            'quote_draft' => 'bexia-repair-order-status-card--quote-draft',
+                            'pending_approval' => 'bexia-repair-order-status-card--pending-approval',
+                            'quote_approved' => 'bexia-repair-order-status-card--quote-approved',
+                            'in_repair' => 'bexia-repair-order-status-card--in-repair',
+                            'repaired' => 'bexia-repair-order-status-card--repaired',
+                            'supervisor_review' => 'bexia-repair-order-status-card--supervisor-review',
+                            'ready_for_delivery' => 'bexia-repair-order-status-card--ready-for-delivery',
+                            'delivered' => 'bexia-repair-order-status-card--delivered',
+                            'cancelled' => 'bexia-repair-order-status-card--cancelled',
                         ];
 
                         $label = e($labels[$stage] ?? $stage);
-                        $style = $styles[$stage] ?? 'background:#f8fafc;border:1px solid #cbd5e1;color:#0f172a;';
+                        $stageClass = $stageClasses[$stage] ?? 'bexia-repair-order-status-card--default';
 
                         return new \Illuminate\Support\HtmlString(
-                            '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px;">'
-                            . '<div style="background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:14px;padding:12px 14px;">'
-                            . '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Folio</div>'
-                            . '<div style="font-size:18px;font-weight:800;margin-top:2px;">' . $folio . '</div>'
+                            '<div class="bexia-repair-order-status-header">'
+                            . '<div class="bexia-repair-order-status-card bexia-repair-order-status-card--folio">'
+                            . '<div class="bexia-repair-order-status-label">Folio</div>'
+                            . '<div class="bexia-repair-order-status-value">' . $folio . '</div>'
                             . '</div>'
-                            . '<div style="' . $style . 'border-radius:14px;padding:12px 14px;">'
-                            . '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;">Estado operativo</div>'
-                            . '<div style="font-size:18px;font-weight:800;margin-top:2px;">' . $label . '</div>'
+                            . '<div class="bexia-repair-order-status-card ' . $stageClass . '">'
+                            . '<div class="bexia-repair-order-status-label">Estado operativo</div>'
+                            . '<div class="bexia-repair-order-status-value">' . $label . '</div>'
                             . '</div>'
                             . '</div>'
                         );
@@ -189,6 +191,7 @@ class RepairOrderResource extends Resource
 
 
                 \Filament\Forms\Components\Section::make('Entrega de reparación')
+                    ->extraAttributes(['class' => 'bexia-repair-order-delivery-section'])
                     ->description('Información final de entrega al cliente.')
                     ->schema([
                         \Filament\Forms\Components\Placeholder::make('ready_for_delivery_at_display')
@@ -214,6 +217,7 @@ class RepairOrderResource extends Resource
 
 
                 \Filament\Forms\Components\Section::make('Tiempo real de reparación')
+                    ->extraAttributes(['class' => 'bexia-repair-order-time-section'])
                     ->description('Se calcula con horario hábil: lunes a viernes 09:00-17:00, sábado 09:00-14:00, domingo 0 horas.')
                     ->schema([
                         \Filament\Forms\Components\Placeholder::make('repair_started_at_display')
@@ -240,12 +244,11 @@ class RepairOrderResource extends Resource
                     ->default(fn (): ?int => ServiceAccess::currentCompanyId()),
 
                 Forms\Components\Section::make('Datos generales')
+                    ->extraAttributes(['class' => 'bexia-repair-order-general-section'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('folio')
-                        ->extraAttributes([
-                            'style' => 'background:#fef3c7;border:1px solid #f59e0b;border-radius:12px;padding:8px;',
-                        ])
+                            ->extraAttributes(['class' => 'bexia-repair-order-folio-input'])
                             ->label('Folio')
                             ->disabled()
                             ->dehydrated(false),
@@ -372,6 +375,7 @@ Forms\Components\Hidden::make('status')
                     ]),
 
                 Forms\Components\Section::make('Producto / documento relacionado')
+                    ->extraAttributes(['class' => 'bexia-repair-order-product-section'])
                     ->description('Opcional. Usa catálogo si existe; si no, captura libremente producto, serie, lote, venta o factura.')
                     ->columns(12)
                     ->schema([
@@ -453,6 +457,7 @@ Forms\Components\Hidden::make('status')
 
                 
                 Forms\Components\Section::make('Diagnostico, presupuesto y resolucion')
+                    ->extraAttributes(['class' => 'bexia-repair-order-diagnosis-section'])
                     ->description('Captura diagnostico, refacciones/materiales, presupuesto y resolucion en un solo bloque.')
                     ->columns(12)
                     ->schema([
@@ -472,6 +477,7 @@ Forms\Components\Hidden::make('status')
                             ->rows(4),
 
                         Forms\Components\Repeater::make('parts')
+                            ->extraAttributes(['class' => 'bexia-repair-order-parts-repeater'])
                             ->label('Refacciones / materiales')
                             ->relationship('parts')
                             ->columns(12)
@@ -731,6 +737,7 @@ Forms\Components\Hidden::make('status')
                             ->columnSpanFull(),
 
                         Forms\Components\Placeholder::make('resolution_locked_notice')
+                            ->extraAttributes(['class' => 'bexia-repair-order-resolution-locked-notice'])
                             ->label('Resolución final')
                             ->content('La resolución final se captura después de aprobar la cotización e iniciar la reparación.')
                             ->visible(fn (Get $get): bool => ! in_array((string) ($get('workflow_stage') ?: 'quote_draft'), ['in_repair', 'repaired', 'supervisor_review', 'ready_for_delivery', 'delivered', 'finished'], true))
@@ -745,6 +752,7 @@ Forms\Components\Hidden::make('status')
                             ->rows(4),
 
                         Forms\Components\FileUpload::make('uploaded_attachments')
+                            ->extraAttributes(['class' => 'bexia-repair-order-attachments-upload'])
                             ->label('Fotos y archivos')
                             ->helperText('Agrega fotos de recepcion, diagnostico, pruebas, entrega o documentos relacionados.')
                             ->multiple()
@@ -766,6 +774,7 @@ Forms\Components\Hidden::make('status')
                     ]),
 
                 Forms\Components\Section::make('Costos finales / reales')
+                    ->extraAttributes(['class' => 'bexia-repair-order-costs-section'])
                     ->columns(2)
                     ->schema([
                         Forms\Components\TextInput::make('estimated_cost')
