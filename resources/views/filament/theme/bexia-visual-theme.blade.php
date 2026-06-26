@@ -4167,4 +4167,127 @@ button[role="switch"] > span {
 }
 /* BEXIA_EMPLOYEE_CONTRACT_RESOURCE_RESPONSIVE_V5_79_33C_END */
 
+
+/* BEXIA_PAYROLL_CFDI_RECEIPT_RESOURCE_RESPONSIVE_V5_79_34C_START */
+.bexia-payroll-cfdi-receipt-infolist-section {
+    min-width: 0;
+}
+
+.bexia-payroll-cfdi-receipt-infolist-section .fi-section-content {
+    border-radius: 16px;
+}
+
+.bexia-payroll-cfdi-receipt-infolist-section .fi-in-grid,
+.bexia-payroll-cfdi-receipt-infolist-section .grid {
+    min-width: 0;
+}
+
+.bexia-payroll-cfdi-receipt-entry,
+.bexia-payroll-cfdi-receipt-modal-field {
+    min-width: 0;
+}
+
+.bexia-payroll-cfdi-receipt-uuid-entry,
+.bexia-payroll-cfdi-receipt-xml-path-entry,
+.bexia-payroll-cfdi-receipt-xml-content-entry,
+.bexia-payroll-cfdi-receipt-issuer-snapshot-entry,
+.bexia-payroll-cfdi-receipt-employee-snapshot-entry,
+.bexia-payroll-cfdi-receipt-contract-snapshot-entry,
+.bexia-payroll-cfdi-receipt-validation-errors-entry {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-payroll-cfdi-receipt-xml-content-entry pre,
+.bexia-payroll-cfdi-receipt-snapshots-section pre {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap;
+}
+
+.bexia-payroll-cfdi-receipt-col-status,
+.bexia-payroll-cfdi-receipt-col-run-id,
+.bexia-payroll-cfdi-receipt-col-series,
+.bexia-payroll-cfdi-receipt-col-pdf,
+.bexia-payroll-cfdi-receipt-col-xml {
+    min-width: 120px;
+}
+
+.bexia-payroll-cfdi-receipt-col-run,
+.bexia-payroll-cfdi-receipt-col-employee {
+    min-width: 220px;
+}
+
+.bexia-payroll-cfdi-receipt-col-folio {
+    min-width: 150px;
+}
+
+.bexia-payroll-cfdi-receipt-col-uuid {
+    min-width: 260px;
+    max-width: 360px;
+    overflow-wrap: anywhere;
+}
+
+.bexia-payroll-cfdi-receipt-col-validated,
+.bexia-payroll-cfdi-receipt-col-stamped,
+.bexia-payroll-cfdi-receipt-col-created {
+    min-width: 150px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-payroll-cfdi-receipt-main-section .fi-in-grid,
+    .bexia-payroll-cfdi-receipt-main-section .grid,
+    .bexia-payroll-cfdi-receipt-totals-section .fi-in-grid,
+    .bexia-payroll-cfdi-receipt-totals-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-payroll-cfdi-receipt-infolist-section .fi-in-grid,
+    .bexia-payroll-cfdi-receipt-infolist-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-payroll-cfdi-receipt-entry,
+    .bexia-payroll-cfdi-receipt-modal-field,
+    .bexia-payroll-cfdi-receipt-infolist-section [data-entry-wrapper],
+    .bexia-payroll-cfdi-receipt-infolist-section .fi-in-entry-wrp {
+        grid-column: 1 / -1 !important;
+        min-width: 0;
+    }
+
+    .bexia-payroll-cfdi-receipt-col-status,
+    .bexia-payroll-cfdi-receipt-col-run-id,
+    .bexia-payroll-cfdi-receipt-col-run,
+    .bexia-payroll-cfdi-receipt-col-employee,
+    .bexia-payroll-cfdi-receipt-col-folio,
+    .bexia-payroll-cfdi-receipt-col-series,
+    .bexia-payroll-cfdi-receipt-col-uuid,
+    .bexia-payroll-cfdi-receipt-col-pdf,
+    .bexia-payroll-cfdi-receipt-col-xml,
+    .bexia-payroll-cfdi-receipt-col-validated,
+    .bexia-payroll-cfdi-receipt-col-stamped,
+    .bexia-payroll-cfdi-receipt-col-created {
+        min-width: 0;
+        max-width: none;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-payroll-cfdi-receipt-infolist-section {
+        border-radius: 14px;
+    }
+
+    .bexia-payroll-cfdi-receipt-infolist-section .fi-section-content {
+        padding: 0.85rem;
+    }
+
+    .bexia-payroll-cfdi-receipt-infolist-section .fi-section-header {
+        padding-inline: 0.85rem;
+    }
+}
+/* BEXIA_PAYROLL_CFDI_RECEIPT_RESOURCE_RESPONSIVE_V5_79_34C_END */
+
 </style>

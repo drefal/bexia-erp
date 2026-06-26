@@ -14,6 +14,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
+// BEXIA_PAYROLL_CFDI_RECEIPT_RESOURCE_RESPONSIVE_V5_79_34C
 class PayrollCfdiReceiptResource extends Resource
 {
     protected static ?string $model = PayrollCfdiReceipt::class;
@@ -104,69 +105,98 @@ class PayrollCfdiReceiptResource extends Resource
                     ->label('Estado')
                     ->formatStateUsing(fn (?string $state): string => self::statusOptions()[$state] ?? ($state ?: 'Sin estado'))
                     ->badge()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-status']),
 
                 Tables\Columns\TextColumn::make('payroll_run_id')
                     ->label('Nómina ID')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-run-id'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-run-id']),
 
                 Tables\Columns\TextColumn::make('payrollRun.name')
                     ->label('Nómina')
                     ->limit(40)
+                    ->wrap()
                     ->searchable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-run'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-run']),
 
                 Tables\Columns\TextColumn::make('employee.name')
                     ->label('Empleado')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-employee'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-employee']),
 
                 Tables\Columns\TextColumn::make('folio')
                     ->label('Folio')
                     ->searchable()
                     ->copyable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-folio'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-folio']),
 
                 Tables\Columns\TextColumn::make('series')
                     ->label('Serie')
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-series'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-series']),
 
                 Tables\Columns\TextColumn::make('uuid')
                     ->label('UUID')
                     ->placeholder('Sin timbrar')
                     ->copyable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-uuid'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-uuid']),
 
                 Tables\Columns\TextColumn::make('pdf_path')
                     ->label('PDF')
                     ->formatStateUsing(fn (?string $state): string => filled($state) ? 'Generado' : 'Pendiente')
                     ->badge()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-pdf'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-pdf']),
 
                 Tables\Columns\TextColumn::make('xml_path')
                     ->label('XML')
                     ->formatStateUsing(fn (?string $state): string => filled($state) ? 'Generado' : 'Pendiente')
                     ->badge()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-xml'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-xml']),
 
                 Tables\Columns\TextColumn::make('validated_at')
                     ->label('Validado')
                     ->dateTime('Y-m-d H:i')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-validated'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-validated']),
 
                 Tables\Columns\TextColumn::make('stamped_at')
                     ->label('Timbrado')
                     ->dateTime('Y-m-d H:i')
                     ->placeholder('Pendiente')
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-stamped'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-stamped']),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Creado')
                     ->dateTime('Y-m-d H:i')
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-created'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-cfdi-receipt-col-created']),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -186,6 +216,7 @@ class PayrollCfdiReceiptResource extends Resource
                     ->form([
                         \Filament\Forms\Components\Select::make('reason')
                             ->label('Motivo SAT de cancelación')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-modal-field bexia-payroll-cfdi-receipt-cancel-reason-field'])
                             ->options([
                                 '01' => '01 - Comprobante emitido con errores con relación',
                                 '02' => '02 - Comprobante emitido con errores sin relación',
@@ -196,6 +227,7 @@ class PayrollCfdiReceiptResource extends Resource
                             ->required(),
                         \Filament\Forms\Components\TextInput::make('replacement_uuid')
                             ->label('UUID relacionado')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-modal-field bexia-payroll-cfdi-receipt-replacement-uuid-field'])
                             ->helperText('Solo aplica normalmente para motivo 01.')
                             ->maxLength(36),
                     ])
@@ -367,6 +399,7 @@ class PayrollCfdiReceiptResource extends Resource
                     ->form([
                         \Filament\Forms\Components\Textarea::make('reason')
                             ->label('Motivo')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-modal-field bexia-payroll-cfdi-receipt-reason-field-1'])
                             ->rows(3)
                             ->maxLength(500)
                             ->required(),
@@ -398,6 +431,7 @@ class PayrollCfdiReceiptResource extends Resource
                     ->form([
                         \Filament\Forms\Components\Textarea::make('reason')
                             ->label('Motivo')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-modal-field bexia-payroll-cfdi-receipt-reason-field-2'])
                             ->rows(3)
                             ->maxLength(500)
                             ->required(),
@@ -428,15 +462,18 @@ class PayrollCfdiReceiptResource extends Resource
                     ->form([
                         \Filament\Forms\Components\TextInput::make('uuid')
                             ->label('UUID externo')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-modal-field bexia-payroll-cfdi-receipt-external-uuid-field'])
                             ->required()
                             ->maxLength(36)
                             ->helperText('Formato UUID del CFDI timbrado fuera de Bexia.'),
                         \Filament\Forms\Components\TextInput::make('xml_path')
                             ->label('Ruta XML en storage local')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-modal-field bexia-payroll-cfdi-receipt-external-xml-path-field'])
                             ->maxLength(255)
                             ->helperText('Opcional. Si se informa, debe existir en storage/app.'),
                         \Filament\Forms\Components\Textarea::make('notes')
                             ->label('Notas')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-modal-field bexia-payroll-cfdi-receipt-notes-field'])
                             ->rows(3)
                             ->maxLength(500),
                     ])
@@ -477,6 +514,7 @@ class PayrollCfdiReceiptResource extends Resource
                     ->form([
                         \Filament\Forms\Components\Textarea::make('reason')
                             ->label('Motivo')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-modal-field bexia-payroll-cfdi-receipt-reason-field-3'])
                             ->rows(3)
                             ->maxLength(500)
                             ->required(),
@@ -508,87 +546,108 @@ class PayrollCfdiReceiptResource extends Resource
         return $infolist
             ->schema([
                 Infolists\Components\Section::make('Recibo CFDI nómina')
+                    ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-infolist-section bexia-payroll-cfdi-receipt-main-section'])
                     ->columns(3)
                     ->schema([
                         Infolists\Components\TextEntry::make('status')
                             ->label('Estado')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-status-entry'])
                             ->formatStateUsing(fn (?string $state): string => self::statusOptions()[$state] ?? ($state ?: 'Sin estado'))
                             ->badge(),
 
                         Infolists\Components\TextEntry::make('series')
-                            ->label('Serie'),
+                            ->label('Serie')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-series-entry']),
 
                         Infolists\Components\TextEntry::make('folio')
                             ->label('Folio')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-folio-entry'])
                             ->copyable(),
 
                         Infolists\Components\TextEntry::make('payrollRun.name')
-                            ->label('Nómina'),
+                            ->label('Nómina')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-run-entry']),
 
                         Infolists\Components\TextEntry::make('employee.name')
-                            ->label('Empleado'),
+                            ->label('Empleado')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-employee-entry']),
 
                         Infolists\Components\TextEntry::make('uuid')
                             ->label('UUID')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-uuid-entry'])
                             ->placeholder('Sin timbrar')
                             ->copyable(),
 
                         Infolists\Components\TextEntry::make('cfdi_version')
-                            ->label('CFDI'),
+                            ->label('CFDI')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-cfdi-version-entry']),
 
                         Infolists\Components\TextEntry::make('payroll_complement_version')
-                            ->label('Complemento nómina'),
+                            ->label('Complemento nómina')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-payroll-complement-entry']),
 
                         Infolists\Components\TextEntry::make('validated_at')
                             ->label('Validado')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-validated-entry'])
                             ->dateTime('Y-m-d H:i'),
 
                         Infolists\Components\TextEntry::make('stamped_at')
                             ->label('Timbrado')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-stamped-entry'])
                             ->dateTime('Y-m-d H:i')
                             ->placeholder('Pendiente'),
 
                         Infolists\Components\TextEntry::make('cancelled_at')
                             ->label('Cancelado')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-cancelled-entry'])
                             ->dateTime('Y-m-d H:i')
                             ->placeholder('No cancelado'),
 
                         Infolists\Components\TextEntry::make('pac_provider')
                             ->label('PAC')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-pac-entry'])
                             ->placeholder('Sin PAC'),
                     ]),
 
                 Infolists\Components\Section::make('Totales')
+                    ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-infolist-section bexia-payroll-cfdi-receipt-totals-section'])
                     ->columns(3)
                     ->schema([
                         Infolists\Components\TextEntry::make('totals_snapshot')
                             ->label('Período')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-period-entry'])
                             ->formatStateUsing(fn ($state): string => self::periodSummary($state)),
 
                         Infolists\Components\TextEntry::make('totals_snapshot_gross')
                             ->label('Total bruto')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-gross-entry'])
                             ->state(fn (PayrollCfdiReceipt $record): string => self::moneyFromSnapshot($record->totals_snapshot, 'gross_amount')),
 
                         Infolists\Components\TextEntry::make('totals_snapshot_deductions')
                             ->label('Deducciones')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-deductions-entry'])
                             ->state(fn (PayrollCfdiReceipt $record): string => self::moneyFromSnapshot($record->totals_snapshot, 'deductions_amount')),
 
                         Infolists\Components\TextEntry::make('totals_snapshot_net')
                             ->label('Neto')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-net-entry'])
                             ->state(fn (PayrollCfdiReceipt $record): string => self::moneyFromSnapshot($record->totals_snapshot, 'net_amount')),
                     ]),
 
                 Infolists\Components\Section::make('XML borrador')
+                    ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-infolist-section bexia-payroll-cfdi-receipt-xml-section'])
                     ->description('XML generado localmente. No timbrado, sin UUID y sin envio a PAC/SAT.')
                     ->schema([
                         Infolists\Components\TextEntry::make('xml_path')
                             ->label('Ruta XML')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-xml-path-entry'])
                             ->placeholder('Sin XML generado')
                             ->copyable()
                             ->columnSpanFull(),
 
                         Infolists\Components\TextEntry::make('xml_content')
                             ->label('Contenido XML')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-xml-content-entry'])
                             ->state(function (PayrollCfdiReceipt $record): string {
                                 if (! filled($record->xml_path)) {
                                     return 'Sin XML generado.';
@@ -605,24 +664,29 @@ class PayrollCfdiReceiptResource extends Resource
                     ]),
 
                 Infolists\Components\Section::make('Snapshots fiscales')
+                    ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-infolist-section bexia-payroll-cfdi-receipt-snapshots-section'])
                     ->schema([
                         Infolists\Components\TextEntry::make('issuer_snapshot')
                             ->label('Emisor')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-issuer-snapshot-entry'])
                             ->formatStateUsing(fn ($state): string => self::snapshotText($state))
                             ->columnSpanFull(),
 
                         Infolists\Components\TextEntry::make('employee_snapshot')
                             ->label('Empleado/Receptor')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-employee-snapshot-entry'])
                             ->formatStateUsing(fn ($state): string => self::snapshotText($state))
                             ->columnSpanFull(),
 
                         Infolists\Components\TextEntry::make('contract_snapshot')
                             ->label('Contrato')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-contract-snapshot-entry'])
                             ->formatStateUsing(fn ($state): string => self::snapshotText($state))
                             ->columnSpanFull(),
 
                         Infolists\Components\TextEntry::make('validation_errors')
                             ->label('Errores de validación')
+                            ->extraAttributes(['class' => 'bexia-payroll-cfdi-receipt-entry bexia-payroll-cfdi-receipt-validation-errors-entry'])
                             ->formatStateUsing(fn ($state): string => self::snapshotText($state))
                             ->placeholder('Sin errores')
                             ->columnSpanFull(),
