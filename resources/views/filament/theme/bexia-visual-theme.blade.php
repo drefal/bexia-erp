@@ -3569,4 +3569,110 @@ button[role="switch"] > span {
 }
 /* BEXIA_ROLE_RESOURCE_RESPONSIVE_V5_79_28B_END */
 
+
+/* BEXIA_COMPANY_RESOURCE_RESPONSIVE_V5_79_29C_START */
+.bexia-company-section {
+    min-width: 0;
+}
+
+.bexia-company-section .fi-section-content {
+    border-radius: 16px;
+}
+
+.bexia-company-section .fi-grid,
+.bexia-company-section .grid {
+    min-width: 0;
+}
+
+.bexia-company-general-section,
+.bexia-company-attendance-section,
+.bexia-company-pac-section,
+.bexia-company-csd-section,
+.bexia-company-branding-section,
+.bexia-company-costing-section {
+    overflow: hidden;
+}
+
+.bexia-company-col-logo {
+    min-width: 88px;
+}
+
+.bexia-company-col-id {
+    min-width: 70px;
+}
+
+.bexia-company-col-name {
+    min-width: 220px;
+}
+
+.bexia-company-col-slug {
+    min-width: 160px;
+}
+
+.bexia-company-col-tax-id {
+    min-width: 135px;
+}
+
+.bexia-company-col-pac,
+.bexia-company-col-pac-test,
+.bexia-company-col-active {
+    min-width: 115px;
+}
+
+.bexia-company-col-pac-status {
+    min-width: 160px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-company-section .fi-grid,
+    .bexia-company-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .bexia-company-branding-section .fi-grid,
+    .bexia-company-branding-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-company-section .fi-grid,
+    .bexia-company-section .grid,
+    .bexia-company-branding-section .fi-grid,
+    .bexia-company-branding-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-company-section .fi-fo-field-wrp,
+    .bexia-company-section .fi-fo-component-ctn,
+    .bexia-company-section [data-field-wrapper] {
+        grid-column: 1 / -1 !important;
+        min-width: 0;
+    }
+
+    .bexia-company-col-logo,
+    .bexia-company-col-id,
+    .bexia-company-col-name,
+    .bexia-company-col-slug,
+    .bexia-company-col-tax-id,
+    .bexia-company-col-pac,
+    .bexia-company-col-pac-test,
+    .bexia-company-col-pac-status,
+    .bexia-company-col-active {
+        min-width: 0;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-company-section {
+        border-radius: 14px;
+    }
+
+    .bexia-company-section .fi-section-content {
+        padding: 0.85rem;
+    }
+}
+/* BEXIA_COMPANY_RESOURCE_RESPONSIVE_V5_79_29C_END */
+
 </style>
