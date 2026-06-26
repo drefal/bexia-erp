@@ -2593,4 +2593,155 @@ button[role="switch"] > span {
 }
 /* BEXIA_CONTACT_RESOURCE_RESPONSIVE_V5_79_22C_END */
 
+
+/* BEXIA_POS_POINT_RESOURCE_RESPONSIVE_V5_79_23C_START */
+/*
+ * PosPointResource responsive refinements.
+ * Alcance: tabs de configuración PDV, secciones densas,
+ * selects/toggles/file upload y placeholder de cajeros.
+ * No cambia lógica de PDV, sesiones, pagos, inventario ni permisos.
+ */
+.bexia-pos-point-resource-tabs,
+.bexia-pos-point-tab-general,
+.bexia-pos-point-tab-interface,
+.bexia-pos-point-tab-stock,
+.bexia-pos-point-tab-prices,
+.bexia-pos-point-tab-ticket-billing,
+.bexia-pos-point-tab-payments,
+.bexia-pos-point-tab-inventory,
+.bexia-pos-point-tab-technical,
+.bexia-pos-point-main-section,
+.bexia-pos-point-partial-payment-section,
+.bexia-pos-point-interface-section,
+.bexia-pos-point-stock-section,
+.bexia-pos-point-orders-section,
+.bexia-pos-point-price-lists-section,
+.bexia-pos-point-close-section,
+.bexia-pos-point-receipt-privacy-section,
+.bexia-pos-point-ticket-section,
+.bexia-pos-point-invoice-qr-section,
+.bexia-pos-point-payments-section,
+.bexia-pos-point-inventory-section,
+.bexia-pos-point-technical-section,
+.bexia-pos-point-cashiers-help-field {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-pos-point-resource-tabs .fi-tabs {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+}
+
+.bexia-pos-point-resource-tabs .fi-tabs-item {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+}
+
+.bexia-pos-point-main-section .fi-grid,
+.bexia-pos-point-partial-payment-section .fi-grid,
+.bexia-pos-point-interface-section .fi-grid,
+.bexia-pos-point-stock-section .fi-grid,
+.bexia-pos-point-orders-section .fi-grid,
+.bexia-pos-point-price-lists-section .fi-grid,
+.bexia-pos-point-close-section .fi-grid,
+.bexia-pos-point-receipt-privacy-section .fi-grid,
+.bexia-pos-point-ticket-section .fi-grid,
+.bexia-pos-point-invoice-qr-section .fi-grid,
+.bexia-pos-point-payments-section .fi-grid,
+.bexia-pos-point-inventory-section .fi-grid,
+.bexia-pos-point-technical-section .fi-grid,
+.bexia-pos-point-main-section .fi-fo-component-ctn,
+.bexia-pos-point-partial-payment-section .fi-fo-component-ctn,
+.bexia-pos-point-interface-section .fi-fo-component-ctn,
+.bexia-pos-point-stock-section .fi-fo-component-ctn,
+.bexia-pos-point-orders-section .fi-fo-component-ctn,
+.bexia-pos-point-price-lists-section .fi-fo-component-ctn,
+.bexia-pos-point-close-section .fi-fo-component-ctn,
+.bexia-pos-point-receipt-privacy-section .fi-fo-component-ctn,
+.bexia-pos-point-ticket-section .fi-fo-component-ctn,
+.bexia-pos-point-invoice-qr-section .fi-fo-component-ctn,
+.bexia-pos-point-payments-section .fi-fo-component-ctn,
+.bexia-pos-point-inventory-section .fi-fo-component-ctn,
+.bexia-pos-point-technical-section .fi-fo-component-ctn {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-pos-point-resource-tabs .fi-input-wrp,
+.bexia-pos-point-resource-tabs .fi-select-input,
+.bexia-pos-point-resource-tabs .fi-fo-select,
+.bexia-pos-point-resource-tabs .fi-fo-textarea,
+.bexia-pos-point-resource-tabs textarea,
+.bexia-pos-point-resource-tabs input,
+.bexia-pos-point-resource-tabs .choices,
+.bexia-pos-point-resource-tabs .choices__inner,
+.bexia-pos-point-resource-tabs .fi-fo-file-upload {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-pos-point-resource-tabs .fi-fo-field-wrp-helper-text,
+.bexia-pos-point-resource-tabs .fi-fo-field-wrp-hint,
+.bexia-pos-point-resource-tabs .fi-section-description,
+.bexia-pos-point-cashiers-help-field {
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+}
+
+.bexia-pos-point-cashiers-help-field {
+    color: #6b7280 !important;
+    line-height: 1.4 !important;
+}
+
+.dark .bexia-pos-point-cashiers-help-field {
+    color: #9ca3af !important;
+}
+
+@media (max-width: 768px) {
+    .bexia-pos-point-main-section,
+    .bexia-pos-point-partial-payment-section,
+    .bexia-pos-point-interface-section,
+    .bexia-pos-point-stock-section,
+    .bexia-pos-point-orders-section,
+    .bexia-pos-point-price-lists-section,
+    .bexia-pos-point-close-section,
+    .bexia-pos-point-receipt-privacy-section,
+    .bexia-pos-point-ticket-section,
+    .bexia-pos-point-invoice-qr-section,
+    .bexia-pos-point-payments-section,
+    .bexia-pos-point-inventory-section,
+    .bexia-pos-point-technical-section {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .bexia-pos-point-resource-tabs .fi-tabs {
+        margin-left: -0.25rem !important;
+        margin-right: -0.25rem !important;
+        padding-left: 0.25rem !important;
+        padding-right: 0.25rem !important;
+    }
+
+    .bexia-pos-point-resource-tabs .fi-tabs-item {
+        min-height: 2.35rem !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-pos-point-resource-tabs .fi-section-description,
+    .bexia-pos-point-resource-tabs .fi-fo-field-wrp-helper-text,
+    .bexia-pos-point-cashiers-help-field {
+        font-size: 0.8125rem !important;
+    }
+
+    .bexia-pos-point-resource-tabs textarea {
+        min-height: 7rem !important;
+    }
+}
+/* BEXIA_POS_POINT_RESOURCE_RESPONSIVE_V5_79_23C_END */
+
 </style>
