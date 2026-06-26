@@ -3675,4 +3675,125 @@ button[role="switch"] > span {
 }
 /* BEXIA_COMPANY_RESOURCE_RESPONSIVE_V5_79_29C_END */
 
+
+/* BEXIA_EMPLOYEE_INCIDENT_RESOURCE_RESPONSIVE_V5_79_30C_START */
+.bexia-employee-incident-section {
+    min-width: 0;
+}
+
+.bexia-employee-incident-section .fi-section-content {
+    border-radius: 16px;
+}
+
+.bexia-employee-incident-form-grid,
+.bexia-employee-incident-section .fi-grid,
+.bexia-employee-incident-section .grid {
+    min-width: 0;
+}
+
+.bexia-employee-incident-field,
+.bexia-employee-incident-vacation-wrapper {
+    min-width: 0;
+}
+
+.bexia-employee-incident-vacation-summary {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.55;
+}
+
+.bexia-employee-incident-col-employee {
+    min-width: 210px;
+}
+
+.bexia-employee-incident-col-type {
+    min-width: 160px;
+}
+
+.bexia-employee-incident-col-title {
+    min-width: 230px;
+}
+
+.bexia-employee-incident-col-status {
+    min-width: 130px;
+}
+
+.bexia-employee-incident-col-start-date,
+.bexia-employee-incident-col-end-date,
+.bexia-employee-incident-col-created {
+    min-width: 130px;
+}
+
+.bexia-employee-incident-col-quantity {
+    min-width: 170px;
+}
+
+.bexia-employee-incident-col-quantity-unit,
+.bexia-employee-incident-col-approval,
+.bexia-employee-incident-col-payroll,
+.bexia-employee-incident-col-attachment {
+    min-width: 120px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-employee-incident-form-grid,
+    .bexia-employee-incident-section .fi-grid,
+    .bexia-employee-incident-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-employee-incident-form-grid,
+    .bexia-employee-incident-section .fi-grid,
+    .bexia-employee-incident-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-employee-incident-section .fi-fo-field-wrp,
+    .bexia-employee-incident-section .fi-fo-component-ctn,
+    .bexia-employee-incident-section [data-field-wrapper],
+    .bexia-employee-incident-field,
+    .bexia-employee-incident-vacation-wrapper {
+        grid-column: 1 / -1 !important;
+        min-width: 0;
+    }
+
+    .bexia-employee-incident-vacation-summary {
+        font-size: 0.86rem;
+        line-height: 1.5;
+    }
+
+    .bexia-employee-incident-col-employee,
+    .bexia-employee-incident-col-type,
+    .bexia-employee-incident-col-title,
+    .bexia-employee-incident-col-status,
+    .bexia-employee-incident-col-start-date,
+    .bexia-employee-incident-col-end-date,
+    .bexia-employee-incident-col-created,
+    .bexia-employee-incident-col-quantity,
+    .bexia-employee-incident-col-quantity-unit,
+    .bexia-employee-incident-col-approval,
+    .bexia-employee-incident-col-payroll,
+    .bexia-employee-incident-col-attachment {
+        min-width: 0;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-employee-incident-section {
+        border-radius: 14px;
+    }
+
+    .bexia-employee-incident-section .fi-section-content {
+        padding: 0.85rem;
+    }
+
+    .bexia-employee-incident-vacation-summary {
+        padding: 0.75rem !important;
+    }
+}
+/* BEXIA_EMPLOYEE_INCIDENT_RESOURCE_RESPONSIVE_V5_79_30C_END */
+
 </style>
