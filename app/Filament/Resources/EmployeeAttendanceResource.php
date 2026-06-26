@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 
+// BEXIA_EMPLOYEE_ATTENDANCE_RESOURCE_RESPONSIVE_V5_79_31C
 class EmployeeAttendanceResource extends Resource
 {
     protected static ?string $model = EmployeeAttendance::class;
@@ -134,12 +135,15 @@ class EmployeeAttendanceResource extends Resource
         return $form
             ->schema([
                 Section::make('Registro de asistencia')
+                    ->extraAttributes(['class' => 'bexia-employee-attendance-section bexia-employee-attendance-record-section'])
                     ->description('Captura entrada y salida. El sistema calcula estado, retardo, salida temprana, horas trabajadas y horas extra contra el horario operativo.')
                     ->schema([
                         Grid::make(2)
+                            ->extraAttributes(['class' => 'bexia-employee-attendance-grid bexia-employee-attendance-record-grid'])
                             ->schema([
                                 Select::make('employee_id')
                                     ->label('Empleado')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-field bexia-employee-attendance-employee-field'])
                                     ->options(fn () => self::employeeOptions())
                                     ->searchable()
                                     ->preload()
@@ -147,22 +151,26 @@ class EmployeeAttendanceResource extends Resource
 
                                 DatePicker::make('attendance_date')
                                     ->label('Fecha')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-field bexia-employee-attendance-date-field'])
                                     ->native(false)
                                     ->default(now())
                                     ->required(),
 
                                 DateTimePicker::make('clock_in_at')
                                     ->label('Entrada real')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-field bexia-employee-attendance-clock-in-field'])
                                     ->seconds(false)
                                     ->native(false),
 
                                 DateTimePicker::make('clock_out_at')
                                     ->label('Salida real')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-field bexia-employee-attendance-clock-out-field'])
                                     ->seconds(false)
                                     ->native(false),
 
                                 Select::make('source')
                                     ->label('Origen')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-field bexia-employee-attendance-source-field'])
                                     ->options([
                                         'manual' => 'Manual',
                                         'clock' => 'Checador',
@@ -173,17 +181,20 @@ class EmployeeAttendanceResource extends Resource
 
                                 Placeholder::make('calculation_hint')
                                     ->label('Cálculo automático')
-                                    ->content(new HtmlString('<div class="rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200">Al guardar se calcula el horario esperado, minutos trabajados, retardo, salida temprana, horas extra y estado.</div>'))
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-placeholder bexia-employee-attendance-calculation-wrapper'])
+                                    ->content(new HtmlString('<div class="bexia-employee-attendance-calculation-hint rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200">Al guardar se calcula el horario esperado, minutos trabajados, retardo, salida temprana, horas extra y estado.</div>'))
                                     ->columnSpanFull(),
 
                                 Textarea::make('notes')
                                     ->label('Notas')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-field bexia-employee-attendance-notes-field'])
                                     ->rows(3)
                                     ->columnSpanFull(),
                             ]),
                     ]),
 
                 Section::make('Revisión móvil / geocerca')
+                    ->extraAttributes(['class' => 'bexia-employee-attendance-section bexia-employee-attendance-mobile-review-section'])
                     ->description('Revisión operativa de la ubicación reportada por QR o checador móvil. No sustituye el flujo formal de aprobación de incidencias.')
                     ->visible(fn (?EmployeeAttendance $record): bool => (bool) $record && (
                         $record->mobile_review_status !== null
@@ -194,9 +205,11 @@ class EmployeeAttendanceResource extends Resource
                     ))
                     ->schema([
                         Grid::make(3)
+                            ->extraAttributes(['class' => 'bexia-employee-attendance-grid bexia-employee-attendance-mobile-review-grid'])
                             ->schema([
                                 Select::make('mobile_review_status')
                                     ->label('Estado revisión móvil')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-field bexia-employee-attendance-mobile-status-field'])
                                     ->options([
                                         'accepted' => 'Aceptada',
                                         'pending' => 'Pendiente',
@@ -208,14 +221,17 @@ class EmployeeAttendanceResource extends Resource
 
                                 Placeholder::make('mobile_reviewed_by_label')
                                     ->label('Revisado por')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-placeholder bexia-employee-attendance-reviewed-by-wrapper'])
                                     ->content(fn (?EmployeeAttendance $record): string => $record?->mobileReviewer?->name ?? '—'),
 
                                 Placeholder::make('mobile_reviewed_at_label')
                                     ->label('Revisado el')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-placeholder bexia-employee-attendance-reviewed-at-wrapper'])
                                     ->content(fn (?EmployeeAttendance $record): string => $record?->mobile_reviewed_at?->format('d/m/Y H:i') ?? '—'),
 
                                 Placeholder::make('clock_in_geo_summary')
                                     ->label('Entrada / geocerca')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-placeholder bexia-employee-attendance-clock-in-geo-wrapper'])
                                     ->content(fn (?EmployeeAttendance $record): string => $record
                                         ? 'Estado: ' . match ($record->clock_in_location_status) {
                                             'inside' => 'Dentro',
@@ -229,6 +245,7 @@ class EmployeeAttendanceResource extends Resource
 
                                 Placeholder::make('clock_out_geo_summary')
                                     ->label('Salida / geocerca')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-placeholder bexia-employee-attendance-clock-out-geo-wrapper'])
                                     ->content(fn (?EmployeeAttendance $record): string => $record
                                         ? 'Estado: ' . match ($record->clock_out_location_status) {
                                             'inside' => 'Dentro',
@@ -242,11 +259,13 @@ class EmployeeAttendanceResource extends Resource
 
                                 Placeholder::make('mobile_reviewer_rule')
                                     ->label('Quién puede revisar')
+                                    ->extraAttributes(['class' => 'bexia-employee-attendance-placeholder bexia-employee-attendance-reviewer-rule-wrapper'])
                                     ->content('Super Admin, admin de empresa, RRHH autorizado o jefe directo del empleado.'),
                             ]),
 
                         Textarea::make('mobile_review_notes')
                             ->label('Notas de revisión móvil')
+                            ->extraAttributes(['class' => 'bexia-employee-attendance-field bexia-employee-attendance-mobile-notes-field'])
                             ->rows(3)
                             ->disabled(fn (?EmployeeAttendance $record): bool => ! static::canReviewMobileAttendance($record))
                             ->required(fn (\Filament\Forms\Get $get): bool => $get('mobile_review_status') === 'rejected')
@@ -287,6 +306,8 @@ class EmployeeAttendanceResource extends Resource
                         default => $record->source ? str($record->source)->headline()->toString() : '—',
                     })
                     ->label('Origen')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-source'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-source'])
                     // v5790l4_origen_qr_state
                     ->state(fn ($record): string => match ($record->source) {
                         'qr_link' => 'QR',
@@ -316,6 +337,8 @@ class EmployeeAttendanceResource extends Resource
 
                 \Filament\Tables\Columns\TextColumn::make('mobile_review_status')
                     ->label('Rev. móvil')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-mobile-review'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-mobile-review'])
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'accepted' => 'Aceptada',
@@ -333,6 +356,8 @@ class EmployeeAttendanceResource extends Resource
 
                 \Filament\Tables\Columns\TextColumn::make('clock_in_location_status')
                     ->label('Geo entrada')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-in-geo'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-in-geo'])
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'inside' => 'Dentro',
@@ -354,6 +379,8 @@ class EmployeeAttendanceResource extends Resource
 
                 \Filament\Tables\Columns\TextColumn::make('clock_out_location_status')
                     ->label('Geo salida')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-out-geo'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-out-geo'])
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'inside' => 'Dentro',
@@ -375,18 +402,24 @@ class EmployeeAttendanceResource extends Resource
 
                 \Filament\Tables\Columns\TextColumn::make('clock_in_distance_meters')
                     ->label('Dist. entrada')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-in-distance'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-in-distance'])
                     ->formatStateUsing(fn ($state): string => $state === null ? '—' : ((int) $state) . ' m')
                     ->alignEnd()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 \Filament\Tables\Columns\TextColumn::make('clock_out_distance_meters')
                     ->label('Dist. salida')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-out-distance'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-out-distance'])
                     ->formatStateUsing(fn ($state): string => $state === null ? '—' : ((int) $state) . ' m')
                     ->alignEnd()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 \Filament\Tables\Columns\TextColumn::make('clock_in_device_guard_status')
                     ->label('Guard entrada')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-in-guard'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-in-guard'])
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'ok' => 'OK',
@@ -407,6 +440,8 @@ class EmployeeAttendanceResource extends Resource
 
                 \Filament\Tables\Columns\TextColumn::make('clock_out_device_guard_status')
                     ->label('Guard salida')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-out-guard'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-out-guard'])
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'ok' => 'OK',
@@ -427,72 +462,100 @@ class EmployeeAttendanceResource extends Resource
 
                 \Filament\Tables\Columns\TextColumn::make('clock_in_device_fingerprint')
                     ->label('Equipo entrada')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-in-device'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-in-device'])
                     ->formatStateUsing(fn (?string $state): string => $state ? substr($state, 0, 10) . '…' : '—')
                     ->copyable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 \Filament\Tables\Columns\TextColumn::make('clock_out_device_fingerprint')
                     ->label('Equipo salida')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-out-device'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-out-device'])
                     ->formatStateUsing(fn (?string $state): string => $state ? substr($state, 0, 10) . '…' : '—')
                     ->copyable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('attendance_date')
                     ->label('Fecha')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-date'])
                     ->date('d/m/Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('employee.name')
                     ->label('Empleado')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-employee'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-employee'])
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('workSchedule.name')
                     ->label('Horario')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-schedule'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-schedule'])
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-status'])
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => self::statusLabel($state))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('expected_start_at')
                     ->label('Entrada esperada')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-expected-start'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-expected-start'])
                     ->dateTime('H:i')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('clock_in_at')
                     ->label('Entrada real')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-in'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-in'])
                     ->dateTime('H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('expected_end_at')
                     ->label('Salida esperada')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-expected-end'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-expected-end'])
                     ->dateTime('H:i')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('clock_out_at')
                     ->label('Salida real')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-clock-out'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-clock-out'])
                     ->dateTime('H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('worked_hours')
                     ->label('Horas')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-worked-hours'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-worked-hours'])
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('late_minutes')
                     ->label('Retardo')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-late'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-late'])
                     ->suffix(' min')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('early_leave_minutes')
                     ->label('Salida temp.')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-early-leave'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-early-leave'])
                     ->suffix(' min')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('overtime_minutes')
                     ->label('Extra')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-overtime'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-overtime'])
                     ->suffix(' min')
                     ->sortable(),
 
@@ -505,6 +568,8 @@ class EmployeeAttendanceResource extends Resource
                         default => $record->source ? str($record->source)->headline()->toString() : '—',
                     })
                     ->label('Origen')
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-attendance-col-source'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-attendance-col-source'])
                     ->badge()
                     ->toggleable(),
             ])

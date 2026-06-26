@@ -3796,4 +3796,154 @@ button[role="switch"] > span {
 }
 /* BEXIA_EMPLOYEE_INCIDENT_RESOURCE_RESPONSIVE_V5_79_30C_END */
 
+
+/* BEXIA_EMPLOYEE_ATTENDANCE_RESOURCE_RESPONSIVE_V5_79_31C_START */
+.bexia-employee-attendance-section {
+    min-width: 0;
+}
+
+.bexia-employee-attendance-section .fi-section-content {
+    border-radius: 16px;
+}
+
+.bexia-employee-attendance-grid,
+.bexia-employee-attendance-section .fi-grid,
+.bexia-employee-attendance-section .grid {
+    min-width: 0;
+}
+
+.bexia-employee-attendance-field,
+.bexia-employee-attendance-placeholder {
+    min-width: 0;
+}
+
+.bexia-employee-attendance-calculation-hint {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.55;
+}
+
+.bexia-employee-attendance-clock-in-geo-wrapper,
+.bexia-employee-attendance-clock-out-geo-wrapper,
+.bexia-employee-attendance-reviewer-rule-wrapper {
+    overflow-wrap: anywhere;
+}
+
+.bexia-employee-attendance-col-employee {
+    min-width: 220px;
+}
+
+.bexia-employee-attendance-col-source,
+.bexia-employee-attendance-col-mobile-review,
+.bexia-employee-attendance-col-status {
+    min-width: 130px;
+}
+
+.bexia-employee-attendance-col-clock-in-geo,
+.bexia-employee-attendance-col-clock-out-geo,
+.bexia-employee-attendance-col-clock-in-guard,
+.bexia-employee-attendance-col-clock-out-guard {
+    min-width: 145px;
+}
+
+.bexia-employee-attendance-col-clock-in-distance,
+.bexia-employee-attendance-col-clock-out-distance,
+.bexia-employee-attendance-col-worked-hours,
+.bexia-employee-attendance-col-late,
+.bexia-employee-attendance-col-early-leave,
+.bexia-employee-attendance-col-overtime {
+    min-width: 120px;
+}
+
+.bexia-employee-attendance-col-clock-in-device,
+.bexia-employee-attendance-col-clock-out-device {
+    min-width: 150px;
+}
+
+.bexia-employee-attendance-col-date,
+.bexia-employee-attendance-col-schedule,
+.bexia-employee-attendance-col-expected-start,
+.bexia-employee-attendance-col-clock-in,
+.bexia-employee-attendance-col-expected-end,
+.bexia-employee-attendance-col-clock-out {
+    min-width: 135px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-employee-attendance-record-grid,
+    .bexia-employee-attendance-record-section .fi-grid,
+    .bexia-employee-attendance-record-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .bexia-employee-attendance-mobile-review-grid,
+    .bexia-employee-attendance-mobile-review-section .fi-grid,
+    .bexia-employee-attendance-mobile-review-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-employee-attendance-grid,
+    .bexia-employee-attendance-section .fi-grid,
+    .bexia-employee-attendance-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-employee-attendance-section .fi-fo-field-wrp,
+    .bexia-employee-attendance-section .fi-fo-component-ctn,
+    .bexia-employee-attendance-section [data-field-wrapper],
+    .bexia-employee-attendance-field,
+    .bexia-employee-attendance-placeholder {
+        grid-column: 1 / -1 !important;
+        min-width: 0;
+    }
+
+    .bexia-employee-attendance-calculation-hint {
+        font-size: 0.86rem;
+        line-height: 1.5;
+    }
+
+    .bexia-employee-attendance-col-source,
+    .bexia-employee-attendance-col-mobile-review,
+    .bexia-employee-attendance-col-clock-in-geo,
+    .bexia-employee-attendance-col-clock-out-geo,
+    .bexia-employee-attendance-col-clock-in-distance,
+    .bexia-employee-attendance-col-clock-out-distance,
+    .bexia-employee-attendance-col-clock-in-guard,
+    .bexia-employee-attendance-col-clock-out-guard,
+    .bexia-employee-attendance-col-clock-in-device,
+    .bexia-employee-attendance-col-clock-out-device,
+    .bexia-employee-attendance-col-date,
+    .bexia-employee-attendance-col-employee,
+    .bexia-employee-attendance-col-schedule,
+    .bexia-employee-attendance-col-status,
+    .bexia-employee-attendance-col-expected-start,
+    .bexia-employee-attendance-col-clock-in,
+    .bexia-employee-attendance-col-expected-end,
+    .bexia-employee-attendance-col-clock-out,
+    .bexia-employee-attendance-col-worked-hours,
+    .bexia-employee-attendance-col-late,
+    .bexia-employee-attendance-col-early-leave,
+    .bexia-employee-attendance-col-overtime {
+        min-width: 0;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-employee-attendance-section {
+        border-radius: 14px;
+    }
+
+    .bexia-employee-attendance-section .fi-section-content {
+        padding: 0.85rem;
+    }
+
+    .bexia-employee-attendance-calculation-hint {
+        padding: 0.75rem !important;
+    }
+}
+/* BEXIA_EMPLOYEE_ATTENDANCE_RESOURCE_RESPONSIVE_V5_79_31C_END */
+
 </style>
