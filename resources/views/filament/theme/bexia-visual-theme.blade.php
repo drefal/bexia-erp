@@ -3946,4 +3946,116 @@ button[role="switch"] > span {
 }
 /* BEXIA_EMPLOYEE_ATTENDANCE_RESOURCE_RESPONSIVE_V5_79_31C_END */
 
+
+/* BEXIA_TREASURY_CASH_TRANSFER_REQUEST_RESOURCE_RESPONSIVE_V5_79_32C_START */
+.bexia-treasury-cash-transfer-section,
+.bexia-treasury-cash-transfer-infolist-section {
+    min-width: 0;
+}
+
+.bexia-treasury-cash-transfer-section .fi-section-content,
+.bexia-treasury-cash-transfer-infolist-section .fi-section-content {
+    border-radius: 16px;
+}
+
+.bexia-treasury-cash-transfer-section .fi-grid,
+.bexia-treasury-cash-transfer-section .grid,
+.bexia-treasury-cash-transfer-infolist-section .fi-in-grid,
+.bexia-treasury-cash-transfer-infolist-section .grid {
+    min-width: 0;
+}
+
+.bexia-treasury-cash-transfer-field {
+    min-width: 0;
+}
+
+.bexia-treasury-cash-transfer-log-section,
+.bexia-treasury-cash-transfer-log-item,
+.bexia-treasury-cash-transfer-log-note,
+.bexia-treasury-cash-transfer-log-empty {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.bexia-treasury-cash-transfer-col-number {
+    min-width: 145px;
+}
+
+.bexia-treasury-cash-transfer-col-status {
+    min-width: 135px;
+}
+
+.bexia-treasury-cash-transfer-col-type {
+    min-width: 190px;
+}
+
+.bexia-treasury-cash-transfer-col-amount {
+    min-width: 120px;
+}
+
+.bexia-treasury-cash-transfer-col-source,
+.bexia-treasury-cash-transfer-col-destination {
+    min-width: 210px;
+}
+
+.bexia-treasury-cash-transfer-col-created {
+    min-width: 145px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-treasury-cash-transfer-flow-section .fi-grid,
+    .bexia-treasury-cash-transfer-flow-section .grid,
+    .bexia-treasury-cash-transfer-request-section .fi-in-grid,
+    .bexia-treasury-cash-transfer-request-section .grid,
+    .bexia-treasury-cash-transfer-approval-section .fi-in-grid,
+    .bexia-treasury-cash-transfer-approval-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-treasury-cash-transfer-section .fi-grid,
+    .bexia-treasury-cash-transfer-section .grid,
+    .bexia-treasury-cash-transfer-infolist-section .fi-in-grid,
+    .bexia-treasury-cash-transfer-infolist-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-treasury-cash-transfer-section .fi-fo-field-wrp,
+    .bexia-treasury-cash-transfer-section .fi-fo-component-ctn,
+    .bexia-treasury-cash-transfer-section [data-field-wrapper],
+    .bexia-treasury-cash-transfer-field {
+        grid-column: 1 / -1 !important;
+        min-width: 0;
+    }
+
+    .bexia-treasury-cash-transfer-log-item {
+        line-height: 1.45;
+    }
+
+    .bexia-treasury-cash-transfer-col-number,
+    .bexia-treasury-cash-transfer-col-status,
+    .bexia-treasury-cash-transfer-col-type,
+    .bexia-treasury-cash-transfer-col-amount,
+    .bexia-treasury-cash-transfer-col-source,
+    .bexia-treasury-cash-transfer-col-destination,
+    .bexia-treasury-cash-transfer-col-created {
+        min-width: 0;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-treasury-cash-transfer-section,
+    .bexia-treasury-cash-transfer-infolist-section {
+        border-radius: 14px;
+    }
+
+    .bexia-treasury-cash-transfer-section .fi-section-content,
+    .bexia-treasury-cash-transfer-infolist-section .fi-section-content {
+        padding: 0.85rem;
+    }
+}
+/* BEXIA_TREASURY_CASH_TRANSFER_REQUEST_RESOURCE_RESPONSIVE_V5_79_32C_END */
+
 </style>
