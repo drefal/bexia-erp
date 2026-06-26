@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 // BEXIA_V57210K_SALIDAS_CONFIG_TENANT_PERMISSIONS
+// BEXIA_EXIT_PROJECT_RESOURCE_RESPONSIVE_V5_79_27C
 class ExitProjectResource extends Resource
 {
     protected static ?string $model = ExitProject::class;
@@ -74,12 +75,14 @@ public static function form(Form $form): Form
                     ->required(),
 
                 Forms\Components\Section::make('Datos generales')
+                    ->extraAttributes(['class' => 'bexia-exit-catalog-section bexia-exit-project-section'])
                     ->schema([
                         Forms\Components\TextInput::make('name')
                             ->label('Nombre')
                             ->required()
                             ->maxLength(255)
-                            ->columnSpan(6),
+                            ->columnSpan(6)
+                            ->extraAttributes(['class' => 'bexia-exit-catalog-field bexia-exit-project-field']),
 
                         Forms\Components\TextInput::make('code')
                             ->label('Código')
@@ -89,9 +92,7 @@ public static function form(Form $form): Form
                             ->dehydrated()
                             ->maxLength(5)
                             ->columnSpan(6)
-                            ->extraInputAttributes([
-                                'style' => 'background-color:#ffffff;',
-                            ]),
+                            ->extraInputAttributes(['class' => 'bexia-exit-catalog-input bexia-exit-project-input']),
 
                         Forms\Components\Toggle::make('is_active')
                             ->label('Activo')
@@ -103,9 +104,7 @@ public static function form(Form $form): Form
                             ->numeric()
                             ->default(0)
                             ->columnSpan(4)
-                            ->extraInputAttributes([
-                                'style' => 'background-color:#ffffff;',
-                            ]),
+                            ->extraInputAttributes(['class' => 'bexia-exit-catalog-input bexia-exit-project-input']),
 
                         Forms\Components\Placeholder::make('spacer')
                             ->label('')
@@ -116,9 +115,7 @@ public static function form(Form $form): Form
                             ->label('Notas')
                             ->rows(4)
                             ->columnSpan(12)
-                            ->extraInputAttributes([
-                                'style' => 'background-color:#ffffff;',
-                            ]),
+                            ->extraInputAttributes(['class' => 'bexia-exit-catalog-input bexia-exit-project-input']),
                     ])
                     ->columns(12),
             ])
@@ -150,8 +147,8 @@ public static function form(Form $form): Form
                     ->label('Nombre')
                     ->searchable()
                     ->sortable()
-                    ->extraHeaderAttributes(['style' => 'min-width: 220px;'])
-                    ->extraCellAttributes(['style' => 'min-width: 220px;'])
+                    ->extraHeaderAttributes(['class' => 'bexia-exit-project-col-name'])
+                    ->extraCellAttributes(['class' => 'bexia-exit-project-col-name'])
                     ->wrap()
                     ->width('260px'),
 
@@ -160,8 +157,8 @@ public static function form(Form $form): Form
                     ->label('Código')
                     ->searchable()
                     ->sortable()
-                    ->extraHeaderAttributes(['style' => 'min-width: 140px;'])
-                    ->extraCellAttributes(['style' => 'min-width: 140px;'])
+                    ->extraHeaderAttributes(['class' => 'bexia-exit-project-col-code'])
+                    ->extraCellAttributes(['class' => 'bexia-exit-project-col-code'])
                     ->wrap()
                     ->width('160px'),
 

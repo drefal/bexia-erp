@@ -3411,4 +3411,72 @@ button[role="switch"] > span {
 }
 /* BEXIA_STOCK_ADJUSTMENT_RESOURCE_RESPONSIVE_V5_79_26C_END */
 
+
+/* BEXIA_EXIT_CATALOG_RESOURCES_RESPONSIVE_V5_79_27C_START */
+.bexia-exit-catalog-section .fi-section-content {
+    border-radius: 16px;
+}
+
+.bexia-exit-catalog-section .bexia-exit-catalog-input {
+    background-color: #ffffff;
+}
+
+.dark .bexia-exit-catalog-section .bexia-exit-catalog-input {
+    background-color: rgba(15, 23, 42, 0.92);
+}
+
+.bexia-exit-catalog-field {
+    min-width: 0;
+}
+
+.bexia-exit-project-col-name,
+.bexia-exit-warehouse-col-name {
+    min-width: 220px;
+}
+
+.bexia-exit-project-col-code,
+.bexia-exit-warehouse-col-code {
+    min-width: 140px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-exit-project-section .fi-grid,
+    .bexia-exit-warehouse-section .fi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-exit-project-section .fi-grid,
+    .bexia-exit-warehouse-section .fi-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-exit-project-section .fi-fo-field-wrp,
+    .bexia-exit-warehouse-section .fi-fo-field-wrp {
+        grid-column: 1 / -1 !important;
+    }
+
+    .bexia-exit-project-col-name,
+    .bexia-exit-warehouse-col-name,
+    .bexia-exit-project-col-code,
+    .bexia-exit-warehouse-col-code {
+        min-width: 0;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-exit-project-section,
+    .bexia-exit-warehouse-section {
+        border-radius: 14px;
+    }
+
+    .bexia-exit-project-section .fi-section-content,
+    .bexia-exit-warehouse-section .fi-section-content {
+        padding: 0.85rem;
+    }
+}
+/* BEXIA_EXIT_CATALOG_RESOURCES_RESPONSIVE_V5_79_27C_END */
+
 </style>
