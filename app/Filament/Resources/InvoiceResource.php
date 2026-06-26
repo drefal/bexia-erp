@@ -120,9 +120,11 @@ public static function canEdit(Model $record): bool
         return $form->schema([
 
                 Forms\Components\Section::make('Solicitud de autofacturación')
+                    ->extraAttributes(['class' => 'bexia-invoice-portal-section'])
                     ->description('Datos capturados por el cliente desde el portal público de facturación.')
                     ->schema([
                         Forms\Components\Placeholder::make('portal_invoice_request_summary')
+                            ->extraAttributes(['class' => 'bexia-invoice-portal-request-summary-field'])
                             ->label('')
                             ->content(fn (?Invoice $record): \Illuminate\Support\HtmlString => static::portalInvoiceRequestSummaryHtml($record)),
                     ])
@@ -134,15 +136,18 @@ public static function canEdit(Model $record): bool
                  */
 
             Forms\Components\Section::make('Cabecera')
+                ->extraAttributes(['class' => 'bexia-invoice-header-section'])
                 ->description('Selecciona el cliente y el uso CFDI. El regimen fiscal y los datos fiscales se toman desde Contactos.')
                 ->columns(12)
                 ->schema([
                     Forms\Components\Placeholder::make('number_display')
+                        ->extraAttributes(['class' => 'bexia-invoice-folio-display-field'])
                         ->label('Folio')
                         ->content(fn (?Invoice $record): string => $record?->number ?: 'Automatico')
                         ->columnSpan(2),
 
                     Forms\Components\Select::make('status')
+                        ->extraAttributes(['class' => 'bexia-invoice-status-select'])
                         ->label('Estado')
                         ->options(static::statusOptions())
                         ->default('draft')
@@ -151,12 +156,14 @@ public static function canEdit(Model $record): bool
                         ->columnSpan(2),
 
                     Forms\Components\DatePicker::make('invoice_date')
+                        ->extraAttributes(['class' => 'bexia-invoice-date-field'])
                         ->label('Fecha')
                         ->default(now())
                         ->disabled(fn (?Invoice $record): bool => static::isLocked($record))
                         ->columnSpan(2),
 
                     Forms\Components\Select::make('contact_id')
+                        ->extraAttributes(['class' => 'bexia-invoice-contact-select'])
                         ->label('Cliente')
                         ->searchable()
                         ->preload()
@@ -171,6 +178,7 @@ public static function canEdit(Model $record): bool
                         ->columnSpan(4),
 
                     Forms\Components\TextInput::make('currency_code')
+                        ->extraAttributes(['class' => 'bexia-invoice-currency-input'])
                         ->label('Moneda')
                         ->default('MXN')
                         ->maxLength(10)
@@ -178,6 +186,7 @@ public static function canEdit(Model $record): bool
                         ->columnSpan(1),
 
                     Forms\Components\Placeholder::make('customer_tax_regime_display')
+                        ->extraAttributes(['class' => 'bexia-invoice-tax-regime-display-field'])
                         ->label('Regimen fiscal')
                         ->content(fn (Forms\Get $get, ?Invoice $record): string => static::taxRegimeLabel(
                             (string) ($get('customer_tax_regime_code') ?: $record?->customer_tax_regime_code ?: '')
@@ -185,6 +194,7 @@ public static function canEdit(Model $record): bool
                         ->columnSpan(3),
 
                     Forms\Components\Select::make('customer_cfdi_use_code')
+                        ->extraAttributes(['class' => 'bexia-invoice-cfdi-use-select'])
                         ->label('Uso CFDI')
                         ->options(fn (Forms\Get $get, ?Invoice $record): array => static::cfdiUseOptionsForRegime(
                             (string) ($get('customer_tax_regime_code') ?: $record?->customer_tax_regime_code ?: '')
@@ -197,6 +207,7 @@ public static function canEdit(Model $record): bool
                         ->columnSpan(3),
 
                     Forms\Components\Select::make('source_type')
+                        ->extraAttributes(['class' => 'bexia-invoice-source-type-select'])
                         ->label('Origen')
                         ->default('manual')
                         ->options([
@@ -210,12 +221,14 @@ public static function canEdit(Model $record): bool
                         ->columnSpan(2),
 
                     Forms\Components\TextInput::make('source_number')
+                        ->extraAttributes(['class' => 'bexia-invoice-source-number-input'])
                         ->label('Referencia')
                         ->maxLength(120)
                         ->disabled(fn (?Invoice $record): bool => static::isLocked($record))
                         ->columnSpan(4),
 
                     Forms\Components\Placeholder::make('customer_change_warning_live')
+                        ->extraAttributes(['class' => 'bexia-invoice-customer-warning-live-field'])
                         ->label('Aviso')
                         ->content('Cambiaste el cliente de la factura. Al guardar, se registrara el cambio y se usara la informacion fiscal del nuevo cliente.')
                         ->visible(fn (Forms\Get $get, ?Invoice $record): bool => $record
@@ -224,6 +237,7 @@ public static function canEdit(Model $record): bool
                         ->columnSpanFull(),
 
                     Forms\Components\Placeholder::make('customer_change_warning_saved')
+                        ->extraAttributes(['class' => 'bexia-invoice-customer-warning-saved-field'])
                         ->label('Aviso de cambio de cliente')
                         ->content(fn (?Invoice $record): string => static::customerChangedMessage($record))
                         ->visible(fn (?Invoice $record): bool => static::customerChangedMessage($record) !== '')
@@ -234,6 +248,7 @@ public static function canEdit(Model $record): bool
                      * Datos de pago CFDI visibles en Cabecera, antes de Información fiscal del cliente.
                      */
                     Forms\Components\Select::make('payment_form_code')
+                        ->extraAttributes(['class' => 'bexia-invoice-payment-form-select'])
                         ->label('Forma de pago')
                         ->options(static::paymentFormCodeOptions())
                         ->searchable()
@@ -243,6 +258,7 @@ public static function canEdit(Model $record): bool
                         ->columnSpan(3),
 
                     Forms\Components\Select::make('payment_method_code')
+                        ->extraAttributes(['class' => 'bexia-invoice-payment-method-select'])
                         ->label('Método de pago SAT')
                         ->options(static::paymentMethodCodeOptions())
                         ->searchable()
@@ -252,6 +268,7 @@ public static function canEdit(Model $record): bool
                         ->columnSpan(3),
 
                     Forms\Components\Select::make('payment_terms')
+                        ->extraAttributes(['class' => 'bexia-invoice-payment-terms-select'])
                         ->label('Condiciones de pago')
                         ->options(static::paymentTermsOptions())
                         ->searchable()
@@ -269,12 +286,14 @@ public static function canEdit(Model $record): bool
                      * el nodo cfdi:InformacionGlobal en el XML.
                      */
                     Forms\Components\Section::make('Información global CFDI')
+                        ->extraAttributes(['class' => 'bexia-invoice-global-cfdi-section'])
                         ->description('Solo aplica para facturas globales PDV. Se usa en el nodo InformacionGlobal del CFDI.')
                         ->columns(3)
                         ->visible(fn (?Invoice $record): bool => static::isGlobalInvoiceRecord($record))
                         ->columnSpanFull()
                         ->schema([
                             Forms\Components\Select::make('global_invoice_periodicity')
+                                ->extraAttributes(['class' => 'bexia-invoice-global-periodicity-select'])
                                 ->label('Periodicidad')
                                 ->options(static::globalInvoicePeriodicityOptions())
                                 ->default('01')
@@ -288,6 +307,7 @@ public static function canEdit(Model $record): bool
                                 ->columnSpan(1),
 
                             Forms\Components\Select::make('global_invoice_month')
+                                ->extraAttributes(['class' => 'bexia-invoice-global-month-select'])
                                 ->label('Mes / bimestre')
                                 ->options(static::globalInvoiceMonthOptions())
                                 ->default(now()->format('m'))
@@ -301,6 +321,7 @@ public static function canEdit(Model $record): bool
                                 ->columnSpan(1),
 
                             Forms\Components\TextInput::make('global_invoice_year')
+                                ->extraAttributes(['class' => 'bexia-invoice-global-year-input'])
                                 ->label('Año')
                                 ->default(now()->format('Y'))
                                 ->afterStateHydrated(function (Forms\Components\TextInput $component, ?Invoice $record): void {
@@ -321,61 +342,72 @@ public static function canEdit(Model $record): bool
                      * Información fiscal devuelta por PAC/SAT visible en cabecera.
                      */
                     Forms\Components\Section::make('Información CFDI / PAC')
+                        ->extraAttributes(['class' => 'bexia-invoice-cfdi-pac-section'])
                         ->description('Datos de timbrado, UUID, PAC y último error fiscal.')
                         ->columns(12)
                         ->visible(fn (?Invoice $record): bool => static::hasCfdiPacInfo($record))
                         ->columnSpanFull()
                         ->schema([
                             Forms\Components\Placeholder::make('cfdi_status_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-cfdi-status-field'])
                                 ->label('Estado CFDI')
                                 ->content(fn (?Invoice $record): string => static::cfdiPacStatusLabel($record))
                                 ->columnSpan(2),
 
                             Forms\Components\Placeholder::make('cfdi_uuid_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-cfdi-uuid-field'])
                                 ->label('UUID')
                                 ->content(fn (?Invoice $record): string => (string) ($record?->cfdi_uuid ?: 'N/D'))
                                 ->columnSpan(4),
 
                             Forms\Components\Placeholder::make('cfdi_folio_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-cfdi-folio-field'])
                                 ->label('Serie / folio')
                                 ->content(fn (?Invoice $record): string => trim((string) (($record?->cfdi_series ?? '') . '/' . ($record?->cfdi_folio ?? '')), '/') ?: 'N/D')
                                 ->columnSpan(2),
 
                             Forms\Components\Placeholder::make('pac_provider_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-pac-provider-field'])
                                 ->label('PAC')
                                 ->content(fn (?Invoice $record): string => strtoupper((string) ($record?->pac_provider ?: 'N/D')))
                                 ->columnSpan(2),
 
                             Forms\Components\Placeholder::make('pac_environment_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-pac-environment-field'])
                                 ->label('Ambiente')
                                 ->content(fn (?Invoice $record): string => static::pacEnvironmentLabel($record))
                                 ->columnSpan(2),
 
                             Forms\Components\Placeholder::make('cfdi_xml_path_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-cfdi-xml-field'])
                                 ->label('XML')
                                 ->content(fn (?Invoice $record): string => filled($record?->cfdi_xml_path ?? null) ? 'Disponible para descarga' : 'N/D')
                                 ->columnSpan(6),
 
 
                             Forms\Components\Placeholder::make('cfdi_cancel_status_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-cfdi-cancel-status-field'])
                                 ->label('Estado cancelación')
                                 ->content(fn (?Invoice $record): string => static::cfdiCancelStatusLabel($record))
                                 ->visible(fn (?Invoice $record): bool => filled($record?->cfdi_cancel_status ?? null))
                                 ->columnSpan(3),
 
                             Forms\Components\Placeholder::make('cfdi_cancel_message_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-cfdi-cancel-message-field'])
                                 ->label('Mensaje cancelación')
                                 ->content(fn (?Invoice $record): string => (string) ($record?->cfdi_cancel_status_message ?: 'N/D'))
                                 ->visible(fn (?Invoice $record): bool => filled($record?->cfdi_cancel_status_message ?? null))
                                 ->columnSpan(6),
 
                             Forms\Components\Placeholder::make('cfdi_cancel_ack_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-cfdi-cancel-ack-field'])
                                 ->label('Acuse cancelación')
                                 ->content(fn (?Invoice $record): string => filled($record?->cfdi_cancel_ack_path ?? null) ? 'Disponible' : 'N/D')
                                 ->visible(fn (?Invoice $record): bool => filled($record?->cfdi_cancel_ack_path ?? null))
                                 ->columnSpan(3),
 
                             Forms\Components\Placeholder::make('pac_error_display')
+                                ->extraAttributes(['class' => 'bexia-invoice-pac-error-field'])
                                 ->label('Último mensaje PAC')
                                 ->content(fn (?Invoice $record): string => static::compactCfdiPacMessage($record))
                                 ->visible(fn (?Invoice $record): bool => trim((string) ($record?->pac_error_message ?? '')) !== '')
@@ -383,16 +415,19 @@ public static function canEdit(Model $record): bool
                         ]),
 
                     Forms\Components\Section::make('Informacion fiscal del cliente')
+                        ->extraAttributes(['class' => 'bexia-invoice-customer-fiscal-section'])
                         ->description('Solo lectura. Si algun dato esta incorrecto, corrigelo en Contactos y vuelve a seleccionar el cliente.')
                         ->columns(1)
                         ->columnSpanFull()
                         ->schema([
                             Forms\Components\Placeholder::make('customer_fiscal_summary')
+                                ->extraAttributes(['class' => 'bexia-invoice-customer-fiscal-summary-field'])
                                 ->label('')
                                 ->content(fn (Forms\Get $get, ?Invoice $record): \Illuminate\Support\HtmlString => static::customerFiscalSummaryHtml($record, $get)),
                         ]),
 
                     Forms\Components\Textarea::make('cancel_reason')
+                        ->extraAttributes(['class' => 'bexia-invoice-cancel-reason-field'])
                         ->label('Motivo de cancelacion')
                         ->rows(2)
                         ->visible(fn (?Invoice $record): bool => (string) ($record?->status ?? '') === 'cancelled')
@@ -1554,15 +1589,15 @@ public static function canEdit(Model $record): bool
         $value = fn ($v): string => e(trim((string) $v) !== '' ? trim((string) $v) : 'N/D');
 
         $html = '
-            <div style="display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:10px; font-size:13px;">
-                <div><strong>Razón social</strong><br>'.$value($fiscalName).'</div>
-                <div><strong>RFC</strong><br>'.$value($rfc).'</div>
-                <div><strong>CP fiscal</strong><br>'.$value($postalCode).'</div>
-                <div><strong>Contacto</strong><br>'.$value(trim($email . ($email && $phone ? " / " : "") . $phone)).'</div>
-                <div><strong>WhatsApp facturación</strong><br>'.$value($whatsapp).'</div>
-                <div style="grid-column: span 2;"><strong>Régimen fiscal</strong><br>'.$value($taxRegimeLabel).'</div>
-                <div style="grid-column: span 2;"><strong>Uso CFDI</strong><br>'.$value($cfdiUseLabel).'</div>
-                <div style="grid-column: span 4;"><strong>Dirección fiscal</strong><br>'.$value($address).'</div>
+            <div class="bexia-invoice-customer-fiscal-grid">
+                <div class="bexia-invoice-fiscal-item"><strong>Razón social</strong><br>'.$value($fiscalName).'</div>
+                <div class="bexia-invoice-fiscal-item"><strong>RFC</strong><br>'.$value($rfc).'</div>
+                <div class="bexia-invoice-fiscal-item"><strong>CP fiscal</strong><br>'.$value($postalCode).'</div>
+                <div class="bexia-invoice-fiscal-item"><strong>Contacto</strong><br>'.$value(trim($email . ($email && $phone ? " / " : "") . $phone)).'</div>
+                <div class="bexia-invoice-fiscal-item"><strong>WhatsApp facturación</strong><br>'.$value($whatsapp).'</div>
+                <div class="bexia-invoice-fiscal-item bexia-invoice-fiscal-item-wide"><strong>Régimen fiscal</strong><br>'.$value($taxRegimeLabel).'</div>
+                <div class="bexia-invoice-fiscal-item bexia-invoice-fiscal-item-wide"><strong>Uso CFDI</strong><br>'.$value($cfdiUseLabel).'</div>
+                <div class="bexia-invoice-fiscal-item bexia-invoice-fiscal-item-full"><strong>Dirección fiscal</strong><br>'.$value($address).'</div>
             </div>
         ';
 
@@ -2036,8 +2071,8 @@ public static function canEdit(Model $record): bool
             'Fecha de solicitud' => data_get($request, 'requested_at') ?: data_get($metadata, 'portal_invoice_requested_at'),
         ];
 
-        $html = '<div class="rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm dark:border-primary-800 dark:bg-primary-950/30">';
-        $html .= '<div class="mb-3 font-semibold text-primary-700 dark:text-primary-300">Solicitud recibida desde el portal público</div>';
+        $html = '<div class="bexia-invoice-portal-summary-card rounded-xl border border-primary-200 bg-primary-50 p-4 text-sm dark:border-primary-800 dark:bg-primary-950/30">';
+        $html .= '<div class="bexia-invoice-portal-summary-title mb-3 font-semibold text-primary-700 dark:text-primary-300">Solicitud recibida desde el portal público</div>';
         $html .= '<dl class="space-y-2">';
 
         foreach ($rows as $label => $value) {
@@ -2045,16 +2080,16 @@ public static function canEdit(Model $record): bool
                 continue;
             }
 
-            $html .= '<div class="grid gap-1 border-b border-primary-100 pb-2 last:border-b-0 last:pb-0 dark:border-primary-800 md:grid-cols-3">';
-            $html .= '<dt class="font-medium text-gray-600 dark:text-gray-300">' . e($label) . '</dt>';
-            $html .= '<dd class="md:col-span-2 font-semibold text-gray-950 dark:text-white">' . e((string) $value) . '</dd>';
+            $html .= '<div class="bexia-invoice-portal-summary-row grid gap-1 border-b border-primary-100 pb-2 last:border-b-0 last:pb-0 dark:border-primary-800 md:grid-cols-3">';
+            $html .= '<dt class="bexia-invoice-portal-summary-label font-medium text-gray-600 dark:text-gray-300">' . e($label) . '</dt>';
+            $html .= '<dd class="bexia-invoice-portal-summary-value md:col-span-2 font-semibold text-gray-950 dark:text-white">' . e((string) $value) . '</dd>';
             $html .= '</div>';
         }
 
         $html .= '</dl>';
 
         if (strtoupper((string) data_get($request, 'rfc')) === 'XAXX010101000') {
-            $html .= '<div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">';
+            $html .= '<div class="bexia-invoice-portal-protected-alert mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">';
             $html .= 'Público en General protegido: el correo se conserva como correo de envío del portal, no como correo del contacto.';
             $html .= '</div>';
         }
