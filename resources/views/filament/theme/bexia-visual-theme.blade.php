@@ -3231,4 +3231,184 @@ button[role="switch"] > span {
 }
 /* BEXIA_INVOICE_RESOURCE_RESPONSIVE_V5_79_25C_END */
 
+
+/* BEXIA_STOCK_ADJUSTMENT_RESOURCE_RESPONSIVE_V5_79_26C_START
+   Ajustes inventario: layout responsive + limpieza inline styles.
+   Scope: StockAdjustmentResource.
+*/
+.bexia-stock-adjustment-header-section,
+.bexia-stock-adjustment-lines-section {
+    border-radius: 18px;
+    overflow: hidden;
+}
+
+.bexia-stock-adjustment-header-section .fi-section-content,
+.bexia-stock-adjustment-lines-section .fi-section-content {
+    padding: clamp(1rem, 2vw, 1.5rem);
+}
+
+.bexia-stock-adjustment-header-section .fi-grid,
+.bexia-stock-adjustment-lines-section .fi-grid {
+    gap: 1rem;
+}
+
+.bexia-stock-adjustment-header-section .fi-fo-field-wrp,
+.bexia-stock-adjustment-lines-section .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-stock-adjustment-reference-input .fi-input,
+.bexia-stock-adjustment-warehouse-select .fi-select-input,
+.bexia-stock-adjustment-location-select .fi-select-input,
+.bexia-stock-adjustment-status-select .fi-select-input,
+.bexia-stock-adjustment-reason-textarea textarea,
+.bexia-stock-adjustment-notes-textarea textarea {
+    min-height: 44px;
+    border-radius: 12px;
+}
+
+.bexia-stock-adjustment-reason-textarea textarea,
+.bexia-stock-adjustment-notes-textarea textarea {
+    min-height: 88px;
+}
+
+.bexia-stock-adjustment-lines-capture-notice-field .fi-fo-placeholder {
+    width: 100%;
+}
+
+.bexia-stock-adjustment-notice {
+    padding: 12px;
+    border-radius: 12px;
+    line-height: 1.45;
+    font-size: 0.92rem;
+}
+
+.bexia-stock-adjustment-notice-warning {
+    border: 1px solid #fde68a;
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.dark .bexia-stock-adjustment-notice-warning {
+    border-color: rgba(253, 230, 138, 0.55);
+    background: rgba(146, 64, 14, 0.22);
+    color: #fde68a;
+}
+
+.bexia-stock-adjustment-notice-info {
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+    color: #1e40af;
+}
+
+.dark .bexia-stock-adjustment-notice-info {
+    border-color: rgba(191, 219, 254, 0.45);
+    background: rgba(30, 64, 175, 0.22);
+    color: #bfdbfe;
+}
+
+.bexia-stock-adjustment-notice-link {
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.bexia-stock-adjustment-invalid-summary {
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.bexia-stock-adjustment-invalid-list {
+    padding-left: 18px;
+    margin-top: 10px;
+}
+
+.bexia-stock-adjustment-invalid-line-li {
+    margin-bottom: 10px;
+}
+
+.bexia-stock-adjustment-invalid-more {
+    margin-top: 10px;
+}
+
+.bexia-stock-adjustment-invalid-help-title,
+.bexia-stock-adjustment-invalid-danger {
+    margin-top: 12px;
+}
+
+.bexia-stock-adjustment-invalid-help {
+    margin-top: 14px;
+}
+
+.bexia-stock-adjustment-invalid-steps {
+    padding-left: 18px;
+    margin-top: 6px;
+}
+
+.bexia-stock-adjustment-invalid-card {
+    border: 1px solid #fecaca;
+    background: #fef2f2;
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 10px;
+}
+
+.dark .bexia-stock-adjustment-invalid-card {
+    border-color: rgba(254, 202, 202, 0.45);
+    background: rgba(127, 29, 29, 0.22);
+}
+
+.bexia-stock-adjustment-invalid-danger {
+    color: #b91c1c;
+}
+
+.dark .bexia-stock-adjustment-invalid-danger {
+    color: #fecaca;
+}
+
+@media (max-width: 1024px) {
+    .bexia-stock-adjustment-header-section .fi-grid,
+    .bexia-stock-adjustment-lines-section .fi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-stock-adjustment-header-section .fi-grid,
+    .bexia-stock-adjustment-lines-section .fi-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-stock-adjustment-header-section .fi-fo-field-wrp,
+    .bexia-stock-adjustment-lines-section .fi-fo-field-wrp {
+        grid-column: 1 / -1 !important;
+    }
+
+    .bexia-stock-adjustment-notice {
+        font-size: 0.88rem;
+    }
+
+    .bexia-stock-adjustment-invalid-card {
+        padding: 10px;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-stock-adjustment-header-section,
+    .bexia-stock-adjustment-lines-section {
+        border-radius: 14px;
+    }
+
+    .bexia-stock-adjustment-header-section .fi-section-content,
+    .bexia-stock-adjustment-lines-section .fi-section-content {
+        padding: 0.85rem;
+    }
+
+    .bexia-stock-adjustment-invalid-list,
+    .bexia-stock-adjustment-invalid-steps {
+        padding-left: 16px;
+    }
+}
+/* BEXIA_STOCK_ADJUSTMENT_RESOURCE_RESPONSIVE_V5_79_26C_END */
+
 </style>
