@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
+// BEXIA_TREASURY_CASH_TRANSFER_REQUEST_RESOURCE_RESPONSIVE_V5_79_32C
 class TreasuryCashTransferRequestResource extends Resource
 {
     protected static ?string $model = TreasuryCashTransferRequest::class;
@@ -119,11 +120,13 @@ class TreasuryCashTransferRequestResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Flujo de efectivo')
+                    ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-section bexia-treasury-cash-transfer-flow-section'])
                     ->description('Define de qué caja sale el dinero y a qué caja entra. La sucursal, almacén o PDV se determinan por las cajas seleccionadas.')
                     ->columns(2)
                     ->schema([
                         Forms\Components\Select::make('type')
                             ->label('Tipo')
+                            ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-field bexia-treasury-cash-transfer-type-field'])
                             ->required()
                             ->options(static::typeLabels())
                             ->default('transfer')
@@ -131,6 +134,7 @@ class TreasuryCashTransferRequestResource extends Resource
 
                         Forms\Components\TextInput::make('amount')
                             ->label('Monto')
+                            ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-field bexia-treasury-cash-transfer-amount-field'])
                             ->required()
                             ->numeric()
                             ->minValue(0.01)
@@ -139,6 +143,7 @@ class TreasuryCashTransferRequestResource extends Resource
 
                         Forms\Components\Select::make('source_treasury_account_id')
                             ->label('Caja origen')
+                            ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-field bexia-treasury-cash-transfer-source-account-field'])
                             ->options(fn (): array => static::treasuryAccountOptions())
                             ->searchable()
                             ->preload()
@@ -146,6 +151,7 @@ class TreasuryCashTransferRequestResource extends Resource
 
                         Forms\Components\Select::make('destination_treasury_account_id')
                             ->label('Caja destino')
+                            ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-field bexia-treasury-cash-transfer-destination-account-field'])
                             ->options(fn (): array => static::treasuryAccountOptions())
                             ->searchable()
                             ->preload()
@@ -153,22 +159,26 @@ class TreasuryCashTransferRequestResource extends Resource
 
                         Forms\Components\TextInput::make('currency_code')
                             ->label('Moneda')
+                            ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-field bexia-treasury-cash-transfer-currency-field'])
                             ->default('MXN')
                             ->required()
                             ->maxLength(10),
                     ]),
 
                 Forms\Components\Section::make('Justificación')
+                    ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-section bexia-treasury-cash-transfer-justification-section'])
                     ->columns(1)
                     ->schema([
                         Forms\Components\Textarea::make('reason')
                             ->label('Motivo')
+                            ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-field bexia-treasury-cash-transfer-reason-field'])
                             ->rows(3)
                             ->required()
                             ->maxLength(2000),
 
                         Forms\Components\Textarea::make('notes')
                             ->label('Notas internas')
+                            ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-field bexia-treasury-cash-transfer-notes-field'])
                             ->rows(3)
                             ->maxLength(3000),
                     ]),
@@ -180,6 +190,7 @@ class TreasuryCashTransferRequestResource extends Resource
         return $infolist
             ->schema([
                 Infolists\Components\Section::make('Solicitud')
+                    ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-infolist-section bexia-treasury-cash-transfer-request-section'])
                     ->columns(3)
                     ->schema([
                         Infolists\Components\TextEntry::make('number')
@@ -209,6 +220,7 @@ class TreasuryCashTransferRequestResource extends Resource
                     ]),
 
                 Infolists\Components\Section::make('Cajas')
+                    ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-infolist-section bexia-treasury-cash-transfer-accounts-section'])
                     ->columns(2)
                     ->schema([
                         Infolists\Components\TextEntry::make('source_treasury_account_id')
@@ -221,6 +233,7 @@ class TreasuryCashTransferRequestResource extends Resource
                     ]),
 
                 Infolists\Components\Section::make('Motivo y notas')
+                    ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-infolist-section bexia-treasury-cash-transfer-notes-section'])
                     ->schema([
                         Infolists\Components\TextEntry::make('reason')
                             ->label('Motivo')
@@ -236,6 +249,7 @@ class TreasuryCashTransferRequestResource extends Resource
                     ]),
 
                 Infolists\Components\Section::make('Aprobación electrónica')
+                    ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-infolist-section bexia-treasury-cash-transfer-approval-section'])
                     ->columns(2)
                     ->schema([
                         Infolists\Components\TextEntry::make('requested_by_user_id')
@@ -267,6 +281,7 @@ class TreasuryCashTransferRequestResource extends Resource
                     ]),
 
                 Infolists\Components\Section::make('Bitácora')
+                    ->extraAttributes(['class' => 'bexia-treasury-cash-transfer-infolist-section bexia-treasury-cash-transfer-log-section'])
                     ->schema([
                         Infolists\Components\TextEntry::make('id')
                             ->label('Eventos')
@@ -284,39 +299,55 @@ class TreasuryCashTransferRequestResource extends Resource
                 Tables\Columns\TextColumn::make('number')
                     ->label('Folio')
                     ->searchable()
-                    ->placeholder('Sin folio'),
+                    ->placeholder('Sin folio')
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-cash-transfer-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-cash-transfer-col-number']),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
                     ->color(fn (?string $state): string => static::statusColor($state))
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-cash-transfer-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-cash-transfer-col-status']),
 
                 Tables\Columns\TextColumn::make('type')
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => static::typeLabel($state))
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-cash-transfer-col-type'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-cash-transfer-col-type']),
 
                 Tables\Columns\TextColumn::make('amount')
                     ->label('Monto')
                     ->money('MXN')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-cash-transfer-col-amount'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-cash-transfer-col-amount']),
 
                 Tables\Columns\TextColumn::make('source_treasury_account_id')
                     ->label('Origen')
                     ->formatStateUsing(fn ($state): string => static::accountShortLabel($state))
-                    ->wrap(),
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-cash-transfer-col-source'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-cash-transfer-col-source']),
 
                 Tables\Columns\TextColumn::make('destination_treasury_account_id')
                     ->label('Destino')
                     ->formatStateUsing(fn ($state): string => static::accountShortLabel($state))
-                    ->wrap(),
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-cash-transfer-col-destination'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-cash-transfer-col-destination']),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Creada')
                     ->dateTime('d/m/Y H:i')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-cash-transfer-col-created'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-cash-transfer-col-created']),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -789,7 +820,7 @@ class TreasuryCashTransferRequestResource extends Resource
             ->get();
 
         if ($logs->isEmpty()) {
-            return '<span class="text-gray-500">Sin eventos registrados.</span>';
+            return '<span class="bexia-treasury-cash-transfer-log-empty text-gray-500">Sin eventos registrados.</span>';
         }
 
         return $logs
@@ -798,9 +829,9 @@ class TreasuryCashTransferRequestResource extends Resource
                 $date = $log->created_at ? date('d/m/Y H:i', strtotime((string) $log->created_at)) : '';
                 $from = $log->from_status ? static::statusLabel($log->from_status) : 'Inicio';
                 $to = $log->to_status ? static::statusLabel($log->to_status) : '';
-                $notes = $log->notes ? '<br><span class="text-gray-500">' . e($log->notes) . '</span>' : '';
+                $notes = $log->notes ? '<br><span class="bexia-treasury-cash-transfer-log-note text-gray-500">' . e($log->notes) . '</span>' : '';
 
-                return '<div class="mb-2">'
+                return '<div class="bexia-treasury-cash-transfer-log-item mb-2">'
                     . '<strong>' . e($date) . '</strong> - '
                     . e($user) . ' - '
                     . e($log->action) . ' - '
