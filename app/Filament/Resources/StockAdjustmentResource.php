@@ -88,8 +88,10 @@ class StockAdjustmentResource extends Resource
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Ajuste')
+                    ->extraAttributes(['class' => 'bexia-stock-adjustment-header-section'])
                     ->schema([
                         Forms\Components\TextInput::make('reference')
+                            ->extraAttributes(['class' => 'bexia-stock-adjustment-reference-input'])
                             ->label('Referencia')
                             ->placeholder('Se genera automáticamente al guardar')
                             ->helperText('Formato: UBICACION/AJU/000001. Ej. STOCK/AJU/000001.')
@@ -108,6 +110,7 @@ class StockAdjustmentResource extends Resource
                             ->columnSpan(3),
 
                         Forms\Components\Select::make('warehouse_id')
+                            ->extraAttributes(['class' => 'bexia-stock-adjustment-warehouse-select'])
                             ->label('Almacén')
                             ->options(fn (): array => static::warehouseOptions())
                             ->searchable()
@@ -121,6 +124,7 @@ class StockAdjustmentResource extends Resource
                             ->columnSpan(3),
 
                         Forms\Components\Select::make('location_id')
+                            ->extraAttributes(['class' => 'bexia-stock-adjustment-location-select'])
                             ->label('Ubicación')
                             ->options(fn (Forms\Get $get): array => static::locationOptions($get('warehouse_id')))
                             ->searchable()
@@ -130,6 +134,7 @@ class StockAdjustmentResource extends Resource
                             ->columnSpan(3),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-stock-adjustment-status-select'])
                             ->label('Estado')
                             ->options([
                                 'draft' => 'Borrador',
@@ -142,6 +147,7 @@ class StockAdjustmentResource extends Resource
                             ->columnSpan(3),
 
                         Forms\Components\Textarea::make('reason')
+                            ->extraAttributes(['class' => 'bexia-stock-adjustment-reason-textarea'])
                             ->label('Motivo')
                             ->placeholder('Ej. Inventario inicial, conteo físico, corrección por diferencia.')
                             ->rows(2)
@@ -156,6 +162,7 @@ class StockAdjustmentResource extends Resource
                             ->columnSpan(9),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-stock-adjustment-notes-textarea'])
                             ->required()
                             ->minLength(5)
                             ->validationMessages([
@@ -170,15 +177,17 @@ class StockAdjustmentResource extends Resource
                     ->columns(12),
 
                 Forms\Components\Section::make('Productos contados')
+                    ->extraAttributes(['class' => 'bexia-stock-adjustment-lines-section'])
                     // BEXIA_V5728B_AJUSTES_INVENTARIO_LINES_FINAL
                     ->description('La captura de productos se realiza en una pantalla rápida tipo tabla para evitar formularios pesados.')
                     ->schema([
                         Forms\Components\Placeholder::make('lines_capture_notice')
+                            ->extraAttributes(['class' => 'bexia-stock-adjustment-lines-capture-notice-field'])
                             ->label('')
                             ->content(function (?StockAdjustment $record): \Illuminate\Support\HtmlString {
                                 if (! $record || ! $record->exists) {
                                     return new \Illuminate\Support\HtmlString(
-                                        '<div style="padding:12px;border:1px solid #fde68a;background:#fffbeb;border-radius:12px;color:#92400e;">Primero guarda el encabezado del ajuste. Después Bexia abrirá la pantalla rápida para capturar productos.</div>'
+                                        '<div class="bexia-stock-adjustment-notice bexia-stock-adjustment-notice-warning">Primero guarda el encabezado del ajuste. Después Bexia abrirá la pantalla rápida para capturar productos.</div>'
                                     );
                                 }
 
@@ -186,7 +195,7 @@ class StockAdjustmentResource extends Resource
                                 $safeUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
 
                                 return new \Illuminate\Support\HtmlString(
-                                    '<div style="padding:12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:12px;color:#1e40af;">Las líneas se capturan en una pantalla optimizada. <a href="' . $safeUrl . '" style="font-weight:700;text-decoration:underline;">Abrir captura rápida de líneas</a>.</div>'
+                                    '<div class="bexia-stock-adjustment-notice bexia-stock-adjustment-notice-info">Las líneas se capturan en una pantalla optimizada. <a href="' . $safeUrl . '" class="bexia-stock-adjustment-notice-link">Abrir captura rápida de líneas</a>.</div>'
                                 );
                             })
                             ->columnSpanFull(),
@@ -1575,7 +1584,7 @@ public static function canCreate(): bool
             $unitCost = $line->unit_cost === null ? 'Sin costo' : '$' . number_format((float) $line->unit_cost, 2);
 
             return <<<HTML
-<li style="margin-bottom: 10px;">
+<li class="bexia-stock-adjustment-invalid-line-li">
     <strong>Línea {$lineId}: {$problem}</strong><br>
     Producto: {$productName}<br>
     Producto ID: {$productId} · Variante ID: {$variantId}<br>
@@ -1585,7 +1594,7 @@ HTML;
         })->implode('');
 
         $moreHtml = $total > 12
-            ? '<p style="margin-top: 10px;"><strong>Hay más líneas con problema.</strong> Se muestran las primeras 12.</p>'
+            ? '<p class="bexia-stock-adjustment-invalid-more"><strong>Hay más líneas con problema.</strong> Se muestran las primeras 12.</p>'
             : '';
 
         $html = <<<HTML
@@ -1593,20 +1602,20 @@ HTML;
     <p><strong>No se puede confirmar el ajuste {$reference}.</strong></p>
     <p>Se encontraron {$total} línea(s) con relaciones inválidas. Si se confirma así, Bexia no puede generar los movimientos de inventario correctamente.</p>
 
-    <ul style="padding-left: 18px; margin-top: 10px;">
+    <ul class="bexia-stock-adjustment-invalid-list">
         {$itemsHtml}
     </ul>
 
     {$moreHtml}
 
-    <p style="margin-top: 12px;"><strong>Cómo corregirlo:</strong></p>
-    <ol style="padding-left: 18px;">
+    <p class="bexia-stock-adjustment-invalid-help-title"><strong>Cómo corregirlo:</strong></p>
+    <ol class="bexia-stock-adjustment-invalid-steps">
         <li>Abre la línea indicada.</li>
         <li>Selecciona una variante válida del producto, o elimina la variante si el ajuste debe afectar al producto padre.</li>
         <li>Guarda los cambios de la tabla y vuelve a confirmar.</li>
     </ol>
 
-    <p style="margin-top: 12px;"><strong>No se hizo ningún movimiento de inventario.</strong></p>
+    <p class="bexia-stock-adjustment-invalid-danger"><strong>No se hizo ningún movimiento de inventario.</strong></p>
 </div>
 HTML;
 
@@ -1722,7 +1731,7 @@ HTML;
                 ? 'Sin costo'
                 : '$' . number_format((float) $line->unit_cost, 2);
 
-            $itemsHtml .= '<div style="border:1px solid #fecaca;background:#fef2f2;border-radius:10px;padding:12px;margin-top:10px;">';
+            $itemsHtml .= '<div class="bexia-stock-adjustment-invalid-card">';
             $itemsHtml .= '<div><strong>Linea ' . $lineId . ': ' . $problem . '</strong></div>';
             $itemsHtml .= '<div>Producto: ' . $productName . '</div>';
             $itemsHtml .= '<div>Producto ID: ' . $productId . ' · Variante ID: ' . $variantId . '</div>';
@@ -1732,24 +1741,24 @@ HTML;
         }
 
         $moreHtml = $invalidLines->count() > 20
-            ? '<p style="margin-top:10px;"><strong>Hay mas lineas con problema.</strong> Se muestran las primeras 20.</p>'
+            ? '<p class="bexia-stock-adjustment-invalid-more"><strong>Hay mas lineas con problema.</strong> Se muestran las primeras 20.</p>'
             : '';
 
         $html = '';
-        $html .= '<div style="font-size:14px;line-height:1.45;">';
+        $html .= '<div class="bexia-stock-adjustment-invalid-summary">';
         
         $html .= '<p>Se encontraron <strong>' . $invalidLines->count() . ' linea(s)</strong> con relaciones invalidas. Mientras existan estas lineas, Bexia no confirmara el ajuste ni generara movimientos de inventario.</p>';
         $html .= $itemsHtml;
         $html .= $moreHtml;
-        $html .= '<div style="margin-top:14px;">';
+        $html .= '<div class="bexia-stock-adjustment-invalid-help">';
         $html .= '<strong>Como corregirlo:</strong>';
-        $html .= '<ol style="padding-left:18px;margin-top:6px;">';
+        $html .= '<ol class="bexia-stock-adjustment-invalid-steps">';
         $html .= '<li>Abre la linea indicada.</li>';
         $html .= '<li>Selecciona una variante valida del producto, o elimina la variante si el ajuste debe afectar al producto padre.</li>';
         $html .= '<li>Guarda los cambios de la tabla y vuelve a confirmar.</li>';
         $html .= '</ol>';
         $html .= '</div>';
-        $html .= '<p style="margin-top:14px;color:#b91c1c;"><strong>No se hizo ningun movimiento de inventario.</strong></p>';
+        $html .= '<p class="bexia-stock-adjustment-invalid-danger"><strong>No se hizo ningun movimiento de inventario.</strong></p>';
         $html .= '</div>';
 
         return new \Illuminate\Support\HtmlString($html);
