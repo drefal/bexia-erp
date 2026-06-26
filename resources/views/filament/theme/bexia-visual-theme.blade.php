@@ -2226,4 +2226,177 @@ button[role="switch"] > span {
 }
 /* BEXIA_EMPLOYEE_RESOURCE_RESPONSIVE_V5_79_20C_END */
 
+
+/* BEXIA_PURCHASE_REQUEST_RESOURCE_RESPONSIVE_V5_79_21C_START */
+/*
+ * PurchaseRequestResource responsive refinements.
+ * Alcance: secciones de solicitud de compra, productos,
+ * historial de aprobación y tablas HtmlString de historial/totales.
+ * No cambia lógica de compras, aprobación, totales, permisos ni datos.
+ */
+.bexia-purchase-request-main-section,
+.bexia-purchase-request-products-section,
+.bexia-purchase-request-history-section,
+.bexia-purchase-request-status-history-field {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-purchase-request-main-section .fi-grid,
+.bexia-purchase-request-products-section .fi-grid,
+.bexia-purchase-request-history-section .fi-grid,
+.bexia-purchase-request-main-section .fi-fo-component-ctn,
+.bexia-purchase-request-products-section .fi-fo-component-ctn,
+.bexia-purchase-request-history-section .fi-fo-component-ctn {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-purchase-request-history-empty,
+.bexia-purchase-request-history-unavailable,
+.bexia-purchase-request-totals-empty {
+    max-width: 100% !important;
+    color: #6b7280 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.bexia-purchase-request-status-history-wrap {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+    border-radius: 0.85rem !important;
+}
+
+.bexia-purchase-request-status-history-table {
+    width: 100% !important;
+    min-width: 720px !important;
+    border-collapse: collapse !important;
+    font-size: 0.8125rem !important;
+}
+
+.bexia-purchase-request-status-history-header-row {
+    background: #f8fafc !important;
+}
+
+.dark .bexia-purchase-request-status-history-header-row {
+    background: rgba(15, 23, 42, 0.72) !important;
+}
+
+.bexia-purchase-request-status-history-th {
+    text-align: left !important;
+    padding: 0.55rem 0.65rem !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    white-space: nowrap !important;
+    color: #374151 !important;
+    font-weight: 700 !important;
+}
+
+.dark .bexia-purchase-request-status-history-th {
+    border-bottom-color: rgba(71, 85, 105, 0.8) !important;
+    color: #e5e7eb !important;
+}
+
+.bexia-purchase-request-status-history-td {
+    padding: 0.55rem 0.65rem !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    vertical-align: top !important;
+    color: #374151 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.dark .bexia-purchase-request-status-history-td {
+    border-bottom-color: rgba(51, 65, 85, 0.75) !important;
+    color: #d1d5db !important;
+}
+
+.bexia-purchase-request-status-history-td--strong {
+    font-weight: 700 !important;
+}
+
+.bexia-purchase-request-totals-wrap {
+    display: flex !important;
+    justify-content: flex-end !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+.bexia-purchase-request-totals-table {
+    min-width: 320px !important;
+    max-width: 100% !important;
+    font-size: 0.875rem !important;
+}
+
+.bexia-purchase-request-totals-label,
+.bexia-purchase-request-totals-value,
+.bexia-purchase-request-totals-total-label,
+.bexia-purchase-request-totals-total-value {
+    padding: 0.3rem 0.5rem !important;
+    text-align: right !important;
+    white-space: nowrap !important;
+}
+
+.bexia-purchase-request-totals-label {
+    color: #374151 !important;
+}
+
+.dark .bexia-purchase-request-totals-label {
+    color: #d1d5db !important;
+}
+
+.bexia-purchase-request-totals-value {
+    font-weight: 600 !important;
+}
+
+.bexia-purchase-request-totals-total-label,
+.bexia-purchase-request-totals-total-value {
+    font-size: 1rem !important;
+    font-weight: 800 !important;
+}
+
+@media (max-width: 768px) {
+    .bexia-purchase-request-main-section,
+    .bexia-purchase-request-products-section,
+    .bexia-purchase-request-history-section {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .bexia-purchase-request-status-history-table {
+        min-width: 640px !important;
+        font-size: 0.76rem !important;
+    }
+
+    .bexia-purchase-request-status-history-th,
+    .bexia-purchase-request-status-history-td {
+        padding: 0.5rem 0.55rem !important;
+    }
+
+    .bexia-purchase-request-totals-wrap {
+        justify-content: flex-start !important;
+    }
+
+    .bexia-purchase-request-totals-table {
+        min-width: 280px !important;
+        width: 100% !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-purchase-request-status-history-table {
+        min-width: 580px !important;
+    }
+
+    .bexia-purchase-request-totals-label,
+    .bexia-purchase-request-totals-value,
+    .bexia-purchase-request-totals-total-label,
+    .bexia-purchase-request-totals-total-value {
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+    }
+}
+/* BEXIA_PURCHASE_REQUEST_RESOURCE_RESPONSIVE_V5_79_21C_END */
+
 </style>

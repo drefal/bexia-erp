@@ -177,6 +177,7 @@ public static function form(Form $form): Form
         return $form
             ->schema([
                 Forms\Components\Section::make('Solicitud de compra')
+                    ->extraAttributes(['class' => 'bexia-purchase-request-main-section'])
                     ->description('Borrador editable. La ubicación es general para toda la solicitud.')
                     ->schema([
                         Forms\Components\ViewField::make('purchase_request_status_notice')
@@ -293,6 +294,7 @@ public static function form(Form $form): Form
 
 
                 Forms\Components\Section::make('Productos')
+                    ->extraAttributes(['class' => 'bexia-purchase-request-products-section'])
                     ->description('Agrega o edita productos.')
                     ->schema([
                         Forms\Components\View::make('filament.components.purchase-request-lines-inline-field')
@@ -304,9 +306,11 @@ public static function form(Form $form): Form
                     ->columnSpanFull(),
 
                 Forms\Components\Section::make('Historial de revisión y aprobación')
+                    ->extraAttributes(['class' => 'bexia-purchase-request-history-section'])
                     ->description('Registra creación, envíos a revisión, aprobaciones, cancelaciones y cambios de estado.')
                     ->schema([
                         Forms\Components\Placeholder::make('status_history')
+                            ->extraAttributes(['class' => 'bexia-purchase-request-status-history-field'])
                             ->label('')
                             ->content(fn (?PurchaseRequest $record): HtmlString => static::statusHistoryHtml($record))
                             ->columnSpanFull(),
@@ -586,11 +590,11 @@ public static function normalizePurchaseRequestLineData(array $data): array
     protected static function statusHistoryHtml(?PurchaseRequest $record): HtmlString
     {
         if (! $record || ! $record->exists) {
-            return new HtmlString('<div style="color:#6b7280;">Guarda la solicitud para ver historial.</div>');
+            return new HtmlString('<div class="bexia-purchase-request-history-empty">Guarda la solicitud para ver historial.</div>');
         }
 
         if (! Schema::hasTable('purchase_request_status_logs')) {
-            return new HtmlString('<div style="color:#6b7280;">El historial aún no está disponible.</div>');
+            return new HtmlString('<div class="bexia-purchase-request-history-unavailable">El historial aún no está disponible.</div>');
         }
 
         $rows = DB::table('purchase_request_status_logs')
@@ -600,20 +604,20 @@ public static function normalizePurchaseRequestLineData(array $data): array
             ->get();
 
         if ($rows->isEmpty()) {
-            return new HtmlString('<div style="color:#6b7280;">Sin historial registrado.</div>');
+            return new HtmlString('<div class="bexia-purchase-request-history-empty">Sin historial registrado.</div>');
         }
 
         $labels = static::statusOptions();
 
-        $html = '<div style="overflow-x:auto;">';
-        $html .= '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+        $html = '<div class="bexia-purchase-request-status-history-wrap" role="region" aria-label="Historial de revisión y aprobación" tabindex="0">';
+        $html .= '<table class="bexia-purchase-request-status-history-table">';
         $html .= '<thead>';
-        $html .= '<tr style="background:#f8fafc;">';
-        $html .= '<th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;">Fecha</th>';
-        $html .= '<th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;">Usuario</th>';
-        $html .= '<th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;">Anterior</th>';
-        $html .= '<th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;">Nuevo</th>';
-        $html .= '<th style="text-align:left;padding:8px;border-bottom:1px solid #e5e7eb;">Detalle</th>';
+        $html .= '<tr class="bexia-purchase-request-status-history-header-row">';
+        $html .= '<th class="bexia-purchase-request-status-history-th">Fecha</th>';
+        $html .= '<th class="bexia-purchase-request-status-history-th">Usuario</th>';
+        $html .= '<th class="bexia-purchase-request-status-history-th">Anterior</th>';
+        $html .= '<th class="bexia-purchase-request-status-history-th">Nuevo</th>';
+        $html .= '<th class="bexia-purchase-request-status-history-th">Detalle</th>';
         $html .= '</tr>';
         $html .= '</thead>';
         $html .= '<tbody>';
@@ -635,11 +639,11 @@ public static function normalizePurchaseRequestLineData(array $data): array
             $notes = $row->notes ?: '—';
 
             $html .= '<tr>';
-            $html .= '<td style="padding:8px;border-bottom:1px solid #f1f5f9;">' . e($date) . '</td>';
-            $html .= '<td style="padding:8px;border-bottom:1px solid #f1f5f9;">' . e($user) . '</td>';
-            $html .= '<td style="padding:8px;border-bottom:1px solid #f1f5f9;">' . e($from) . '</td>';
-            $html .= '<td style="padding:8px;border-bottom:1px solid #f1f5f9;font-weight:600;">' . e($to) . '</td>';
-            $html .= '<td style="padding:8px;border-bottom:1px solid #f1f5f9;">' . e($notes) . '</td>';
+            $html .= '<td class="bexia-purchase-request-status-history-td">' . e($date) . '</td>';
+            $html .= '<td class="bexia-purchase-request-status-history-td">' . e($user) . '</td>';
+            $html .= '<td class="bexia-purchase-request-status-history-td">' . e($from) . '</td>';
+            $html .= '<td class="bexia-purchase-request-status-history-td bexia-purchase-request-status-history-td--strong">' . e($to) . '</td>';
+            $html .= '<td class="bexia-purchase-request-status-history-td">' . e($notes) . '</td>';
             $html .= '</tr>';
         }
 
@@ -664,22 +668,22 @@ public static function normalizePurchaseRequestLineData(array $data): array
     protected static function totalsHtml(?PurchaseRequest $record): HtmlString
     {
         if (! $record || ! $record->exists) {
-            return new HtmlString('<div style="text-align:right;color:#6b7280;">Guarda para calcular totales.</div>');
+            return new HtmlString('<div class="bexia-purchase-request-totals-empty">Guarda para calcular totales.</div>');
         }
 
         $record->refresh();
 
-        $html = '<div style="display:flex;justify-content:flex-end;">';
-        $html .= '<table style="min-width:320px;font-size:14px;">';
+        $html = '<div class="bexia-purchase-request-totals-wrap">';
+        $html .= '<table class="bexia-purchase-request-totals-table">';
 
-        $html .= '<tr><td style="padding:4px 8px;text-align:right;color:#374151;">Importe sin impuestos:</td>';
-        $html .= '<td style="padding:4px 8px;text-align:right;font-weight:600;">$ ' . number_format((float) $record->total_without_tax, 2) . '</td></tr>';
+        $html .= '<tr><td class="bexia-purchase-request-totals-label">Importe sin impuestos:</td>';
+        $html .= '<td class="bexia-purchase-request-totals-value">$ ' . number_format((float) $record->total_without_tax, 2) . '</td></tr>';
 
-        $html .= '<tr><td style="padding:4px 8px;text-align:right;color:#374151;">IVA:</td>';
-        $html .= '<td style="padding:4px 8px;text-align:right;font-weight:600;">$ ' . number_format((float) $record->total_tax, 2) . '</td></tr>';
+        $html .= '<tr><td class="bexia-purchase-request-totals-label">IVA:</td>';
+        $html .= '<td class="bexia-purchase-request-totals-value">$ ' . number_format((float) $record->total_tax, 2) . '</td></tr>';
 
-        $html .= '<tr><td style="padding:6px 8px;text-align:right;font-size:16px;font-weight:700;">Total:</td>';
-        $html .= '<td style="padding:6px 8px;text-align:right;font-size:16px;font-weight:700;">$ ' . number_format((float) $record->total_with_tax, 2) . '</td></tr>';
+        $html .= '<tr><td class="bexia-purchase-request-totals-total-label">Total:</td>';
+        $html .= '<td class="bexia-purchase-request-totals-total-value">$ ' . number_format((float) $record->total_with_tax, 2) . '</td></tr>';
 
         $html .= '</table></div>';
 
