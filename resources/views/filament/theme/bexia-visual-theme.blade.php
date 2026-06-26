@@ -3016,4 +3016,219 @@ button[role="switch"] > span {
 }
 /* BEXIA_REPAIR_ORDER_RESOURCE_RESPONSIVE_V5_79_24C_END */
 
+
+/* BEXIA_INVOICE_RESOURCE_RESPONSIVE_V5_79_25C_START
+ * Alcance: InvoiceResource principal.
+ * Objetivo: mejorar lectura responsive de factura, CFDI/PAC, autofacturacion,
+ * informacion fiscal del cliente y campos largos sin tocar logica SAT/PAC.
+ */
+.bexia-invoice-portal-section,
+.bexia-invoice-header-section,
+.bexia-invoice-global-cfdi-section,
+.bexia-invoice-cfdi-pac-section,
+.bexia-invoice-customer-fiscal-section {
+    overflow: hidden !important;
+}
+
+.bexia-invoice-portal-section .fi-section-content,
+.bexia-invoice-header-section .fi-section-content,
+.bexia-invoice-global-cfdi-section .fi-section-content,
+.bexia-invoice-cfdi-pac-section .fi-section-content,
+.bexia-invoice-customer-fiscal-section .fi-section-content {
+    min-width: 0 !important;
+}
+
+.bexia-invoice-header-section .fi-fo-field-wrp,
+.bexia-invoice-global-cfdi-section .fi-fo-field-wrp,
+.bexia-invoice-cfdi-pac-section .fi-fo-field-wrp,
+.bexia-invoice-customer-fiscal-section .fi-fo-field-wrp,
+.bexia-invoice-portal-section .fi-fo-field-wrp {
+    min-width: 0 !important;
+}
+
+.bexia-invoice-contact-select .fi-select-input,
+.bexia-invoice-cfdi-use-select .fi-select-input,
+.bexia-invoice-source-type-select .fi-select-input,
+.bexia-invoice-payment-form-select .fi-select-input,
+.bexia-invoice-payment-method-select .fi-select-input,
+.bexia-invoice-payment-terms-select .fi-select-input,
+.bexia-invoice-global-periodicity-select .fi-select-input,
+.bexia-invoice-global-month-select .fi-select-input,
+.bexia-invoice-status-select .fi-select-input,
+.bexia-invoice-currency-input .fi-input,
+.bexia-invoice-source-number-input .fi-input,
+.bexia-invoice-global-year-input .fi-input,
+.bexia-invoice-cancel-reason-field textarea {
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-invoice-folio-display-field,
+.bexia-invoice-tax-regime-display-field,
+.bexia-invoice-cfdi-status-field,
+.bexia-invoice-cfdi-uuid-field,
+.bexia-invoice-cfdi-folio-field,
+.bexia-invoice-pac-provider-field,
+.bexia-invoice-pac-environment-field,
+.bexia-invoice-cfdi-xml-field,
+.bexia-invoice-cfdi-cancel-status-field,
+.bexia-invoice-cfdi-cancel-message-field,
+.bexia-invoice-cfdi-cancel-ack-field,
+.bexia-invoice-pac-error-field,
+.bexia-invoice-customer-warning-live-field,
+.bexia-invoice-customer-warning-saved-field {
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+}
+
+.bexia-invoice-cfdi-uuid-field .fi-fo-placeholder,
+.bexia-invoice-cfdi-folio-field .fi-fo-placeholder,
+.bexia-invoice-cfdi-xml-field .fi-fo-placeholder,
+.bexia-invoice-cfdi-cancel-message-field .fi-fo-placeholder,
+.bexia-invoice-cfdi-cancel-ack-field .fi-fo-placeholder,
+.bexia-invoice-pac-error-field .fi-fo-placeholder,
+.bexia-invoice-customer-warning-live-field .fi-fo-placeholder,
+.bexia-invoice-customer-warning-saved-field .fi-fo-placeholder {
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+}
+
+.bexia-invoice-customer-fiscal-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.625rem !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.45 !important;
+}
+
+.bexia-invoice-fiscal-item {
+    min-width: 0 !important;
+    border-radius: 0.75rem !important;
+    border: 1px solid rgba(148, 163, 184, 0.24) !important;
+    background: rgba(248, 250, 252, 0.82) !important;
+    padding: 0.625rem 0.75rem !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+}
+
+.dark .bexia-invoice-fiscal-item {
+    border-color: rgba(51, 65, 85, 0.9) !important;
+    background: rgba(15, 23, 42, 0.74) !important;
+}
+
+.bexia-invoice-fiscal-item strong {
+    display: inline-block !important;
+    margin-bottom: 0.125rem !important;
+    font-size: 0.72rem !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+    color: rgb(71, 85, 105) !important;
+}
+
+.dark .bexia-invoice-fiscal-item strong {
+    color: rgb(203, 213, 225) !important;
+}
+
+.bexia-invoice-fiscal-item-wide {
+    grid-column: span 2 / span 2 !important;
+}
+
+.bexia-invoice-fiscal-item-full {
+    grid-column: 1 / -1 !important;
+}
+
+.bexia-invoice-portal-summary-card {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+}
+
+.bexia-invoice-portal-summary-title {
+    line-height: 1.3 !important;
+}
+
+.bexia-invoice-portal-summary-row {
+    min-width: 0 !important;
+}
+
+.bexia-invoice-portal-summary-label,
+.bexia-invoice-portal-summary-value {
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+}
+
+.bexia-invoice-portal-protected-alert {
+    line-height: 1.45 !important;
+    overflow-wrap: anywhere !important;
+}
+
+@media (max-width: 1024px) {
+    .bexia-invoice-header-section .fi-grid,
+    .bexia-invoice-global-cfdi-section .fi-grid,
+    .bexia-invoice-cfdi-pac-section .fi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    .bexia-invoice-customer-fiscal-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-invoice-header-section .fi-grid,
+    .bexia-invoice-global-cfdi-section .fi-grid,
+    .bexia-invoice-cfdi-pac-section .fi-grid,
+    .bexia-invoice-customer-fiscal-section .fi-grid,
+    .bexia-invoice-portal-section .fi-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-invoice-header-section .fi-fo-field-wrp,
+    .bexia-invoice-global-cfdi-section .fi-fo-field-wrp,
+    .bexia-invoice-cfdi-pac-section .fi-fo-field-wrp,
+    .bexia-invoice-customer-fiscal-section .fi-fo-field-wrp,
+    .bexia-invoice-portal-section .fi-fo-field-wrp {
+        grid-column: 1 / -1 !important;
+        width: 100% !important;
+    }
+
+    .bexia-invoice-customer-fiscal-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+        font-size: 0.78rem !important;
+    }
+
+    .bexia-invoice-fiscal-item,
+    .bexia-invoice-fiscal-item-wide,
+    .bexia-invoice-fiscal-item-full {
+        grid-column: 1 / -1 !important;
+    }
+
+    .bexia-invoice-portal-summary-row {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-invoice-header-section,
+    .bexia-invoice-global-cfdi-section,
+    .bexia-invoice-cfdi-pac-section,
+    .bexia-invoice-customer-fiscal-section,
+    .bexia-invoice-portal-section {
+        border-radius: 1rem !important;
+    }
+
+    .bexia-invoice-fiscal-item {
+        padding: 0.55rem 0.65rem !important;
+    }
+
+    .bexia-invoice-portal-summary-card {
+        padding: 0.75rem !important;
+    }
+}
+/* BEXIA_INVOICE_RESOURCE_RESPONSIVE_V5_79_25C_END */
+
 </style>
