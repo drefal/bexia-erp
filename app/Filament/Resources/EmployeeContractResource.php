@@ -28,6 +28,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
+// BEXIA_EMPLOYEE_CONTRACT_RESOURCE_RESPONSIVE_V5_79_33C
 class EmployeeContractResource extends Resource
 {
     protected static ?string $model = EmployeeContract::class;
@@ -125,12 +126,14 @@ class EmployeeContractResource extends Resource
         return $form
             ->schema([
                 Section::make('Contrato laboral')
+                    ->extraAttributes(['class' => 'bexia-employee-contract-section bexia-employee-contract-labor-section'])
                     ->description('Historial contractual del empleado: vigencia, puesto, sueldo, horario y archivo firmado.')
                     ->schema([
                         Grid::make(2)
                             ->schema([
                                 Select::make('employee_id')
                                     ->label('Empleado')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-employee-field'])
                                     ->options(fn () => self::employeeOptions())
                                     ->searchable()
                                     ->preload()
@@ -139,84 +142,100 @@ class EmployeeContractResource extends Resource
 
                                 TextInput::make('contract_number')
                                     ->label('Número / folio contrato')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-number-field'])
                                     ->maxLength(255),
 
                                 Select::make('contract_type')
                                     ->label('Tipo de contrato')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-type-field'])
                                     ->options(self::contractTypeOptions())
                                     ->default('indefinite')
                                     ->required(),
 
                                 Select::make('status')
                                     ->label('Estado')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-status-field'])
                                     ->options(self::statusOptions())
                                     ->default('draft')
                                     ->required(),
 
                                 DatePicker::make('start_date')
                                     ->label('Fecha inicio')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-start-date-field'])
                                     ->native(false)
                                     ->required(),
 
                                 DatePicker::make('end_date')
                                     ->label('Fecha fin')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-end-date-field'])
                                     ->native(false),
 
                                 DatePicker::make('signed_at')
                                     ->label('Fecha firma')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-signed-at-field'])
                                     ->native(false),
 
                                 DatePicker::make('probation_end_date')
                                     ->label('Fin periodo prueba')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-probation-end-field'])
                                     ->native(false),
 
                                 Toggle::make('is_current')
                                     ->label('Contrato vigente')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-current-field'])
                                     ->helperText('Al guardar como vigente, se desmarcarán otros contratos vigentes del empleado.'),
                             ]),
                     ]),
 
                 Section::make('Condiciones laborales')
+                    ->extraAttributes(['class' => 'bexia-employee-contract-section bexia-employee-contract-work-section'])
                     ->schema([
                         Grid::make(2)
                             ->schema([
                                 Select::make('hr_department_id')
                                     ->label('Departamento')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-department-field'])
                                     ->options(fn () => self::departmentOptions())
                                     ->searchable()
                                     ->preload(),
 
                                 Select::make('hr_job_position_id')
                                     ->label('Puesto')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-job-position-field'])
                                     ->options(fn () => self::jobPositionOptions())
                                     ->searchable()
                                     ->preload(),
 
                                 Select::make('hr_work_schedule_id')
                                     ->label('Horario laboral')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-work-schedule-field'])
                                     ->options(fn () => self::workScheduleOptions())
                                     ->searchable()
                                     ->preload(),
 
                                 Select::make('payroll_employer_registration_id')
                                     ->label('Registro patronal')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-employer-registration-field'])
                                     ->options(fn () => self::employerRegistrationOptions())
                                     ->searchable()
                                     ->preload(),
 
                                 Select::make('payroll_periodicity_id')
                                     ->label('Periodicidad nómina')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-periodicity-field'])
                                     ->options(fn () => self::payrollPeriodicityOptions())
                                     ->searchable()
                                     ->preload(),
 
                                 TextInput::make('base_salary')
                                     ->label('Sueldo base')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-base-salary-field'])
                                     ->numeric()
                                     ->prefix('$'),
 
                                 Select::make('salary_type')
                                     ->label('Tipo de sueldo')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-salary-type-field'])
                                     ->options([
                                         'monthly' => 'Mensual',
                                         'daily' => 'Diario',
@@ -227,22 +246,26 @@ class EmployeeContractResource extends Resource
 
                                 TextInput::make('currency')
                                     ->label('Moneda')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-currency-field'])
                                     ->default('MXN')
                                     ->maxLength(3),
 
                                 TextInput::make('hours_per_week')
                                     ->label('Horas por semana')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-hours-field'])
                                     ->numeric(),
                             ]),
                     ]),
 
                 Section::make('CFDI nómina SAT')
+                    ->extraAttributes(['class' => 'bexia-employee-contract-section bexia-employee-contract-sat-section'])
                     ->description('Datos fiscales laborales usados para validar y preparar el complemento de nómina. No timbra.')
                     ->schema([
                         Grid::make(2)
                             ->schema([
                                 Select::make('sat_contract_type_code')
                                     ->label('Tipo contrato SAT')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-sat-contract-type-field'])
                                     ->options([
                                         '01' => '01 - Contrato de trabajo por tiempo indeterminado',
                                         '02' => '02 - Contrato de trabajo para obra determinada',
@@ -261,6 +284,7 @@ class EmployeeContractResource extends Resource
 
                                 Select::make('sat_workday_type_code')
                                     ->label('Tipo jornada SAT')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-sat-workday-field'])
                                     ->options([
                                         '01' => '01 - Diurna',
                                         '02' => '02 - Nocturna',
@@ -277,6 +301,7 @@ class EmployeeContractResource extends Resource
 
                                 Select::make('sat_regime_type_code')
                                     ->label('Tipo régimen SAT')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-sat-regime-field'])
                                     ->options([
                                         '02' => '02 - Sueldos',
                                         '03' => '03 - Jubilados',
@@ -296,6 +321,7 @@ class EmployeeContractResource extends Resource
 
                                 Select::make('sat_risk_position_code')
                                     ->label('Riesgo puesto SAT')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-sat-risk-field'])
                                     ->options([
                                         '1' => 'Clase I',
                                         '2' => 'Clase II',
@@ -309,26 +335,31 @@ class EmployeeContractResource extends Resource
 
                                 TextInput::make('daily_salary')
                                     ->label('Salario diario')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-daily-salary-field'])
                                     ->numeric()
                                     ->prefix('$')
                                     ->helperText('Salario diario usado para CFDI nómina.'),
 
                                 TextInput::make('integrated_daily_salary')
                                     ->label('Salario diario integrado')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-integrated-salary-field'])
                                     ->numeric()
                                     ->prefix('$')
                                     ->helperText('SDI usado para IMSS/CFDI nómina.'),
 
                                 Toggle::make('is_unionized')
                                     ->label('Sindicalizado')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-unionized-field'])
                                     ->helperText('Dato informativo para complemento de nómina.'),
                             ]),
                     ]),
 
                 Section::make('Archivo y notas')
+                    ->extraAttributes(['class' => 'bexia-employee-contract-section bexia-employee-contract-file-section'])
                     ->schema([
                         FileUpload::make('file_path')
                             ->label('Contrato firmado')
+                            ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-file-upload-field'])
                             ->disk('public')
                             ->directory('employee-contracts')
                             ->visibility('public')
@@ -338,6 +369,7 @@ class EmployeeContractResource extends Resource
 
                         Textarea::make('notes')
                             ->label('Notas')
+                            ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-notes-field'])
                             ->rows(4)
                             ->columnSpanFull(),
                     ]),
@@ -484,58 +516,86 @@ class EmployeeContractResource extends Resource
                 Tables\Columns\TextColumn::make('employee.name')
                     ->label('Empleado')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-employee'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-employee']),
 
                 Tables\Columns\TextColumn::make('contract_number')
                     ->label('Folio')
                     ->searchable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-number']),
 
                 Tables\Columns\TextColumn::make('contract_type')
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => self::contractTypeOptions()[$state] ?? ($state ?: '-'))
                     ->badge()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-type'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-type']),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
                     ->formatStateUsing(fn (?string $state): string => self::statusOptions()[$state] ?? ($state ?: '-'))
                     ->badge()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-status']),
 
                 Tables\Columns\IconColumn::make('is_current')
                     ->label('Vigente')
                     ->boolean()
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-current'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-current']),
 
                 Tables\Columns\TextColumn::make('start_date')
                     ->label('Inicio')
                     ->date('d/m/Y')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-start-date'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-start-date']),
 
                 Tables\Columns\TextColumn::make('end_date')
                     ->label('Fin')
                     ->date('d/m/Y')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-end-date'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-end-date']),
 
                 Tables\Columns\TextColumn::make('jobPosition.name')
                     ->label('Puesto')
-                    ->toggleable(),
+                    ->toggleable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-job-position'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-job-position']),
 
                 Tables\Columns\TextColumn::make('department.name')
                     ->label('Departamento')
-                    ->toggleable(),
+                    ->toggleable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-department'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-department']),
 
                 Tables\Columns\TextColumn::make('base_salary')
                     ->label('Sueldo')
                     ->money('MXN')
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-salary'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-salary']),
 
                 Tables\Columns\IconColumn::make('file_path')
                     ->label('Archivo')
                     ->boolean()
-                    ->getStateUsing(fn ($record): bool => filled($record->file_path)),
+                    ->getStateUsing(fn ($record): bool => filled($record->file_path))
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-contract-col-file'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-contract-col-file']),
             ])
             ->filters([
                 SelectFilter::make('status')

@@ -4058,4 +4058,113 @@ button[role="switch"] > span {
 }
 /* BEXIA_TREASURY_CASH_TRANSFER_REQUEST_RESOURCE_RESPONSIVE_V5_79_32C_END */
 
+
+/* BEXIA_EMPLOYEE_CONTRACT_RESOURCE_RESPONSIVE_V5_79_33C_START */
+.bexia-employee-contract-section {
+    min-width: 0;
+}
+
+.bexia-employee-contract-section .fi-section-content {
+    border-radius: 16px;
+}
+
+.bexia-employee-contract-section .fi-grid,
+.bexia-employee-contract-section .grid {
+    min-width: 0;
+}
+
+.bexia-employee-contract-field {
+    min-width: 0;
+}
+
+.bexia-employee-contract-file-upload-field,
+.bexia-employee-contract-notes-field {
+    width: 100%;
+}
+
+.bexia-employee-contract-col-employee {
+    min-width: 220px;
+}
+
+.bexia-employee-contract-col-number,
+.bexia-employee-contract-col-type,
+.bexia-employee-contract-col-status {
+    min-width: 145px;
+}
+
+.bexia-employee-contract-col-current,
+.bexia-employee-contract-col-start-date,
+.bexia-employee-contract-col-end-date,
+.bexia-employee-contract-col-salary,
+.bexia-employee-contract-col-file {
+    min-width: 120px;
+}
+
+.bexia-employee-contract-col-job-position,
+.bexia-employee-contract-col-department {
+    min-width: 180px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-employee-contract-labor-section .fi-grid,
+    .bexia-employee-contract-labor-section .grid,
+    .bexia-employee-contract-work-section .fi-grid,
+    .bexia-employee-contract-work-section .grid,
+    .bexia-employee-contract-sat-section .fi-grid,
+    .bexia-employee-contract-sat-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-employee-contract-section .fi-grid,
+    .bexia-employee-contract-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-employee-contract-section .fi-fo-field-wrp,
+    .bexia-employee-contract-section .fi-fo-component-ctn,
+    .bexia-employee-contract-section [data-field-wrapper],
+    .bexia-employee-contract-field {
+        grid-column: 1 / -1 !important;
+        min-width: 0;
+    }
+
+    .bexia-employee-contract-section .fi-input-wrp,
+    .bexia-employee-contract-section .fi-select-input,
+    .bexia-employee-contract-section textarea {
+        min-width: 0;
+    }
+
+    .bexia-employee-contract-col-employee,
+    .bexia-employee-contract-col-number,
+    .bexia-employee-contract-col-type,
+    .bexia-employee-contract-col-status,
+    .bexia-employee-contract-col-current,
+    .bexia-employee-contract-col-start-date,
+    .bexia-employee-contract-col-end-date,
+    .bexia-employee-contract-col-job-position,
+    .bexia-employee-contract-col-department,
+    .bexia-employee-contract-col-salary,
+    .bexia-employee-contract-col-file {
+        min-width: 0;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-employee-contract-section {
+        border-radius: 14px;
+    }
+
+    .bexia-employee-contract-section .fi-section-content {
+        padding: 0.85rem;
+    }
+
+    .bexia-employee-contract-section .fi-section-header {
+        padding-inline: 0.85rem;
+    }
+}
+/* BEXIA_EMPLOYEE_CONTRACT_RESOURCE_RESPONSIVE_V5_79_33C_END */
+
 </style>
