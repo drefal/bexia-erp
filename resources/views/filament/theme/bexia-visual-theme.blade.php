@@ -3479,4 +3479,94 @@ button[role="switch"] > span {
 }
 /* BEXIA_EXIT_CATALOG_RESOURCES_RESPONSIVE_V5_79_27C_END */
 
+
+/* BEXIA_ROLE_RESOURCE_RESPONSIVE_V5_79_28B_START */
+.bexia-role-field {
+    min-width: 0;
+}
+
+.bexia-role-permission-guide-wrapper {
+    border-radius: 16px;
+}
+
+.bexia-role-permission-guide {
+    font-size: 13px;
+    line-height: 1.65;
+    color: #334155;
+}
+
+.dark .bexia-role-permission-guide {
+    color: #cbd5e1;
+}
+
+.bexia-role-permission-guide div + div {
+    margin-top: 2px;
+}
+
+.bexia-role-permission-list {
+    min-width: 0;
+}
+
+.bexia-role-permission-list .fi-fo-checkbox-list {
+    width: 100%;
+}
+
+.bexia-role-col-name {
+    min-width: 190px;
+}
+
+.bexia-role-col-company {
+    min-width: 190px;
+}
+
+.bexia-role-col-permissions {
+    min-width: 110px;
+}
+
+.bexia-role-col-updated {
+    min-width: 140px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-role-permission-list .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-role-field,
+    .bexia-role-permission-guide-wrapper,
+    .bexia-role-permission-list {
+        grid-column: 1 / -1 !important;
+    }
+
+    .bexia-role-permission-list .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-role-permission-guide {
+        font-size: 0.88rem;
+        line-height: 1.55;
+    }
+
+    .bexia-role-col-name,
+    .bexia-role-col-company,
+    .bexia-role-col-permissions,
+    .bexia-role-col-updated {
+        min-width: 0;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-role-permission-guide-wrapper {
+        border-radius: 14px;
+    }
+
+    .bexia-role-permission-guide {
+        font-size: 0.84rem;
+    }
+}
+/* BEXIA_ROLE_RESOURCE_RESPONSIVE_V5_79_28B_END */
+
 </style>

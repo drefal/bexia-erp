@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Model;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
+// BEXIA_ROLE_RESOURCE_RESPONSIVE_V5_79_28B
 class RoleResource extends Resource
 {
     protected static ?string $model = Role::class;
@@ -111,7 +112,8 @@ $user->can('roles.view')
             Forms\Components\TextInput::make('name')
                 ->label('Nombre del rol')
                 ->required()
-                ->maxLength(255),
+                ->maxLength(255)
+                ->extraAttributes(['class' => 'bexia-role-field bexia-role-name-field']),
 
             Forms\Components\Select::make('company_ids')
                 ->label('Empresas')
@@ -122,7 +124,8 @@ $user->can('roles.view')
                 ->native(false)
                 ->visible(fn (string $operation): bool => auth()->user()?->isSystemAdmin() && $operation === 'create')
                 ->required(fn (string $operation): bool => auth()->user()?->isSystemAdmin() && $operation === 'create')
-                ->helperText('Como superadmin, puedes replicar este rol en varias empresas.'),
+                ->helperText('Como superadmin, puedes replicar este rol en varias empresas.')
+                ->extraAttributes(['class' => 'bexia-role-field bexia-role-company-ids-field']),
 
             Forms\Components\Select::make('company_id')
                 ->label('Empresa')
@@ -139,12 +142,14 @@ $user->can('roles.view')
                 ->preload()
                 ->native(false)
                 ->visible(fn (string $operation): bool => ! (auth()->user()?->isSystemAdmin() && $operation === 'create'))
-                ->dehydrated(fn (string $operation): bool => ! (auth()->user()?->isSystemAdmin() && $operation === 'create')),
+                ->dehydrated(fn (string $operation): bool => ! (auth()->user()?->isSystemAdmin() && $operation === 'create'))
+                ->extraAttributes(['class' => 'bexia-role-field bexia-role-company-field']),
 
             Forms\Components\Placeholder::make('permission_guide')
                 ->label('Guía rápida de permisos')
+                ->extraAttributes(['class' => 'bexia-role-permission-guide-wrapper'])
                 ->content(new \Illuminate\Support\HtmlString('
-                    <div style="font-size: 13px; line-height: 1.65;">
+                    <div class="bexia-role-permission-guide">
                         <div><strong>Ver empresas</strong>: permite entrar al módulo de empresas y consultar su información.</div>
                         <div><strong>Editar empresas</strong>: permite crear o modificar datos de empresas.</div>
                         <div><strong>Ver usuarios</strong>: permite ver los usuarios de la empresa actual.</div>
@@ -203,7 +208,9 @@ $user->can('roles.view')
                 })
                 ->columns(2)
                 ->searchable()
-                ->bulkToggleable(),
+                ->bulkToggleable()
+                ->columnSpanFull()
+                ->extraAttributes(['class' => 'bexia-role-permission-list']),
         ])->columns(2);
     }
 
@@ -214,21 +221,31 @@ $user->can('roles.view')
                 Tables\Columns\TextColumn::make('name')
                     ->label('Rol')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->extraHeaderAttributes(['class' => 'bexia-role-col-name'])
+                    ->extraCellAttributes(['class' => 'bexia-role-col-name'])
+                    ->wrap(),
 
                 Tables\Columns\TextColumn::make('company_id')
                     ->label('Empresa')
                     ->formatStateUsing(fn ($state) => Company::find($state)?->name ?? '—')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-role-col-company'])
+                    ->extraCellAttributes(['class' => 'bexia-role-col-company'])
+                    ->wrap(),
 
                 Tables\Columns\TextColumn::make('permissions_count')
                     ->label('# Permisos')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-role-col-permissions'])
+                    ->extraCellAttributes(['class' => 'bexia-role-col-permissions']),
 
                 Tables\Columns\TextColumn::make('updated_at')
                     ->label('Actualizado')
                     ->since()
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-role-col-updated'])
+                    ->extraCellAttributes(['class' => 'bexia-role-col-updated']),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
