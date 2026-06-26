@@ -78,10 +78,13 @@ public static function getEloquentQuery(): Builder
         return $form
             ->schema([
                 Forms\Components\Tabs::make('Configuración de punto de venta')
+                    ->extraAttributes(['class' => 'bexia-pos-point-resource-tabs'])
                     ->tabs([
                         Forms\Components\Tabs\Tab::make('General')
+                            ->extraAttributes(['class' => 'bexia-pos-point-tab-general'])
                             ->schema([
                                 Forms\Components\Section::make('Datos principales')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-main-section'])
                                     ->columns(3)
                                     ->schema([
 Forms\Components\TextInput::make('name')
@@ -138,6 +141,7 @@ Forms\Components\TextInput::make('name')
                                     ]),
 
                                 Forms\Components\Section::make('Apartados / anticipos')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-partial-payment-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Toggle::make('allow_partial_payment')
@@ -153,8 +157,10 @@ Forms\Components\TextInput::make('name')
                             ]),
 
                         Forms\Components\Tabs\Tab::make('Interfaz')
+                            ->extraAttributes(['class' => 'bexia-pos-point-tab-interface'])
                             ->schema([
                                 Forms\Components\Section::make('Interfaz de PDV')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-interface-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Toggle::make('multiple_cashiers_per_session')
@@ -163,6 +169,7 @@ Forms\Components\TextInput::make('name')
                                             ->default(true),
 
                                         Forms\Components\Placeholder::make('cashiers_help')
+                                            ->extraAttributes(['class' => 'bexia-pos-point-cashiers-help-field'])
                                             ->label('Cajeros permitidos')
                                             ->content('Los cajeros se configuran en Punto de Venta > Cajeros PDV. Cada cajero se liga al punto de venta.'),
 
@@ -218,8 +225,10 @@ Forms\Components\TextInput::make('name')
                             ]),
 
                         Forms\Components\Tabs\Tab::make('Existencias')
+                            ->extraAttributes(['class' => 'bexia-pos-point-tab-stock'])
                             ->schema([
                                 Forms\Components\Section::make('Configuración de existencias')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-stock-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Toggle::make('show_stock')
@@ -259,6 +268,7 @@ Forms\Components\TextInput::make('name')
                                     ]),
 
                                 Forms\Components\Section::make('Pedidos del PDV')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-orders-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Toggle::make('show_pos_orders')
@@ -284,8 +294,10 @@ Forms\Components\TextInput::make('name')
                             ]),
 
                         Forms\Components\Tabs\Tab::make('Precios')
+                            ->extraAttributes(['class' => 'bexia-pos-point-tab-prices'])
                             ->schema([
                                 Forms\Components\Section::make('Listas de precios')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-price-lists-section'])
                                     ->description('Las listas se toman del módulo de listas de precios. El PDV podrá usar una lista predeterminada y permitir cambiarla según cliente o venta.')
                                     ->columns(2)
                                     ->schema([
@@ -328,8 +340,10 @@ Forms\Components\TextInput::make('name')
                             ]),
 
                         Forms\Components\Tabs\Tab::make('Ticket / Facturación')
+                            ->extraAttributes(['class' => 'bexia-pos-point-tab-ticket-billing'])
                             ->schema([
                                 Forms\Components\Section::make('Cierre de caja')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-close-section'])
                                     ->description('Define el formato usado para imprimir el ticket y PDF de cierre de sesión.')
                                     ->columns(2)
                                     ->schema([
@@ -349,6 +363,7 @@ Forms\Components\TextInput::make('name')
                                  * BEXIA_V5527D5C_RECEIPT_PRIVACY_SECTION
                                  */
                                 Forms\Components\Section::make('Privacidad del ticket')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-receipt-privacy-section'])
                                     ->description('Configura cómo se muestra el vendedor/cajero en los tickets impresos. No afecta la pantalla del PDV.')
                                     ->columns(2)
                                     ->schema([
@@ -366,6 +381,7 @@ Forms\Components\TextInput::make('name')
                                     ]),
 
                                 Forms\Components\Section::make('Ticket')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-ticket-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Toggle::make('custom_receipt_header_footer')
@@ -401,6 +417,7 @@ Forms\Components\TextInput::make('name')
                                     ]),
 
                                 Forms\Components\Section::make('Facturación con QR')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-invoice-qr-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Toggle::make('use_qr_on_receipt')
@@ -415,8 +432,10 @@ Forms\Components\TextInput::make('name')
                             ]),
 
                         Forms\Components\Tabs\Tab::make('Pagos')
+                            ->extraAttributes(['class' => 'bexia-pos-point-tab-payments'])
                             ->schema([
                                 Forms\Components\Section::make('Métodos de pago')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-payments-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Select::make('payment_method_ids')
@@ -463,8 +482,10 @@ Forms\Components\TextInput::make('name')
                             ]),
 
                         Forms\Components\Tabs\Tab::make('Inventario')
+                            ->extraAttributes(['class' => 'bexia-pos-point-tab-inventory'])
                             ->schema([
                                 Forms\Components\Section::make('Movimiento de inventario')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-inventory-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Select::make('inventory_update_mode')
@@ -494,8 +515,10 @@ Forms\Components\TextInput::make('name')
                             ]),
 
                         Forms\Components\Tabs\Tab::make('Técnico')
+                            ->extraAttributes(['class' => 'bexia-pos-point-tab-technical'])
                             ->schema([
                                 Forms\Components\Section::make('Carga de datos')
+                                    ->extraAttributes(['class' => 'bexia-pos-point-technical-section'])
                                     ->columns(2)
                                     ->schema([
                                         Forms\Components\Toggle::make('limited_products_loading')
