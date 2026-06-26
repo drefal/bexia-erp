@@ -1197,10 +1197,12 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                 Forms\Components\Hidden::make('csf_imported_by_user_id'),
 
                 Forms\Components\Tabs::make('Contacto')
+                    ->extraAttributes(['class' => 'bexia-contact-resource-tabs'])
                     ->tabs([
                         Forms\Components\Tabs\Tab::make('Información general')
                             ->schema([
                                 Forms\Components\Section::make('Datos principales')
+                                    ->extraAttributes(['class' => 'bexia-contact-main-section'])
                                     ->schema([
                                         Forms\Components\Select::make('contact_type')
                                             ->label('Tipo')
@@ -1270,6 +1272,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                                     ->columns(12),
 
                                 Forms\Components\Section::make('Contacto')
+                                    ->extraAttributes(['class' => 'bexia-contact-details-section'])
                                     ->schema([
                                         Forms\Components\TextInput::make('email')
                                             ->label('Correo electrónico')
@@ -1295,6 +1298,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                                     ->columns(12),
 
                                 Forms\Components\Section::make('Dirección')
+                                    ->extraAttributes(['class' => 'bexia-contact-address-section'])
                                     ->schema([
                                         Forms\Components\TextInput::make('street')
                                             ->label('Calle')
@@ -1382,6 +1386,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                         Forms\Components\Tabs\Tab::make('Facturación')
                             ->schema([
                                 Forms\Components\Section::make('Información fiscal')
+                                    ->extraAttributes(['class' => 'bexia-contact-fiscal-section'])
                                     ->schema([
                                         Forms\Components\TextInput::make('fiscal_name')
                                             ->label('Razón social fiscal')
@@ -1392,13 +1397,13 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                                         Forms\Components\TextInput::make('rfc')
                                             ->label('RFC')
                                             ->maxLength(20)
-                                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                            ->extraInputAttributes(['class' => 'bexia-contact-uppercase-input'])
                                             ->columnSpan(3),
 
                                         Forms\Components\TextInput::make('curp')
                                             ->label('CURP')
                                             ->maxLength(30)
-                                            ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                                            ->extraInputAttributes(['class' => 'bexia-contact-uppercase-input'])
                                             ->visible(fn (Forms\Get $get): bool => $get('contact_type') === 'person')
                                             ->columnSpan(3),
 
@@ -1435,9 +1440,11 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
 
                                 Forms\Components\Section::make('Constancia de Situación Fiscal')
+                                    ->extraAttributes(['class' => 'bexia-contact-csf-section'])
                                     ->description('Archivo PDF usado como evidencia para cargar la información fiscal del contacto.')
                                     ->schema([
                                         Forms\Components\Placeholder::make('csf_file_info')
+                                            ->extraAttributes(['class' => 'bexia-contact-csf-file-info-field'])
                                             ->label('Archivo')
                                             ->content(function (?Contact $record, Forms\Get $get): HtmlString {
                                                 $path = trim((string) ($record?->csf_pdf_path ?: $get('csf_pdf_path')));
@@ -1445,7 +1452,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                                                 $importedAt = $record?->csf_imported_at ?: $get('csf_imported_at');
 
                                                 if ($path === '') {
-                                                    return new HtmlString('<span class="text-gray-500">Sin Constancia SAT cargada.</span>');
+                                                    return new HtmlString('<span class="bexia-contact-csf-empty">Sin Constancia SAT cargada.</span>');
                                                 }
 
                                                 if ($filename === '') {
@@ -1453,14 +1460,14 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                                                 }
 
                                                 $dateText = $importedAt
-                                                    ? '<div class="text-sm text-gray-500 mt-1">Importada: ' . e((string) $importedAt) . '</div>'
+                                                    ? '<div class="bexia-contact-csf-date">Importada: ' . e((string) $importedAt) . '</div>'
                                                     : '';
 
                                                 if (! $record) {
                                                     return new HtmlString(
-                                                        '<div class="space-y-1">'
-                                                        . '<div class="font-medium">' . e($filename) . '</div>'
-                                                        . '<div class="text-sm text-gray-500">El archivo ya fue cargado. Podrás verlo o descargarlo después de guardar el contacto.</div>'
+                                                        '<div class="bexia-contact-csf-preview">'
+                                                        . '<div class="bexia-contact-csf-filename">' . e($filename) . '</div>'
+                                                        . '<div class="bexia-contact-csf-note">El archivo ya fue cargado. Podrás verlo o descargarlo después de guardar el contacto.</div>'
                                                         . $dateText
                                                         . '</div>'
                                                     );
@@ -1470,12 +1477,12 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                                                 $downloadUrl = route('contacts.csf.download', ['contact' => $record]);
 
                                                 return new HtmlString(
-                                                    '<div class="space-y-2">'
-                                                    . '<div class="font-medium">' . e($filename) . '</div>'
+                                                    '<div class="bexia-contact-csf-actions">'
+                                                    . '<div class="bexia-contact-csf-filename">' . e($filename) . '</div>'
                                                     . $dateText
-                                                    . '<div class="flex gap-2 mt-2">'
-                                                    . '<a class="fi-btn fi-btn-size-sm fi-btn-color-gray inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold ring-1 ring-gray-300 hover:bg-gray-50" href="' . e($viewUrl) . '" target="_blank" rel="noopener">Ver PDF</a>'
-                                                    . '<a class="fi-btn fi-btn-size-sm fi-btn-color-primary inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold bg-primary-600 text-white hover:bg-primary-500" href="' . e($downloadUrl) . '">Descargar PDF</a>'
+                                                    . '<div class="bexia-contact-csf-buttons">'
+                                                    . '<a class="bexia-contact-csf-button bexia-contact-csf-button--view" href="' . e($viewUrl) . '" target="_blank" rel="noopener">Ver PDF</a>'
+                                                    . '<a class="bexia-contact-csf-button bexia-contact-csf-button--download" href="' . e($downloadUrl) . '">Descargar PDF</a>'
                                                     . '</div>'
                                                     . '</div>'
                                                 );
@@ -1485,6 +1492,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                                     ->columns(12),
 
                                 Forms\Components\Section::make('Pago')
+                                    ->extraAttributes(['class' => 'bexia-contact-payment-section'])
                                     ->schema([
                                         Forms\Components\Select::make('payment_form_code')
                                             ->label('Forma de pago')
@@ -1510,6 +1518,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                         Forms\Components\Tabs\Tab::make('Venta y compra')
                             ->schema([
                                 Forms\Components\Section::make('Ventas')
+                                    ->extraAttributes(['class' => 'bexia-contact-sales-section'])
                                     ->description('Valores que se usarán al crear cotizaciones, pedidos y facturas para este cliente.')
                                     ->schema([
                                         Forms\Components\Select::make('salesperson_user_id')
@@ -1583,6 +1592,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                                     ->columns(12),
 
                                 Forms\Components\Section::make('Compras')
+                                    ->extraAttributes(['class' => 'bexia-contact-purchases-section'])
                                     ->description('Valores que se usarán cuando este contacto sea proveedor.')
                                     ->schema([
                                         Forms\Components\Select::make('supplier_payment_form_code')

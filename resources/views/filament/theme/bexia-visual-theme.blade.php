@@ -2399,4 +2399,198 @@ button[role="switch"] > span {
 }
 /* BEXIA_PURCHASE_REQUEST_RESOURCE_RESPONSIVE_V5_79_21C_END */
 
+
+/* BEXIA_CONTACT_RESOURCE_RESPONSIVE_V5_79_22C_START */
+/*
+ * ContactResource responsive refinements.
+ * Alcance: tabs, secciones de contacto/facturación, Constancia SAT,
+ * RFC/CURP uppercase por clase y botones del bloque CSF.
+ * No cambia lógica de contactos, permisos, SAT, importación ni archivado.
+ */
+.bexia-contact-resource-tabs,
+.bexia-contact-main-section,
+.bexia-contact-details-section,
+.bexia-contact-address-section,
+.bexia-contact-fiscal-section,
+.bexia-contact-csf-section,
+.bexia-contact-payment-section,
+.bexia-contact-sales-section,
+.bexia-contact-purchases-section,
+.bexia-contact-csf-file-info-field {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-contact-resource-tabs .fi-tabs {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+}
+
+.bexia-contact-resource-tabs .fi-tabs-item {
+    white-space: nowrap !important;
+}
+
+.bexia-contact-main-section .fi-grid,
+.bexia-contact-details-section .fi-grid,
+.bexia-contact-address-section .fi-grid,
+.bexia-contact-fiscal-section .fi-grid,
+.bexia-contact-csf-section .fi-grid,
+.bexia-contact-payment-section .fi-grid,
+.bexia-contact-sales-section .fi-grid,
+.bexia-contact-purchases-section .fi-grid,
+.bexia-contact-main-section .fi-fo-component-ctn,
+.bexia-contact-details-section .fi-fo-component-ctn,
+.bexia-contact-address-section .fi-fo-component-ctn,
+.bexia-contact-fiscal-section .fi-fo-component-ctn,
+.bexia-contact-csf-section .fi-fo-component-ctn,
+.bexia-contact-payment-section .fi-fo-component-ctn,
+.bexia-contact-sales-section .fi-fo-component-ctn,
+.bexia-contact-purchases-section .fi-fo-component-ctn {
+    max-width: 100% !important;
+    min-width: 0 !important;
+}
+
+.bexia-contact-uppercase-input {
+    text-transform: uppercase !important;
+}
+
+.bexia-contact-csf-file-info-field,
+.bexia-contact-csf-preview,
+.bexia-contact-csf-actions {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.bexia-contact-csf-empty,
+.bexia-contact-csf-note,
+.bexia-contact-csf-date {
+    color: #6b7280 !important;
+    font-size: 0.875rem !important;
+    line-height: 1.35 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.dark .bexia-contact-csf-empty,
+.dark .bexia-contact-csf-note,
+.dark .bexia-contact-csf-date {
+    color: #9ca3af !important;
+}
+
+.bexia-contact-csf-preview {
+    display: grid !important;
+    gap: 0.25rem !important;
+}
+
+.bexia-contact-csf-actions {
+    display: grid !important;
+    gap: 0.5rem !important;
+}
+
+.bexia-contact-csf-filename {
+    color: #111827 !important;
+    font-weight: 700 !important;
+    overflow-wrap: anywhere !important;
+}
+
+.dark .bexia-contact-csf-filename {
+    color: #f9fafb !important;
+}
+
+.bexia-contact-csf-buttons {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    margin-top: 0.5rem !important;
+    max-width: 100% !important;
+}
+
+.bexia-contact-csf-button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 2.25rem !important;
+    border-radius: 0.65rem !important;
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 700 !important;
+    line-height: 1.1 !important;
+    text-decoration: none !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+}
+
+.bexia-contact-csf-button--view {
+    border: 1px solid #d1d5db !important;
+    background: #ffffff !important;
+    color: #374151 !important;
+}
+
+.bexia-contact-csf-button--view:hover {
+    background: #f9fafb !important;
+}
+
+.dark .bexia-contact-csf-button--view {
+    border-color: #475569 !important;
+    background: rgba(15, 23, 42, 0.72) !important;
+    color: #e5e7eb !important;
+}
+
+.dark .bexia-contact-csf-button--view:hover {
+    background: rgba(30, 41, 59, 0.9) !important;
+}
+
+.bexia-contact-csf-button--download {
+    border: 1px solid var(--primary-600, #2563eb) !important;
+    background: var(--primary-600, #2563eb) !important;
+    color: #ffffff !important;
+}
+
+.bexia-contact-csf-button--download:hover {
+    background: var(--primary-500, #3b82f6) !important;
+}
+
+@media (max-width: 768px) {
+    .bexia-contact-main-section,
+    .bexia-contact-details-section,
+    .bexia-contact-address-section,
+    .bexia-contact-fiscal-section,
+    .bexia-contact-csf-section,
+    .bexia-contact-payment-section,
+    .bexia-contact-sales-section,
+    .bexia-contact-purchases-section {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .bexia-contact-csf-buttons {
+        align-items: stretch !important;
+    }
+
+    .bexia-contact-csf-button {
+        flex: 1 1 12rem !important;
+        width: 100% !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-contact-resource-tabs .fi-tabs {
+        margin-left: -0.25rem !important;
+        margin-right: -0.25rem !important;
+        padding-left: 0.25rem !important;
+        padding-right: 0.25rem !important;
+    }
+
+    .bexia-contact-csf-empty,
+    .bexia-contact-csf-note,
+    .bexia-contact-csf-date,
+    .bexia-contact-csf-filename {
+        font-size: 0.8125rem !important;
+    }
+}
+/* BEXIA_CONTACT_RESOURCE_RESPONSIVE_V5_79_22C_END */
+
 </style>
