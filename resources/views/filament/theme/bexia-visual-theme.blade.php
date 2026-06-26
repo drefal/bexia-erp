@@ -4290,4 +4290,135 @@ button[role="switch"] > span {
 }
 /* BEXIA_PAYROLL_CFDI_RECEIPT_RESOURCE_RESPONSIVE_V5_79_34C_END */
 
+
+/* BEXIA_STOCK_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_35C_START */
+.bexia-stock-movement-section {
+    min-width: 0;
+}
+
+.bexia-stock-movement-section .fi-section-content {
+    border-radius: 16px;
+}
+
+.bexia-stock-movement-section .fi-grid,
+.bexia-stock-movement-section .grid {
+    min-width: 0;
+}
+
+.bexia-stock-movement-field {
+    min-width: 0;
+}
+
+.bexia-stock-movement-notes-field,
+.bexia-stock-movement-line-notes-field,
+.bexia-stock-movement-lines-repeater {
+    width: 100%;
+}
+
+.bexia-stock-movement-lines-repeater .fi-fo-repeater-item,
+.bexia-stock-movement-lines-repeater .fi-fo-repeater-item-content,
+.bexia-stock-movement-lines-repeater .fi-grid,
+.bexia-stock-movement-lines-repeater .grid {
+    min-width: 0;
+}
+
+.bexia-stock-movement-line-product-field,
+.bexia-stock-movement-line-variant-field,
+.bexia-stock-movement-line-source-stock-field {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-movement-col-reference,
+.bexia-stock-movement-col-origin-document {
+    min-width: 180px;
+    max-width: 260px;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-movement-col-movement-at,
+.bexia-stock-movement-col-status,
+.bexia-stock-movement-col-lines-count {
+    min-width: 120px;
+}
+
+.bexia-stock-movement-col-operation-type {
+    min-width: 170px;
+}
+
+.bexia-stock-movement-col-warehouse,
+.bexia-stock-movement-col-source-location,
+.bexia-stock-movement-col-destination-location {
+    min-width: 190px;
+}
+
+@media (max-width: 1024px) {
+    .bexia-stock-movement-transfer-section .fi-grid,
+    .bexia-stock-movement-transfer-section .grid,
+    .bexia-stock-movement-lines-repeater .fi-grid,
+    .bexia-stock-movement-lines-repeater .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-stock-movement-section .fi-grid,
+    .bexia-stock-movement-section .grid,
+    .bexia-stock-movement-lines-repeater .fi-grid,
+    .bexia-stock-movement-lines-repeater .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-stock-movement-section .fi-fo-field-wrp,
+    .bexia-stock-movement-section .fi-fo-component-ctn,
+    .bexia-stock-movement-section [data-field-wrapper],
+    .bexia-stock-movement-field,
+    .bexia-stock-movement-lines-repeater {
+        grid-column: 1 / -1 !important;
+        min-width: 0;
+    }
+
+    .bexia-stock-movement-section .fi-input-wrp,
+    .bexia-stock-movement-section .fi-select-input,
+    .bexia-stock-movement-section textarea,
+    .bexia-stock-movement-lines-repeater .fi-input-wrp,
+    .bexia-stock-movement-lines-repeater .fi-select-input,
+    .bexia-stock-movement-lines-repeater textarea {
+        min-width: 0;
+    }
+
+    .bexia-stock-movement-col-reference,
+    .bexia-stock-movement-col-movement-at,
+    .bexia-stock-movement-col-operation-type,
+    .bexia-stock-movement-col-warehouse,
+    .bexia-stock-movement-col-source-location,
+    .bexia-stock-movement-col-destination-location,
+    .bexia-stock-movement-col-lines-count,
+    .bexia-stock-movement-col-origin-document,
+    .bexia-stock-movement-col-status {
+        min-width: 0;
+        max-width: none;
+        width: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .bexia-stock-movement-section {
+        border-radius: 14px;
+    }
+
+    .bexia-stock-movement-section .fi-section-content {
+        padding: 0.85rem;
+    }
+
+    .bexia-stock-movement-section .fi-section-header {
+        padding-inline: 0.85rem;
+    }
+
+    .bexia-stock-movement-lines-repeater .fi-fo-repeater-item {
+        border-radius: 14px;
+    }
+}
+/* BEXIA_STOCK_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_35C_END */
+
 </style>

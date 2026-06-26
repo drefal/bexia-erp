@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
+// BEXIA_STOCK_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_35C
 class StockMovementResource extends Resource
 {
     protected static ?string $model = StockMovement::class;
@@ -90,9 +91,11 @@ class StockMovementResource extends Resource
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Traslado')
+                    ->extraAttributes(['class' => 'bexia-stock-movement-section bexia-stock-movement-transfer-section'])
                     ->schema([
                         Forms\Components\TextInput::make('reference')
                             ->label('Referencia')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-reference-field'])
                             ->placeholder('Se genera automáticamente al guardar')
                             ->helperText('Formato: UBICACION/PREFIJO/000001.')
                             ->readOnly()
@@ -101,6 +104,7 @@ class StockMovementResource extends Resource
 
                         Forms\Components\DateTimePicker::make('movement_at')
                             ->label('Fecha y hora')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-movement-at-field'])
                             ->default(now())
                             ->required()
                             ->seconds(false)
@@ -110,6 +114,7 @@ class StockMovementResource extends Resource
 
                         Forms\Components\Select::make('stock_operation_type_id')
                             ->label('Tipo de operación')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-operation-type-field'])
                             ->options(fn (): array => static::operationTypeOptions())
                             ->searchable()
                             ->native(false)
@@ -132,6 +137,7 @@ class StockMovementResource extends Resource
 
                         Forms\Components\Select::make('status')
                             ->label('Estado')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-status-field'])
                             ->options([
                                 'draft' => 'Borrador',
                                 'done' => 'Hecho',
@@ -144,6 +150,7 @@ class StockMovementResource extends Resource
 
                         Forms\Components\Select::make('warehouse_id')
                             ->label('Almacén')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-warehouse-field'])
                             ->options(fn (): array => static::warehouseOptions())
                             ->searchable()
                             ->native(false)
@@ -159,6 +166,7 @@ class StockMovementResource extends Resource
 
                         Forms\Components\Select::make('source_location_id')
                             ->label('Ubicación origen')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-source-location-field'])
                             ->options(fn (Forms\Get $get): array => static::locationOptions($get('warehouse_id')))
                             ->searchable()
                             ->native(false)
@@ -169,6 +177,7 @@ class StockMovementResource extends Resource
 
                         Forms\Components\Select::make('destination_location_id')
                             ->label('Ubicación destino')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-destination-location-field'])
                             ->options(fn (Forms\Get $get): array => static::locationOptions($get('warehouse_id')))
                             ->searchable()
                             ->native(false)
@@ -179,6 +188,7 @@ class StockMovementResource extends Resource
 
                         Forms\Components\TextInput::make('origin_document')
                             ->label('Documento de origen')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-origin-document-field'])
                             ->placeholder('Ej. OC-0001, Pedido, Ticket, referencia externa')
                             ->maxLength(180)
                             ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
@@ -186,6 +196,7 @@ class StockMovementResource extends Resource
 
                         Forms\Components\Textarea::make('notes')
                             ->label('Notas')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-notes-field'])
                             ->rows(2)
                             ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
                             ->columnSpanFull(),
@@ -193,14 +204,17 @@ class StockMovementResource extends Resource
                     ->columns(12),
 
                 Forms\Components\Section::make('Productos')
+                    ->extraAttributes(['class' => 'bexia-stock-movement-section bexia-stock-movement-products-section'])
                     ->description('Captura los productos que se trasladarán. Al confirmar, Bexia actualizará las existencias.')
                     ->schema([
                         Forms\Components\Repeater::make('lines')
                             ->label('Líneas')
+                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-lines-repeater'])
                             ->relationship()
                             ->schema([
                                 Forms\Components\Select::make('product_id')
                                     ->label('Producto')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-product-field'])
                                     ->searchable()
                                     ->getSearchResultsUsing(fn (string $search): array => static::productSearchOptions($search))
                                     ->getOptionLabelUsing(fn ($value): ?string => static::productLabel($value))
@@ -214,6 +228,7 @@ class StockMovementResource extends Resource
 
                                 Forms\Components\Select::make('product_variant_id')
                                     ->label('Variante')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-variant-field'])
                                     ->options(fn (Forms\Get $get): array => static::variantOptions($get('product_id')))
                                     ->searchable()
                                     ->preload()
@@ -224,6 +239,7 @@ class StockMovementResource extends Resource
 
                                 Forms\Components\TextInput::make('done_quantity')
                                     ->label('Cantidad')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-quantity-field'])
                                     ->numeric()
                                     ->minValue(0.000001)
                                     ->default(1)
@@ -233,6 +249,7 @@ class StockMovementResource extends Resource
 
                                 Forms\Components\TextInput::make('unit_cost')
                                     ->label('Costo unit.')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-unit-cost-field'])
                                     ->numeric()
                                     ->prefix('$')
                                     ->helperText('Si se deja vacío, se tomará el costo promedio o costo del producto.')
@@ -241,11 +258,13 @@ class StockMovementResource extends Resource
 
                                 Forms\Components\Placeholder::make('source_stock')
                                     ->label('Stock origen')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-source-stock-field'])
                                     ->content(fn (Forms\Get $get): string => static::sourceQuantityLabelFromForm($get))
                                     ->columnSpan(2),
 
                                 Forms\Components\Textarea::make('notes')
                                     ->label('Notas')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-notes-field'])
                                     ->rows(1)
                                     ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
                                     ->columnSpanFull(),
@@ -992,6 +1011,9 @@ class StockMovementResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('reference')
                     ->label('Referencia')
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-reference'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-reference'])
                     ->formatStateUsing(fn (?string $state): string => static::stockMovementReferenceLabel($state))
                     ->copyable()
                     ->searchable()
@@ -1000,34 +1022,53 @@ class StockMovementResource extends Resource
 
                 Tables\Columns\TextColumn::make('movement_at')
                     ->label('Fecha y hora')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-movement-at'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-movement-at'])
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('operationType.name')
                     ->label('Tipo')
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-operation-type'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-operation-type'])
                     ->state(fn ($record): string => static::v5511iStockMovementTypeLabel($record))
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('warehouse.name')
                     ->label('Almacén')
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-warehouse'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-warehouse'])
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sourceLocation.name')
                     ->label('Desde')
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-source-location'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-source-location'])
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('destinationLocation.name')
                     ->label('A')
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-destination-location'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-destination-location'])
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('lines_count')
                     ->label('Líneas')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-lines-count'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-lines-count'])
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('origin_document')
                     ->label('Origen')
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-origin-document'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-origin-document'])
                     ->getStateUsing(fn ($record): string => static::v5511cOriginDocumentLabel($record))
                     ->formatStateUsing(fn (?string $state): string => static::stockMovementOriginLabel($state))
                     ->placeholder('—')
@@ -1041,6 +1082,8 @@ class StockMovementResource extends Resource
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-movement-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-movement-col-status'])
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'draft' => 'Borrador',
