@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Crypt;
 
+// BEXIA_COMPANY_RESOURCE_RESPONSIVE_V5_79_29C
 class CompanyResource extends Resource
 {
     protected static ?string $model = Company::class;
@@ -182,6 +183,7 @@ public static function canCreate(): bool
     {
         return $form->schema([
             Section::make('Datos generales')
+                ->extraAttributes(['class' => 'bexia-company-section bexia-company-general-section'])
                 ->schema([
                     TextInput::make('name')
                         ->label('Nombre comercial')
@@ -242,6 +244,7 @@ public static function canCreate(): bool
                 ->columns(2),
 
             Section::make('Asistencia móvil / QR')
+                ->extraAttributes(['class' => 'bexia-company-section bexia-company-attendance-section'])
                 ->description('Configura cómo se permiten las checadas por QR, geocerca, revisión de ubicaciones y bloqueo por dispositivo para esta empresa.')
                 ->icon('heroicon-o-qr-code')
                 ->columns(2)
@@ -305,6 +308,7 @@ public static function canCreate(): bool
                 ]),
 
             Section::make('Configuración PAC / Timbrado')
+                ->extraAttributes(['class' => 'bexia-company-section bexia-company-pac-section'])
                 ->description('Credenciales sensibles para timbrado CFDI. Solo visible para superadmin del sistema.')
                 ->visible(fn (): bool => static::currentUserIsSystemAdmin())
                 ->schema([
@@ -348,6 +352,7 @@ public static function canCreate(): bool
 
 
             Section::make('Configuración CSD')
+                ->extraAttributes(['class' => 'bexia-company-section bexia-company-csd-section'])
                 ->description('Certificado de Sello Digital de la empresa. Necesario para generar y firmar CFDI.')
                 ->visible(fn (): bool => static::currentUserIsSystemAdmin())
                 ->schema([
@@ -389,6 +394,7 @@ public static function canCreate(): bool
 
 
             Section::make('Branding')
+                ->extraAttributes(['class' => 'bexia-company-section bexia-company-branding-section'])
                 ->schema([
                     FileUpload::make('logo_path')
                         ->label('Logo principal')
@@ -411,6 +417,7 @@ public static function canCreate(): bool
                 ->columns(3),
         
                 \Filament\Forms\Components\Section::make('Costeo de inventario')
+                    ->extraAttributes(['class' => 'bexia-company-section bexia-company-costing-section'])
                     ->description('Configuración base del método de costeo para esta empresa.')
                     ->schema([
                         \Filament\Forms\Components\Select::make('default_costing_method')
@@ -446,36 +453,52 @@ public static function canCreate(): bool
                 ImageColumn::make('logo_compact_path')
                     ->label('Logo')
                     ->disk('public')
-                    ->circular(),
+                    ->circular()
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-logo'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-logo']),
 
                 TextColumn::make('id')
                     ->label('ID')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-id'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-id']),
 
                 TextColumn::make('name')
                     ->label('Empresa')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-name'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-name']),
 
                 TextColumn::make('slug')
                     ->label('Slug')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-slug'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-slug']),
 
                 TextColumn::make('tax_id')
                     ->label('RFC')
-                    ->searchable(),
+                    ->searchable()
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-tax-id'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-tax-id']),
 
                 TextColumn::make('billing_pac_provider')
                     ->label('PAC')
                     ->visible(fn (): bool => static::currentUserIsSystemAdmin())
                     ->formatStateUsing(fn ($state): string => $state === 'sw' ? 'SW' : ($state ?: 'Sin configurar'))
-                    ->badge(),
+                    ->badge()
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-pac'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-pac']),
 
                 IconColumn::make('billing_pac_test_env')
                     ->label('Prueba PAC')
                     ->visible(fn (): bool => static::currentUserIsSystemAdmin())
-                    ->boolean(),
+                    ->boolean()
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-pac-test'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-pac-test']),
 
                 TextColumn::make('billing_pac_last_test_status')
                     ->label('Conexión PAC')
@@ -490,12 +513,16 @@ public static function canCreate(): bool
                         'success' => 'success',
                         'error' => 'danger',
                         default => 'gray',
-                    }),
+                    })
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-pac-status'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-pac-status']),
 
                 IconColumn::make('active')
                     ->label('Activa')
                     ->boolean()
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-company-col-active'])
+                    ->extraCellAttributes(['class' => 'bexia-company-col-active']),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
