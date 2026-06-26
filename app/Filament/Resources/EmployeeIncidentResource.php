@@ -32,6 +32,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
+// BEXIA_EMPLOYEE_INCIDENT_RESOURCE_RESPONSIVE_V5_79_30C
 class EmployeeIncidentResource extends Resource
 {
     protected static ?string $model = EmployeeIncident::class;
@@ -122,12 +123,15 @@ class EmployeeIncidentResource extends Resource
         return $form
             ->schema([
                 Section::make('Incidencia del empleado')
+                    ->extraAttributes(['class' => 'bexia-employee-incident-section bexia-employee-incident-main-section'])
                     ->description('Registra eventos como retardos, faltas, permisos, vacaciones, incapacidad u horas extra.')
                     ->schema([
                         Grid::make(2)
+                            ->extraAttributes(['class' => 'bexia-employee-incident-form-grid'])
                             ->schema([
                                 Select::make('employee_id')
                                     ->label('Empleado')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-employee-field'])
                                     ->live()
                                     ->options(fn () => self::employeeOptions())
                                     ->searchable()
@@ -136,6 +140,7 @@ class EmployeeIncidentResource extends Resource
 
                                 Select::make('hr_incident_type_id')
                                     ->label('Tipo de incidencia')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-type-field'])
                                     ->live()
                                     ->options(fn () => self::incidentTypeOptions())
                                     ->searchable()
@@ -144,11 +149,13 @@ class EmployeeIncidentResource extends Resource
 
                                 TextInput::make('title')
                                     ->label('Título')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-title-field'])
                                     ->required()
                                     ->maxLength(255),
 
                                 Select::make('status')
                                     ->label('Estado')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-status-field'])
                                     ->options([
                                         'draft' => 'Borrador',
                                         'pending' => 'Pendiente',
@@ -161,31 +168,37 @@ class EmployeeIncidentResource extends Resource
 
                                 DatePicker::make('start_date')
                                     ->label('Fecha inicio')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-start-date-field'])
                                     ->live()
                                     ->native(false)
                                     ->required(),
 
                                 DatePicker::make('end_date')
                                     ->label('Fecha fin')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-end-date-field'])
                                     ->live()
                                     ->native(false),
 
                                 TextInput::make('start_time')
                                     ->label('Hora inicio')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-start-time-field'])
                                     ->type('time'),
 
                                 TextInput::make('end_time')
                                     ->label('Hora fin')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-end-time-field'])
                                     ->type('time'),
 
                                 TextInput::make('quantity')
                                     ->label('Cantidad')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-quantity-field'])
                                     ->live(debounce: 500)
                                     ->numeric()
                                     ->helperText('Ej. 1 día, 2 horas, 15 minutos.'),
 
                                 Select::make('quantity_unit')
                                     ->label('Unidad')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-quantity-unit-field'])
                                     ->live()
                                     ->options([
                                         'minutes' => 'Minutos',
@@ -196,6 +209,7 @@ class EmployeeIncidentResource extends Resource
 
                                 Placeholder::make('vacation_balance_summary')
                                     ->label('Resumen de vacaciones')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-vacation-wrapper'])
                                     ->content(fn (Get $get): HtmlString => self::vacationBalanceSummary(
                                         $get('employee_id'),
                                         $get('hr_incident_type_id'),
@@ -226,6 +240,7 @@ class EmployeeIncidentResource extends Resource
 
                                 FileUpload::make('attachment_path')
                                     ->label('Soporte / evidencia')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-attachment-field'])
                                     ->visible(false)
                                     ->dehydrated(false)
                                     ->disk('public')
@@ -237,11 +252,13 @@ class EmployeeIncidentResource extends Resource
 
                                 Textarea::make('description')
                                     ->label('Descripción')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-description-field'])
                                     ->rows(4)
                                     ->columnSpanFull(),
 
                                 Textarea::make('resolution_notes')
                                     ->label('Notas de resolución')
+                                    ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-resolution-notes-field'])
                                     ->visible(false)
                                     ->dehydrated(false)
                                     ->rows(3)
@@ -399,7 +416,7 @@ class EmployeeIncidentResource extends Resource
         };
 
         return new HtmlString(
-            '<div class="rounded-xl border px-4 py-3 text-sm ' . $classes . '">'
+            '<div class="bexia-employee-incident-vacation-summary rounded-xl border px-4 py-3 text-sm ' . $classes . '">'
             . e($message)
             . '</div>'
         );
@@ -412,17 +429,26 @@ class EmployeeIncidentResource extends Resource
                 Tables\Columns\TextColumn::make('employee.name')
                     ->label('Empleado')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-employee'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-employee']),
 
                 Tables\Columns\TextColumn::make('incidentType.name')
                     ->label('Tipo')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-type'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-type']),
 
                 Tables\Columns\TextColumn::make('title')
                     ->label('Título')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->wrap()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-title'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-title']),
 
                 Tables\Columns\TextColumn::make('status')
                     ->label('Estado')
@@ -434,47 +460,65 @@ class EmployeeIncidentResource extends Resource
                         'rejected' => 'Rechazada',
                         'cancelled' => 'Cancelada',
                         default => $state ?: '-',
-                    }),
+                    })
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-status']),
 
                 Tables\Columns\TextColumn::make('start_date')
                     ->label('Inicio')
                     ->date('d/m/Y')
-                    ->sortable(),
+                    ->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-start-date'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-start-date']),
 
                 Tables\Columns\TextColumn::make('end_date')
                     ->label('Fin')
                     ->date('d/m/Y')
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-end-date'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-end-date']),
 
                 Tables\Columns\TextColumn::make('quantity')
                     ->label('Cantidad / Monto / Minutos')
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-quantity'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-quantity']),
 
                 Tables\Columns\TextColumn::make('quantity_unit')
                     ->label('Unidad')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-quantity-unit'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-quantity-unit']),
 
                 Tables\Columns\IconColumn::make('requires_approval')
                     ->label('Aprobación')
                     ->boolean()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-approval'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-approval']),
 
                 Tables\Columns\IconColumn::make('affects_payroll')
                     ->label('Nómina')
                     ->boolean()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-payroll'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-payroll']),
 
                 Tables\Columns\IconColumn::make('attachment_path')
                     ->label('Soporte')
                     ->boolean()
-                    ->getStateUsing(fn ($record): bool => filled($record->attachment_path)),
+                    ->getStateUsing(fn ($record): bool => filled($record->attachment_path))
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-attachment'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-attachment']),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Creado')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->extraHeaderAttributes(['class' => 'bexia-employee-incident-col-created'])
+                    ->extraCellAttributes(['class' => 'bexia-employee-incident-col-created']),
             ])
             ->filters([
                 SelectFilter::make('status')
