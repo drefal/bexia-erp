@@ -6877,4 +6877,223 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_AENT_RESOURCE_RESPONSIVE_V5_79_49C_END */
+
+/* BEXIA_APWF_RESOURCE_RESPONSIVE_V5_79_50C_START */
+/*
+ * ApprovalWorkflowResource responsive refinements.
+ * Visual scope only. No cambia logica de aprobaciones, pasos, reglas,
+ * estados, roles, usuarios, permisos ni tenant scope.
+ */
+.bexia-apwf-section {
+    border-radius: 1rem;
+}
+
+.bexia-apwf-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-apwf-field,
+.bexia-apwf-step-field,
+.bexia-apwf-repeater {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-apwf-field .fi-input-wrp,
+.bexia-apwf-field .fi-select-input,
+.bexia-apwf-field .fi-fo-select,
+.bexia-apwf-field input,
+.bexia-apwf-field select,
+.bexia-apwf-field textarea,
+.bexia-apwf-step-field .fi-input-wrp,
+.bexia-apwf-step-field .fi-select-input,
+.bexia-apwf-step-field .fi-fo-select,
+.bexia-apwf-step-field input,
+.bexia-apwf-step-field select,
+.bexia-apwf-step-field textarea {
+    max-width: 100%;
+}
+
+.bexia-apwf-field-flow-name input,
+.bexia-apwf-field-notes textarea,
+.bexia-apwf-step-field-name input,
+.bexia-apwf-step-field-notes textarea,
+.bexia-apwf-col-name,
+.bexia-apwf-col-document-type {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-apwf-field-priority input,
+.bexia-apwf-field-amount-min input,
+.bexia-apwf-field-amount-max input,
+.bexia-apwf-step-field-order input,
+.bexia-apwf-step-field-amount-min input,
+.bexia-apwf-step-field-amount-max input,
+.bexia-apwf-col-priority,
+.bexia-apwf-col-money,
+.bexia-apwf-col-steps {
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-apwf-col-active,
+.bexia-apwf-col-name,
+.bexia-apwf-col-document-type,
+.bexia-apwf-col-priority,
+.bexia-apwf-col-amount-range,
+.bexia-apwf-col-steps,
+.bexia-apwf-col-updated-at {
+    vertical-align: top;
+}
+
+.bexia-apwf-col-primary {
+    min-width: 13rem;
+    max-width: 24rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-apwf-col-active {
+    min-width: 4.5rem;
+    text-align: center;
+}
+
+.bexia-apwf-col-document-type {
+    min-width: 10rem;
+    max-width: 16rem;
+    white-space: normal;
+}
+
+.bexia-apwf-col-priority,
+.bexia-apwf-col-steps {
+    min-width: 5.5rem;
+    white-space: nowrap;
+}
+
+.bexia-apwf-col-amount-range {
+    min-width: 12rem;
+    white-space: nowrap;
+}
+
+.bexia-apwf-col-updated-at {
+    min-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-apwf-repeater .fi-fo-repeater-item,
+.bexia-apwf-section-steps .fi-fo-repeater-item {
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+.bexia-apwf-repeater .fi-fo-repeater-item-content,
+.bexia-apwf-section-steps .fi-fo-repeater-item-content {
+    min-width: 0;
+}
+
+@media (max-width: 1024px) {
+    .bexia-apwf-section .fi-grid,
+    .bexia-apwf-section .grid,
+    .bexia-apwf-repeater .fi-grid,
+    .bexia-apwf-repeater .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-apwf-col-primary {
+        max-width: 18rem;
+    }
+
+    .bexia-apwf-col-document-type {
+        max-width: 13rem;
+    }
+
+    .bexia-apwf-col-amount-range {
+        min-width: 10rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-apwf-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-apwf-section .fi-section-header,
+    .bexia-apwf-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-apwf-repeater .fi-fo-repeater-item-header {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .bexia-apwf-field .fi-fo-field-wrp-label,
+    .bexia-apwf-step-field .fi-fo-field-wrp-label,
+    .bexia-apwf-field label,
+    .bexia-apwf-step-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-apwf-field input,
+    .bexia-apwf-field select,
+    .bexia-apwf-field textarea,
+    .bexia-apwf-step-field input,
+    .bexia-apwf-step-field select,
+    .bexia-apwf-step-field textarea,
+    .bexia-apwf-field .choices__inner,
+    .bexia-apwf-step-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-apwf-col-active,
+    .bexia-apwf-col-name,
+    .bexia-apwf-col-document-type,
+    .bexia-apwf-col-priority,
+    .bexia-apwf-col-amount-range,
+    .bexia-apwf-col-steps,
+    .bexia-apwf-col-updated-at {
+        font-size: 0.76rem;
+    }
+
+    .bexia-apwf-col-primary {
+        min-width: 10rem;
+        max-width: 13rem;
+    }
+
+    .bexia-apwf-col-document-type {
+        min-width: 8.5rem;
+        max-width: 11rem;
+    }
+
+    .bexia-apwf-col-amount-range {
+        min-width: 8.5rem;
+    }
+
+    .bexia-apwf-col-updated-at {
+        min-width: 7.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-apwf-col-primary {
+        min-width: 8.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-apwf-col-document-type {
+        min-width: 7.5rem;
+        max-width: 9rem;
+    }
+
+    .bexia-apwf-col-priority,
+    .bexia-apwf-col-steps {
+        min-width: 4.5rem;
+    }
+
+    .bexia-apwf-col-amount-range {
+        min-width: 7.5rem;
+    }
+}
+/* BEXIA_APWF_RESOURCE_RESPONSIVE_V5_79_50C_END */
 </style>

@@ -76,6 +76,12 @@ class ApprovalWorkflowResource extends Resource
             );
     }
 
+
+    /*
+     * BEXIA_APWF_RESOURCE_RESPONSIVE_V5_79_50C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
@@ -84,15 +90,18 @@ class ApprovalWorkflowResource extends Resource
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Datos del flujo')
+                    ->extraAttributes(['class' => 'bexia-apwf-section bexia-apwf-section-main'])
                     ->description('Define cuándo aplica este flujo. Bexia elegirá el flujo activo más específico y con mayor prioridad.')
                     ->schema([
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-flow-name'])
                             ->label('Nombre del flujo')
                             ->required()
                             ->maxLength(255)
                             ->columnSpan(2),
 
                         Forms\Components\Select::make('document_type')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-document-type'])
                             ->label('Tipo de documento')
                             ->options(fn (): array => \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeOptions())
                             ->getOptionLabelUsing(fn ($value): ?string => filled($value) ? \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeLabel((string) $value) : null)
@@ -101,10 +110,12 @@ class ApprovalWorkflowResource extends Resource
                             ->searchable(),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-active'])
                             ->label('Activo')
                             ->default(true),
 
                         Forms\Components\TextInput::make('priority')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-priority'])
                             ->label('Prioridad')
                             ->numeric()
                             ->required()
@@ -112,17 +123,20 @@ class ApprovalWorkflowResource extends Resource
                             ->helperText('Menor número = mayor prioridad.'),
 
                         Forms\Components\TextInput::make('amount_min')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-amount-min'])
                             ->label('Monto mínimo')
                             ->prefix('$')
                             ->numeric()
                             ->minValue(0),
 
                         Forms\Components\TextInput::make('amount_max')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-amount-max'])
                             ->label('Monto máximo')
                             ->prefix('$')
                             ->numeric()
                             ->minValue(0),
 Forms\Components\Select::make('applies_to_user_id')
+    ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-user'])
                             ->label('Aplica a usuario')
                             ->placeholder('Cualquier usuario del grupo')
                             ->helperText('Solo muestra usuarios de la empresa actual o del mismo grupo de empresas.')
@@ -137,6 +151,7 @@ Forms\Components\Select::make('applies_to_user_id')
                         
 
                         Forms\Components\Select::make('applies_to_role_name')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-role'])
                             ->label('Aplica a rol')
                             ->options(fn (): array => static::roleOptions())
                             ->searchable()
@@ -145,6 +160,7 @@ Forms\Components\Select::make('applies_to_user_id')
                             ->placeholder('Cualquier rol'),
 
                         Forms\Components\Select::make('applies_to_warehouse_id')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-warehouse'])
                             ->label('Aplica a almacén')
                             ->options(fn (): array => static::warehouseOptions())
                             ->searchable()
@@ -153,6 +169,7 @@ Forms\Components\Select::make('applies_to_user_id')
                             ->placeholder('Cualquier almacén'),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-apwf-field bexia-apwf-field-notes'])
                             ->label('Notas')
                             ->rows(2)
                             ->columnSpanFull(),
@@ -160,9 +177,11 @@ Forms\Components\Select::make('applies_to_user_id')
                     ->columns(3),
 
                 Forms\Components\Section::make('Etapas de aprobación')
+                    ->extraAttributes(['class' => 'bexia-apwf-section bexia-apwf-section-steps'])
                     ->description('Configura todas las etapas necesarias. Ejemplo: Coordinador → Compras → Dirección.')
                     ->schema([
                         Forms\Components\Repeater::make('steps')
+                            ->extraAttributes(['class' => 'bexia-apwf-repeater bexia-apwf-repeater-steps'])
                             ->relationship('steps')
                             ->label('')
                             ->addActionLabel('Agregar etapa')
@@ -170,6 +189,7 @@ Forms\Components\Select::make('applies_to_user_id')
                             ->defaultItems(1)
                             ->schema([
                                 Forms\Components\TextInput::make('sort_order')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-order'])
                                     ->label('Orden')
                                     ->numeric()
                                     ->required()
@@ -177,6 +197,7 @@ Forms\Components\Select::make('applies_to_user_id')
                                     ->columnSpan(1),
 
                                 Forms\Components\TextInput::make('name')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-name'])
                                     ->label('Nombre de etapa')
                                     ->required()
                                     ->maxLength(255)
@@ -184,11 +205,13 @@ Forms\Components\Select::make('applies_to_user_id')
                                     ->columnSpan(3),
 
                                 Forms\Components\Toggle::make('is_active')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-active'])
                                     ->label('Activa')
                                     ->default(true)
                                     ->columnSpan(1),
 
                                 Forms\Components\Select::make('approver_type')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-type'])
                                     ->label('Tipo de aprobador')
                                     ->options(static::approverTypeOptions())
                                     ->required()
@@ -197,6 +220,7 @@ Forms\Components\Select::make('applies_to_user_id')
                                     ->columnSpan(2),
 
                                 Forms\Components\Select::make('approver_user_id')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-user'])
                                     ->label('Usuario aprobador')
                                     ->options(fn (): array => static::userOptions())
                                     ->searchable()
@@ -207,6 +231,7 @@ Forms\Components\Select::make('applies_to_user_id')
                                     ->columnSpan(2),
 
                                 Forms\Components\Select::make('approver_role_name')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-role'])
                                     ->label('Rol aprobador')
                                     ->options(fn (): array => static::roleOptions())
                                     ->searchable()
@@ -217,6 +242,7 @@ Forms\Components\Select::make('applies_to_user_id')
                                     ->columnSpan(2),
 
                                 Forms\Components\Toggle::make('require_all')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-require-all'])
                                     ->label('Requiere todos')
                                     ->helperText('Si el aprobador es rol, requiere aprobación de todos los usuarios del rol.')
                                     ->visible(fn (Get $get): bool => $get('approver_type') === 'role')
@@ -224,6 +250,7 @@ Forms\Components\Select::make('applies_to_user_id')
                                     ->columnSpan(2),
 
                                 Forms\Components\TextInput::make('amount_min')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-amount-min'])
                                     ->label('Monto mín. etapa')
                                     ->prefix('$')
                                     ->numeric()
@@ -231,6 +258,7 @@ Forms\Components\Select::make('applies_to_user_id')
                                     ->columnSpan(2),
 
                                 Forms\Components\TextInput::make('amount_max')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-amount-max'])
                                     ->label('Monto máx. etapa')
                                     ->prefix('$')
                                     ->numeric()
@@ -238,6 +266,7 @@ Forms\Components\Select::make('applies_to_user_id')
                                     ->columnSpan(2),
 
                                 Forms\Components\Textarea::make('notes')
+                                    ->extraAttributes(['class' => 'bexia-apwf-step-field bexia-apwf-step-field-notes'])
                                     ->label('Notas de etapa')
                                     ->rows(2)
                                     ->columnSpanFull(),
@@ -253,34 +282,48 @@ Forms\Components\Select::make('applies_to_user_id')
         return $table
             ->columns([
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-apwf-col-active'])
+                    ->extraCellAttributes(['class' => 'bexia-apwf-col-active'])
                     ->label('Activo')
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-apwf-col-name bexia-apwf-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-apwf-col-name bexia-apwf-col-primary'])
                     ->label('Flujo')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('document_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-apwf-col-document-type'])
+                    ->extraCellAttributes(['class' => 'bexia-apwf-col-document-type'])
                     ->label('Documento')
 
                     ->formatStateUsing(fn (?string $state): string => \App\Support\Service\ServiceAccess::approvalWorkflowDocumentTypeLabel($state))
                     ->formatStateUsing(fn (?string $state): string => static::documentTypeOptions()[$state] ?? ($state ?: '—'))
                     ->badge(),
                 Tables\Columns\TextColumn::make('priority')
+                    ->extraHeaderAttributes(['class' => 'bexia-apwf-col-priority'])
+                    ->extraCellAttributes(['class' => 'bexia-apwf-col-priority'])
                     ->label('Prioridad')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount_range')
+                    ->extraHeaderAttributes(['class' => 'bexia-apwf-col-amount-range bexia-apwf-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-apwf-col-amount-range bexia-apwf-col-money'])
                     ->label('Rango')
                     ->state(fn (ApprovalWorkflow $record): string => static::amountRangeLabel($record)),
 
                 Tables\Columns\TextColumn::make('steps_count')
+                    ->extraHeaderAttributes(['class' => 'bexia-apwf-col-steps'])
+                    ->extraCellAttributes(['class' => 'bexia-apwf-col-steps'])
                     ->label('Etapas')
                     ->counts('steps')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('updated_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-apwf-col-updated-at'])
+                    ->extraCellAttributes(['class' => 'bexia-apwf-col-updated-at'])
                     ->label('Actualizado')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
