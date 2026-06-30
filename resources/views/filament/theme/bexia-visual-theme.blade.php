@@ -5394,4 +5394,212 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_ACCOUNT_RECEIVABLE_PAYMENT_RESOURCE_RESPONSIVE_V5_79_41C_END */
+
+/* BEXIA_SALES_PRICE_LIST_RESOURCE_RESPONSIVE_V5_79_42C_START */
+/*
+ * SalesPriceListResource responsive refinements.
+ * Visual scope only. No cambia logica de precios, margenes, descuentos, productos, moneda, compania, permisos ni tenant scope.
+ */
+.bexia-spl-section {
+    border-radius: 1rem;
+}
+
+.bexia-spl-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-spl-section .fi-grid,
+.bexia-spl-section .grid {
+    gap: 0.9rem;
+}
+
+.bexia-spl-field,
+.bexia-spl-repeater {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-spl-field .fi-input-wrp,
+.bexia-spl-field .fi-select-input,
+.bexia-spl-field .fi-fo-select,
+.bexia-spl-field input,
+.bexia-spl-field select,
+.bexia-spl-field textarea,
+.bexia-spl-field .choices,
+.bexia-spl-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-spl-field-code input,
+.bexia-spl-field-curr input,
+.bexia-spl-field-adjust input,
+.bexia-spl-field-min-qty input,
+.bexia-spl-field-amount input {
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-spl-field-notes textarea {
+    min-height: 5rem;
+    line-height: 1.45;
+}
+
+.bexia-spl-repeater .fi-fo-repeater,
+.bexia-spl-repeater .fi-fo-repeater-item,
+.bexia-spl-repeater .fi-fo-component-ctn {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-spl-repeater .fi-fo-repeater-item {
+    overflow-x: hidden;
+}
+
+.bexia-spl-col-code,
+.bexia-spl-col-name,
+.bexia-spl-col-mode,
+.bexia-spl-col-base-ref,
+.bexia-spl-col-basis,
+.bexia-spl-col-adjust,
+.bexia-spl-col-main-flag,
+.bexia-spl-col-enabled,
+.bexia-spl-col-lines,
+.bexia-spl-col-updated {
+    vertical-align: top;
+}
+
+.bexia-spl-col-primary {
+    min-width: 12rem;
+    max-width: 22rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-spl-col-key {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-spl-col-base-ref {
+    min-width: 10rem;
+    max-width: 16rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-spl-col-mode,
+.bexia-spl-col-basis,
+.bexia-spl-col-main-flag,
+.bexia-spl-col-enabled {
+    min-width: 6.5rem;
+    white-space: nowrap;
+}
+
+.bexia-spl-col-numeric {
+    min-width: 6rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.bexia-spl-col-updated {
+    min-width: 8rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+    .bexia-spl-section .fi-grid,
+    .bexia-spl-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-spl-repeater .fi-fo-repeater-item .fi-grid,
+    .bexia-spl-repeater .fi-fo-repeater-item .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-spl-col-primary {
+        max-width: 18rem;
+    }
+
+    .bexia-spl-col-base-ref {
+        max-width: 13rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-spl-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-spl-section .fi-section-header,
+    .bexia-spl-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-spl-field .fi-fo-field-wrp-label,
+    .bexia-spl-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-spl-field input,
+    .bexia-spl-field select,
+    .bexia-spl-field textarea,
+    .bexia-spl-field .fi-select-input {
+        font-size: 0.82rem;
+    }
+
+    .bexia-spl-repeater .fi-fo-repeater-item {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .bexia-spl-col-code,
+    .bexia-spl-col-name,
+    .bexia-spl-col-mode,
+    .bexia-spl-col-base-ref,
+    .bexia-spl-col-basis,
+    .bexia-spl-col-adjust,
+    .bexia-spl-col-main-flag,
+    .bexia-spl-col-enabled,
+    .bexia-spl-col-lines,
+    .bexia-spl-col-updated {
+        font-size: 0.76rem;
+    }
+
+    .bexia-spl-col-primary {
+        min-width: 9.5rem;
+        max-width: 13rem;
+    }
+
+    .bexia-spl-col-key,
+    .bexia-spl-col-base-ref {
+        min-width: 7.5rem;
+        max-width: 10.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-spl-field-notes {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-spl-col-primary {
+        max-width: 11.5rem;
+    }
+
+    .bexia-spl-col-mode,
+    .bexia-spl-col-basis {
+        min-width: 5.75rem;
+    }
+
+    .bexia-spl-col-numeric {
+        min-width: 5.75rem;
+    }
+}
+/* BEXIA_SALES_PRICE_LIST_RESOURCE_RESPONSIVE_V5_79_42C_END */
 </style>

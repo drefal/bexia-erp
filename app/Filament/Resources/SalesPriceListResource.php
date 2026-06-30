@@ -105,30 +105,41 @@ protected static ?string $modelLabel = 'lista de precios';
         return static::userCanPermission('sales.configure_prices') || static::userCanPermission('sales.configure');
     }
 
+
+    /*
+     * BEXIA_SALES_PRICE_LIST_RESOURCE_RESPONSIVE_V5_79_42C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Section::make('Datos de la lista')
+                    ->extraAttributes(['class' => 'bexia-spl-section bexia-spl-section-main'])
                     ->columns(4)
                     ->schema([
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-code'])
                             ->label('Código')
                             ->maxLength(50)
                             ->placeholder('PUBLICO'),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-name'])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(255)
                             ->placeholder('Precio público'),
 
                         Forms\Components\TextInput::make('currency')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-curr'])
                             ->label('Moneda')
                             ->default('MXN')
                             ->maxLength(8),
 
                         Forms\Components\Select::make('calculation_type')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-mode'])
                             ->label('Tipo de lista')
                             ->default('items')
                             ->reactive()
@@ -139,6 +150,7 @@ protected static ?string $modelLabel = 'lista de precios';
                             ->helperText('Los precios siempre se manejan sin impuestos.'),
 
                         Forms\Components\Select::make('formula_basis')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-basis'])
                             ->label('Base de fórmula')
                             ->default('price_list')
                             ->reactive()
@@ -151,6 +163,7 @@ protected static ?string $modelLabel = 'lista de precios';
                             ->helperText('Todos los cálculos son sin impuestos.'),
 
                         Forms\Components\Select::make('base_price_list_id')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-base-ref'])
                             ->label('Lista base')
                             ->searchable()
                             ->options(fn (): array => static::basePriceListOptions())
@@ -159,6 +172,7 @@ protected static ?string $modelLabel = 'lista de precios';
                             ->helperText('La fórmula toma el precio sin impuestos de esta lista.'),
 
                         Forms\Components\TextInput::make('adjustment_percent')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-adjust'])
                             ->label('Ajuste %')
                             ->numeric()
                             ->default(0)
@@ -167,28 +181,35 @@ protected static ?string $modelLabel = 'lista de precios';
                             ->helperText('Ejemplo: -10 = 10% menos, 5 = 5% más.'),
 
                         Forms\Components\Toggle::make('is_default')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-main-flag'])
                             ->label('Lista predeterminada'),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-enabled'])
                             ->label('Activa')
                             ->default(true),
 
                         Forms\Components\DatePicker::make('valid_from')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-date-from'])
                             ->label('Válida desde'),
 
                         Forms\Components\DatePicker::make('valid_to')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-date-to'])
                             ->label('Válida hasta'),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-notes'])
                             ->label('Notas')
                             ->rows(2)
                             ->columnSpanFull(),
                     ]),
 
                 Forms\Components\Section::make('Precios por producto')
+                    ->extraAttributes(['class' => 'bexia-spl-section bexia-spl-section-lines'])
                     ->visible(fn (Forms\Get $get): bool => ($get('calculation_type') ?? 'items') === 'items')
                     ->schema([
                         Forms\Components\Repeater::make('items')
+                            ->extraAttributes(['class' => 'bexia-spl-repeater bexia-spl-repeater-lines'])
                             ->label('Productos')
                             ->relationship('items')
                             ->columns(12)
@@ -197,6 +218,7 @@ protected static ?string $modelLabel = 'lista de precios';
                             ->reorderable(false)
                             ->schema([
                                 Forms\Components\Select::make('product_id')
+                                    ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-item'])
                                     ->label('Producto')
                                     ->searchable()
                                     ->preload()
@@ -225,6 +247,7 @@ protected static ?string $modelLabel = 'lista de precios';
                                     }),
 
                                 Forms\Components\Select::make('product_variant_id')
+                                    ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-variant'])
                                     ->label('Variante')
                                     ->searchable()
                                     ->preload()
@@ -251,6 +274,7 @@ protected static ?string $modelLabel = 'lista de precios';
                                     }),
 
                                 Forms\Components\TextInput::make('min_quantity')
+                                    ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-min-qty'])
                                     ->label('Cantidad mínima')
                                     ->numeric()
                                     ->default(1)
@@ -258,6 +282,7 @@ protected static ?string $modelLabel = 'lista de precios';
                                     ->columnSpan(2),
 
                                 Forms\Components\TextInput::make('price_without_tax')
+                                    ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-amount'])
                                     ->label('Precio sin impuestos')
                                     ->numeric()
                                     ->required()
@@ -266,6 +291,7 @@ protected static ?string $modelLabel = 'lista de precios';
                                     ->columnSpan(2),
 
                                 Forms\Components\Toggle::make('is_active')
+                                    ->extraAttributes(['class' => 'bexia-spl-field bexia-spl-field-enabled'])
                                     ->label('Activo')
                                     ->default(true)
                                     ->columnSpan(1),
@@ -292,15 +318,21 @@ protected static ?string $modelLabel = 'lista de precios';
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-code bexia-spl-col-key'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-code bexia-spl-col-key'])
                     ->label('Código')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-name bexia-spl-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-name bexia-spl-col-primary'])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\BadgeColumn::make('calculation_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-mode'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-mode'])
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => match ((string) $state) {
                         'items' => 'Productos',
@@ -309,11 +341,15 @@ protected static ?string $modelLabel = 'lista de precios';
                     }),
 
                 Tables\Columns\TextColumn::make('basePriceList.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-base-ref'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-base-ref'])
                     ->label('Lista base')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\BadgeColumn::make('formula_basis')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-basis'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-basis'])
                     ->label('Base fórmula')
                     ->formatStateUsing(fn (?string $state): string => match ((string) $state) {
                         'product_cost' => 'Costo producto',
@@ -323,23 +359,33 @@ protected static ?string $modelLabel = 'lista de precios';
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('adjustment_percent')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-adjust bexia-spl-col-numeric'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-adjust bexia-spl-col-numeric'])
                     ->label('Ajuste %')
                     ->formatStateUsing(fn ($state): string => number_format((float) $state, 2) . '%')
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_default')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-main-flag'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-main-flag'])
                     ->label('Default')
                     ->boolean(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-enabled'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-enabled'])
                     ->label('Activa')
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('items_count')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-lines bexia-spl-col-numeric'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-lines bexia-spl-col-numeric'])
                     ->label('Productos')
                     ->counts('items'),
 
                 Tables\Columns\TextColumn::make('updated_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-spl-col-updated'])
+                    ->extraCellAttributes(['class' => 'bexia-spl-col-updated'])
                     ->label('Actualizada')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
