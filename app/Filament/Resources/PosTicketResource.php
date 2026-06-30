@@ -88,6 +88,13 @@ public static function canCreate(): bool
             );
     }
 
+
+    /*
+     * BEXIA_POS_TICKET_RESOURCE_RESPONSIVE_V5_79_36C
+     * Ajuste responsive visual para listado de tickets PDV.
+     * No modifica reglas POS, pagos, facturacion, inventario, devoluciones ni permisos.
+     */
+
     public static function table(Table $table): Table
     {
         return $table
@@ -95,11 +102,15 @@ public static function canCreate(): bool
             ->recordUrl(fn ($record): string => static::getUrl('view', ['record' => $record]))
             ->columns([
                 Tables\Columns\TextColumn::make('number')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-number bexia-pos-ticket-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-number bexia-pos-ticket-col-primary'])
                     ->label('Folio')
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-status bexia-pos-ticket-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-status bexia-pos-ticket-col-badge'])
                     ->label('Estado')
                     ->state(fn ($record): string => static::v5509dRefundStatusLabel($record))
                     ->badge()
@@ -114,6 +125,8 @@ public static function canCreate(): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('inventory_status')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-inventory-status bexia-pos-ticket-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-inventory-status bexia-pos-ticket-col-badge'])
                     ->label('Inventario')
                     ->badge()
                     ->state(fn ($record): string => static::inventoryStatus($record))
@@ -131,6 +144,8 @@ public static function canCreate(): bool
                  * Estado fiscal calculado: evita doble facturación individual/global.
                  */
                 Tables\Columns\TextColumn::make('fiscal_state_pos_ticket')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-fiscal-state bexia-pos-ticket-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-fiscal-state bexia-pos-ticket-col-badge'])
                     ->label('Estado fiscal')
                     ->badge()
                     ->state(fn ($record): string => static::fiscalStatus($record))
@@ -140,6 +155,8 @@ public static function canCreate(): bool
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('billing_status')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-billing-status bexia-pos-ticket-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-billing-status bexia-pos-ticket-col-badge'])
                     ->label('Solicitud portal')
                     ->badge()
                     ->state(fn ($record): string => static::billingStatus($record))
@@ -153,6 +170,8 @@ public static function canCreate(): bool
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('customer_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-customer'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-customer'])
                     ->label('Cliente')
                     ->state(fn ($record): string => static::customerLabel($record->customer_id))
                     ->searchable(query: function (Builder $query, string $search): Builder {
@@ -173,26 +192,36 @@ public static function canCreate(): bool
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('pos_session_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-session'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-session'])
                     ->label('Sesión')
                     ->state(fn ($record): string => static::labelFromTable('pos_sessions', $record->pos_session_id, ['number']))
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('pos_point_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-point'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-point'])
                     ->label('PDV')
                     ->state(fn ($record): string => static::labelFromTable('pos_points', $record->pos_point_id, ['name', 'code']))
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('total')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-total bexia-pos-ticket-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-total bexia-pos-ticket-col-money'])
                     ->label('Total')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('ordered_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-ordered-at bexia-pos-ticket-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-ordered-at bexia-pos-ticket-col-date'])
                     ->label('Fecha')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('paid_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-paid-at bexia-pos-ticket-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-paid-at bexia-pos-ticket-col-date'])
                     ->label('Pagado')
                     ->dateTime('d/m/Y H:i')
                     ->placeholder('—')
@@ -200,6 +229,8 @@ public static function canCreate(): bool
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('payment_count')
+                    ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-payment-count bexia-pos-ticket-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-payment-count bexia-pos-ticket-col-compact'])
                     ->label('Pagos')
                     ->state(fn ($record): string => (string) static::paymentCount($record->id))
                     ->alignCenter()
