@@ -82,6 +82,12 @@ class EmployeePayrollDeductionResource extends Resource
         return static::bexiaCanDeductionPermission('nomina.descuentos.eliminar');
     }
 
+    /*
+     * BEXIA_EPDED_RESOURCE_RESPONSIVE_V5_79_55C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         $tenantId = Filament::getTenant()?->getKey();
@@ -89,9 +95,11 @@ class EmployeePayrollDeductionResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Datos generales')
+                    ->extraAttributes(['class' => 'bexia-epded-section bexia-epded-section-general'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\Select::make('company_id')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-company bexia-epded-select'])
                             ->label('Empresa')
                             ->relationship('company', 'name')
                             ->searchable()
@@ -102,6 +110,7 @@ class EmployeePayrollDeductionResource extends Resource
                             ->dehydrated(),
 
                         Forms\Components\Select::make('employee_id')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-employee bexia-epded-select'])
                             ->label('Empleado')
                             ->relationship(
                                 'employee',
@@ -113,6 +122,7 @@ class EmployeePayrollDeductionResource extends Resource
                             ->required(),
 
                         Forms\Components\Select::make('type')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-type bexia-epded-select'])
                             ->label('Tipo')
                             ->options(EmployeePayrollDeduction::typeOptions())
                             ->required()
@@ -125,6 +135,7 @@ class EmployeePayrollDeductionResource extends Resource
                             }),
 
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-code bexia-epded-mono'])
                             ->label('Código')
                             ->required()
                             ->maxLength(80)
@@ -132,12 +143,14 @@ class EmployeePayrollDeductionResource extends Resource
                             ->uppercase(),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-name'])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(255)
                             ->default('Préstamo empleado'),
 
                         Forms\Components\Select::make('payroll_concept_id')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-concept bexia-epded-select'])
                             ->label('Concepto de nómina')
                             ->relationship(
                                 'concept',
@@ -149,6 +162,7 @@ class EmployeePayrollDeductionResource extends Resource
                             ->nullable(),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-status bexia-epded-select'])
                             ->label('Estado')
                             ->options(EmployeePayrollDeduction::statusOptions())
                             ->required()
@@ -156,9 +170,11 @@ class EmployeePayrollDeductionResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Montos y calendario')
+                    ->extraAttributes(['class' => 'bexia-epded-section bexia-epded-section-amounts'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('original_amount')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-money bexia-epded-field-original'])
                             ->label('Monto original')
                             ->numeric()
                             ->minValue(0)
@@ -173,6 +189,7 @@ class EmployeePayrollDeductionResource extends Resource
                             }),
 
                         Forms\Components\TextInput::make('outstanding_amount')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-money bexia-epded-field-outstanding'])
                             ->label('Saldo pendiente')
                             ->numeric()
                             ->minValue(0)
@@ -181,6 +198,7 @@ class EmployeePayrollDeductionResource extends Resource
                             ->default(0),
 
                         Forms\Components\TextInput::make('period_amount')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-money bexia-epded-field-period'])
                             ->label('Monto por periodo')
                             ->numeric()
                             ->minValue(0.01)
@@ -189,15 +207,18 @@ class EmployeePayrollDeductionResource extends Resource
                             ->default(0),
 
                         Forms\Components\DatePicker::make('start_date')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-date bexia-epded-field-start'])
                             ->label('Fecha inicio')
                             ->default(now())
                             ->required(),
 
                         Forms\Components\DatePicker::make('end_date')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-date bexia-epded-field-end'])
                             ->label('Fecha fin')
                             ->nullable(),
 
                         Forms\Components\TextInput::make('max_periods')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-periods bexia-epded-field-max-periods'])
                             ->label('Máximo periodos')
                             ->numeric()
                             ->integer()
@@ -205,6 +226,7 @@ class EmployeePayrollDeductionResource extends Resource
                             ->nullable(),
 
                         Forms\Components\TextInput::make('applied_periods')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-periods bexia-epded-field-applied-periods'])
                             ->label('Periodos aplicados')
                             ->numeric()
                             ->integer()
@@ -215,8 +237,10 @@ class EmployeePayrollDeductionResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Notas')
+                    ->extraAttributes(['class' => 'bexia-epded-section bexia-epded-section-notes'])
                     ->schema([
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-notes'])
                             ->label('Notas')
                             ->rows(3),
                     ]),
@@ -228,41 +252,57 @@ class EmployeePayrollDeductionResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('employee.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-epded-col-employee bexia-epded-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-epded-col-employee bexia-epded-col-primary'])
                     ->label('Empleado')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('type')
+                    ->extraHeaderAttributes(['class' => 'bexia-epded-col-type bexia-epded-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-epded-col-type bexia-epded-col-badge'])
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => EmployeePayrollDeduction::typeOptions()[$state] ?? ($state ?: '-'))
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-epded-col-name bexia-epded-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-epded-col-name bexia-epded-col-primary'])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('original_amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-epded-col-money bexia-epded-col-original'])
+                    ->extraCellAttributes(['class' => 'bexia-epded-col-money bexia-epded-col-original'])
                     ->label('Original')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('outstanding_amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-epded-col-money bexia-epded-col-outstanding'])
+                    ->extraCellAttributes(['class' => 'bexia-epded-col-money bexia-epded-col-outstanding'])
                     ->label('Pendiente')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('period_amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-epded-col-money bexia-epded-col-period'])
+                    ->extraCellAttributes(['class' => 'bexia-epded-col-money bexia-epded-col-period'])
                     ->label('Por periodo')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('applied_periods')
+                    ->extraHeaderAttributes(['class' => 'bexia-epded-col-periods bexia-epded-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-epded-col-periods bexia-epded-mono'])
                     ->label('Aplicados')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-epded-col-status bexia-epded-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-epded-col-status bexia-epded-col-badge'])
                     ->label('Estado')
                     ->formatStateUsing(fn (?string $state): string => EmployeePayrollDeduction::statusOptions()[$state] ?? ($state ?: '-'))
                     ->badge()
