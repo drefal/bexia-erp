@@ -92,6 +92,12 @@ class ServiceCaseResource extends Resource
         return $query;
     }
 
+
+    /*
+     * BEXIA_SVC_RESOURCE_RESPONSIVE_V5_79_48C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
@@ -100,42 +106,50 @@ class ServiceCaseResource extends Resource
                     ->default(fn (): ?int => ServiceAccess::currentCompanyId()),
 
                 Forms\Components\Section::make('Datos generales')
+                    ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-general'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('folio')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-folio'])
                             ->label('Folio')
                             ->disabled()
                             ->dehydrated(false),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-status'])
                             ->label('Estado')
                             ->options(ServiceCase::STATUSES)
                             ->required()
                             ->default('nuevo'),
 
                         Forms\Components\Select::make('priority')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-priority'])
                             ->label('Prioridad')
                             ->options(ServiceCase::PRIORITIES)
                             ->required()
                             ->default('media'),
 
                         Forms\Components\Select::make('channel')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-channel'])
                             ->label('Canal')
                             ->options(ServiceCase::CHANNELS)
                             ->required()
                             ->default('manual'),
 
                         Forms\Components\Select::make('case_type')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-case-type'])
                             ->label('Tipo de caso')
                             ->options(ServiceCase::CASE_TYPES)
                             ->required()
                             ->default('general'),
 
                         Forms\Components\TextInput::make('assigned_team')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-team'])
                             ->label('Equipo asignado')
                             ->maxLength(255),
 
                         Forms\Components\Select::make('assigned_employee_id')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-technician'])
                             ->label('Tecnico responsable')
                             ->helperText('Solo empleados del mismo grupo de empresas marcados como tecnico de servicio.')
                             ->searchable()
@@ -145,13 +159,16 @@ class ServiceCaseResource extends Resource
                             ->getOptionLabelUsing(fn ($value): ?string => ServiceAccess::employeeLabel((int) $value)),
 
                         Forms\Components\DateTimePicker::make('due_at')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-due-at'])
                             ->label('Fecha compromiso'),
                     ]),
 
                 Forms\Components\Section::make('Cliente / contacto')
+                    ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-contact'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\Select::make('customer_id')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-customer'])
                             ->label('Cliente')
                             ->searchable()
                             ->preload()
@@ -168,27 +185,33 @@ class ServiceCaseResource extends Resource
                             }),
 
                         Forms\Components\TextInput::make('contact_name')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-contact-name'])
                             ->label('Contacto')
                             ->maxLength(255),
 
                         Forms\Components\TextInput::make('contact_phone')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-phone'])
                             ->label('Telefono')
                             ->maxLength(255),
 
                         Forms\Components\TextInput::make('contact_email')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-email'])
                             ->label('Correo')
                             ->email()
                             ->maxLength(255),
                     ]),
 
                 Forms\Components\Section::make('Caso')
+                    ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-case'])
                     ->schema([
                         Forms\Components\TextInput::make('subject')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-subject'])
                             ->label('Asunto')
                             ->required()
                             ->maxLength(255),
 
                         Forms\Components\Textarea::make('description')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-description'])
                             ->label('Descripcion')
                             ->rows(5)
                             ->columnSpanFull(),
@@ -215,10 +238,12 @@ class ServiceCaseResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Producto / documento relacionado')
+                    ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-product'])
                     ->description('Opcional. Usa catálogo si existe; si no, captura libremente producto, serie, lote, venta o factura.')
                     ->columns(12)
                     ->schema([
                         Forms\Components\Select::make('product_id')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-product'])
                             ->label('Producto catálogo')
                             ->searchable()
                             ->preload()
@@ -232,30 +257,35 @@ class ServiceCaseResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\TextInput::make('product_name')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-product-name'])
                             ->label('Producto / modelo libre')
                             ->helperText('Captura manual cuando el producto aún no exista en catálogo.')
                             ->maxLength(255)
                             ->columnSpan(6),
 
                         Forms\Components\TextInput::make('serial_number')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-serial'])
                             ->label('Número de serie libre')
                             ->helperText('Captura libre mientras se cargan las series reales.')
                             ->maxLength(255)
                             ->columnSpan(4),
 
                         Forms\Components\TextInput::make('lot_number')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-lot'])
                             ->label('Lote libre')
                             ->helperText('Captura libre mientras se cargan lotes reales.')
                             ->maxLength(255)
                             ->columnSpan(4),
 
                         Forms\Components\TextInput::make('sale_reference')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-sale-reference'])
                             ->label('Venta / documento libre')
                             ->helperText('Folio, pedido, nota o referencia manual.')
                             ->maxLength(255)
                             ->columnSpan(4),
 
                         Forms\Components\Select::make('sale_id')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-sale'])
                             ->label('Venta relacionada')
                             ->searchable()
                             ->preload()
@@ -265,6 +295,7 @@ class ServiceCaseResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\Select::make('invoice_id')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-invoice'])
                             ->label('Factura relacionada')
                             ->searchable()
                             ->preload()
@@ -274,6 +305,7 @@ class ServiceCaseResource extends Resource
                             ->columnSpan(3),
 
                         Forms\Components\TextInput::make('invoice_reference')
+                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-invoice-reference'])
                             ->label('Factura / folio libre')
                             ->helperText('UUID, folio fiscal, serie-folio o referencia manual.')
                             ->maxLength(255)
@@ -290,69 +322,97 @@ class ServiceCaseResource extends Resource
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('folio')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-folio bexia-svc-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-folio bexia-svc-col-primary'])
                     ->label('Folio')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('subject')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-subject bexia-svc-col-wrap'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-subject bexia-svc-col-wrap'])
                     ->label('Asunto')
                     ->searchable()
                     ->limit(45),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-status'])
                     ->label('Estado')
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('priority')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-priority'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-priority'])
                     ->label('Prioridad')
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('case_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-case-type'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-case-type'])
                     ->label('Tipo')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_name')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-product bexia-svc-col-wrap'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-product bexia-svc-col-wrap'])
                     ->label('Producto')
                     ->searchable()
                     ->limit(35)
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('serial_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-serial bexia-svc-col-wrap'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-serial bexia-svc-col-wrap'])
                     ->label('Serie')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('invoice_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-invoice'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-invoice'])
                     ->label('Factura')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('channel')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-channel'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-channel'])
                     ->label('Canal')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('assigned_team')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-team bexia-svc-col-wrap'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-team bexia-svc-col-wrap'])
                     ->label('Equipo')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('assigned_employee_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-technician'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-technician'])
                     ->label('Tecnico')
                     ->formatStateUsing(fn ($state): ?string => filled($state) ? ServiceAccess::employeeLabel((int) $state) : null)
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-company'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-company'])
                     ->label('Empresa')
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('due_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-due-at'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-due-at'])
                     ->label('Compromiso')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-created-at'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-created-at'])
                     ->label('Creado')
                     ->dateTime()
                     ->sortable(),
