@@ -82,6 +82,12 @@ class EmployeePayrollPerceptionResource extends Resource
         return static::bexiaCanPerceptionPermission('nomina.percepciones.eliminar');
     }
 
+    /*
+     * BEXIA_EPPER_RESOURCE_RESPONSIVE_V5_79_56C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         $tenantId = Filament::getTenant()?->getKey();
@@ -89,9 +95,11 @@ class EmployeePayrollPerceptionResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Datos generales')
+                    ->extraAttributes(['class' => 'bexia-epper-section bexia-epper-section-general'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\Select::make('company_id')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-company bexia-epper-select'])
                             ->label('Empresa')
                             ->relationship('company', 'name')
                             ->searchable()
@@ -102,6 +110,7 @@ class EmployeePayrollPerceptionResource extends Resource
                             ->dehydrated(),
 
                         Forms\Components\Select::make('employee_id')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-employee bexia-epper-select'])
                             ->label('Empleado')
                             ->relationship(
                                 'employee',
@@ -113,6 +122,7 @@ class EmployeePayrollPerceptionResource extends Resource
                             ->required(),
 
                         Forms\Components\Select::make('type')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-type bexia-epper-select'])
                             ->label('Tipo')
                             ->options(EmployeePayrollPerception::typeOptions())
                             ->required()
@@ -125,6 +135,7 @@ class EmployeePayrollPerceptionResource extends Resource
                             }),
 
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-code bexia-epper-mono'])
                             ->label('Código')
                             ->required()
                             ->maxLength(80)
@@ -132,12 +143,14 @@ class EmployeePayrollPerceptionResource extends Resource
                             ->uppercase(),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-name'])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(255)
                             ->default('Bono productividad'),
 
                         Forms\Components\Select::make('payroll_concept_id')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-concept bexia-epper-select'])
                             ->label('Concepto de nómina')
                             ->relationship(
                                 'concept',
@@ -149,6 +162,7 @@ class EmployeePayrollPerceptionResource extends Resource
                             ->nullable(),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-status bexia-epper-select'])
                             ->label('Estado')
                             ->options(EmployeePayrollPerception::statusOptions())
                             ->required()
@@ -156,9 +170,11 @@ class EmployeePayrollPerceptionResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Montos y calendario')
+                    ->extraAttributes(['class' => 'bexia-epper-section bexia-epper-section-amounts'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('original_amount')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-money bexia-epper-field-original'])
                             ->label('Monto original')
                             ->numeric()
                             ->minValue(0)
@@ -173,6 +189,7 @@ class EmployeePayrollPerceptionResource extends Resource
                             }),
 
                         Forms\Components\TextInput::make('remaining_amount')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-money bexia-epper-field-remaining'])
                             ->label('Saldo pendiente por pagar')
                             ->numeric()
                             ->minValue(0)
@@ -181,6 +198,7 @@ class EmployeePayrollPerceptionResource extends Resource
                             ->default(0),
 
                         Forms\Components\TextInput::make('period_amount')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-money bexia-epper-field-period'])
                             ->label('Monto por periodo')
                             ->numeric()
                             ->minValue(0.01)
@@ -189,15 +207,18 @@ class EmployeePayrollPerceptionResource extends Resource
                             ->default(0),
 
                         Forms\Components\DatePicker::make('start_date')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-date bexia-epper-field-start'])
                             ->label('Fecha inicio')
                             ->default(now())
                             ->required(),
 
                         Forms\Components\DatePicker::make('end_date')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-date bexia-epper-field-end'])
                             ->label('Fecha fin')
                             ->nullable(),
 
                         Forms\Components\TextInput::make('max_periods')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-periods bexia-epper-field-max-periods'])
                             ->label('Máximo periodos')
                             ->numeric()
                             ->integer()
@@ -205,6 +226,7 @@ class EmployeePayrollPerceptionResource extends Resource
                             ->nullable(),
 
                         Forms\Components\TextInput::make('applied_periods')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-periods bexia-epper-field-applied-periods'])
                             ->label('Periodos aplicados')
                             ->numeric()
                             ->integer()
@@ -215,8 +237,10 @@ class EmployeePayrollPerceptionResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Notas')
+                    ->extraAttributes(['class' => 'bexia-epper-section bexia-epper-section-notes'])
                     ->schema([
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-epper-field bexia-epper-field-notes'])
                             ->label('Notas')
                             ->rows(3),
                     ]),
@@ -228,41 +252,57 @@ class EmployeePayrollPerceptionResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('employee.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-epper-col-employee bexia-epper-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-epper-col-employee bexia-epper-col-primary'])
                     ->label('Empleado')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('type')
+                    ->extraHeaderAttributes(['class' => 'bexia-epper-col-type bexia-epper-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-epper-col-type bexia-epper-col-badge'])
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => EmployeePayrollPerception::typeOptions()[$state] ?? ($state ?: '-'))
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-epper-col-name bexia-epper-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-epper-col-name bexia-epper-col-primary'])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('original_amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-epper-col-money bexia-epper-col-original'])
+                    ->extraCellAttributes(['class' => 'bexia-epper-col-money bexia-epper-col-original'])
                     ->label('Original')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('remaining_amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-epper-col-money bexia-epper-col-remaining'])
+                    ->extraCellAttributes(['class' => 'bexia-epper-col-money bexia-epper-col-remaining'])
                     ->label('Pendiente')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('period_amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-epper-col-money bexia-epper-col-period'])
+                    ->extraCellAttributes(['class' => 'bexia-epper-col-money bexia-epper-col-period'])
                     ->label('Por periodo')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('applied_periods')
+                    ->extraHeaderAttributes(['class' => 'bexia-epper-col-periods bexia-epper-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-epper-col-periods bexia-epper-mono'])
                     ->label('Aplicados')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-epper-col-status bexia-epper-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-epper-col-status bexia-epper-col-badge'])
                     ->label('Estado')
                     ->formatStateUsing(fn (?string $state): string => EmployeePayrollPerception::statusOptions()[$state] ?? ($state ?: '-'))
                     ->badge()

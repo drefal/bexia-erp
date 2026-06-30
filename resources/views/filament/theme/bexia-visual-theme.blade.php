@@ -8185,4 +8185,197 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_EPDED_RESOURCE_RESPONSIVE_V5_79_55C_END */
+
+/* BEXIA_EPPER_RESOURCE_RESPONSIVE_V5_79_56C_START */
+/*
+ * EmployeePayrollPerceptionResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de nomina, percepciones,
+ * empleado, concepto, montos, periodos, permisos, empresa ni tenant.
+ */
+.bexia-epper-section {
+    border-radius: 1rem;
+}
+
+.bexia-epper-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-epper-section,
+.bexia-epper-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-epper-field .fi-input-wrp,
+.bexia-epper-field .fi-select-input,
+.bexia-epper-field .fi-fo-select,
+.bexia-epper-field input,
+.bexia-epper-field select,
+.bexia-epper-field textarea,
+.bexia-epper-field .choices,
+.bexia-epper-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-epper-field-name,
+.bexia-epper-field-notes,
+.bexia-epper-col-employee,
+.bexia-epper-col-name,
+.bexia-epper-col-type,
+.bexia-epper-col-status {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-epper-mono,
+.bexia-epper-field-code input,
+.bexia-epper-col-periods {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    letter-spacing: 0.01em;
+}
+
+.bexia-epper-field-money input,
+.bexia-epper-field-periods input,
+.bexia-epper-col-money,
+.bexia-epper-col-periods {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-epper-col-employee,
+.bexia-epper-col-type,
+.bexia-epper-col-name,
+.bexia-epper-col-money,
+.bexia-epper-col-periods,
+.bexia-epper-col-status {
+    vertical-align: top;
+}
+
+.bexia-epper-col-primary {
+    min-width: 12rem;
+    max-width: 24rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-epper-col-type,
+.bexia-epper-col-status {
+    min-width: 7.5rem;
+    max-width: 11rem;
+    white-space: normal;
+}
+
+.bexia-epper-col-money {
+    min-width: 7.25rem;
+}
+
+.bexia-epper-col-periods {
+    min-width: 6rem;
+}
+
+.bexia-epper-field-notes textarea {
+    min-height: 6.5rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-epper-section-amounts .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-epper-section-notes .fi-section-content {
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-epper-section .fi-grid,
+    .bexia-epper-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-epper-col-primary {
+        max-width: 18rem;
+    }
+
+    .bexia-epper-col-type,
+    .bexia-epper-col-status {
+        max-width: 10rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-epper-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-epper-section .fi-section-header,
+    .bexia-epper-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-epper-field .fi-fo-field-wrp-label,
+    .bexia-epper-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-epper-field input,
+    .bexia-epper-field select,
+    .bexia-epper-field textarea,
+    .bexia-epper-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-epper-col-employee,
+    .bexia-epper-col-type,
+    .bexia-epper-col-name,
+    .bexia-epper-col-money,
+    .bexia-epper-col-periods,
+    .bexia-epper-col-status {
+        font-size: 0.76rem;
+    }
+
+    .bexia-epper-col-primary {
+        min-width: 9.5rem;
+        max-width: 13rem;
+    }
+
+    .bexia-epper-col-type,
+    .bexia-epper-col-status {
+        min-width: 6.75rem;
+        max-width: 8.75rem;
+    }
+
+    .bexia-epper-col-money {
+        min-width: 6.25rem;
+    }
+
+    .bexia-epper-col-periods {
+        min-width: 5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-epper-col-primary {
+        min-width: 8.25rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-epper-col-type,
+    .bexia-epper-col-status {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-epper-col-money {
+        min-width: 5.75rem;
+    }
+
+    .bexia-epper-col-periods {
+        min-width: 4.75rem;
+    }
+}
+/* BEXIA_EPPER_RESOURCE_RESPONSIVE_V5_79_56C_END */
 </style>
