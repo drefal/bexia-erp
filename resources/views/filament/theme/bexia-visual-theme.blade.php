@@ -5798,4 +5798,174 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_USR_RESOURCE_RESPONSIVE_V5_79_43C_END */
+
+/* BEXIA_APPM_RESOURCE_RESPONSIVE_V5_79_44C_START */
+/*
+ * Responsive refinements for AP remittance directory.
+ * Visual scope only.
+ */
+.bexia-appm-section {
+    border-radius: 1rem;
+}
+
+.bexia-appm-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-appm-section .fi-in-grid,
+.bexia-appm-section .grid {
+    gap: 0.9rem;
+}
+
+.bexia-appm-entry {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-appm-entry .fi-in-entry,
+.bexia-appm-entry .fi-in-text,
+.bexia-appm-entry .fi-badge {
+    max-width: 100%;
+}
+
+.bexia-appm-entry-num,
+.bexia-appm-entry-sup,
+.bexia-appm-entry-ref,
+.bexia-appm-entry-tm,
+.bexia-appm-entry-ae {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-appm-entry-amt .fi-in-entry,
+.bexia-appm-entry-amt .fi-in-text {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bexia-appm-col-num,
+.bexia-appm-col-sup,
+.bexia-appm-col-dt,
+.bexia-appm-col-amt,
+.bexia-appm-col-st,
+.bexia-appm-col-ref {
+    vertical-align: top;
+}
+
+.bexia-appm-col-primary {
+    min-width: 9rem;
+    max-width: 14rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-appm-col-sup {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-appm-col-dt {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+.bexia-appm-col-money {
+    min-width: 8rem;
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-appm-col-st {
+    min-width: 8rem;
+    white-space: nowrap;
+}
+
+.bexia-appm-col-ref {
+    min-width: 10rem;
+    max-width: 18rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 1024px) {
+    .bexia-appm-section .fi-in-grid,
+    .bexia-appm-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-appm-col-primary {
+        max-width: 12rem;
+    }
+
+    .bexia-appm-col-sup {
+        max-width: 16rem;
+    }
+
+    .bexia-appm-col-ref {
+        max-width: 14rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-appm-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-appm-section .fi-section-header,
+    .bexia-appm-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-appm-entry .fi-in-entry-label,
+    .bexia-appm-entry .fi-in-entry-label span {
+        font-size: 0.78rem;
+    }
+
+    .bexia-appm-entry .fi-in-entry,
+    .bexia-appm-entry .fi-in-text {
+        font-size: 0.82rem;
+    }
+
+    .bexia-appm-col-num,
+    .bexia-appm-col-sup,
+    .bexia-appm-col-dt,
+    .bexia-appm-col-amt,
+    .bexia-appm-col-st,
+    .bexia-appm-col-ref {
+        font-size: 0.76rem;
+    }
+
+    .bexia-appm-col-primary {
+        min-width: 8rem;
+        max-width: 10rem;
+    }
+
+    .bexia-appm-col-sup {
+        min-width: 10rem;
+        max-width: 12rem;
+    }
+
+    .bexia-appm-col-ref {
+        min-width: 9rem;
+        max-width: 11rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-appm-col-primary,
+    .bexia-appm-col-sup,
+    .bexia-appm-col-ref {
+        max-width: 10rem;
+    }
+
+    .bexia-appm-col-money {
+        min-width: 7rem;
+    }
+}
+/* BEXIA_APPM_RESOURCE_RESPONSIVE_V5_79_44C_END */
 </style>
