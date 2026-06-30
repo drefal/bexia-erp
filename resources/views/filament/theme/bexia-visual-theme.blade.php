@@ -6327,4 +6327,179 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_APBL_RESOURCE_RESPONSIVE_V5_79_46C_END */
+
+/* BEXIA_TRMOV_RESOURCE_RESPONSIVE_V5_79_47C_START */
+/*
+ * TreasuryMovementResource responsive refinements.
+ * Visual scope only. No cambia logica de movimientos, cuentas, montos,
+ * conciliacion, contabilidad, estatus, permisos ni tenant scope.
+ */
+.bexia-trmov-section {
+    border-radius: 1rem;
+}
+
+.bexia-trmov-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-trmov-section .fi-in-grid,
+.bexia-trmov-section .grid {
+    gap: 0.9rem;
+}
+
+.bexia-trmov-field,
+.bexia-trmov-filter,
+.bexia-trmov-entry {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-trmov-field .fi-input-wrp,
+.bexia-trmov-field .fi-select-input,
+.bexia-trmov-field .fi-fo-select,
+.bexia-trmov-field input,
+.bexia-trmov-field select,
+.bexia-trmov-field textarea,
+.bexia-trmov-filter .fi-input-wrp,
+.bexia-trmov-filter input {
+    max-width: 100%;
+}
+
+.bexia-trmov-field-reference input,
+.bexia-trmov-field-description textarea,
+.bexia-trmov-entry-account,
+.bexia-trmov-entry-reference,
+.bexia-trmov-entry-description {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-trmov-field-amount input,
+.bexia-trmov-entry-amount .fi-in-entry,
+.bexia-trmov-entry-amount .fi-in-text {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bexia-trmov-col-date,
+.bexia-trmov-col-account,
+.bexia-trmov-col-type,
+.bexia-trmov-col-amount,
+.bexia-trmov-col-payment,
+.bexia-trmov-col-reference,
+.bexia-trmov-col-status {
+    vertical-align: top;
+}
+
+.bexia-trmov-col-primary {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-trmov-col-wrap {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-trmov-col-date,
+.bexia-trmov-col-type,
+.bexia-trmov-col-payment,
+.bexia-trmov-col-status {
+    min-width: 8rem;
+    white-space: nowrap;
+}
+
+.bexia-trmov-col-money {
+    min-width: 8rem;
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1024px) {
+    .bexia-trmov-section .fi-in-grid,
+    .bexia-trmov-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-trmov-col-primary {
+        max-width: 15rem;
+    }
+
+    .bexia-trmov-col-wrap {
+        max-width: 13rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-trmov-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-trmov-section .fi-section-header,
+    .bexia-trmov-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-trmov-field .fi-fo-field-wrp-label,
+    .bexia-trmov-field label,
+    .bexia-trmov-entry .fi-in-entry-label,
+    .bexia-trmov-entry .fi-in-entry-label span {
+        font-size: 0.78rem;
+    }
+
+    .bexia-trmov-field input,
+    .bexia-trmov-field select,
+    .bexia-trmov-field textarea,
+    .bexia-trmov-entry .fi-in-entry,
+    .bexia-trmov-entry .fi-in-text,
+    .bexia-trmov-entry .fi-badge {
+        font-size: 0.82rem;
+    }
+
+    .bexia-trmov-col-date,
+    .bexia-trmov-col-account,
+    .bexia-trmov-col-type,
+    .bexia-trmov-col-amount,
+    .bexia-trmov-col-payment,
+    .bexia-trmov-col-reference,
+    .bexia-trmov-col-status {
+        font-size: 0.76rem;
+    }
+
+    .bexia-trmov-col-primary {
+        min-width: 10rem;
+        max-width: 12rem;
+    }
+
+    .bexia-trmov-col-wrap {
+        min-width: 9rem;
+        max-width: 11rem;
+    }
+
+    .bexia-trmov-col-money {
+        min-width: 7.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-trmov-col-primary,
+    .bexia-trmov-col-wrap {
+        max-width: 10rem;
+    }
+
+    .bexia-trmov-col-date,
+    .bexia-trmov-col-type,
+    .bexia-trmov-col-payment,
+    .bexia-trmov-col-status {
+        min-width: 7rem;
+    }
+}
+/* BEXIA_TRMOV_RESOURCE_RESPONSIVE_V5_79_47C_END */
 </style>

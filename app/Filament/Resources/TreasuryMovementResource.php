@@ -82,6 +82,12 @@ class TreasuryMovementResource extends Resource
         return false;
     }
 
+
+    /*
+     * BEXIA_TRMOV_RESOURCE_RESPONSIVE_V5_79_47C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form->schema([
@@ -92,6 +98,7 @@ class TreasuryMovementResource extends Resource
                 ->default('draft'),
 
             Forms\Components\Select::make('treasury_account_id')
+                ->extraAttributes(['class' => 'bexia-trmov-field bexia-trmov-field-account'])
                 ->label('Cuenta / Caja')
                 ->options(fn (): array => TreasuryAccount::query()
                     ->where('company_id', static::companyId())
@@ -105,6 +112,7 @@ class TreasuryMovementResource extends Resource
                 ->disabled(fn (?TreasuryMovement $record): bool => filled($record) && (string) $record->status !== 'draft'),
 
             Forms\Components\Select::make('type')
+                ->extraAttributes(['class' => 'bexia-trmov-field bexia-trmov-field-type'])
                 ->label('Tipo')
                 ->options([
                     'inbound' => 'Entrada',
@@ -116,12 +124,14 @@ class TreasuryMovementResource extends Resource
                 ->disabled(fn (?TreasuryMovement $record): bool => filled($record) && (string) $record->status !== 'draft'),
 
             Forms\Components\DatePicker::make('movement_date')
+                ->extraAttributes(['class' => 'bexia-trmov-field bexia-trmov-field-date'])
                 ->label('Fecha')
                 ->required()
                 ->default(now())
                 ->disabled(fn (?TreasuryMovement $record): bool => filled($record) && (string) $record->status !== 'draft'),
 
             Forms\Components\TextInput::make('amount')
+                ->extraAttributes(['class' => 'bexia-trmov-field bexia-trmov-field-amount'])
                 ->label('Importe')
                 ->numeric()
                 ->prefix('$')
@@ -132,6 +142,7 @@ class TreasuryMovementResource extends Resource
                 ->disabled(fn (?TreasuryMovement $record): bool => filled($record) && (string) $record->status !== 'draft'),
 
             Forms\Components\TextInput::make('currency_code')
+                ->extraAttributes(['class' => 'bexia-trmov-field bexia-trmov-field-currency'])
                 ->label('Moneda')
                 ->default('MXN')
                 ->required()
@@ -139,6 +150,7 @@ class TreasuryMovementResource extends Resource
                 ->disabled(fn (?TreasuryMovement $record): bool => filled($record) && (string) $record->status !== 'draft'),
 
             Forms\Components\Select::make('payment_form_id')
+                ->extraAttributes(['class' => 'bexia-trmov-field bexia-trmov-field-payment'])
                 ->label('Forma de pago')
                 ->options(fn (): array => PaymentForm::query()
                     ->where('company_id', static::companyId())
@@ -153,11 +165,13 @@ class TreasuryMovementResource extends Resource
                 ->disabled(fn (?TreasuryMovement $record): bool => filled($record) && (string) $record->status !== 'draft'),
 
             Forms\Components\TextInput::make('reference')
+                ->extraAttributes(['class' => 'bexia-trmov-field bexia-trmov-field-reference'])
                 ->label('Referencia')
                 ->maxLength(255)
                 ->disabled(fn (?TreasuryMovement $record): bool => filled($record) && (string) $record->status !== 'draft'),
 
             Forms\Components\Textarea::make('description')
+                ->extraAttributes(['class' => 'bexia-trmov-field bexia-trmov-field-description'])
                 ->label('Descripción')
                 ->columnSpanFull()
                 ->disabled(fn (?TreasuryMovement $record): bool => filled($record) && (string) $record->status !== 'draft'),
@@ -168,49 +182,60 @@ class TreasuryMovementResource extends Resource
     {
         return $infolist->schema([
             Infolists\Components\Section::make('Información del movimiento')
+                ->extraAttributes(['class' => 'bexia-trmov-section bexia-trmov-section-info'])
                 ->columns(3)
                 ->schema([
                     Infolists\Components\TextEntry::make('movement_date')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-date'])
                         ->label('Fecha')
                         ->date('d/m/Y'),
 
                     Infolists\Components\TextEntry::make('treasuryAccount.name')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-account'])
                         ->label('Cuenta / Caja'),
 
                     Infolists\Components\TextEntry::make('type')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-type'])
                         ->label('Tipo')
                         ->formatStateUsing(fn (?string $state): string => static::treasuryMovementTypeLabel($state)),
 
                     Infolists\Components\TextEntry::make('amount')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-amount'])
                         ->label('Importe')
                         // BEXIA_V5524B6_TREASURY_MONEY_FORMAT_INFOLIST
                         ->formatStateUsing(fn ($state, $record): string => self::moneyLabel($state, $record?->currency_code)),
 
                     Infolists\Components\TextEntry::make('paymentForm.name')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-payment'])
                         ->label('Forma de pago')
                         ->placeholder('-'),
 
                     Infolists\Components\TextEntry::make('reference')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-reference'])
                         ->label('Referencia')
                         ->placeholder('-'),
 
                     Infolists\Components\TextEntry::make('status')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-status'])
                         ->label('Estado')
                         ->badge()
                         ->formatStateUsing(fn (?string $state): string => self::statusLabel($state))
                         ->color(fn (?string $state): string => self::statusColor($state)),
 
                     Infolists\Components\TextEntry::make('posted_at')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-posted'])
                         ->label('Confirmado el')
                         ->dateTime('d/m/Y H:i')
                         ->placeholder('-'),
 
                     Infolists\Components\TextEntry::make('cancelled_at')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-cancelled'])
                         ->label('Cancelado el')
                         ->dateTime('d/m/Y H:i')
                         ->placeholder('-'),
 
                     Infolists\Components\TextEntry::make('description')
+                        ->extraAttributes(['class' => 'bexia-trmov-entry bexia-trmov-entry-description'])
                         ->label('Descripción')
                         ->columnSpanFull()
                         ->placeholder('-'),
@@ -228,33 +253,47 @@ class TreasuryMovementResource extends Resource
                 ->orderByDesc('id'))
             ->columns([
                 Tables\Columns\TextColumn::make('movement_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-trmov-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-trmov-col-date'])
                     ->label('Fecha')
                     ->date('d/m/Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('treasuryAccount.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-trmov-col-account bexia-trmov-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-trmov-col-account bexia-trmov-col-primary'])
                     ->label('Cuenta / Caja')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('type')
+                    ->extraHeaderAttributes(['class' => 'bexia-trmov-col-type'])
+                    ->extraCellAttributes(['class' => 'bexia-trmov-col-type'])
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => static::treasuryMovementTypeLabel($state))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-trmov-col-amount bexia-trmov-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-trmov-col-amount bexia-trmov-col-money'])
                     ->label('Importe')
                     // BEXIA_V5524B6_TREASURY_MONEY_FORMAT_TABLE
                     ->formatStateUsing(fn ($state, $record): string => self::moneyLabel($state, $record?->currency_code)),
 
                 Tables\Columns\TextColumn::make('paymentForm.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-trmov-col-payment'])
+                    ->extraCellAttributes(['class' => 'bexia-trmov-col-payment'])
                     ->label('Forma de pago')
                     ->placeholder('-'),
 
                 Tables\Columns\TextColumn::make('reference')
+                    ->extraHeaderAttributes(['class' => 'bexia-trmov-col-reference bexia-trmov-col-wrap'])
+                    ->extraCellAttributes(['class' => 'bexia-trmov-col-reference bexia-trmov-col-wrap'])
                     ->label('Referencia')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-trmov-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-trmov-col-status'])
                     ->label('Estado')
                     ->formatStateUsing(fn (?string $state): string => self::statusLabel($state))
                     ->badge()
@@ -269,9 +308,11 @@ class TreasuryMovementResource extends Resource
                     ->label('Rango de fechas')
                     ->form([
                         Forms\Components\DatePicker::make('from')
+                            ->extraAttributes(['class' => 'bexia-trmov-filter bexia-trmov-filter-from'])
                             ->label('Desde'),
 
                         Forms\Components\DatePicker::make('until')
+                            ->extraAttributes(['class' => 'bexia-trmov-filter bexia-trmov-filter-until'])
                             ->label('Hasta'),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
