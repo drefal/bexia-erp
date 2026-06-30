@@ -7749,4 +7749,247 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SC_RESOURCE_RESPONSIVE_V5_79_53C_END */
+
+/* BEXIA_PAUDIT_RESOURCE_RESPONSIVE_V5_79_54C_START */
+/*
+ * PosAuditLogResource responsive refinements.
+ * Visual scope only. No cambia logica PDV, auditoria, logs,
+ * usuario, ticket, sesion, empresa, permisos ni tenant.
+ */
+.bexia-paudit-section {
+    border-radius: 1rem;
+}
+
+.bexia-paudit-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-paudit-section,
+.bexia-paudit-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-paudit-field .fi-input-wrp,
+.bexia-paudit-field input,
+.bexia-paudit-field select,
+.bexia-paudit-field textarea {
+    max-width: 100%;
+}
+
+.bexia-paudit-field-description,
+.bexia-paudit-field-entity-type,
+.bexia-paudit-field-user-agent,
+.bexia-paudit-section-data,
+.bexia-paudit-section-data .fi-fo-field-wrp,
+.bexia-paudit-section-data pre,
+.bexia-paudit-section-data code,
+.bexia-paudit-col-description,
+.bexia-paudit-col-user,
+.bexia-paudit-col-action {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-paudit-mono,
+.bexia-paudit-col-id,
+.bexia-paudit-col-company,
+.bexia-paudit-col-session,
+.bexia-paudit-col-ticket,
+.bexia-paudit-col-refund,
+.bexia-paudit-col-ip {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    letter-spacing: 0.01em;
+}
+
+.bexia-paudit-field-id input,
+.bexia-paudit-field-company input,
+.bexia-paudit-field-user input,
+.bexia-paudit-field-session input,
+.bexia-paudit-field-ticket input,
+.bexia-paudit-field-refund input,
+.bexia-paudit-field-stock-movement input,
+.bexia-paudit-field-entity-id input,
+.bexia-paudit-field-ip input,
+.bexia-paudit-col-id,
+.bexia-paudit-col-company,
+.bexia-paudit-col-session,
+.bexia-paudit-col-ticket,
+.bexia-paudit-col-refund,
+.bexia-paudit-col-ip,
+.bexia-paudit-col-date {
+    white-space: nowrap;
+}
+
+.bexia-paudit-col-id,
+.bexia-paudit-col-date,
+.bexia-paudit-col-action,
+.bexia-paudit-col-description,
+.bexia-paudit-col-company,
+.bexia-paudit-col-user,
+.bexia-paudit-col-session,
+.bexia-paudit-col-ticket,
+.bexia-paudit-col-refund,
+.bexia-paudit-col-ip {
+    vertical-align: top;
+}
+
+.bexia-paudit-col-primary {
+    min-width: 14rem;
+    max-width: 28rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-paudit-col-id {
+    min-width: 4.75rem;
+}
+
+.bexia-paudit-col-date {
+    min-width: 8.75rem;
+}
+
+.bexia-paudit-col-action {
+    min-width: 9rem;
+    max-width: 13rem;
+    white-space: normal;
+}
+
+.bexia-paudit-col-company,
+.bexia-paudit-col-session,
+.bexia-paudit-col-ticket,
+.bexia-paudit-col-refund {
+    min-width: 6rem;
+}
+
+.bexia-paudit-col-user {
+    min-width: 9rem;
+    max-width: 15rem;
+    white-space: normal;
+}
+
+.bexia-paudit-col-ip {
+    min-width: 8rem;
+}
+
+.bexia-paudit-section-data .fi-section-content {
+    overflow-x: auto;
+}
+
+.bexia-paudit-section-data pre,
+.bexia-paudit-section-data code {
+    max-width: 100%;
+    white-space: pre-wrap;
+    line-height: 1.35;
+}
+
+.bexia-paudit-field-user-agent input {
+    text-overflow: ellipsis;
+}
+
+.bexia-paudit-field-filter-date .fi-input-wrp,
+.bexia-paudit-field-datetime .fi-input-wrp {
+    min-width: 0;
+}
+
+@media (max-width: 1024px) {
+    .bexia-paudit-section .fi-grid,
+    .bexia-paudit-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-paudit-col-primary {
+        max-width: 20rem;
+    }
+
+    .bexia-paudit-col-action {
+        max-width: 11rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-paudit-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-paudit-section .fi-section-header,
+    .bexia-paudit-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-paudit-field .fi-fo-field-wrp-label,
+    .bexia-paudit-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-paudit-field input,
+    .bexia-paudit-field select,
+    .bexia-paudit-field textarea {
+        font-size: 0.82rem;
+    }
+
+    .bexia-paudit-col-id,
+    .bexia-paudit-col-date,
+    .bexia-paudit-col-action,
+    .bexia-paudit-col-description,
+    .bexia-paudit-col-company,
+    .bexia-paudit-col-user,
+    .bexia-paudit-col-session,
+    .bexia-paudit-col-ticket,
+    .bexia-paudit-col-refund,
+    .bexia-paudit-col-ip {
+        font-size: 0.76rem;
+    }
+
+    .bexia-paudit-col-primary {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
+    .bexia-paudit-col-action,
+    .bexia-paudit-col-user {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-paudit-col-date,
+    .bexia-paudit-col-ip {
+        min-width: 7rem;
+    }
+
+    .bexia-paudit-col-company,
+    .bexia-paudit-col-session,
+    .bexia-paudit-col-ticket,
+    .bexia-paudit-col-refund {
+        min-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-paudit-col-primary {
+        min-width: 8.5rem;
+        max-width: 11rem;
+    }
+
+    .bexia-paudit-col-action,
+    .bexia-paudit-col-user {
+        min-width: 6.75rem;
+        max-width: 8.5rem;
+    }
+
+    .bexia-paudit-col-date,
+    .bexia-paudit-col-ip {
+        min-width: 6.25rem;
+    }
+
+    .bexia-paudit-col-id,
+    .bexia-paudit-col-company,
+    .bexia-paudit-col-session,
+    .bexia-paudit-col-ticket,
+    .bexia-paudit-col-refund {
+        min-width: 4.75rem;
+    }
+}
+/* BEXIA_PAUDIT_RESOURCE_RESPONSIVE_V5_79_54C_END */
 </style>
