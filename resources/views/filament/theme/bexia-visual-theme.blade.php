@@ -4906,4 +4906,170 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PAYROLL_RUN_RESOURCE_RESPONSIVE_V5_79_38C_END */
+
+/* BEXIA_STOCK_REPLENISHMENT_RULE_RESOURCE_RESPONSIVE_V5_79_39C_START */
+/*
+ * StockReplenishmentRuleResource responsive refinements.
+ * Visual scope only. No cambia logica de inventario, productos, almacenes, compras, permisos ni tenant scope.
+ */
+.bexia-stock-replenishment-rule-section {
+    border-radius: 1rem;
+}
+
+.bexia-stock-replenishment-rule-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-stock-replenishment-rule-section .fi-grid,
+.bexia-stock-replenishment-rule-section .grid {
+    gap: 0.95rem;
+}
+
+.bexia-stock-replenishment-rule-field .fi-input-wrp,
+.bexia-stock-replenishment-rule-field .fi-select-input,
+.bexia-stock-replenishment-rule-field .fi-fo-select,
+.bexia-stock-replenishment-rule-field input,
+.bexia-stock-replenishment-rule-field select,
+.bexia-stock-replenishment-rule-field textarea,
+.bexia-stock-replenishment-rule-field .choices,
+.bexia-stock-replenishment-rule-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-stock-replenishment-rule-field-notes textarea {
+    min-height: 5.5rem;
+}
+
+.bexia-stock-replenishment-rule-field-onhand,
+.bexia-stock-replenishment-rule-field-buy-info {
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-replenishment-rule-col-warehouse,
+.bexia-stock-replenishment-rule-col-location,
+.bexia-stock-replenishment-rule-col-item,
+.bexia-stock-replenishment-rule-col-variant,
+.bexia-stock-replenishment-rule-col-floor,
+.bexia-stock-replenishment-rule-col-ceiling,
+.bexia-stock-replenishment-rule-col-onhand,
+.bexia-stock-replenishment-rule-col-supplier,
+.bexia-stock-replenishment-rule-col-lead-days,
+.bexia-stock-replenishment-rule-col-priority,
+.bexia-stock-replenishment-rule-col-enabled,
+.bexia-stock-replenishment-rule-col-updated {
+    vertical-align: top;
+}
+
+.bexia-stock-replenishment-rule-col-primary {
+    min-width: 13rem;
+    max-width: 22rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-stock-replenishment-rule-col-warehouse,
+.bexia-stock-replenishment-rule-col-location,
+.bexia-stock-replenishment-rule-col-supplier {
+    min-width: 10rem;
+    max-width: 16rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-replenishment-rule-col-variant {
+    min-width: 9rem;
+    max-width: 14rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-replenishment-rule-col-number,
+.bexia-stock-replenishment-rule-col-lead-days {
+    min-width: 7rem;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-stock-replenishment-rule-col-priority,
+.bexia-stock-replenishment-rule-col-enabled,
+.bexia-stock-replenishment-rule-col-updated {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+    .bexia-stock-replenishment-rule-section .fi-grid,
+    .bexia-stock-replenishment-rule-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-stock-replenishment-rule-col-primary {
+        min-width: 11rem;
+        max-width: 17rem;
+    }
+
+    .bexia-stock-replenishment-rule-col-warehouse,
+    .bexia-stock-replenishment-rule-col-location,
+    .bexia-stock-replenishment-rule-col-supplier {
+        min-width: 8.5rem;
+        max-width: 13rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-stock-replenishment-rule-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-stock-replenishment-rule-section .fi-section-header,
+    .bexia-stock-replenishment-rule-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-stock-replenishment-rule-col-primary {
+        min-width: 9.5rem;
+        max-width: 12rem;
+        font-size: 0.78rem;
+    }
+
+    .bexia-stock-replenishment-rule-col-warehouse,
+    .bexia-stock-replenishment-rule-col-location,
+    .bexia-stock-replenishment-rule-col-variant,
+    .bexia-stock-replenishment-rule-col-supplier {
+        min-width: 7.5rem;
+        max-width: 10.5rem;
+        font-size: 0.76rem;
+    }
+
+    .bexia-stock-replenishment-rule-col-number,
+    .bexia-stock-replenishment-rule-col-lead-days,
+    .bexia-stock-replenishment-rule-col-priority,
+    .bexia-stock-replenishment-rule-col-enabled,
+    .bexia-stock-replenishment-rule-col-updated {
+        min-width: 6.5rem;
+        font-size: 0.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-stock-replenishment-rule-field .fi-fo-field-wrp-label,
+    .bexia-stock-replenishment-rule-field label {
+        font-size: 0.8rem;
+    }
+
+    .bexia-stock-replenishment-rule-field input,
+    .bexia-stock-replenishment-rule-field select,
+    .bexia-stock-replenishment-rule-field textarea {
+        font-size: 0.82rem;
+    }
+
+    .bexia-stock-replenishment-rule-col-primary {
+        max-width: 10.5rem;
+    }
+}
+/* BEXIA_STOCK_REPLENISHMENT_RULE_RESOURCE_RESPONSIVE_V5_79_39C_END */
 </style>

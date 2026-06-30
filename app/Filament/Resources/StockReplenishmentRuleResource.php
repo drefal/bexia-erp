@@ -77,6 +77,12 @@ class StockReplenishmentRuleResource extends Resource
             );
     }
 
+
+    /*
+     * BEXIA_STOCK_REPLENISHMENT_RULE_RESOURCE_RESPONSIVE_V5_79_39C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
@@ -85,9 +91,11 @@ class StockReplenishmentRuleResource extends Resource
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Regla de reabastecimiento')
+                    ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-section bexia-stock-replenishment-rule-section-main'])
                     ->description('Define el mínimo, máximo y prioridad por almacén, ubicación, producto y variante.')
                     ->schema([
                         Forms\Components\Select::make('warehouse_id')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-warehouse'])
                             ->label('Almacén')
                             ->options(fn (): array => static::warehouseOptions())
                             ->searchable()
@@ -100,6 +108,7 @@ class StockReplenishmentRuleResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\Select::make('location_id')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-location'])
                             ->label('Ubicación')
                             ->options(fn (Forms\Get $get): array => static::locationOptions($get('warehouse_id')))
                             ->searchable()
@@ -109,6 +118,7 @@ class StockReplenishmentRuleResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\Select::make('product_id')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-item'])
                             ->label('Producto')
                             ->searchable()
                             ->getSearchResultsUsing(fn (string $search): array => static::productSearchOptions($search))
@@ -121,6 +131,7 @@ class StockReplenishmentRuleResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\Select::make('product_variant_id')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-variant'])
                             ->label('Variante')
                             ->options(fn (Forms\Get $get): array => static::variantOptions($get('product_id')))
                             ->searchable()
@@ -131,6 +142,7 @@ class StockReplenishmentRuleResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\TextInput::make('min_quantity')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-floor'])
                             ->label('Cantidad mínima')
                             ->numeric()
                             ->minValue(0)
@@ -141,6 +153,7 @@ class StockReplenishmentRuleResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\TextInput::make('max_quantity')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-ceiling'])
                             ->label('Cantidad máxima')
                             ->numeric()
                             ->minValue(0)
@@ -151,16 +164,19 @@ class StockReplenishmentRuleResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\Placeholder::make('current_stock')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-onhand'])
                             ->label('Disponible actual')
                             ->content(fn (Forms\Get $get): string => static::currentStockLabel($get))
                             ->columnSpan(6),
 
                         Forms\Components\Placeholder::make('purchase_info')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-buy-info'])
                             ->label('Datos de compra')
                             ->content(fn (Forms\Get $get): string => static::purchaseInfoLabel($get('product_id'), $get('product_variant_id')))
                             ->columnSpan(6),
 
                         Forms\Components\Select::make('priority')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-priority'])
                             ->label('Prioridad')
                             ->options([
                                 'low' => 'Baja',
@@ -173,6 +189,7 @@ class StockReplenishmentRuleResource extends Resource
                             ->required()
                             ->columnSpan(3),
                         Forms\Components\Select::make('preferred_supplier_id')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-supplier'])
                             ->label('Proveedor preferido')
                             ->options(fn (): array => static::supplierOptions())
                             ->searchable()
@@ -184,6 +201,7 @@ class StockReplenishmentRuleResource extends Resource
 
 
                         Forms\Components\TextInput::make('lead_time_days')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-lead-days'])
                             ->label('Días de entrega')
                             ->numeric()
                             ->minValue(0)
@@ -194,11 +212,13 @@ class StockReplenishmentRuleResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-enabled'])
                             ->label('Activa')
                             ->default(true)
                             ->columnSpan(6),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-stock-replenishment-rule-field bexia-stock-replenishment-rule-field-notes'])
                             ->label('Notas')
                             ->rows(2)
                             ->columnSpanFull(),
@@ -212,16 +232,22 @@ class StockReplenishmentRuleResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('warehouse.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-warehouse'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-warehouse'])
                     ->label('Almacén')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('location.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-location'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-location'])
                     ->label('Ubicación')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_display')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-item bexia-stock-replenishment-rule-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-item bexia-stock-replenishment-rule-col-primary'])
                     ->label('Producto')
                     ->state(fn (StockReplenishmentRule $record): string => static::productLabel($record->product_id))
                     ->searchable(query: function (Builder $query, string $search): Builder {
@@ -237,20 +263,28 @@ class StockReplenishmentRuleResource extends Resource
                     }),
 
                 Tables\Columns\TextColumn::make('variant_display')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-variant'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-variant'])
                     ->label('Variante')
                     ->state(fn (StockReplenishmentRule $record): string => $record->product_variant_id ? static::variantLabel($record->product_variant_id) : '—'),
 
                 Tables\Columns\TextColumn::make('min_quantity')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-floor bexia-stock-replenishment-rule-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-floor bexia-stock-replenishment-rule-col-number'])
                     ->label('Mínimo')
                     ->numeric(decimalPlaces: 2)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('max_quantity')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-ceiling bexia-stock-replenishment-rule-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-ceiling bexia-stock-replenishment-rule-col-number'])
                     ->label('Máximo')
                     ->numeric(decimalPlaces: 2)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('current_stock')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-onhand bexia-stock-replenishment-rule-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-onhand bexia-stock-replenishment-rule-col-number'])
                     ->label('Disponible')
                     ->state(fn (StockReplenishmentRule $record): string => number_format(static::currentQuantity(
                         (int) $record->company_id,
@@ -262,16 +296,22 @@ class StockReplenishmentRuleResource extends Resource
 
                 
                 Tables\Columns\TextColumn::make('preferred_supplier_display')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-supplier'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-supplier'])
                     ->label('Proveedor')
                     ->state(fn (StockReplenishmentRule $record): string => static::supplierLabel($record->preferred_supplier_id))
                     ->searchable(false)
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('lead_time_days')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-lead-days'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-lead-days'])
                     ->label('Entrega')
                     ->formatStateUsing(fn ($state): string => $state ? $state . ' días' : '—')
                     ->sortable()
                     ->toggleable(),Tables\Columns\TextColumn::make('priority')
+                        ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-priority'])
+                        ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-priority'])
                     ->label('Prioridad')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
@@ -290,10 +330,14 @@ class StockReplenishmentRuleResource extends Resource
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-enabled'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-enabled'])
                     ->label('Activa')
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('updated_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-replenishment-rule-col-updated'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-replenishment-rule-col-updated'])
                     ->label('Actualizada')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
