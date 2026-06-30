@@ -97,6 +97,12 @@ class HrAttendanceLocationResource extends Resource
         return $query;
     }
 
+
+    /*
+     * BEXIA_HRLOC_RESOURCE_RESPONSIVE_V5_79_51C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
@@ -106,18 +112,22 @@ class HrAttendanceLocationResource extends Resource
                     ->required(),
 
                 Forms\Components\Section::make('Ubicación autorizada')
+                    ->extraAttributes(['class' => 'bexia-hrloc-section bexia-hrloc-section-main'])
                     ->columns(2)
                     ->schema([
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-name'])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(255),
 
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-code'])
                             ->label('Código')
                             ->maxLength(255),
 
                         Forms\Components\Select::make('branch_id')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-branch'])
                             ->label('Sucursal')
                             ->options(function (): array {
                                 $tenant = Filament::getTenant();
@@ -133,11 +143,13 @@ class HrAttendanceLocationResource extends Resource
                             ->preload(),
 
                         Forms\Components\Textarea::make('address')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-address'])
                             ->label('Dirección / referencia')
                             ->rows(2)
                             ->columnSpanFull(),
 
                         Forms\Components\Select::make('geofence_type')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-kind'])
                             ->label('Tipo de geocerca')
                             ->options([
                                 'circle' => 'Círculo: centro + radio',
@@ -149,18 +161,21 @@ class HrAttendanceLocationResource extends Resource
                             ->helperText('Puedes capturar el polígono escribiendo coordenadas JSON o usando el mapa visual inferior.'),
 
                         Forms\Components\TextInput::make('latitude')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-lat'])
                             ->label('Latitud')
                             ->numeric()
                             ->required()
                             ->helperText('Ejemplo: 19.4326077'),
 
                         Forms\Components\TextInput::make('longitude')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-lng'])
                             ->label('Longitud')
                             ->numeric()
                             ->required()
                             ->helperText('Ejemplo: -99.1332080'),
 
                         Forms\Components\TextInput::make('radius_meters')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-radius bexia-hrloc-field-number'])
                             ->label('Radio permitido en metros')
                             ->numeric()
                             ->minValue(10)
@@ -170,6 +185,7 @@ class HrAttendanceLocationResource extends Resource
                             ->visible(fn (Forms\Get $get): bool => ($get('geofence_type') ?: 'circle') === 'circle'),
 
                         Forms\Components\Textarea::make('polygon_coordinates')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-poly'])
                             ->label('Coordenadas del polígono')
                             ->rows(8)
                             ->columnSpanFull()
@@ -197,6 +213,7 @@ class HrAttendanceLocationResource extends Resource
                             ->columnSpanFull(),
 
                         Forms\Components\TextInput::make('accuracy_required_meters')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-accuracy bexia-hrloc-field-number'])
                             ->label('Precisión GPS máxima aceptada')
                             ->numeric()
                             ->minValue(5)
@@ -207,9 +224,11 @@ class HrAttendanceLocationResource extends Resource
 
 
                 Forms\Components\Section::make('Empleados asignados')
+                    ->extraAttributes(['class' => 'bexia-hrloc-section bexia-hrloc-section-people'])
                     ->description('Selecciona los empleados que podrán checar usando esta geocerca. Después presiona Guardar cambios.')
                     ->schema([
                         Forms\Components\Placeholder::make('assigned_employees_summary')
+                            ->extraAttributes(['class' => 'bexia-hrloc-placeholder bexia-hrloc-placeholder-summary'])
                             ->label('Resumen actual')
                             ->content(function (?HrAttendanceLocation $record): string {
                                 if (! $record?->exists) {
@@ -226,6 +245,7 @@ class HrAttendanceLocationResource extends Resource
                             }),
 
                         Forms\Components\Select::make('assigned_employee_ids')
+                            ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-people'])
                             ->label('Empleados asignados a esta geocerca')
                             ->helperText('Puedes seleccionar uno o varios empleados. Al guardar, se reemplaza la asignación activa de esta geocerca.')
                             ->multiple()
@@ -271,22 +291,27 @@ class HrAttendanceLocationResource extends Resource
                     ->columns(1),
 
                 Forms\Components\Section::make('Reglas')
+                    ->extraAttributes(['class' => 'bexia-hrloc-section bexia-hrloc-section-rules'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\Toggle::make('allow_mobile_clock_in')
+                            ->extraAttributes(['class' => 'bexia-hrloc-toggle bexia-hrloc-toggle-mobile'])
                             ->label('Permitir checada móvil')
                             ->default(true),
 
                         Forms\Components\Toggle::make('requires_review_when_outside')
+                            ->extraAttributes(['class' => 'bexia-hrloc-toggle bexia-hrloc-toggle-review'])
                             ->label('Revisar si está fuera')
                             ->default(true),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-hrloc-toggle bexia-hrloc-toggle-active'])
                             ->label('Activa')
                             ->default(true),
                     ]),
 
                 Forms\Components\Textarea::make('notes')
+                    ->extraAttributes(['class' => 'bexia-hrloc-field bexia-hrloc-field-notes'])
                     ->label('Notas')
                     ->rows(3)
                     ->columnSpanFull(),
@@ -298,49 +323,69 @@ class HrAttendanceLocationResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-name bexia-hrloc-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-name bexia-hrloc-col-primary'])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-code'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-code'])
                     ->label('Código')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('branch.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-branch'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-branch'])
                     ->label('Sucursal')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('geofence_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-kind'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-kind'])
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => $state === 'polygon' ? 'Polígono' : 'Círculo')
                     ->badge()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('latitude')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-lat bexia-hrloc-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-lat bexia-hrloc-col-number'])
                     ->label('Latitud')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('longitude')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-lng bexia-hrloc-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-lng bexia-hrloc-col-number'])
                     ->label('Longitud')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('radius_meters')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-radius bexia-hrloc-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-radius bexia-hrloc-col-number'])
                     ->label('Radio')
                     ->suffix(' m')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('allow_mobile_clock_in')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-mobile'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-mobile'])
                     ->label('Móvil')
                     ->boolean(),
 
                 Tables\Columns\IconColumn::make('requires_review_when_outside')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-review'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-review'])
                     ->label('Revisión')
                     ->boolean(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-hrloc-col-active'])
+                    ->extraCellAttributes(['class' => 'bexia-hrloc-col-active'])
                     ->label('Activa')
                     ->boolean(),
             ])

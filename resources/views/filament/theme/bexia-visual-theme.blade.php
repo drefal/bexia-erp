@@ -7096,4 +7096,237 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_APWF_RESOURCE_RESPONSIVE_V5_79_50C_END */
+
+/* BEXIA_HRLOC_RESOURCE_RESPONSIVE_V5_79_51C_START */
+/*
+ * HrAttendanceLocationResource responsive refinements.
+ * Visual scope only. No cambia logica de asistencia, ubicaciones,
+ * geocercas, coordenadas, radio, sucursal, empresa, permisos ni tenant.
+ */
+.bexia-hrloc-section {
+    border-radius: 1rem;
+}
+
+.bexia-hrloc-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-hrloc-field,
+.bexia-hrloc-toggle,
+.bexia-hrloc-placeholder {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-hrloc-field .fi-input-wrp,
+.bexia-hrloc-field .fi-select-input,
+.bexia-hrloc-field .fi-fo-select,
+.bexia-hrloc-field input,
+.bexia-hrloc-field select,
+.bexia-hrloc-field textarea {
+    max-width: 100%;
+}
+
+.bexia-hrloc-field-name input,
+.bexia-hrloc-field-code input,
+.bexia-hrloc-field-address textarea,
+.bexia-hrloc-field-poly textarea,
+.bexia-hrloc-field-notes textarea,
+.bexia-hrloc-placeholder,
+.bexia-hrloc-col-name,
+.bexia-hrloc-col-branch,
+.bexia-hrloc-col-kind {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-hrloc-field-number input,
+.bexia-hrloc-field-lat input,
+.bexia-hrloc-field-lng input,
+.bexia-hrloc-col-number {
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-hrloc-col-name,
+.bexia-hrloc-col-code,
+.bexia-hrloc-col-branch,
+.bexia-hrloc-col-kind,
+.bexia-hrloc-col-lat,
+.bexia-hrloc-col-lng,
+.bexia-hrloc-col-radius,
+.bexia-hrloc-col-mobile,
+.bexia-hrloc-col-review,
+.bexia-hrloc-col-active {
+    vertical-align: top;
+}
+
+.bexia-hrloc-col-primary {
+    min-width: 13rem;
+    max-width: 24rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-hrloc-col-code {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+.bexia-hrloc-col-branch {
+    min-width: 10rem;
+    max-width: 16rem;
+    white-space: normal;
+}
+
+.bexia-hrloc-col-kind {
+    min-width: 8rem;
+    max-width: 12rem;
+    white-space: normal;
+}
+
+.bexia-hrloc-col-lat,
+.bexia-hrloc-col-lng {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+.bexia-hrloc-col-radius {
+    min-width: 6.5rem;
+    white-space: nowrap;
+}
+
+.bexia-hrloc-col-mobile,
+.bexia-hrloc-col-review,
+.bexia-hrloc-col-active {
+    min-width: 5.25rem;
+    text-align: center;
+}
+
+.bexia-hrloc-field-poly textarea {
+    min-height: 7rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.bexia-hrloc-field-people .choices__inner,
+.bexia-hrloc-field-people .fi-select-input {
+    min-height: 2.7rem;
+}
+
+.bexia-hrloc-placeholder-summary {
+    border-radius: 0.85rem;
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-hrloc-section .fi-grid,
+    .bexia-hrloc-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-hrloc-col-primary {
+        max-width: 18rem;
+    }
+
+    .bexia-hrloc-col-branch {
+        max-width: 13rem;
+    }
+
+    .bexia-hrloc-col-kind {
+        max-width: 10rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-hrloc-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-hrloc-section .fi-section-header,
+    .bexia-hrloc-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-hrloc-field .fi-fo-field-wrp-label,
+    .bexia-hrloc-toggle .fi-fo-field-wrp-label,
+    .bexia-hrloc-field label,
+    .bexia-hrloc-toggle label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-hrloc-field input,
+    .bexia-hrloc-field select,
+    .bexia-hrloc-field textarea,
+    .bexia-hrloc-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-hrloc-col-name,
+    .bexia-hrloc-col-code,
+    .bexia-hrloc-col-branch,
+    .bexia-hrloc-col-kind,
+    .bexia-hrloc-col-lat,
+    .bexia-hrloc-col-lng,
+    .bexia-hrloc-col-radius,
+    .bexia-hrloc-col-mobile,
+    .bexia-hrloc-col-review,
+    .bexia-hrloc-col-active {
+        font-size: 0.76rem;
+    }
+
+    .bexia-hrloc-col-primary {
+        min-width: 10rem;
+        max-width: 13rem;
+    }
+
+    .bexia-hrloc-col-code,
+    .bexia-hrloc-col-lat,
+    .bexia-hrloc-col-lng,
+    .bexia-hrloc-col-radius {
+        min-width: 6.25rem;
+    }
+
+    .bexia-hrloc-col-branch {
+        min-width: 8.5rem;
+        max-width: 11rem;
+    }
+
+    .bexia-hrloc-col-kind {
+        min-width: 7rem;
+        max-width: 9rem;
+    }
+
+    .bexia-hrloc-col-mobile,
+    .bexia-hrloc-col-review,
+    .bexia-hrloc-col-active {
+        min-width: 4.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-hrloc-col-primary {
+        min-width: 8.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-hrloc-col-branch {
+        min-width: 7.5rem;
+        max-width: 9rem;
+    }
+
+    .bexia-hrloc-col-kind {
+        min-width: 6.5rem;
+        max-width: 8rem;
+    }
+
+    .bexia-hrloc-col-code,
+    .bexia-hrloc-col-lat,
+    .bexia-hrloc-col-lng,
+    .bexia-hrloc-col-radius {
+        min-width: 5.75rem;
+    }
+}
+/* BEXIA_HRLOC_RESOURCE_RESPONSIVE_V5_79_51C_END */
 </style>
