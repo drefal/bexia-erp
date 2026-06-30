@@ -7992,4 +7992,197 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PAUDIT_RESOURCE_RESPONSIVE_V5_79_54C_END */
+
+/* BEXIA_EPDED_RESOURCE_RESPONSIVE_V5_79_55C_START */
+/*
+ * EmployeePayrollDeductionResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de nomina, descuentos,
+ * empleado, concepto, montos, periodos, permisos, empresa ni tenant.
+ */
+.bexia-epded-section {
+    border-radius: 1rem;
+}
+
+.bexia-epded-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-epded-section,
+.bexia-epded-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-epded-field .fi-input-wrp,
+.bexia-epded-field .fi-select-input,
+.bexia-epded-field .fi-fo-select,
+.bexia-epded-field input,
+.bexia-epded-field select,
+.bexia-epded-field textarea,
+.bexia-epded-field .choices,
+.bexia-epded-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-epded-field-name,
+.bexia-epded-field-notes,
+.bexia-epded-col-employee,
+.bexia-epded-col-name,
+.bexia-epded-col-type,
+.bexia-epded-col-status {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-epded-mono,
+.bexia-epded-field-code input,
+.bexia-epded-col-periods {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    letter-spacing: 0.01em;
+}
+
+.bexia-epded-field-money input,
+.bexia-epded-field-periods input,
+.bexia-epded-col-money,
+.bexia-epded-col-periods {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-epded-col-employee,
+.bexia-epded-col-type,
+.bexia-epded-col-name,
+.bexia-epded-col-money,
+.bexia-epded-col-periods,
+.bexia-epded-col-status {
+    vertical-align: top;
+}
+
+.bexia-epded-col-primary {
+    min-width: 12rem;
+    max-width: 24rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-epded-col-type,
+.bexia-epded-col-status {
+    min-width: 7.5rem;
+    max-width: 11rem;
+    white-space: normal;
+}
+
+.bexia-epded-col-money {
+    min-width: 7.25rem;
+}
+
+.bexia-epded-col-periods {
+    min-width: 6rem;
+}
+
+.bexia-epded-field-notes textarea {
+    min-height: 6.5rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-epded-section-amounts .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-epded-section-notes .fi-section-content {
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-epded-section .fi-grid,
+    .bexia-epded-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-epded-col-primary {
+        max-width: 18rem;
+    }
+
+    .bexia-epded-col-type,
+    .bexia-epded-col-status {
+        max-width: 10rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-epded-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-epded-section .fi-section-header,
+    .bexia-epded-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-epded-field .fi-fo-field-wrp-label,
+    .bexia-epded-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-epded-field input,
+    .bexia-epded-field select,
+    .bexia-epded-field textarea,
+    .bexia-epded-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-epded-col-employee,
+    .bexia-epded-col-type,
+    .bexia-epded-col-name,
+    .bexia-epded-col-money,
+    .bexia-epded-col-periods,
+    .bexia-epded-col-status {
+        font-size: 0.76rem;
+    }
+
+    .bexia-epded-col-primary {
+        min-width: 9.5rem;
+        max-width: 13rem;
+    }
+
+    .bexia-epded-col-type,
+    .bexia-epded-col-status {
+        min-width: 6.75rem;
+        max-width: 8.75rem;
+    }
+
+    .bexia-epded-col-money {
+        min-width: 6.25rem;
+    }
+
+    .bexia-epded-col-periods {
+        min-width: 5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-epded-col-primary {
+        min-width: 8.25rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-epded-col-type,
+    .bexia-epded-col-status {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-epded-col-money {
+        min-width: 5.75rem;
+    }
+
+    .bexia-epded-col-periods {
+        min-width: 4.75rem;
+    }
+}
+/* BEXIA_EPDED_RESOURCE_RESPONSIVE_V5_79_55C_END */
 </style>
