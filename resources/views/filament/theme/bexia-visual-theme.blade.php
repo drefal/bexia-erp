@@ -5968,4 +5968,183 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_APPM_RESOURCE_RESPONSIVE_V5_79_44C_END */
+
+/* BEXIA_ARCV_RESOURCE_RESPONSIVE_V5_79_45C_START */
+/*
+ * Responsive refinements for AR directory.
+ * Visual scope only.
+ */
+.bexia-arcv-section {
+    border-radius: 1rem;
+}
+
+.bexia-arcv-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-arcv-section .fi-in-grid,
+.bexia-arcv-section .grid {
+    gap: 0.9rem;
+}
+
+.bexia-arcv-item {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-arcv-item .fi-in-entry,
+.bexia-arcv-item .fi-in-text,
+.bexia-arcv-item .fi-badge {
+    max-width: 100%;
+}
+
+.bexia-arcv-item-folio,
+.bexia-arcv-item-cust,
+.bexia-arcv-item-custref,
+.bexia-arcv-item-sale,
+.bexia-arcv-item-inv,
+.bexia-arcv-item-pol,
+.bexia-arcv-item-acctgerr {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-arcv-item-sub .fi-in-text,
+.bexia-arcv-item-tax .fi-in-text,
+.bexia-arcv-item-gross .fi-in-text,
+.bexia-arcv-item-coll .fi-in-text,
+.bexia-arcv-item-bal .fi-in-text {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bexia-arcv-col-folio,
+.bexia-arcv-col-cust,
+.bexia-arcv-col-custref,
+.bexia-arcv-col-state,
+.bexia-arcv-col-issue,
+.bexia-arcv-col-due,
+.bexia-arcv-col-gross,
+.bexia-arcv-col-coll,
+.bexia-arcv-col-bal {
+    vertical-align: top;
+}
+
+.bexia-arcv-col-primary {
+    min-width: 8rem;
+    max-width: 13rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-arcv-col-wide {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-arcv-col-wrap {
+    min-width: 10rem;
+    max-width: 18rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-arcv-col-state,
+.bexia-arcv-col-issue,
+.bexia-arcv-col-due {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+.bexia-arcv-col-money {
+    min-width: 8rem;
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1024px) {
+    .bexia-arcv-section .fi-in-grid,
+    .bexia-arcv-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-arcv-col-primary {
+        max-width: 11rem;
+    }
+
+    .bexia-arcv-col-wide {
+        max-width: 15rem;
+    }
+
+    .bexia-arcv-col-wrap {
+        max-width: 13rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-arcv-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-arcv-section .fi-section-header,
+    .bexia-arcv-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-arcv-item .fi-in-entry-label,
+    .bexia-arcv-item .fi-in-entry-label span {
+        font-size: 0.78rem;
+    }
+
+    .bexia-arcv-item .fi-in-entry,
+    .bexia-arcv-item .fi-in-text,
+    .bexia-arcv-item .fi-badge {
+        font-size: 0.82rem;
+    }
+
+    .bexia-arcv-col-folio,
+    .bexia-arcv-col-cust,
+    .bexia-arcv-col-custref,
+    .bexia-arcv-col-state,
+    .bexia-arcv-col-issue,
+    .bexia-arcv-col-due,
+    .bexia-arcv-col-gross,
+    .bexia-arcv-col-coll,
+    .bexia-arcv-col-bal {
+        font-size: 0.76rem;
+    }
+
+    .bexia-arcv-col-primary {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-arcv-col-wide {
+        min-width: 10rem;
+        max-width: 12rem;
+    }
+
+    .bexia-arcv-col-wrap {
+        min-width: 9rem;
+        max-width: 11rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-arcv-col-primary,
+    .bexia-arcv-col-wide,
+    .bexia-arcv-col-wrap {
+        max-width: 10rem;
+    }
+
+    .bexia-arcv-col-money {
+        min-width: 7rem;
+    }
+}
+/* BEXIA_ARCV_RESOURCE_RESPONSIVE_V5_79_45C_END */
 </style>

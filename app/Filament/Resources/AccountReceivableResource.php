@@ -82,6 +82,12 @@ class AccountReceivableResource extends Resource
     }
 
 
+
+    /*
+     * BEXIA_ARCV_RESOURCE_RESPONSIVE_V5_79_45C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form->schema([]);
@@ -94,21 +100,29 @@ class AccountReceivableResource extends Resource
             ->persistFiltersInSession()
             ->columns([
                 Tables\Columns\TextColumn::make('number')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-folio bexia-arcv-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-folio bexia-arcv-col-primary'])
                     ->label('Folio')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('customer_name')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-cust bexia-arcv-col-wide'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-cust bexia-arcv-col-wide'])
                     ->label('Cliente')
                     ->searchable()
                     ->limit(42),
 
                 Tables\Columns\TextColumn::make('customer_reference')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-custref bexia-arcv-col-wrap'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-custref bexia-arcv-col-wrap'])
                     ->label('Referencia')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-state'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-state'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
@@ -116,28 +130,38 @@ class AccountReceivableResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('issue_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-issue'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-issue'])
                     ->label('Fecha')
                     ->date()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('due_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-due'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-due'])
                     ->label('Vence')
                     ->date()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('total')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-gross bexia-arcv-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-gross bexia-arcv-col-money'])
                     ->label('Total')
                     ->alignEnd()
                     ->formatStateUsing(fn ($state, AccountReceivable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('collected_total')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-coll bexia-arcv-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-coll bexia-arcv-col-money'])
                     ->label('Cobrado')
                     ->alignEnd()
                     ->formatStateUsing(fn ($state, AccountReceivable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('balance_total')
+                    ->extraHeaderAttributes(['class' => 'bexia-arcv-col-bal bexia-arcv-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-arcv-col-bal bexia-arcv-col-money'])
                     ->label('Saldo')
                     ->alignEnd()
                     ->formatStateUsing(fn ($state, AccountReceivable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
@@ -165,58 +189,79 @@ class AccountReceivableResource extends Resource
         return $infolist
             ->schema([
                 Section::make('Información general')
+                    ->extraAttributes(['class' => 'bexia-arcv-section bexia-arcv-section-main'])
                     ->columns(3)
                     ->schema([
-                        TextEntry::make('number')->label('Folio'),
+                        TextEntry::make('number')->label('Folio')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-folio']),
 
                         TextEntry::make('status')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-state'])
                             ->label('Estado')
                             ->badge()
                             ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
                             ->color(fn (?string $state): string => static::statusColor($state)),
 
-                        TextEntry::make('customer_name')->label('Cliente'),
-                        TextEntry::make('customer_reference')->label('Referencia cliente')->placeholder('Sin referencia'),
-                        TextEntry::make('sale_order_id')->label('Venta')->placeholder('Sin venta'),
-                        TextEntry::make('invoice_id')->label('Factura')->placeholder('Sin factura'),
-                        TextEntry::make('issue_date')->label('Fecha')->date(),
-                        TextEntry::make('due_date')->label('Vencimiento')->date(),
-                        TextEntry::make('currency')->label('Moneda'),
+                        TextEntry::make('customer_name')->label('Cliente')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-cust']),
+                        TextEntry::make('customer_reference')->label('Referencia cliente')->placeholder('Sin referencia')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-custref']),
+                        TextEntry::make('sale_order_id')->label('Venta')->placeholder('Sin venta')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-sale']),
+                        TextEntry::make('invoice_id')->label('Factura')->placeholder('Sin factura')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-inv']),
+                        TextEntry::make('issue_date')->label('Fecha')->date()
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-issue']),
+                        TextEntry::make('due_date')->label('Vencimiento')->date()
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-due']),
+                        TextEntry::make('currency')->label('Moneda')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-curr']),
                     ]),
 
                 Section::make('Importes')
+                    ->extraAttributes(['class' => 'bexia-arcv-section bexia-arcv-section-nums'])
                     ->columns(4)
                     ->schema([
                         TextEntry::make('subtotal')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-sub'])
                             ->label('Subtotal')
                             ->formatStateUsing(fn ($state, AccountReceivable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('tax_total')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-tax'])
                             ->label('Impuestos')
                             ->formatStateUsing(fn ($state, AccountReceivable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('total')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-gross'])
                             ->label('Total')
                             ->formatStateUsing(fn ($state, AccountReceivable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('collected_total')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-coll'])
                             ->label('Cobrado')
                             ->formatStateUsing(fn ($state, AccountReceivable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('balance_total')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-bal'])
                             ->label('Saldo')
                             ->formatStateUsing(fn ($state, AccountReceivable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                     ]),
 
                 Section::make('Conexión contable')
+                    ->extraAttributes(['class' => 'bexia-arcv-section bexia-arcv-section-acctg'])
                     ->description('CxC es un módulo separado. Estos campos mostrarán la póliza generada cuando se contabilice.')
                     ->columns(3)
                     ->schema([
                         TextEntry::make('accounting_status')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-acctgstate'])
                             ->label('Estado contable')
                             ->badge()
                             ->formatStateUsing(fn (?string $state): string => static::accountingStatusLabel($state))
                             ->color(fn (?string $state): string => static::accountingStatusColor($state)),
 
-                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Sin póliza'),
-                        TextEntry::make('accounting_posted_at')->label('Contabilizado')->dateTime()->placeholder('Pendiente'),
-                        TextEntry::make('accounting_error_message')->label('Error contable')->columnSpanFull()->placeholder('Sin error'),
+                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Sin póliza')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-pol']),
+                        TextEntry::make('accounting_posted_at')->label('Contabilizado')->dateTime()->placeholder('Pendiente')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-acctgdt']),
+                        TextEntry::make('accounting_error_message')->label('Error contable')->columnSpanFull()->placeholder('Sin error')
+                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-acctgerr']),
                     ]),
             ]);
     }
