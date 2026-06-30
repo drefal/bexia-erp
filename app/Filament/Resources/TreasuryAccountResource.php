@@ -71,6 +71,12 @@ class TreasuryAccountResource extends Resource
             ->orderBy('name');
     }
 
+
+    /*
+     * BEXIA_TREASURY_ACCOUNT_RESOURCE_RESPONSIVE_V5_79_40C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
@@ -79,15 +85,18 @@ class TreasuryAccountResource extends Resource
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Configuración operativa')
+                    ->extraAttributes(['class' => 'bexia-treasury-account-section bexia-treasury-account-section-main'])
                     ->description('Define si esta caja pertenece a un PDV, sucursal/tienda, bodega/CEDIS, administración o empresa. Las cuentas bancarias se administran en Tesoreria > Cuentas bancarias.')
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-name'])
                             ->label('Nombre de la caja')
                             ->required()
                             ->maxLength(255),
 
                         Forms\Components\Select::make('cash_scope')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-scope'])
                             ->label('Uso operativo')
                             ->required()
                             ->reactive()
@@ -96,6 +105,7 @@ class TreasuryAccountResource extends Resource
                             ->helperText('Este campo determina cómo se usará la caja en retiros, traspasos y dashboard.'),
 
                         Forms\Components\Select::make('type')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-category'])
                             ->label('Tipo contable')
                             ->required()
                             ->options([
@@ -105,6 +115,7 @@ class TreasuryAccountResource extends Resource
                             ->default('cash'),
 
                         Forms\Components\Select::make('branch_id')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-branch'])
                             ->label('Sucursal / tienda')
                             ->options(fn (): array => static::branchOptions())
                             ->searchable()
@@ -113,6 +124,7 @@ class TreasuryAccountResource extends Resource
                             ->helperText('Para Caja sucursal debe indicar la tienda/sucursal. En Caja PDV ayuda a validar su ubicación.'),
 
                         Forms\Components\Select::make('warehouse_id')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-warehouse'])
                             ->label('Almacén del PDV')
                             ->options(fn (): array => static::warehouseOptions())
                             ->searchable()
@@ -121,6 +133,7 @@ class TreasuryAccountResource extends Resource
                             ->helperText('Solo aplica a Caja PDV si se desea reflejar su almacén operativo.'),
 
                         Forms\Components\Select::make('pos_point_id')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-pos-point'])
                             ->label('Punto de venta asociado')
                             ->options(fn (): array => static::posPointOptions())
                             ->searchable()
@@ -129,6 +142,7 @@ class TreasuryAccountResource extends Resource
                             ->helperText('Cada PDV debe tener una Caja PDV para retiros.'),
 
                         Forms\Components\Select::make('bank_id')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-financial-entity'])
                             ->label('Banco')
                             ->options(fn (): array => static::bankOptions())
                             ->searchable()
@@ -136,16 +150,19 @@ class TreasuryAccountResource extends Resource
                             ->visible(fn (Get $get): bool => $get('cash_scope') === 'bank' || $get('type') === 'bank'),
 
                         Forms\Components\TextInput::make('account_number')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-number'])
                             ->label('Número de cuenta')
                             ->maxLength(100)
                             ->visible(fn (Get $get): bool => $get('cash_scope') === 'bank' || $get('type') === 'bank'),
 
                         Forms\Components\TextInput::make('clabe')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-clabe'])
                             ->label('CLABE')
                             ->maxLength(100)
                             ->visible(fn (Get $get): bool => $get('cash_scope') === 'bank' || $get('type') === 'bank'),
 
                         Forms\Components\Select::make('parent_treasury_account_id')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-parent'])
                             ->label('Caja superior / agrupadora')
                             ->options(fn (): array => static::accountOptions())
                             ->searchable()
@@ -153,31 +170,37 @@ class TreasuryAccountResource extends Resource
                             ->helperText('Opcional. Sirve para agrupar cajas operativas bajo una caja principal.'),
 
                         Forms\Components\TextInput::make('currency_code')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-money-code'])
                             ->label('Moneda')
                             ->default('MXN')
                             ->required()
                             ->maxLength(10),
 
                         Forms\Components\Toggle::make('requires_approval')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-approval'])
                             ->label('Requiere aprobación')
                             ->default(true)
                             ->helperText('Recomendado para sucursal, administración, bodega/CEDIS y traspasos.'),
 
                         Forms\Components\Toggle::make('is_default_concentrator')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-concentrator'])
                             ->label('Concentradora por defecto de la empresa')
                             ->default(false)
                             ->helperText('Solo debe existir una por empresa. Si activas esta, se desactivan las demas.'),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-enabled'])
                             ->label('Activa')
                             ->default(true),
                     ]),
 
                 Forms\Components\Section::make('Saldos')
+                    ->extraAttributes(['class' => 'bexia-treasury-account-section bexia-treasury-account-section-amounts'])
                     ->description('El saldo actual se actualiza por movimientos de Tesorería. No debe modificarse manualmente en operación normal.')
                     ->columns(2)
                     ->schema([
                         Forms\Components\TextInput::make('opening_balance')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-initial-amount'])
                             ->label('Saldo inicial')
                             ->numeric()
                             ->default(0)
@@ -185,6 +208,7 @@ class TreasuryAccountResource extends Resource
                             ->step('0.01'),
 
                         Forms\Components\TextInput::make('current_balance')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-current-amount'])
                             ->label('Saldo actual')
                             ->numeric()
                             ->prefix('$')
@@ -194,8 +218,10 @@ class TreasuryAccountResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Notas')
+                    ->extraAttributes(['class' => 'bexia-treasury-account-section bexia-treasury-account-section-notes'])
                     ->schema([
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-notes'])
                             ->label('Notas')
                             ->rows(3)
                             ->maxLength(3000),
@@ -208,52 +234,72 @@ class TreasuryAccountResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-name bexia-treasury-account-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-name bexia-treasury-account-col-primary'])
                     ->label('Caja')
                     ->searchable()
                     ->sortable()
                     ->wrap(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-entity'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-entity'])
                     ->label('Empresa')
                     ->formatStateUsing(fn ($state): string => static::companyLabel($state))
                     ->toggleable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('cash_scope')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-scope'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-scope'])
                     ->label('Uso')
                     ->formatStateUsing(fn (?string $state): string => static::cashScopeLabel($state))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('branch_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-branch'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-branch'])
                     ->label('Sucursal')
                     ->formatStateUsing(fn ($state): string => static::branchLabel($state))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('warehouse_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-warehouse'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-warehouse'])
                     ->label('Almacén del PDV')
                     ->formatStateUsing(fn ($state): string => static::warehouseLabel($state))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('pos_point_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-pos-point'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-pos-point'])
                     ->label('PDV asociado')
                     ->formatStateUsing(fn ($state): string => static::posPointLabel($state))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('current_balance')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-current-amount bexia-treasury-account-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-current-amount bexia-treasury-account-col-money'])
                     ->label('Saldo')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('requires_approval')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-approval'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-approval'])
                     ->label('Aprueba')
                     ->boolean(),
 
                 Tables\Columns\IconColumn::make('is_default_concentrator')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-concentrator'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-concentrator'])
                     ->label('Concentradora')
                     ->boolean()
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-treasury-account-col-enabled'])
+                    ->extraCellAttributes(['class' => 'bexia-treasury-account-col-enabled'])
                     ->label('Activa')
                     ->boolean(),
             ])
