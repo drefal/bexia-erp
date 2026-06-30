@@ -4563,4 +4563,171 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_POS_TICKET_RESOURCE_RESPONSIVE_V5_79_36C_END */
+
+/* BEXIA_STOCK_SERIAL_NUMBER_RESOURCE_RESPONSIVE_V5_79_37C_START */
+/*
+ * StockSerialNumberResource responsive refinements.
+ * Alcance visual: formulario, columnas largas, serie, producto, lote, ubicacion, estado y fechas.
+ * No toca logica de series, lotes, ubicaciones, PDF/QR, inventario, movimientos, permisos ni tenant scope.
+ */
+.bexia-stock-serial-number-section {
+    border-radius: 1rem;
+}
+
+.bexia-stock-serial-number-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-stock-serial-number-section .fi-grid,
+.bexia-stock-serial-number-section .grid {
+    gap: 0.95rem;
+}
+
+.bexia-stock-serial-number-field .fi-input-wrp,
+.bexia-stock-serial-number-field .fi-select-input,
+.bexia-stock-serial-number-field .fi-fo-select,
+.bexia-stock-serial-number-field input,
+.bexia-stock-serial-number-field select,
+.bexia-stock-serial-number-field .choices,
+.bexia-stock-serial-number-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-stock-serial-number-field-serial input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    letter-spacing: 0.01em;
+}
+
+.bexia-stock-serial-number-col-serial,
+.bexia-stock-serial-number-col-product,
+.bexia-stock-serial-number-col-lot,
+.bexia-stock-serial-number-col-warehouse,
+.bexia-stock-serial-number-col-location,
+.bexia-stock-serial-number-col-status,
+.bexia-stock-serial-number-col-source,
+.bexia-stock-serial-number-col-created {
+    vertical-align: top;
+}
+
+.bexia-stock-serial-number-col-primary {
+    min-width: 10rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-stock-serial-number-col-product {
+    min-width: 14rem;
+    max-width: 22rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-serial-number-col-lot {
+    min-width: 8rem;
+    max-width: 12rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-serial-number-col-warehouse,
+.bexia-stock-serial-number-col-location {
+    min-width: 10rem;
+    max-width: 15rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-serial-number-col-badge {
+    min-width: 7.5rem;
+    white-space: normal;
+}
+
+.bexia-stock-serial-number-col-source {
+    min-width: 8rem;
+    max-width: 12rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stock-serial-number-col-date {
+    min-width: 8rem;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    line-height: 1.25rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-stock-serial-number-section .fi-grid,
+    .bexia-stock-serial-number-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-stock-serial-number-col-product {
+        min-width: 12rem;
+        max-width: 18rem;
+    }
+
+    .bexia-stock-serial-number-col-warehouse,
+    .bexia-stock-serial-number-col-location {
+        min-width: 8.5rem;
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-stock-serial-number-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-stock-serial-number-section .fi-section-header,
+    .bexia-stock-serial-number-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-stock-serial-number-col-serial {
+        min-width: 8.5rem;
+        font-size: 0.78rem;
+    }
+
+    .bexia-stock-serial-number-col-product,
+    .bexia-stock-serial-number-col-warehouse,
+    .bexia-stock-serial-number-col-location {
+        max-width: 11.5rem;
+        font-size: 0.78rem;
+    }
+
+    .bexia-stock-serial-number-col-lot,
+    .bexia-stock-serial-number-col-source,
+    .bexia-stock-serial-number-col-status {
+        font-size: 0.76rem;
+    }
+
+    .bexia-stock-serial-number-col-date {
+        min-width: 7rem;
+        white-space: normal;
+        font-size: 0.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-stock-serial-number-field .fi-fo-field-wrp-label,
+    .bexia-stock-serial-number-field label {
+        font-size: 0.8rem;
+    }
+
+    .bexia-stock-serial-number-field-serial input {
+        font-size: 0.8rem;
+    }
+
+    .bexia-stock-serial-number-col-product,
+    .bexia-stock-serial-number-col-warehouse,
+    .bexia-stock-serial-number-col-location {
+        max-width: 10rem;
+    }
+}
+/* BEXIA_STOCK_SERIAL_NUMBER_RESOURCE_RESPONSIVE_V5_79_37C_END */
 </style>

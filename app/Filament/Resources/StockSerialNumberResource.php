@@ -69,6 +69,13 @@ class StockSerialNumberResource extends Resource
         return $query;
     }
 
+
+    /*
+     * BEXIA_STOCK_SERIAL_NUMBER_RESOURCE_RESPONSIVE_V5_79_37C
+     * Ajuste responsive visual para catalogo de numeros de serie.
+     * No modifica reglas de series, lotes, ubicaciones, PDF/QR, inventario, movimientos, permisos ni tenant scope.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
@@ -79,8 +86,10 @@ class StockSerialNumberResource extends Resource
                     ->dehydrated(true),
 
                 Forms\Components\Section::make('Datos del número de serie')
+                    ->extraAttributes(['class' => 'bexia-stock-serial-number-section bexia-stock-serial-number-section-main'])
                     ->schema([
                         Forms\Components\Select::make('product_id')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-product'])
                             ->label('Producto')
                             ->searchable()
                             ->getSearchResultsUsing(fn (string $search): array => static::productSearchOptions($search))
@@ -95,6 +104,7 @@ class StockSerialNumberResource extends Resource
                             ->columnSpan(5),
 
                         Forms\Components\Select::make('product_variant_id')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-variant'])
                             ->label('Variante')
                             ->options(fn (Forms\Get $get): array => static::variantOptions($get('product_id')))
                             ->searchable()
@@ -108,12 +118,14 @@ class StockSerialNumberResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\TextInput::make('serial_number')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-serial'])
                             ->label('Número de serie')
                             ->required()
                             ->maxLength(160)
                             ->columnSpan(3),
 
                         Forms\Components\Select::make('lot_id')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-lot'])
                             ->label('Lote')
                             ->options(fn (Forms\Get $get): array => static::lotOptions($get('product_id'), $get('product_variant_id')))
                             ->searchable()
@@ -123,6 +135,7 @@ class StockSerialNumberResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\Select::make('current_warehouse_id')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-warehouse'])
                             ->label('Almacén actual')
                             ->options(fn (): array => static::warehouseOptions())
                             ->searchable()
@@ -136,6 +149,7 @@ class StockSerialNumberResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\Select::make('current_location_id')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-location'])
                             ->label('Ubicación actual')
                             ->options(fn (Forms\Get $get): array => static::locationOptions($get('current_warehouse_id')))
                             ->searchable()
@@ -145,6 +159,7 @@ class StockSerialNumberResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-status'])
                             ->label('Estado')
                             ->options(static::statusOptions())
                             ->default('available')
@@ -153,12 +168,14 @@ class StockSerialNumberResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\TextInput::make('source_type')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-source-type'])
                             ->label('Origen')
                             ->placeholder('Ej. manual, purchase_receipt, pos_order')
                             ->maxLength(80)
                             ->columnSpan(4),
 
                         Forms\Components\TextInput::make('source_id')
+                            ->extraAttributes(['class' => 'bexia-stock-serial-number-field bexia-stock-serial-number-field-source-id'])
                             ->label('ID origen')
                             ->numeric()
                             ->columnSpan(4),
@@ -173,11 +190,15 @@ class StockSerialNumberResource extends Resource
             ->columns([
 
                 Tables\Columns\TextColumn::make('serial_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-serial-number-col-serial bexia-stock-serial-number-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-serial-number-col-serial bexia-stock-serial-number-col-primary'])
                     ->label('Serie')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_label')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-serial-number-col-product'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-serial-number-col-product'])
                     ->label('Producto')
                     ->state(fn (StockSerialNumber $record): string => static::productLabel($record->product_id) ?: '—')
                     ->searchable(false)
@@ -185,22 +206,30 @@ class StockSerialNumberResource extends Resource
                     ->wrap(),
 
                 Tables\Columns\TextColumn::make('lot.lot_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-serial-number-col-lot'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-serial-number-col-lot'])
                     ->label('Lote')
                     ->placeholder('—')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('warehouse.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-serial-number-col-warehouse'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-serial-number-col-warehouse'])
                     ->label('Almacén')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('location.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-serial-number-col-location'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-serial-number-col-location'])
                     ->label('Ubicación')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-serial-number-col-status bexia-stock-serial-number-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-serial-number-col-status bexia-stock-serial-number-col-badge'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
@@ -208,11 +237,15 @@ class StockSerialNumberResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('source_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-serial-number-col-source'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-serial-number-col-source'])
                     ->label('Origen')
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-stock-serial-number-col-created bexia-stock-serial-number-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-stock-serial-number-col-created bexia-stock-serial-number-col-date'])
                     ->label('Creado')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
