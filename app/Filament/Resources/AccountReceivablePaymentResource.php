@@ -61,6 +61,12 @@ class AccountReceivablePaymentResource extends Resource
         return $form->schema([]);
     }
 
+
+    /*
+     * BEXIA_ACCOUNT_RECEIVABLE_PAYMENT_RESOURCE_RESPONSIVE_V5_79_41C
+     * Visual-only responsive marker.
+     */
+
     public static function table(Table $table): Table
     {
         return $table
@@ -68,30 +74,42 @@ class AccountReceivablePaymentResource extends Resource
             ->persistFiltersInSession()
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes(['class' => 'bexia-cxc-pay-col-id bexia-cxc-pay-col-numeric'])
+                    ->extraCellAttributes(['class' => 'bexia-cxc-pay-col-id bexia-cxc-pay-col-numeric'])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('accountReceivable.number')
+                    ->extraHeaderAttributes(['class' => 'bexia-cxc-pay-col-doc bexia-cxc-pay-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-cxc-pay-col-doc bexia-cxc-pay-col-primary'])
                     ->label('CxC')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('accountReceivable.customer_name')
+                    ->extraHeaderAttributes(['class' => 'bexia-cxc-pay-col-client'])
+                    ->extraCellAttributes(['class' => 'bexia-cxc-pay-col-client'])
                     ->label('Cliente')
                     ->searchable()
                     ->limit(42),
 
                 Tables\Columns\TextColumn::make('payment_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-cxc-pay-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-cxc-pay-col-date'])
                     ->label('Fecha')
                     ->date()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-cxc-pay-col-money bexia-cxc-pay-col-numeric'])
+                    ->extraCellAttributes(['class' => 'bexia-cxc-pay-col-money bexia-cxc-pay-col-numeric'])
                     ->label('Importe')
                     ->alignEnd()
                     ->formatStateUsing(fn ($state, AccountReceivablePayment $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-cxc-pay-col-state'])
+                    ->extraCellAttributes(['class' => 'bexia-cxc-pay-col-state'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
@@ -99,6 +117,8 @@ class AccountReceivablePaymentResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('reference')
+                    ->extraHeaderAttributes(['class' => 'bexia-cxc-pay-col-ref'])
+                    ->extraCellAttributes(['class' => 'bexia-cxc-pay-col-ref'])
                     ->label('Referencia')
                     ->searchable()
                     ->toggleable(),
@@ -124,31 +144,45 @@ class AccountReceivablePaymentResource extends Resource
         return $infolist
             ->schema([
                 Section::make('Cobro')
+                    ->extraAttributes(['class' => 'bexia-cxc-pay-section bexia-cxc-pay-section-main'])
                     ->columns(3)
                     ->schema([
-                        TextEntry::make('id')->label('ID'),
-                        TextEntry::make('accountReceivable.number')->label('CxC')->placeholder('Sin CxC'),
-                        TextEntry::make('accountReceivable.customer_name')->label('Cliente')->placeholder('Sin cliente'),
+                        TextEntry::make('id')->label('ID')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-id']),
+                        TextEntry::make('accountReceivable.number')->label('CxC')->placeholder('Sin CxC')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-doc']),
+                        TextEntry::make('accountReceivable.customer_name')->label('Cliente')->placeholder('Sin cliente')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-client']),
 
                         TextEntry::make('status')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-state'])
                             ->label('Estado')
                             ->badge()
                             ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
                             ->color(fn (?string $state): string => static::statusColor($state)),
 
-                        TextEntry::make('payment_date')->label('Fecha de cobro')->date(),
+                        TextEntry::make('payment_date')->label('Fecha de cobro')->date()
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-date']),
                         TextEntry::make('amount')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-money'])
                             ->label('Importe')
                             ->formatStateUsing(fn ($state, AccountReceivablePayment $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
 
-                        TextEntry::make('treasuryAccount.name')->label('Caja/Banco')->placeholder('Sin cuenta'),
-                        TextEntry::make('paymentForm.name')->label('Forma de pago')->placeholder('Sin forma'),
-                        TextEntry::make('reference')->label('Referencia')->placeholder('Sin referencia'),
+                        TextEntry::make('treasuryAccount.name')->label('Caja/Banco')->placeholder('Sin cuenta')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-box']),
+                        TextEntry::make('paymentForm.name')->label('Forma de pago')->placeholder('Sin forma')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-method']),
+                        TextEntry::make('reference')->label('Referencia')->placeholder('Sin referencia')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-ref']),
 
-                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Sin póliza'),
-                        TextEntry::make('posted_at')->label('Aplicado')->dateTime()->placeholder('Pendiente'),
-                        TextEntry::make('cancelled_at')->label('Cancelado')->dateTime()->placeholder('No cancelado'),
-                        TextEntry::make('notes')->label('Notas')->columnSpanFull()->placeholder('Sin notas'),
+                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Sin póliza')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-policy']),
+                        TextEntry::make('posted_at')->label('Aplicado')->dateTime()->placeholder('Pendiente')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-posted']),
+                        TextEntry::make('cancelled_at')->label('Cancelado')->dateTime()->placeholder('No cancelado')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-cancelled']),
+                        TextEntry::make('notes')->label('Notas')->columnSpanFull()->placeholder('Sin notas')
+                            ->extraAttributes(['class' => 'bexia-cxc-pay-entry bexia-cxc-pay-entry-notes']),
                     ]),
             ]);
     }
