@@ -4422,3 +4422,146 @@ button[role="switch"] > span {
 /* BEXIA_STOCK_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_35C_END */
 
 </style>
+
+/* BEXIA_POS_TICKET_RESOURCE_RESPONSIVE_V5_79_36C_START */
+/*
+ * PosTicketResource responsive refinements.
+ * Alcance visual: columnas largas, importes, badges y fechas del listado de tickets PDV.
+ * No toca logica POS, pagos, facturacion, inventario, devoluciones ni permisos.
+ */
+.bexia-pos-ticket-col-number,
+.bexia-pos-ticket-col-status,
+.bexia-pos-ticket-col-inventory-status,
+.bexia-pos-ticket-col-fiscal-state,
+.bexia-pos-ticket-col-billing-status,
+.bexia-pos-ticket-col-customer,
+.bexia-pos-ticket-col-session,
+.bexia-pos-ticket-col-point,
+.bexia-pos-ticket-col-total,
+.bexia-pos-ticket-col-ordered-at,
+.bexia-pos-ticket-col-paid-at,
+.bexia-pos-ticket-col-payment-count {
+    vertical-align: top;
+}
+
+.bexia-pos-ticket-col-primary {
+    font-weight: 650;
+}
+
+.bexia-pos-ticket-col-number {
+    min-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-pos-ticket-col-customer {
+    min-width: 12rem;
+    max-width: 18rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-pos-ticket-col-status,
+.bexia-pos-ticket-col-inventory-status,
+.bexia-pos-ticket-col-fiscal-state,
+.bexia-pos-ticket-col-billing-status {
+    min-width: 8.5rem;
+    white-space: normal;
+}
+
+.bexia-pos-ticket-col-session,
+.bexia-pos-ticket-col-point {
+    min-width: 9rem;
+    max-width: 13rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-pos-ticket-col-money {
+    min-width: 7rem;
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-pos-ticket-col-date {
+    min-width: 8rem;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    line-height: 1.25rem;
+}
+
+.bexia-pos-ticket-col-compact {
+    min-width: 5rem;
+    white-space: nowrap;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-pos-ticket-col-number {
+        min-width: 7.5rem;
+    }
+
+    .bexia-pos-ticket-col-customer {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
+    .bexia-pos-ticket-col-session,
+    .bexia-pos-ticket-col-point {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-pos-ticket-col-status,
+    .bexia-pos-ticket-col-inventory-status,
+    .bexia-pos-ticket-col-fiscal-state,
+    .bexia-pos-ticket-col-billing-status {
+        min-width: 7.75rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-pos-ticket-col-customer,
+    .bexia-pos-ticket-col-session,
+    .bexia-pos-ticket-col-point {
+        max-width: 12rem;
+        font-size: 0.78rem;
+    }
+
+    .bexia-pos-ticket-col-date {
+        min-width: 7rem;
+        white-space: normal;
+        font-size: 0.75rem;
+    }
+
+    .bexia-pos-ticket-col-money {
+        min-width: 6.5rem;
+    }
+
+    .bexia-pos-ticket-col-status,
+    .bexia-pos-ticket-col-inventory-status,
+    .bexia-pos-ticket-col-fiscal-state,
+    .bexia-pos-ticket-col-billing-status {
+        min-width: 7rem;
+        font-size: 0.76rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-pos-ticket-col-number,
+    .bexia-pos-ticket-col-total {
+        font-size: 0.8rem;
+    }
+
+    .bexia-pos-ticket-col-customer {
+        min-width: 9rem;
+        max-width: 11rem;
+    }
+
+    .bexia-pos-ticket-col-session,
+    .bexia-pos-ticket-col-point,
+    .bexia-pos-ticket-col-payment-count {
+        font-size: 0.74rem;
+    }
+}
+/* BEXIA_POS_TICKET_RESOURCE_RESPONSIVE_V5_79_36C_END */
