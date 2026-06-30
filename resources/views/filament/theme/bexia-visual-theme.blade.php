@@ -5602,4 +5602,200 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SALES_PRICE_LIST_RESOURCE_RESPONSIVE_V5_79_42C_END */
+
+/* BEXIA_USR_RESOURCE_RESPONSIVE_V5_79_43C_START */
+/*
+ * Responsive refinements for the security directory.
+ * Visual scope only.
+ */
+.bexia-usr-section {
+    border-radius: 1rem;
+}
+
+.bexia-usr-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-usr-section .fi-grid,
+.bexia-usr-section .grid {
+    gap: 0.9rem;
+}
+
+.bexia-usr-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-usr-field .fi-input-wrp,
+.bexia-usr-field .fi-select-input,
+.bexia-usr-field .fi-fo-select,
+.bexia-usr-field input,
+.bexia-usr-field select,
+.bexia-usr-field textarea,
+.bexia-usr-field .choices,
+.bexia-usr-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-usr-field-avatar .fi-fo-file-upload,
+.bexia-usr-field-avatar .filepond--root {
+    max-width: 100%;
+}
+
+.bexia-usr-field-mail input,
+.bexia-usr-field-key input {
+    overflow-wrap: anywhere;
+}
+
+.bexia-usr-field-orgs .choices__list--multiple,
+.bexia-usr-field-rset .choices__list--multiple,
+.bexia-usr-field-pset .choices__list--multiple {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.bexia-usr-field-orgs .choices__item,
+.bexia-usr-field-rset .choices__item,
+.bexia-usr-field-pset .choices__item {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.bexia-usr-col-avatar,
+.bexia-usr-col-id,
+.bexia-usr-col-name,
+.bexia-usr-col-mail,
+.bexia-usr-col-gacc,
+.bexia-usr-col-gadm,
+.bexia-usr-col-eacc,
+.bexia-usr-col-created {
+    vertical-align: top;
+}
+
+.bexia-usr-col-avatar {
+    min-width: 4rem;
+    white-space: nowrap;
+}
+
+.bexia-usr-col-numeric {
+    min-width: 4rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-usr-col-primary {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-usr-col-mail {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-usr-col-gacc,
+.bexia-usr-col-gadm,
+.bexia-usr-col-eacc {
+    min-width: 11rem;
+    max-width: 22rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-usr-col-created {
+    min-width: 8rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+    .bexia-usr-section .fi-grid,
+    .bexia-usr-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-usr-col-primary,
+    .bexia-usr-col-mail {
+        max-width: 16rem;
+    }
+
+    .bexia-usr-col-gacc,
+    .bexia-usr-col-gadm,
+    .bexia-usr-col-eacc {
+        max-width: 18rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-usr-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-usr-section .fi-section-header,
+    .bexia-usr-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-usr-field .fi-fo-field-wrp-label,
+    .bexia-usr-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-usr-field input,
+    .bexia-usr-field select,
+    .bexia-usr-field textarea,
+    .bexia-usr-field .fi-select-input {
+        font-size: 0.82rem;
+    }
+
+    .bexia-usr-col-avatar,
+    .bexia-usr-col-id,
+    .bexia-usr-col-name,
+    .bexia-usr-col-mail,
+    .bexia-usr-col-gacc,
+    .bexia-usr-col-gadm,
+    .bexia-usr-col-eacc,
+    .bexia-usr-col-created {
+        font-size: 0.76rem;
+    }
+
+    .bexia-usr-col-primary,
+    .bexia-usr-col-mail {
+        min-width: 9.5rem;
+        max-width: 13rem;
+    }
+
+    .bexia-usr-col-gacc,
+    .bexia-usr-col-gadm,
+    .bexia-usr-col-eacc {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-usr-field-avatar {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-usr-col-primary,
+    .bexia-usr-col-mail {
+        max-width: 11.5rem;
+    }
+
+    .bexia-usr-col-gacc,
+    .bexia-usr-col-gadm,
+    .bexia-usr-col-eacc {
+        max-width: 12rem;
+    }
+}
+/* BEXIA_USR_RESOURCE_RESPONSIVE_V5_79_43C_END */
 </style>

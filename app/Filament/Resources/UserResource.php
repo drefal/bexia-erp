@@ -177,19 +177,28 @@ public static function canViewAny(): bool
     );
 }
 
+
+    /*
+     * BEXIA_USR_RESOURCE_RESPONSIVE_V5_79_43C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         $tenantId = Filament::getTenant()?->getKey();
 
         return $form->schema([
             Forms\Components\Section::make('Datos del usuario')
+                ->extraAttributes(['class' => 'bexia-usr-section bexia-usr-section-main'])
                 ->schema([
                     Forms\Components\TextInput::make('name')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-name'])
                         ->label('Nombre')
                         ->required()
                         ->maxLength(255),
 
                     Forms\Components\TextInput::make('email')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-mail'])
                         ->label('Correo')
                         ->email()
                         ->required()
@@ -197,6 +206,7 @@ public static function canViewAny(): bool
                         ->unique(ignoreRecord: true),
 
                     Forms\Components\TextInput::make('password')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-key'])
                         ->label('Contraseña')
                         ->password()
                         ->dehydrated(fn ($state) => filled($state))
@@ -204,6 +214,7 @@ public static function canViewAny(): bool
                         ->required(fn (string $operation): bool => $operation === 'create'),
 
                     FileUpload::make('avatar_path')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-avatar'])
                         ->label('Avatar')
                         ->disk('public')
                         ->directory('users/avatars')
@@ -220,9 +231,11 @@ public static function canViewAny(): bool
 
 
             Forms\Components\Section::make('Preferencias operativas')
+                ->extraAttributes(['class' => 'bexia-usr-section bexia-usr-section-ops'])
                 ->description('Valores predeterminados para ventas, inventario y entregas.')
                 ->schema([
                     Forms\Components\Select::make('default_warehouse_id')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-wh'])
                         ->label('Almacén predeterminado')
                         ->searchable()
                         ->preload()
@@ -230,6 +243,7 @@ public static function canViewAny(): bool
                         ->reactive(),
 
                     Forms\Components\Select::make('default_location_id')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-loc'])
                         ->label('Ubicación predeterminada')
                         ->searchable()
                         ->preload()
@@ -239,8 +253,10 @@ public static function canViewAny(): bool
                 ->columns(2),
 
             Forms\Components\Section::make('Accesos')
+                ->extraAttributes(['class' => 'bexia-usr-section bexia-usr-section-sec'])
                 ->schema([
                     Forms\Components\Select::make('access_company_group_id')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-scopegrp'])
                         ->label('Grupo de acceso del usuario')
                         ->helperText('Selecciona el grupo principal de acceso. Se cargarán sus empresas y después puedes quitar manualmente las que no apliquen.')
                         ->options(function (): array {
@@ -288,6 +304,7 @@ public static function canViewAny(): bool
                         }),
 
                     Forms\Components\Toggle::make('access_company_group_is_admin')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-gadm'])
                         ->label('Administrar este grupo')
                         ->helperText('Activa esto para que el usuario sea administrador real del grupo seleccionado. Si queda apagado, el grupo solo se usa para cargar empresas y limitar acceso.')
                         ->default(false)
@@ -296,6 +313,7 @@ public static function canViewAny(): bool
                         ->visible(fn (Forms\Get $get): bool => filled($get('access_company_group_id'))),
 
                     Forms\Components\Select::make('companies')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-orgs'])
                         ->label('Empresas asignadas')
                         ->helperText('Estas son las empresas finales a las que tendrá acceso el usuario. Puedes quitar empresas después de cargar el grupo.')
                         ->options(function (Forms\Get $get) use ($tenantId): array {
@@ -337,6 +355,7 @@ public static function canViewAny(): bool
                         ->afterStateUpdated(fn (): null => null),
 
                     Forms\Components\Select::make('role_group_loader')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-gload'])
                         ->label('Cargar roles base para el grupo')
                         ->helperText('Selecciona roles por nombre. Si faltan en empresas del grupo, se crearán copiando permisos desde el rol plantilla.')
                         ->options(function (Forms\Get $get) use ($tenantId): array {
@@ -552,6 +571,7 @@ public static function canViewAny(): bool
                         }),
 
                     Forms\Components\Select::make('role_ids')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-rset'])
                         ->label('Roles')
                         ->options(function (Forms\Get $get) use ($tenantId): array {
                             $companyIds = collect($get('companies') ?? [])
@@ -630,6 +650,7 @@ public static function canViewAny(): bool
                         ->helperText('Estos son los roles finales del usuario. Puedes quitar roles por empresa después de usar la carga base por grupo.'),
 
                     Forms\Components\Select::make('permission_ids')
+                        ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-pset'])
                         ->label('Permisos directos')
                         ->options(function () {
                             return Permission::query()
@@ -807,20 +828,28 @@ public static function canViewAny(): bool
         return $table
             ->columns([
                 ImageColumn::make('avatar_url')
+                    ->extraHeaderAttributes(['class' => 'bexia-usr-col-avatar'])
+                    ->extraCellAttributes(['class' => 'bexia-usr-col-avatar'])
                     ->label('Avatar')
                     ->getStateUsing(fn (User $record): ?string => $record->getFilamentAvatarUrl())
                     ->circular(),
 
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes(['class' => 'bexia-usr-col-id bexia-usr-col-numeric'])
+                    ->extraCellAttributes(['class' => 'bexia-usr-col-id bexia-usr-col-numeric'])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-usr-col-name bexia-usr-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-usr-col-name bexia-usr-col-primary'])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('email')
+                    ->extraHeaderAttributes(['class' => 'bexia-usr-col-mail'])
+                    ->extraCellAttributes(['class' => 'bexia-usr-col-mail'])
                     ->label('Correo')
                     ->searchable()
                     ->sortable(),
@@ -828,6 +857,8 @@ public static function canViewAny(): bool
                 // V5.71.27b columna Superadmin removida del listado para liberar espacio.
 
                 Tables\Columns\TextColumn::make('grupos_acceso')
+                    ->extraHeaderAttributes(['class' => 'bexia-usr-col-gacc'])
+                    ->extraCellAttributes(['class' => 'bexia-usr-col-gacc'])
                     ->label('Grupo acceso')
                     ->getStateUsing(function (User $record): string {
                         /*
@@ -854,6 +885,8 @@ public static function canViewAny(): bool
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('grupos_admin')
+                    ->extraHeaderAttributes(['class' => 'bexia-usr-col-gadm'])
+                    ->extraCellAttributes(['class' => 'bexia-usr-col-gadm'])
                     ->label('Admin grupos')
                     ->getStateUsing(function (User $record): string {
                         return $record->companyGroups
@@ -866,6 +899,8 @@ public static function canViewAny(): bool
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('empresas_acceso')
+                    ->extraHeaderAttributes(['class' => 'bexia-usr-col-eacc'])
+                    ->extraCellAttributes(['class' => 'bexia-usr-col-eacc'])
                     ->label('Empresas')
                     ->getStateUsing(function (User $record): string {
                         $companies = $record->companies
@@ -901,6 +936,8 @@ public static function canViewAny(): bool
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-usr-col-created'])
+                    ->extraCellAttributes(['class' => 'bexia-usr-col-created'])
                     ->label('Creado')
                     ->dateTime('d-m-Y H:i')
                     ->sortable(),
