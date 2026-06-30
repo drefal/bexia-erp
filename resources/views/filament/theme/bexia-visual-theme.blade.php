@@ -5072,4 +5072,165 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_STOCK_REPLENISHMENT_RULE_RESOURCE_RESPONSIVE_V5_79_39C_END */
+
+/* BEXIA_TREASURY_ACCOUNT_RESOURCE_RESPONSIVE_V5_79_40C_START */
+/*
+ * TreasuryAccountResource responsive refinements.
+ * Visual scope only. No cambia logica de cuentas, saldos, movimientos, bancos, cajas, conciliacion, permisos ni tenant scope.
+ */
+.bexia-treasury-account-section {
+    border-radius: 1rem;
+}
+
+.bexia-treasury-account-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-treasury-account-section .fi-grid,
+.bexia-treasury-account-section .grid {
+    gap: 0.95rem;
+}
+
+.bexia-treasury-account-field .fi-input-wrp,
+.bexia-treasury-account-field .fi-select-input,
+.bexia-treasury-account-field .fi-fo-select,
+.bexia-treasury-account-field input,
+.bexia-treasury-account-field select,
+.bexia-treasury-account-field textarea,
+.bexia-treasury-account-field .choices,
+.bexia-treasury-account-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-treasury-account-field-name input,
+.bexia-treasury-account-field-number input,
+.bexia-treasury-account-field-clabe input {
+    overflow-wrap: anywhere;
+}
+
+.bexia-treasury-account-field-notes textarea {
+    min-height: 5.5rem;
+}
+
+.bexia-treasury-account-col-name,
+.bexia-treasury-account-col-entity,
+.bexia-treasury-account-col-scope,
+.bexia-treasury-account-col-branch,
+.bexia-treasury-account-col-warehouse,
+.bexia-treasury-account-col-pos-point,
+.bexia-treasury-account-col-current-amount,
+.bexia-treasury-account-col-approval,
+.bexia-treasury-account-col-concentrator,
+.bexia-treasury-account-col-enabled {
+    vertical-align: top;
+}
+
+.bexia-treasury-account-col-primary {
+    min-width: 12rem;
+    max-width: 22rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-treasury-account-col-entity,
+.bexia-treasury-account-col-scope,
+.bexia-treasury-account-col-branch,
+.bexia-treasury-account-col-warehouse,
+.bexia-treasury-account-col-pos-point {
+    min-width: 9rem;
+    max-width: 15rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-treasury-account-col-money {
+    min-width: 8rem;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-treasury-account-col-approval,
+.bexia-treasury-account-col-concentrator,
+.bexia-treasury-account-col-enabled {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+    .bexia-treasury-account-section .fi-grid,
+    .bexia-treasury-account-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-treasury-account-col-primary {
+        min-width: 11rem;
+        max-width: 17rem;
+    }
+
+    .bexia-treasury-account-col-entity,
+    .bexia-treasury-account-col-scope,
+    .bexia-treasury-account-col-branch,
+    .bexia-treasury-account-col-warehouse,
+    .bexia-treasury-account-col-pos-point {
+        min-width: 8rem;
+        max-width: 13rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-treasury-account-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-treasury-account-section .fi-section-header,
+    .bexia-treasury-account-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-treasury-account-col-primary {
+        min-width: 9.5rem;
+        max-width: 12rem;
+        font-size: 0.78rem;
+    }
+
+    .bexia-treasury-account-col-entity,
+    .bexia-treasury-account-col-scope,
+    .bexia-treasury-account-col-branch,
+    .bexia-treasury-account-col-warehouse,
+    .bexia-treasury-account-col-pos-point {
+        min-width: 7.5rem;
+        max-width: 10.5rem;
+        font-size: 0.76rem;
+    }
+
+    .bexia-treasury-account-col-money,
+    .bexia-treasury-account-col-approval,
+    .bexia-treasury-account-col-concentrator,
+    .bexia-treasury-account-col-enabled {
+        min-width: 6.5rem;
+        font-size: 0.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-treasury-account-field .fi-fo-field-wrp-label,
+    .bexia-treasury-account-field label {
+        font-size: 0.8rem;
+    }
+
+    .bexia-treasury-account-field input,
+    .bexia-treasury-account-field select,
+    .bexia-treasury-account-field textarea {
+        font-size: 0.82rem;
+    }
+
+    .bexia-treasury-account-col-primary {
+        max-width: 10.5rem;
+    }
+}
+/* BEXIA_TREASURY_ACCOUNT_RESOURCE_RESPONSIVE_V5_79_40C_END */
 </style>
