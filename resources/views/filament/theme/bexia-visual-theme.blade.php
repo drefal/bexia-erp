@@ -4421,8 +4421,6 @@ button[role="switch"] > span {
 }
 /* BEXIA_STOCK_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_35C_END */
 
-</style>
-
 /* BEXIA_POS_TICKET_RESOURCE_RESPONSIVE_V5_79_36C_START */
 /*
  * PosTicketResource responsive refinements.
@@ -4565,3 +4563,4 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_POS_TICKET_RESOURCE_RESPONSIVE_V5_79_36C_END */
+</style>
