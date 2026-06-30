@@ -5233,4 +5233,165 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_TREASURY_ACCOUNT_RESOURCE_RESPONSIVE_V5_79_40C_END */
+
+/* BEXIA_ACCOUNT_RECEIVABLE_PAYMENT_RESOURCE_RESPONSIVE_V5_79_41C_START */
+/*
+ * AccountReceivablePaymentResource responsive refinements.
+ * Visual scope only. No cambia logica de pagos, aplicacion a CxC, saldos, facturas, clientes, tesoreria, contabilidad, permisos ni tenant scope.
+ */
+.bexia-cxc-pay-section {
+    border-radius: 1rem;
+}
+
+.bexia-cxc-pay-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-cxc-pay-section .fi-in-grid,
+.bexia-cxc-pay-section .grid {
+    gap: 0.9rem;
+}
+
+.bexia-cxc-pay-entry {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-cxc-pay-entry .fi-in-entry-wrp,
+.bexia-cxc-pay-entry .fi-in-text,
+.bexia-cxc-pay-entry .fi-badge,
+.bexia-cxc-pay-entry .fi-ta-text {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.bexia-cxc-pay-entry-money .fi-in-text,
+.bexia-cxc-pay-col-money {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.bexia-cxc-pay-entry-notes .fi-in-text {
+    white-space: pre-wrap;
+    line-height: 1.45;
+}
+
+.bexia-cxc-pay-col-id,
+.bexia-cxc-pay-col-doc,
+.bexia-cxc-pay-col-client,
+.bexia-cxc-pay-col-date,
+.bexia-cxc-pay-col-money,
+.bexia-cxc-pay-col-state,
+.bexia-cxc-pay-col-ref {
+    vertical-align: top;
+}
+
+.bexia-cxc-pay-col-primary {
+    min-width: 8rem;
+    max-width: 13rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-cxc-pay-col-client {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-cxc-pay-col-ref {
+    min-width: 8rem;
+    max-width: 13rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-cxc-pay-col-date,
+.bexia-cxc-pay-col-state {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+.bexia-cxc-pay-col-numeric {
+    min-width: 6rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-cxc-pay-section .fi-in-grid,
+    .bexia-cxc-pay-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-cxc-pay-col-client {
+        min-width: 10rem;
+        max-width: 16rem;
+    }
+
+    .bexia-cxc-pay-col-primary,
+    .bexia-cxc-pay-col-ref {
+        max-width: 11rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-cxc-pay-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-cxc-pay-section .fi-section-header,
+    .bexia-cxc-pay-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-cxc-pay-entry .fi-in-entry-wrp-label,
+    .bexia-cxc-pay-entry .fi-in-entry-wrp-label span {
+        font-size: 0.78rem;
+    }
+
+    .bexia-cxc-pay-entry .fi-in-text,
+    .bexia-cxc-pay-entry .fi-badge {
+        font-size: 0.82rem;
+    }
+
+    .bexia-cxc-pay-col-id,
+    .bexia-cxc-pay-col-doc,
+    .bexia-cxc-pay-col-client,
+    .bexia-cxc-pay-col-date,
+    .bexia-cxc-pay-col-money,
+    .bexia-cxc-pay-col-state,
+    .bexia-cxc-pay-col-ref {
+        font-size: 0.76rem;
+    }
+
+    .bexia-cxc-pay-col-client {
+        min-width: 8.5rem;
+        max-width: 12rem;
+    }
+
+    .bexia-cxc-pay-col-primary,
+    .bexia-cxc-pay-col-ref {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-cxc-pay-entry-notes {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-cxc-pay-col-client {
+        max-width: 10.5rem;
+    }
+
+    .bexia-cxc-pay-col-money {
+        min-width: 6.75rem;
+    }
+}
+/* BEXIA_ACCOUNT_RECEIVABLE_PAYMENT_RESOURCE_RESPONSIVE_V5_79_41C_END */
 </style>
