@@ -260,25 +260,35 @@ class PayrollRunResource extends Resource
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
 
+
+    /*
+     * BEXIA_PAYROLL_RUN_RESOURCE_RESPONSIVE_V5_79_38C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Section::make('Periodo de pre-nómina')
+                    ->extraAttributes(['class' => 'bexia-payroll-run-section bexia-payroll-run-section-main'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-name'])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(255),
 
                         Forms\Components\Select::make('period_type')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-cycle-kind'])
                             ->label('Periodicidad')
                             ->options(PayrollRun::periodTypeOptions())
                             ->default('quincenal')
                             ->required(),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-state'])
                             ->label('Estado')
                             ->options(PayrollRun::statusOptions())
                             ->default('draft')
@@ -286,43 +296,57 @@ class PayrollRunResource extends Resource
                             ->dehydrated(true),
 
                         Forms\Components\DatePicker::make('period_start')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-date-from'])
                             ->label('Inicio')
                             ->native(false)
                             ->default(now()->startOfMonth())
                             ->required(),
 
                         Forms\Components\DatePicker::make('period_end')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-date-to'])
                             ->label('Fin')
                             ->native(false)
                             ->default(now()->endOfMonth())
                             ->required(),
 
                         Forms\Components\DatePicker::make('payment_date')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-paydate'])
                             ->label('Fecha de pago')
                             ->native(false),
 
                         Forms\Components\TextInput::make('currency')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-currency'])
                             ->label('Moneda')
                             ->default('MXN')
                             ->maxLength(3),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-notes'])
                             ->label('Notas')
                             ->columnSpanFull()
                             ->rows(3),
                     ]),
 
                 Forms\Components\Section::make('Totales')
+                    ->extraAttributes(['class' => 'bexia-payroll-run-section bexia-payroll-run-section-money'])
                     ->columns(4)
                     ->schema([
-                        Forms\Components\TextInput::make('employees_count')->label('Empleados')->disabled(),
-                        Forms\Components\TextInput::make('base_total')->label('Sueldo base')->disabled()->prefix('$'),
-                        Forms\Components\TextInput::make('overtime_total')->label('Horas extra')->disabled()->prefix('$'),
-                        Forms\Components\TextInput::make('perceptions_total')->label('Percepciones')->disabled()->prefix('$'),
-                        Forms\Components\TextInput::make('deductions_total')->label('Deducciones')->disabled()->prefix('$'),
-                        Forms\Components\TextInput::make('gross_total')->label('Bruto')->disabled()->prefix('$'),
-                        Forms\Components\TextInput::make('net_total')->label('Neto')->disabled()->prefix('$'),
-                        Forms\Components\TextInput::make('calculated_at')->label('Calculada')->disabled(),
+                        Forms\Components\TextInput::make('employees_count')->label('Empleados')->disabled()
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-employees']),
+                        Forms\Components\TextInput::make('base_total')->label('Sueldo base')->disabled()->prefix('$')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-base-money']),
+                        Forms\Components\TextInput::make('overtime_total')->label('Horas extra')->disabled()->prefix('$')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-overtime-money']),
+                        Forms\Components\TextInput::make('perceptions_total')->label('Percepciones')->disabled()->prefix('$')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-perceptions-money']),
+                        Forms\Components\TextInput::make('deductions_total')->label('Deducciones')->disabled()->prefix('$')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-deductions-money']),
+                        Forms\Components\TextInput::make('gross_total')->label('Bruto')->disabled()->prefix('$')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-bruto-money']),
+                        Forms\Components\TextInput::make('net_total')->label('Neto')->disabled()->prefix('$')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-neto-money']),
+                        Forms\Components\TextInput::make('calculated_at')->label('Calculada')->disabled()
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-computed-at']),
                     ]),
             ]);
     }
@@ -332,6 +356,8 @@ class PayrollRunResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('payroll_cfdi_status')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-cfdi-state'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-cfdi-state'])
                     ->label('CFDI nomina')
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'drafts_prepared' => 'Borradores listos',
@@ -351,62 +377,86 @@ class PayrollRunResource extends Resource
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('payroll_cfdi_ready_lines_count')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-cfdi-ready'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-cfdi-ready'])
                     ->label('CFDI listos')
                     ->numeric()
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('payroll_cfdi_error_lines_count')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-cfdi-errors'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-cfdi-errors'])
                     ->label('Errores CFDI')
                     ->numeric()
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-name bexia-payroll-run-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-name bexia-payroll-run-col-primary'])
                     ->label('Pre-nómina')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('period_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-cycle'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-cycle'])
                     ->label('Periodicidad')
                     ->formatStateUsing(fn (?string $state): string => PayrollRun::periodTypeOptions()[$state] ?? ($state ?: '-'))
                     ->badge(),
 
                 Tables\Columns\TextColumn::make('period_start')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-date-from'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-date-from'])
                     ->label('Inicio')
                     ->date('d/m/Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('period_end')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-date-to'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-date-to'])
                     ->label('Fin')
                     ->date('d/m/Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-state bexia-payroll-run-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-state bexia-payroll-run-col-badge'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => PayrollRun::statusOptions()[$state] ?? ($state ?: '-')),
 
                 Tables\Columns\TextColumn::make('employees_count')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-employees'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-employees'])
                     ->label('Empleados')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('gross_total')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-bruto-money bexia-payroll-run-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-bruto-money bexia-payroll-run-col-money'])
                     ->label('Bruto')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('deductions_total')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-deductions-money bexia-payroll-run-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-deductions-money bexia-payroll-run-col-money'])
                     ->label('Deducciones')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('net_total')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-neto-money bexia-payroll-run-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-neto-money bexia-payroll-run-col-money'])
                     ->label('Neto')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('payroll_accounting_status')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-accounting-state'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-run-col-accounting-state'])
                     ->label('Contabilidad')
                     ->state(fn (PayrollRun $record): string => static::payrollAccountingStatusLabel($record))
                     ->badge()
@@ -579,6 +629,7 @@ class PayrollRunResource extends Resource
                     ->color('danger')
                     ->form([
                         Forms\Components\Textarea::make('reason')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-modal-field bexia-payroll-run-field-reason'])
                             ->label('Motivo del rechazo')
                             ->required()
                             ->rows(3),
@@ -607,6 +658,7 @@ class PayrollRunResource extends Resource
                     ->color('warning')
                     ->form([
                         Forms\Components\Textarea::make('reason')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-modal-field bexia-payroll-run-field-reason'])
                             ->label('Motivo del cierre')
                             ->required()
                             ->rows(3)
@@ -760,6 +812,7 @@ class PayrollRunResource extends Resource
                         && static::payrollAccountingActiveEntryId($record) !== null)
                     ->form([
                         \Filament\Forms\Components\Textarea::make('reason')
+                            ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-modal-field bexia-payroll-run-field-reason'])
                             ->label('Motivo')
                             ->rows(3)
                             ->required()
