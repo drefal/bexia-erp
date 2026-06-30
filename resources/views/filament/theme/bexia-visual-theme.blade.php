@@ -6147,4 +6147,184 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_ARCV_RESOURCE_RESPONSIVE_V5_79_45C_END */
+
+/* BEXIA_APBL_RESOURCE_RESPONSIVE_V5_79_46C_START */
+/*
+ * AccountPayableResource responsive refinements.
+ * Visual scope only. No cambia logica de saldos, proveedores, facturas,
+ * pagos, tesoreria, contabilidad, estatus, permisos ni tenant scope.
+ */
+.bexia-apbl-section {
+    border-radius: 1rem;
+}
+
+.bexia-apbl-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-apbl-section .fi-in-grid,
+.bexia-apbl-section .grid {
+    gap: 0.9rem;
+}
+
+.bexia-apbl-item {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-apbl-item .fi-in-entry,
+.bexia-apbl-item .fi-in-text,
+.bexia-apbl-item .fi-badge {
+    max-width: 100%;
+}
+
+.bexia-apbl-item-folio,
+.bexia-apbl-item-supplier,
+.bexia-apbl-item-po,
+.bexia-apbl-item-receipt,
+.bexia-apbl-item-supplier-ref,
+.bexia-apbl-item-pol,
+.bexia-apbl-item-acctgerr {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-apbl-item-sub .fi-in-text,
+.bexia-apbl-item-tax .fi-in-text,
+.bexia-apbl-item-gross .fi-in-text,
+.bexia-apbl-item-paid .fi-in-text,
+.bexia-apbl-item-bal .fi-in-text {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bexia-apbl-col-folio,
+.bexia-apbl-col-supplier,
+.bexia-apbl-col-receipt,
+.bexia-apbl-col-state,
+.bexia-apbl-col-issue,
+.bexia-apbl-col-due,
+.bexia-apbl-col-gross,
+.bexia-apbl-col-paid,
+.bexia-apbl-col-bal {
+    vertical-align: top;
+}
+
+.bexia-apbl-col-primary {
+    min-width: 8rem;
+    max-width: 13rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-apbl-col-wide {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-apbl-col-wrap {
+    min-width: 10rem;
+    max-width: 18rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-apbl-col-state,
+.bexia-apbl-col-issue,
+.bexia-apbl-col-due {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+.bexia-apbl-col-money {
+    min-width: 8rem;
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1024px) {
+    .bexia-apbl-section .fi-in-grid,
+    .bexia-apbl-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-apbl-col-primary {
+        max-width: 11rem;
+    }
+
+    .bexia-apbl-col-wide {
+        max-width: 15rem;
+    }
+
+    .bexia-apbl-col-wrap {
+        max-width: 13rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-apbl-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-apbl-section .fi-section-header,
+    .bexia-apbl-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-apbl-item .fi-in-entry-label,
+    .bexia-apbl-item .fi-in-entry-label span {
+        font-size: 0.78rem;
+    }
+
+    .bexia-apbl-item .fi-in-entry,
+    .bexia-apbl-item .fi-in-text,
+    .bexia-apbl-item .fi-badge {
+        font-size: 0.82rem;
+    }
+
+    .bexia-apbl-col-folio,
+    .bexia-apbl-col-supplier,
+    .bexia-apbl-col-receipt,
+    .bexia-apbl-col-state,
+    .bexia-apbl-col-issue,
+    .bexia-apbl-col-due,
+    .bexia-apbl-col-gross,
+    .bexia-apbl-col-paid,
+    .bexia-apbl-col-bal {
+        font-size: 0.76rem;
+    }
+
+    .bexia-apbl-col-primary {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-apbl-col-wide {
+        min-width: 10rem;
+        max-width: 12rem;
+    }
+
+    .bexia-apbl-col-wrap {
+        min-width: 9rem;
+        max-width: 11rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-apbl-col-primary,
+    .bexia-apbl-col-wide,
+    .bexia-apbl-col-wrap {
+        max-width: 10rem;
+    }
+
+    .bexia-apbl-col-money {
+        min-width: 7rem;
+    }
+}
+/* BEXIA_APBL_RESOURCE_RESPONSIVE_V5_79_46C_END */
 </style>
