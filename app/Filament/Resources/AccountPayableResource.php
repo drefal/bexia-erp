@@ -79,6 +79,12 @@ class AccountPayableResource extends Resource
         };
     }
 
+
+    /*
+     * BEXIA_APBL_RESOURCE_RESPONSIVE_V5_79_46C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form->schema([]);
@@ -91,20 +97,28 @@ class AccountPayableResource extends Resource
             ->persistFiltersInSession()
             ->columns([
                 Tables\Columns\TextColumn::make('number')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-folio bexia-apbl-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-folio bexia-apbl-col-primary'])
                     ->label('Folio')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('supplier_name')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-supplier bexia-apbl-col-wide'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-supplier bexia-apbl-col-wide'])
                     ->label('Proveedor')
                     ->searchable()
                     ->limit(42),
 
                 Tables\Columns\TextColumn::make('purchaseReceipt.number')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-receipt bexia-apbl-col-wrap'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-receipt bexia-apbl-col-wrap'])
                     ->label('Recepción')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-state'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-state'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
@@ -112,28 +126,38 @@ class AccountPayableResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('issue_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-issue'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-issue'])
                     ->label('Fecha')
                     ->date()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('due_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-due'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-due'])
                     ->label('Vence')
                     ->date()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('total')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-gross bexia-apbl-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-gross bexia-apbl-col-money'])
                     ->label('Total')
                     ->alignEnd()
                     ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('paid_total')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-paid bexia-apbl-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-paid bexia-apbl-col-money'])
                     ->label('Pagado')
                     ->alignEnd()
                     ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('balance_total')
+                    ->extraHeaderAttributes(['class' => 'bexia-apbl-col-bal bexia-apbl-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-apbl-col-bal bexia-apbl-col-money'])
                     ->label('Saldo')
                     ->alignEnd()
                     ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
@@ -151,58 +175,79 @@ class AccountPayableResource extends Resource
         return $infolist
             ->schema([
                 Section::make('Información general')
+                    ->extraAttributes(['class' => 'bexia-apbl-section bexia-apbl-section-main'])
                     ->columns(3)
                     ->schema([
-                        TextEntry::make('number')->label('Folio'),
+                        TextEntry::make('number')->label('Folio')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-folio']),
 
                         TextEntry::make('status')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-state'])
                             ->label('Estado')
                             ->badge()
                             ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
                             ->color(fn (?string $state): string => static::statusColor($state)),
 
-                        TextEntry::make('supplier_name')->label('Proveedor'),
-                        TextEntry::make('purchaseOrder.number')->label('Orden de compra')->placeholder('Sin orden'),
-                        TextEntry::make('purchaseReceipt.number')->label('Recepción')->placeholder('Sin recepción'),
-                        TextEntry::make('supplier_reference')->label('Referencia proveedor')->placeholder('Sin referencia'),
-                        TextEntry::make('issue_date')->label('Fecha')->date(),
-                        TextEntry::make('due_date')->label('Vencimiento')->date(),
-                        TextEntry::make('currency')->label('Moneda'),
+                        TextEntry::make('supplier_name')->label('Proveedor')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-supplier']),
+                        TextEntry::make('purchaseOrder.number')->label('Orden de compra')->placeholder('Sin orden')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-po']),
+                        TextEntry::make('purchaseReceipt.number')->label('Recepción')->placeholder('Sin recepción')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-receipt']),
+                        TextEntry::make('supplier_reference')->label('Referencia proveedor')->placeholder('Sin referencia')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-supplier-ref']),
+                        TextEntry::make('issue_date')->label('Fecha')->date()
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-issue']),
+                        TextEntry::make('due_date')->label('Vencimiento')->date()
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-due']),
+                        TextEntry::make('currency')->label('Moneda')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-curr']),
                     ]),
 
                 Section::make('Importes')
+                    ->extraAttributes(['class' => 'bexia-apbl-section bexia-apbl-section-nums'])
                     ->columns(4)
                     ->schema([
                         TextEntry::make('subtotal')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-sub'])
                             ->label('Subtotal')
                             ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('tax_total')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-tax'])
                             ->label('Impuestos')
                             ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('total')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-gross'])
                             ->label('Total')
                             ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('paid_total')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-paid'])
                             ->label('Pagado')
                             ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                         TextEntry::make('balance_total')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-bal'])
                             ->label('Saldo')
                             ->formatStateUsing(fn ($state, AccountPayable $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
                     ]),
 
                 Section::make('Conexión contable')
+                    ->extraAttributes(['class' => 'bexia-apbl-section bexia-apbl-section-acctg'])
                     ->description('CxP es un módulo separado. Estos campos solo muestran la póliza generada cuando se contabilice.')
                     ->columns(3)
                     ->schema([
                         TextEntry::make('accounting_status')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-acctgstate'])
                             ->label('Estado contable')
                             ->badge()
                             ->formatStateUsing(fn (?string $state): string => static::accountingStatusLabel($state))
                             ->color(fn (?string $state): string => static::accountingStatusColor($state)),
 
-                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Sin póliza'),
-                        TextEntry::make('accounting_posted_at')->label('Contabilizado')->dateTime()->placeholder('Pendiente'),
-                        TextEntry::make('accounting_error_message')->label('Error contable')->columnSpanFull()->placeholder('Sin error'),
+                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Sin póliza')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-pol']),
+                        TextEntry::make('accounting_posted_at')->label('Contabilizado')->dateTime()->placeholder('Pendiente')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-acctgdt']),
+                        TextEntry::make('accounting_error_message')->label('Error contable')->columnSpanFull()->placeholder('Sin error')
+                            ->extraAttributes(['class' => 'bexia-apbl-item bexia-apbl-item-acctgerr']),
                     ]),
             ]);
     }
