@@ -113,16 +113,25 @@ class EmployeeTerminationResource extends Resource
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
 
+
+    /*
+     * BEXIA_ETERM_RESOURCE_RESPONSIVE_V5_79_52C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Section::make('Baja laboral')
+                    ->extraAttributes(['class' => 'bexia-eterm-section bexia-eterm-section-main'])
                     ->description('Registra la separación laboral del empleado y, si aplica, cierra su contrato vigente.')
                     ->schema([
                         Grid::make(2)
+                            ->extraAttributes(['class' => 'bexia-eterm-grid bexia-eterm-grid-main'])
                             ->schema([
                                 Select::make('employee_id')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-employee'])
                                     ->label('Empleado')
                                     ->options(fn () => self::employeeOptions())
                                     ->searchable()
@@ -131,6 +140,7 @@ class EmployeeTerminationResource extends Resource
                                     ->live(),
 
                                 Select::make('employee_contract_id')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-contract'])
                                     ->label('Contrato relacionado')
                                     ->options(fn () => self::contractOptions())
                                     ->searchable()
@@ -138,54 +148,65 @@ class EmployeeTerminationResource extends Resource
                                     ->helperText('Opcional. Si se deja vacío, al completar la baja se cerrará el contrato vigente del empleado.'),
 
                                 TextInput::make('termination_number')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-number'])
                                     ->label('Folio baja')
                                     ->maxLength(255),
 
                                 Select::make('termination_type')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-type'])
                                     ->label('Tipo de baja')
                                     ->options(self::terminationTypeOptions())
                                     ->default('resignation')
                                     ->required(),
 
                                 Select::make('status')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-status'])
                                     ->label('Estado')
                                     ->options(self::statusOptions())
                                     ->default('draft')
                                     ->required(),
 
                                 DatePicker::make('termination_date')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-date bexia-eterm-field-termination-date'])
                                     ->label('Fecha de baja')
                                     ->native(false)
                                     ->required(),
 
                                 DatePicker::make('last_working_day')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-date bexia-eterm-field-last-day'])
                                     ->label('Último día laborado')
                                     ->native(false),
 
                                 DatePicker::make('notice_date')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-date bexia-eterm-field-notice-date'])
                                     ->label('Fecha de aviso')
                                     ->native(false),
 
                                 Toggle::make('rehire_eligible')
+                                    ->extraAttributes(['class' => 'bexia-eterm-toggle bexia-eterm-toggle-rehire'])
                                     ->label('Recontratable')
                                     ->default(false),
 
                                 TextInput::make('settlement_amount')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-money bexia-eterm-field-settlement'])
                                     ->label('Monto finiquito / liquidación')
                                     ->numeric()
                                     ->prefix('$'),
 
                                 TextInput::make('currency')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-currency'])
                                     ->label('Moneda')
                                     ->default('MXN')
                                     ->maxLength(3),
 
                                 Placeholder::make('completion_warning')
+                                    ->extraAttributes(['class' => 'bexia-eterm-placeholder bexia-eterm-placeholder-warning'])
                                     ->label('Efecto al completar')
                                     ->content(new HtmlString('<div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">Si el estado es Completada, el empleado se marcará inactivo, se guardará la fecha de baja y se cerrará su contrato vigente.</div>'))
                                     ->columnSpanFull(),
 
                                 Textarea::make('reason')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-reason'])
                                     ->label('Motivo')
                                     ->rows(3)
                                     ->columnSpanFull(),
@@ -200,6 +221,7 @@ class EmployeeTerminationResource extends Resource
                                     ->columnSpanFull(),
 
                                 Textarea::make('notes')
+                                    ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-notes'])
                                     ->label('Notas internas')
                                     ->rows(4)
                                     ->columnSpanFull(),
@@ -335,48 +357,66 @@ class EmployeeTerminationResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('employee.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-employee bexia-eterm-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-employee bexia-eterm-col-primary'])
                     ->label('Empleado')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('termination_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-number'])
                     ->label('Folio')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('termination_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-type'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-type'])
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => self::terminationTypeOptions()[$state] ?? ($state ?: '-'))
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-status bexia-eterm-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-status bexia-eterm-col-badge'])
                     ->label('Estado')
                     ->formatStateUsing(fn (?string $state): string => self::statusOptions()[$state] ?? ($state ?: '-'))
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('termination_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-date bexia-eterm-col-termination-date'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-date bexia-eterm-col-termination-date'])
                     ->label('Fecha baja')
                     ->date('d/m/Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('last_working_day')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-date bexia-eterm-col-last-day'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-date bexia-eterm-col-last-day'])
                     ->label('Último día')
                     ->date('d/m/Y')
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('rehire_eligible')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-rehire'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-rehire'])
                     ->label('Recontratable')
                     ->boolean()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('settlement_amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-money bexia-eterm-col-settlement'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-money bexia-eterm-col-settlement'])
                     ->label('Finiquito')
                     ->money('MXN')
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('file_path')
+                    ->extraHeaderAttributes(['class' => 'bexia-eterm-col-file'])
+                    ->extraCellAttributes(['class' => 'bexia-eterm-col-file'])
                     ->label('Archivo')
                     ->boolean()
                     ->getStateUsing(fn ($record): bool => filled($record->file_path)),

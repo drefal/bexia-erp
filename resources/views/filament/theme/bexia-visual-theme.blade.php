@@ -7329,4 +7329,214 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_HRLOC_RESOURCE_RESPONSIVE_V5_79_51C_END */
+
+/* BEXIA_ETERM_RESOURCE_RESPONSIVE_V5_79_52C_START */
+/*
+ * EmployeeTerminationResource responsive refinements.
+ * Visual scope only. No cambia logica de bajas, empleados, fechas,
+ * motivos, finiquitos/liquidaciones, empresa, permisos ni tenant.
+ */
+.bexia-eterm-section {
+    border-radius: 1rem;
+}
+
+.bexia-eterm-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-eterm-grid,
+.bexia-eterm-field,
+.bexia-eterm-toggle,
+.bexia-eterm-placeholder {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-eterm-field .fi-input-wrp,
+.bexia-eterm-field .fi-select-input,
+.bexia-eterm-field .fi-fo-select,
+.bexia-eterm-field input,
+.bexia-eterm-field select,
+.bexia-eterm-field textarea {
+    max-width: 100%;
+}
+
+.bexia-eterm-field-employee,
+.bexia-eterm-field-contract,
+.bexia-eterm-field-reason textarea,
+.bexia-eterm-field-notes textarea,
+.bexia-eterm-placeholder,
+.bexia-eterm-col-employee,
+.bexia-eterm-col-type,
+.bexia-eterm-col-status {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-eterm-field-money input,
+.bexia-eterm-col-money {
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-eterm-field-currency input,
+.bexia-eterm-col-number,
+.bexia-eterm-col-date {
+    white-space: nowrap;
+}
+
+.bexia-eterm-col-employee,
+.bexia-eterm-col-number,
+.bexia-eterm-col-type,
+.bexia-eterm-col-status,
+.bexia-eterm-col-date,
+.bexia-eterm-col-rehire,
+.bexia-eterm-col-money,
+.bexia-eterm-col-file {
+    vertical-align: top;
+}
+
+.bexia-eterm-col-primary {
+    min-width: 13rem;
+    max-width: 24rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-eterm-col-number {
+    min-width: 8rem;
+}
+
+.bexia-eterm-col-type,
+.bexia-eterm-col-status {
+    min-width: 8.5rem;
+    max-width: 12rem;
+    white-space: normal;
+}
+
+.bexia-eterm-col-date {
+    min-width: 7.25rem;
+}
+
+.bexia-eterm-col-money {
+    min-width: 8rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.bexia-eterm-col-rehire,
+.bexia-eterm-col-file {
+    min-width: 5.25rem;
+    text-align: center;
+}
+
+.bexia-eterm-field-reason textarea,
+.bexia-eterm-field-notes textarea {
+    min-height: 5.75rem;
+    line-height: 1.4;
+}
+
+.bexia-eterm-placeholder-warning {
+    border-radius: 0.85rem;
+    overflow-x: hidden;
+}
+
+.bexia-eterm-field-date .fi-input-wrp,
+.bexia-eterm-field-money .fi-input-wrp,
+.bexia-eterm-field-currency .fi-input-wrp {
+    min-width: 0;
+}
+
+@media (max-width: 1024px) {
+    .bexia-eterm-grid,
+    .bexia-eterm-section .fi-grid,
+    .bexia-eterm-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-eterm-col-primary {
+        max-width: 18rem;
+    }
+
+    .bexia-eterm-col-type,
+    .bexia-eterm-col-status {
+        max-width: 10rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-eterm-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-eterm-section .fi-section-header,
+    .bexia-eterm-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-eterm-field .fi-fo-field-wrp-label,
+    .bexia-eterm-toggle .fi-fo-field-wrp-label,
+    .bexia-eterm-field label,
+    .bexia-eterm-toggle label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-eterm-field input,
+    .bexia-eterm-field select,
+    .bexia-eterm-field textarea,
+    .bexia-eterm-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-eterm-col-employee,
+    .bexia-eterm-col-number,
+    .bexia-eterm-col-type,
+    .bexia-eterm-col-status,
+    .bexia-eterm-col-date,
+    .bexia-eterm-col-rehire,
+    .bexia-eterm-col-money,
+    .bexia-eterm-col-file {
+        font-size: 0.76rem;
+    }
+
+    .bexia-eterm-col-primary {
+        min-width: 10rem;
+        max-width: 13rem;
+    }
+
+    .bexia-eterm-col-number,
+    .bexia-eterm-col-type,
+    .bexia-eterm-col-status,
+    .bexia-eterm-col-money {
+        min-width: 7rem;
+    }
+
+    .bexia-eterm-col-date {
+        min-width: 6.5rem;
+    }
+
+    .bexia-eterm-col-rehire,
+    .bexia-eterm-col-file {
+        min-width: 4.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-eterm-col-primary {
+        min-width: 8.5rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-eterm-col-number,
+    .bexia-eterm-col-type,
+    .bexia-eterm-col-status,
+    .bexia-eterm-col-money {
+        min-width: 6.25rem;
+    }
+
+    .bexia-eterm-col-date {
+        min-width: 5.85rem;
+    }
+}
+/* BEXIA_ETERM_RESOURCE_RESPONSIVE_V5_79_52C_END */
 </style>
