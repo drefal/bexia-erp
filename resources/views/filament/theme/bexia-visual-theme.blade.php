@@ -7539,4 +7539,214 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_ETERM_RESOURCE_RESPONSIVE_V5_79_52C_END */
+
+/* BEXIA_SC_RESOURCE_RESPONSIVE_V5_79_53C_START */
+/*
+ * SatCompanyCredentialResource responsive refinements.
+ * Visual scope only. No cambia logica SAT, certificados, llaves,
+ * passwords, PAC, RFC, empresa, permisos ni tenant.
+ */
+.bexia-scred-section {
+    border-radius: 1rem;
+}
+
+.bexia-scred-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-scred-section,
+.bexia-scred-field,
+.bexia-scred-toggle {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-scred-field .fi-input-wrp,
+.bexia-scred-field .fi-select-input,
+.bexia-scred-field .fi-fo-select,
+.bexia-scred-field .fi-fo-file-upload,
+.bexia-scred-field input,
+.bexia-scred-field select,
+.bexia-scred-field textarea {
+    max-width: 100%;
+}
+
+.bexia-scred-field-company,
+.bexia-scred-field-legal-name,
+.bexia-scred-field-error textarea,
+.bexia-scred-field-notes textarea,
+.bexia-scred-col-company,
+.bexia-scred-col-legal-name,
+.bexia-scred-col-status {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-scred-mono,
+.bexia-scred-col-rfc,
+.bexia-scred-field-rfc input,
+.bexia-scred-field-serial input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    letter-spacing: 0.01em;
+}
+
+.bexia-scred-field-rfc input,
+.bexia-scred-field-serial input,
+.bexia-scred-col-rfc,
+.bexia-scred-col-date {
+    white-space: nowrap;
+}
+
+.bexia-scred-col-company,
+.bexia-scred-col-rfc,
+.bexia-scred-col-legal-name,
+.bexia-scred-col-status,
+.bexia-scred-col-enabled,
+.bexia-scred-col-file,
+.bexia-scred-col-date {
+    vertical-align: top;
+}
+
+.bexia-scred-col-primary {
+    min-width: 12rem;
+    max-width: 22rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-scred-col-rfc {
+    min-width: 8rem;
+}
+
+.bexia-scred-col-legal-name {
+    min-width: 14rem;
+    max-width: 24rem;
+    white-space: normal;
+}
+
+.bexia-scred-col-status {
+    min-width: 8.5rem;
+    max-width: 12rem;
+    white-space: normal;
+}
+
+.bexia-scred-col-enabled,
+.bexia-scred-col-file {
+    min-width: 4.75rem;
+    text-align: center;
+}
+
+.bexia-scred-col-date {
+    min-width: 8.5rem;
+}
+
+.bexia-scred-field-file .fi-fo-file-upload,
+.bexia-scred-field-file .filepond--root {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-scred-field-error textarea,
+.bexia-scred-field-notes textarea {
+    min-height: 5.75rem;
+    line-height: 1.4;
+}
+
+.bexia-scred-section-validation .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-scred-field-datetime .fi-input-wrp,
+.bexia-scred-field-status .fi-input-wrp,
+.bexia-scred-field-type .fi-input-wrp {
+    min-width: 0;
+}
+
+@media (max-width: 1024px) {
+    .bexia-scred-section .fi-grid,
+    .bexia-scred-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-scred-col-primary,
+    .bexia-scred-col-legal-name {
+        max-width: 18rem;
+    }
+
+    .bexia-scred-col-status {
+        max-width: 10rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-scred-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-scred-section .fi-section-header,
+    .bexia-scred-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-scred-field .fi-fo-field-wrp-label,
+    .bexia-scred-toggle .fi-fo-field-wrp-label,
+    .bexia-scred-field label,
+    .bexia-scred-toggle label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-scred-field input,
+    .bexia-scred-field select,
+    .bexia-scred-field textarea,
+    .bexia-scred-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-scred-col-company,
+    .bexia-scred-col-rfc,
+    .bexia-scred-col-legal-name,
+    .bexia-scred-col-status,
+    .bexia-scred-col-enabled,
+    .bexia-scred-col-file,
+    .bexia-scred-col-date {
+        font-size: 0.76rem;
+    }
+
+    .bexia-scred-col-primary {
+        min-width: 9rem;
+        max-width: 13rem;
+    }
+
+    .bexia-scred-col-legal-name {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
+    .bexia-scred-col-rfc,
+    .bexia-scred-col-status,
+    .bexia-scred-col-date {
+        min-width: 7rem;
+    }
+
+    .bexia-scred-col-enabled,
+    .bexia-scred-col-file {
+        min-width: 4.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-scred-col-primary,
+    .bexia-scred-col-legal-name {
+        min-width: 8.5rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-scred-col-rfc,
+    .bexia-scred-col-status,
+    .bexia-scred-col-date {
+        min-width: 6.25rem;
+    }
+}
+/* BEXIA_SC_RESOURCE_RESPONSIVE_V5_79_53C_END */
 </style>
