@@ -73,77 +73,100 @@ public static function canView($record): bool
         return $query;
     }
 
+    /*
+     * BEXIA_PAUDIT_RESOURCE_RESPONSIVE_V5_79_54C
+     * Visual-only responsive marker.
+     */
+
+
 public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Section::make('Información')
+                    ->extraAttributes(['class' => 'bexia-paudit-section bexia-paudit-section-info'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('id')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-id bexia-paudit-mono'])
                             ->label('ID')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('action')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-action'])
                             ->label('Acción')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('description')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-description'])
                             ->label('Descripción')
                             ->disabled()
                             ->columnSpan(2),
 
                         Forms\Components\TextInput::make('company_id')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-company bexia-paudit-mono'])
                             ->label('Empresa')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('user_id')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-user bexia-paudit-mono'])
                             ->label('Usuario')
                             ->disabled(),
 
                         Forms\Components\DateTimePicker::make('created_at')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-datetime bexia-paudit-field-created'])
                             ->label('Fecha')
                             ->disabled(),
                     ]),
 
                 Forms\Components\Section::make('Referencias')
+                    ->extraAttributes(['class' => 'bexia-paudit-section bexia-paudit-section-refs'])
                     ->columns(4)
                     ->schema([
                         Forms\Components\TextInput::make('pos_session_id')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-session bexia-paudit-mono'])
                             ->label('Sesión PDV')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('pos_order_id')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-ticket bexia-paudit-mono'])
                             ->label('Ticket')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('pos_order_refund_id')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-refund bexia-paudit-mono'])
                             ->label('Devolución')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('stock_movement_id')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-stock-movement bexia-paudit-mono'])
                             ->label('Movimiento almacén')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('entity_type')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-entity-type'])
                             ->label('Entidad')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('entity_id')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-entity-id bexia-paudit-mono'])
                             ->label('ID entidad')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('ip_address')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-ip bexia-paudit-mono'])
                             ->label('IP')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('user_agent')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-user-agent'])
                             ->label('Navegador')
                             ->disabled()
                             ->columnSpan(2),
                     ]),
 
                 Forms\Components\Section::make('Datos')
+                    ->extraAttributes(['class' => 'bexia-paudit-section bexia-paudit-section-data'])
                     ->columns(1)
                     ->schema([
                         Forms\Components\KeyValue::make('before_data')
@@ -195,15 +218,21 @@ public static function form(Form $form): Form
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-id bexia-paudit-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-id bexia-paudit-mono'])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-date bexia-paudit-col-created'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-date bexia-paudit-col-created'])
                     ->label('Fecha')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('action')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-action bexia-paudit-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-action bexia-paudit-col-badge'])
                     ->label('Acción')
                     ->badge()
                     ->color(fn (?string $state): string => match ($state) {
@@ -220,34 +249,48 @@ public static function form(Form $form): Form
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('description')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-description bexia-paudit-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-description bexia-paudit-col-primary'])
                     ->label('Descripción')
                     ->searchable()
                     ->wrap()
                     ->limit(70),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-company bexia-paudit-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-company bexia-paudit-mono'])
                     ->label('Empresa')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('user.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-user'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-user'])
                     ->label('Usuario')
                     ->placeholder(fn ($record): string => $record->user_id ? ('Usuario #' . $record->user_id) : '-')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('pos_session_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-session bexia-paudit-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-session bexia-paudit-mono'])
                     ->label('Sesión')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('pos_order_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-ticket bexia-paudit-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-ticket bexia-paudit-mono'])
                     ->label('Ticket')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('pos_order_refund_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-refund bexia-paudit-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-refund bexia-paudit-mono'])
                     ->label('Devolución')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('ip_address')
+                    ->extraHeaderAttributes(['class' => 'bexia-paudit-col-ip bexia-paudit-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-paudit-col-ip bexia-paudit-mono'])
                     ->label('IP')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -272,8 +315,10 @@ public static function form(Form $form): Form
                     ->label('Fecha')
                     ->form([
                         Forms\Components\DatePicker::make('from')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-filter-date bexia-paudit-field-from'])
                             ->label('Desde'),
                         Forms\Components\DatePicker::make('until')
+                            ->extraAttributes(['class' => 'bexia-paudit-field bexia-paudit-field-filter-date bexia-paudit-field-until'])
                             ->label('Hasta'),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
