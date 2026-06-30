@@ -6698,4 +6698,183 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SVC_RESOURCE_RESPONSIVE_V5_79_48C_END */
+
+/* BEXIA_AENT_RESOURCE_RESPONSIVE_V5_79_49C_START */
+/*
+ * AccountingEntryResource responsive refinements.
+ * Visual scope only. No cambia logica de polizas, cargos, abonos,
+ * cuentas, balance, posting, permisos ni tenant scope.
+ */
+.bexia-aent-section {
+    border-radius: 1rem;
+}
+
+.bexia-aent-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-aent-grid {
+    min-width: 0;
+    max-width: 100%;
+    gap: 0.9rem;
+}
+
+.bexia-aent-entry {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-aent-entry .fi-in-entry-wrp,
+.bexia-aent-entry .fi-in-text,
+.bexia-aent-entry .fi-in-text-item {
+    max-width: 100%;
+}
+
+.bexia-aent-entry-number,
+.bexia-aent-entry-source-id,
+.bexia-aent-col-id,
+.bexia-aent-col-number,
+.bexia-aent-col-source-id {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bexia-aent-entry-money,
+.bexia-aent-col-money {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.bexia-aent-entry-notes,
+.bexia-aent-col-source-type {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-aent-col-id,
+.bexia-aent-col-number,
+.bexia-aent-col-date,
+.bexia-aent-col-company,
+.bexia-aent-col-status,
+.bexia-aent-col-source-type,
+.bexia-aent-col-source-id,
+.bexia-aent-col-debit,
+.bexia-aent-col-credit,
+.bexia-aent-col-posted-at {
+    vertical-align: top;
+}
+
+.bexia-aent-col-primary {
+    min-width: 9rem;
+    font-weight: 650;
+}
+
+.bexia-aent-col-id {
+    min-width: 4.5rem;
+}
+
+.bexia-aent-col-date,
+.bexia-aent-col-posted-at {
+    min-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-aent-col-company,
+.bexia-aent-col-status,
+.bexia-aent-col-source-type,
+.bexia-aent-col-source-id {
+    min-width: 7rem;
+}
+
+.bexia-aent-col-debit,
+.bexia-aent-col-credit {
+    min-width: 8.5rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-aent-grid,
+    .bexia-aent-section .fi-grid,
+    .bexia-aent-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-aent-col-source-type {
+        max-width: 13rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .bexia-aent-col-debit,
+    .bexia-aent-col-credit {
+        min-width: 7.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-aent-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-aent-section .fi-section-header,
+    .bexia-aent-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-aent-entry .fi-in-entry-wrp-label,
+    .bexia-aent-entry .fi-in-entry-wrp-label span {
+        font-size: 0.78rem;
+    }
+
+    .bexia-aent-entry .fi-in-text,
+    .bexia-aent-entry .fi-in-text-item {
+        font-size: 0.82rem;
+    }
+
+    .bexia-aent-col-id,
+    .bexia-aent-col-number,
+    .bexia-aent-col-date,
+    .bexia-aent-col-company,
+    .bexia-aent-col-status,
+    .bexia-aent-col-source-type,
+    .bexia-aent-col-source-id,
+    .bexia-aent-col-debit,
+    .bexia-aent-col-credit,
+    .bexia-aent-col-posted-at {
+        font-size: 0.76rem;
+    }
+
+    .bexia-aent-col-primary {
+        min-width: 8rem;
+    }
+
+    .bexia-aent-col-date,
+    .bexia-aent-col-posted-at {
+        min-width: 7.5rem;
+    }
+
+    .bexia-aent-col-company,
+    .bexia-aent-col-status,
+    .bexia-aent-col-source-type,
+    .bexia-aent-col-source-id {
+        min-width: 6.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-aent-col-id {
+        min-width: 3.5rem;
+    }
+
+    .bexia-aent-col-primary {
+        min-width: 7rem;
+    }
+
+    .bexia-aent-col-debit,
+    .bexia-aent-col-credit {
+        min-width: 7rem;
+    }
+}
+/* BEXIA_AENT_RESOURCE_RESPONSIVE_V5_79_49C_END */
 </style>

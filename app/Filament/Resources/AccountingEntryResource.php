@@ -152,30 +152,48 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $form->schema([]);
     }
 
+
+    /*
+     * BEXIA_AENT_RESOURCE_RESPONSIVE_V5_79_49C
+     * Visual-only responsive marker.
+     */
+
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist->schema([
             Section::make('Asiento')
+                ->extraAttributes(['class' => 'bexia-aent-section bexia-aent-section-summary'])
                 ->schema([
                     Grid::make(3)
+                        ->extraAttributes(['class' => 'bexia-aent-grid bexia-aent-grid-summary'])
                         ->schema([
-                            TextEntry::make('entry_number')->label('Número'),
-                            TextEntry::make('entry_date')->label('Fecha')->date(),
+                            TextEntry::make('entry_number')->label('Número')
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-number']),
+                            TextEntry::make('entry_date')->label('Fecha')->date()
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-date']),
                             TextEntry::make('status')
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-status'])
                                 ->label('Estatus')
                                 ->badge()
                                 ->formatStateUsing(fn ($state) => self::statusLabel($state))
                                 ->color(fn ($state) => self::statusColor($state)),
                             TextEntry::make('source_type')
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-source-type'])
                                 ->label('Origen')
                                 ->formatStateUsing(fn ($state) => self::sourceLabel($state)),
-                            TextEntry::make('source_id')->label('ID origen'),
-                            TextEntry::make('currency')->label('Moneda'),
-                            TextEntry::make('total_debit')->label('Debe')->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN'),
-                            TextEntry::make('total_credit')->label('Haber')->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN'),
-                            TextEntry::make('posted_at')->label('Contabilizado')->dateTime(),
+                            TextEntry::make('source_id')->label('ID origen')
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-source-id']),
+                            TextEntry::make('currency')->label('Moneda')
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-currency']),
+                            TextEntry::make('total_debit')->label('Debe')->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN')
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-debit bexia-aent-entry-money']),
+                            TextEntry::make('total_credit')->label('Haber')->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN')
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-credit bexia-aent-entry-money']),
+                            TextEntry::make('posted_at')->label('Contabilizado')->dateTime()
+                                ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-posted-at']),
                         ]),
-                    TextEntry::make('notes')->label('Notas')->columnSpanFull(),
+                    TextEntry::make('notes')->label('Notas')->columnSpanFull()
+                        ->extraAttributes(['class' => 'bexia-aent-entry bexia-aent-entry-notes']),
                 ]),
         ]);
     }
@@ -186,24 +204,34 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-id'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-id'])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('entry_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-number bexia-aent-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-number bexia-aent-col-primary'])
                     ->label('Número')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('entry_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-date'])
                     ->label('Fecha')
                     ->date()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-company'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-company'])
                     ->label('Empresa')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-status'])
                     ->label('Estatus')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::statusLabel($state))
@@ -211,6 +239,8 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('source_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-source-type'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-source-type'])
                     ->label('Origen')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::sourceLabel($state))
@@ -219,21 +249,29 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('source_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-source-id'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-source-id'])
                     ->label('ID origen')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('total_debit')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-debit bexia-aent-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-debit bexia-aent-col-money'])
                     ->label('Debe')
                     ->alignRight()
                     ->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN'),
 
                 Tables\Columns\TextColumn::make('total_credit')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-credit bexia-aent-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-credit bexia-aent-col-money'])
                     ->label('Haber')
                     ->alignRight()
                     ->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN'),
 
                 Tables\Columns\TextColumn::make('posted_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-aent-col-posted-at'])
+                    ->extraCellAttributes(['class' => 'bexia-aent-col-posted-at'])
                     ->label('Fecha contabilización')
                     ->dateTime()
                     ->sortable()
