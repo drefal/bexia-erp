@@ -54,6 +54,12 @@ class AccountPayablePaymentResource extends Resource
         };
     }
 
+
+    /*
+     * BEXIA_APPM_RESOURCE_RESPONSIVE_V5_79_44C
+     * Visual-only responsive marker.
+     */
+
     public static function form(Form $form): Form
     {
         return $form->schema([]);
@@ -65,26 +71,36 @@ class AccountPayablePaymentResource extends Resource
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('accountPayable.number')
+                    ->extraHeaderAttributes(['class' => 'bexia-appm-col-num bexia-appm-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-appm-col-num bexia-appm-col-primary'])
                     ->label('CxP')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('accountPayable.supplier_name')
+                    ->extraHeaderAttributes(['class' => 'bexia-appm-col-sup'])
+                    ->extraCellAttributes(['class' => 'bexia-appm-col-sup'])
                     ->label('Proveedor')
                     ->searchable()
                     ->limit(42),
 
                 Tables\Columns\TextColumn::make('payment_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-appm-col-dt'])
+                    ->extraCellAttributes(['class' => 'bexia-appm-col-dt'])
                     ->label('Fecha pago')
                     ->date()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-appm-col-amt bexia-appm-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-appm-col-amt bexia-appm-col-money'])
                     ->label('Importe')
                     ->alignEnd()
                     ->formatStateUsing(fn ($state, AccountPayablePayment $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-appm-col-st'])
+                    ->extraCellAttributes(['class' => 'bexia-appm-col-st'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
@@ -92,6 +108,8 @@ class AccountPayablePaymentResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('reference')
+                    ->extraHeaderAttributes(['class' => 'bexia-appm-col-ref'])
+                    ->extraCellAttributes(['class' => 'bexia-appm-col-ref'])
                     ->label('Referencia')
                     ->searchable()
                     ->placeholder('Sin referencia'),
@@ -108,26 +126,37 @@ class AccountPayablePaymentResource extends Resource
         return $infolist
             ->schema([
                 Section::make('Pago a proveedor')
+                    ->extraAttributes(['class' => 'bexia-appm-section bexia-appm-section-main'])
                     ->columns(3)
                     ->schema([
-                        TextEntry::make('accountPayable.number')->label('CxP'),
-                        TextEntry::make('accountPayable.supplier_name')->label('Proveedor'),
+                        TextEntry::make('accountPayable.number')->label('CxP')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-num']),
+                        TextEntry::make('accountPayable.supplier_name')->label('Proveedor')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-sup']),
 
                         TextEntry::make('status')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-st'])
                             ->label('Estado')
                             ->badge()
                             ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
                             ->color(fn (?string $state): string => static::statusColor($state)),
 
-                        TextEntry::make('payment_date')->label('Fecha')->date(),
+                        TextEntry::make('payment_date')->label('Fecha')->date()
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-dt']),
                         TextEntry::make('amount')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-amt'])
                             ->label('Importe')
                             ->formatStateUsing(fn ($state, AccountPayablePayment $record): string => '$' . number_format((float) $state, 2) . ' ' . $record->currency),
-                        TextEntry::make('reference')->label('Referencia')->placeholder('Sin referencia'),
-                        TextEntry::make('treasury_movement_id')->label('Movimiento tesorería')->placeholder('Pendiente'),
-                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Pendiente'),
-                        TextEntry::make('posted_at')->label('Aplicado')->dateTime()->placeholder('Pendiente'),
-                        TextEntry::make('cancelled_at')->label('Cancelado')->dateTime()->placeholder('No cancelado'),
+                        TextEntry::make('reference')->label('Referencia')->placeholder('Sin referencia')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-ref']),
+                        TextEntry::make('treasury_movement_id')->label('Movimiento tesorería')->placeholder('Pendiente')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-tm']),
+                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Pendiente')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-ae']),
+                        TextEntry::make('posted_at')->label('Aplicado')->dateTime()->placeholder('Pendiente')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-pa']),
+                        TextEntry::make('cancelled_at')->label('Cancelado')->dateTime()->placeholder('No cancelado')
+                            ->extraAttributes(['class' => 'bexia-appm-entry bexia-appm-entry-ca']),
                     ]),
             ]);
     }
