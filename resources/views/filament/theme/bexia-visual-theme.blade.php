@@ -4730,4 +4730,180 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_STOCK_SERIAL_NUMBER_RESOURCE_RESPONSIVE_V5_79_37C_END */
+
+/* BEXIA_PAYROLL_RUN_RESOURCE_RESPONSIVE_V5_79_38C_START */
+/*
+ * PayrollRunResource responsive refinements.
+ * Visual scope only.
+ */
+.bexia-payroll-run-section {
+    border-radius: 1rem;
+}
+
+.bexia-payroll-run-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-payroll-run-section .fi-grid,
+.bexia-payroll-run-section .grid {
+    gap: 0.95rem;
+}
+
+.bexia-payroll-run-field .fi-input-wrp,
+.bexia-payroll-run-field .fi-select-input,
+.bexia-payroll-run-field .fi-fo-select,
+.bexia-payroll-run-field input,
+.bexia-payroll-run-field select,
+.bexia-payroll-run-field textarea,
+.bexia-payroll-run-field .choices,
+.bexia-payroll-run-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-payroll-run-field-notes textarea,
+.bexia-payroll-run-field-reason textarea {
+    min-height: 5.5rem;
+}
+
+.bexia-payroll-run-section-money .fi-input-wrp,
+.bexia-payroll-run-section-money input {
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-payroll-run-col-cfdi-state,
+.bexia-payroll-run-col-cfdi-ready,
+.bexia-payroll-run-col-cfdi-errors,
+.bexia-payroll-run-col-name,
+.bexia-payroll-run-col-cycle,
+.bexia-payroll-run-col-date-from,
+.bexia-payroll-run-col-date-to,
+.bexia-payroll-run-col-state,
+.bexia-payroll-run-col-employees,
+.bexia-payroll-run-col-bruto-money,
+.bexia-payroll-run-col-deductions-money,
+.bexia-payroll-run-col-neto-money,
+.bexia-payroll-run-col-accounting-state {
+    vertical-align: top;
+}
+
+.bexia-payroll-run-col-primary {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 650;
+}
+
+.bexia-payroll-run-col-cfdi-state,
+.bexia-payroll-run-col-accounting-state,
+.bexia-payroll-run-col-state {
+    min-width: 8.5rem;
+    white-space: normal;
+}
+
+.bexia-payroll-run-col-cfdi-ready,
+.bexia-payroll-run-col-cfdi-errors,
+.bexia-payroll-run-col-employees {
+    min-width: 6.5rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-payroll-run-col-cycle {
+    min-width: 8rem;
+    white-space: normal;
+}
+
+.bexia-payroll-run-col-date-from,
+.bexia-payroll-run-col-date-to {
+    min-width: 7.5rem;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    line-height: 1.25rem;
+}
+
+.bexia-payroll-run-col-money {
+    min-width: 8rem;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1024px) {
+    .bexia-payroll-run-section .fi-grid,
+    .bexia-payroll-run-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-payroll-run-col-primary {
+        min-width: 11rem;
+        max-width: 16rem;
+    }
+
+    .bexia-payroll-run-col-cfdi-state,
+    .bexia-payroll-run-col-accounting-state,
+    .bexia-payroll-run-col-state {
+        min-width: 7.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-payroll-run-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-payroll-run-section .fi-section-header,
+    .bexia-payroll-run-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-payroll-run-col-primary {
+        min-width: 9.5rem;
+        max-width: 12rem;
+        font-size: 0.78rem;
+    }
+
+    .bexia-payroll-run-col-cfdi-state,
+    .bexia-payroll-run-col-accounting-state,
+    .bexia-payroll-run-col-state,
+    .bexia-payroll-run-col-cycle {
+        min-width: 7rem;
+        font-size: 0.76rem;
+    }
+
+    .bexia-payroll-run-col-date-from,
+    .bexia-payroll-run-col-date-to {
+        min-width: 6.5rem;
+        white-space: normal;
+        font-size: 0.75rem;
+    }
+
+    .bexia-payroll-run-col-money,
+    .bexia-payroll-run-col-cfdi-ready,
+    .bexia-payroll-run-col-cfdi-errors,
+    .bexia-payroll-run-col-employees {
+        min-width: 6.5rem;
+        font-size: 0.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-payroll-run-field .fi-fo-field-wrp-label,
+    .bexia-payroll-run-field label {
+        font-size: 0.8rem;
+    }
+
+    .bexia-payroll-run-field input,
+    .bexia-payroll-run-field select,
+    .bexia-payroll-run-field textarea {
+        font-size: 0.82rem;
+    }
+
+    .bexia-payroll-run-col-primary {
+        max-width: 10.5rem;
+    }
+}
+/* BEXIA_PAYROLL_RUN_RESOURCE_RESPONSIVE_V5_79_38C_END */
 </style>
