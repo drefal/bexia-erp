@@ -6502,4 +6502,200 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_TRMOV_RESOURCE_RESPONSIVE_V5_79_47C_END */
+
+/* BEXIA_SVC_RESOURCE_RESPONSIVE_V5_79_48C_START */
+/*
+ * ServiceCaseResource responsive refinements.
+ * Visual scope only. No cambia logica de clientes, tecnicos, eventos,
+ * reparaciones, estados, prioridades, permisos ni tenant scope.
+ */
+.bexia-svc-section {
+    border-radius: 1rem;
+}
+
+.bexia-svc-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-svc-section .fi-grid,
+.bexia-svc-section .grid {
+    gap: 0.9rem;
+}
+
+.bexia-svc-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-svc-field .fi-input-wrp,
+.bexia-svc-field .fi-select-input,
+.bexia-svc-field .fi-fo-select,
+.bexia-svc-field input,
+.bexia-svc-field select,
+.bexia-svc-field textarea,
+.bexia-svc-field .choices,
+.bexia-svc-field .choices__inner {
+    max-width: 100%;
+}
+
+.bexia-svc-field-subject input,
+.bexia-svc-field-description textarea,
+.bexia-svc-field-product-name input,
+.bexia-svc-field-sale-reference input,
+.bexia-svc-field-invoice-reference input,
+.bexia-svc-col-wrap {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-svc-field-folio input,
+.bexia-svc-field-serial input,
+.bexia-svc-field-lot input,
+.bexia-svc-col-folio,
+.bexia-svc-col-serial {
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-svc-col-folio,
+.bexia-svc-col-subject,
+.bexia-svc-col-status,
+.bexia-svc-col-priority,
+.bexia-svc-col-case-type,
+.bexia-svc-col-product,
+.bexia-svc-col-serial,
+.bexia-svc-col-invoice,
+.bexia-svc-col-channel,
+.bexia-svc-col-team,
+.bexia-svc-col-technician,
+.bexia-svc-col-company,
+.bexia-svc-col-due-at,
+.bexia-svc-col-created-at {
+    vertical-align: top;
+}
+
+.bexia-svc-col-primary {
+    min-width: 8rem;
+    white-space: nowrap;
+    font-weight: 650;
+}
+
+.bexia-svc-col-wrap {
+    min-width: 12rem;
+    max-width: 22rem;
+    white-space: normal;
+}
+
+.bexia-svc-col-status,
+.bexia-svc-col-priority,
+.bexia-svc-col-case-type,
+.bexia-svc-col-channel,
+.bexia-svc-col-company {
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+.bexia-svc-col-due-at,
+.bexia-svc-col-created-at {
+    min-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-svc-col-technician,
+.bexia-svc-col-team,
+.bexia-svc-col-invoice {
+    min-width: 9rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-svc-section .fi-grid,
+    .bexia-svc-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-svc-col-wrap {
+        max-width: 16rem;
+    }
+
+    .bexia-svc-col-technician,
+    .bexia-svc-col-team {
+        max-width: 13rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-svc-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-svc-section .fi-section-header,
+    .bexia-svc-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-svc-field .fi-fo-field-wrp-label,
+    .bexia-svc-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-svc-field input,
+    .bexia-svc-field select,
+    .bexia-svc-field textarea,
+    .bexia-svc-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-svc-col-folio,
+    .bexia-svc-col-subject,
+    .bexia-svc-col-status,
+    .bexia-svc-col-priority,
+    .bexia-svc-col-case-type,
+    .bexia-svc-col-product,
+    .bexia-svc-col-serial,
+    .bexia-svc-col-invoice,
+    .bexia-svc-col-channel,
+    .bexia-svc-col-team,
+    .bexia-svc-col-technician,
+    .bexia-svc-col-company,
+    .bexia-svc-col-due-at,
+    .bexia-svc-col-created-at {
+        font-size: 0.76rem;
+    }
+
+    .bexia-svc-col-wrap {
+        min-width: 10rem;
+        max-width: 12rem;
+    }
+
+    .bexia-svc-col-status,
+    .bexia-svc-col-priority,
+    .bexia-svc-col-case-type,
+    .bexia-svc-col-channel {
+        min-width: 6.5rem;
+    }
+
+    .bexia-svc-col-due-at,
+    .bexia-svc-col-created-at {
+        min-width: 7.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-svc-col-wrap {
+        max-width: 10rem;
+    }
+
+    .bexia-svc-col-primary {
+        min-width: 7rem;
+    }
+
+    .bexia-svc-col-technician,
+    .bexia-svc-col-team,
+    .bexia-svc-col-invoice {
+        min-width: 7.5rem;
+    }
+}
+/* BEXIA_SVC_RESOURCE_RESPONSIVE_V5_79_48C_END */
 </style>
