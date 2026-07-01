@@ -86,28 +86,39 @@ public static function canCreate(): bool
         return (bool) ($user && method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin());
     }
 
+    /*
+     * BEXIA_BILLING_PAC_CONFIGURATION_RESOURCE_RESPONSIVE_V5_79_68C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Section::make('Empresa')
+                ->extraAttributes(['class' => 'bexia-bpac-section bexia-bpac-section-company'])
                 ->columns(12)
                 ->schema([
                     Forms\Components\Placeholder::make('company_display')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-placeholder bexia-bpac-placeholder-company'])
                         ->label('Empresa')
                         ->content(fn (?Company $record): string => $record ? ('ID ' . $record->id . ' | ' . ($record->name ?? 'Empresa')) : 'Empresa')
                         ->columnSpan(8),
 
                     Forms\Components\Placeholder::make('rfc_display')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-placeholder bexia-bpac-placeholder-rfc bexia-bpac-code-field'])
                         ->label('RFC')
                         ->content(fn (?Company $record): string => (string) ($record?->tax_id ?? $record?->rfc ?? $record?->vat ?? 'N/D'))
                         ->columnSpan(4),
                 ]),
 
             Forms\Components\Section::make('PAC MX / SW')
+                ->extraAttributes(['class' => 'bexia-bpac-section bexia-bpac-section-pac'])
                 ->description('Configuración sensible por empresa. Visible solo para superadmin.')
                 ->columns(12)
                 ->schema([
                     Forms\Components\Select::make('billing_pac_provider')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-field-provider'])
                         ->label('PAC')
                         ->options([
                             'sw' => 'SW sapien-SmarterWEB',
@@ -117,18 +128,21 @@ public static function canCreate(): bool
                         ->columnSpan(4),
 
                     Forms\Components\Toggle::make('billing_pac_test_env')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-field-test-env'])
                         ->label('Entorno de prueba')
                         ->helperText('Activo: services.test.sw.com.mx. Inactivo: services.sw.com.mx.')
                         ->default(true)
                         ->columnSpan(3),
 
                     Forms\Components\TextInput::make('billing_pac_username')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-field-username bexia-bpac-code-field'])
                         ->label('Usuario PAC')
                         ->maxLength(255)
                         ->autocomplete(false)
                         ->columnSpan(5),
 
                     Forms\Components\TextInput::make('billing_pac_password')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-field-password bexia-bpac-secret-field'])
                         ->label('Contraseña PAC')
                         ->password()
                         ->revealable()
@@ -141,22 +155,26 @@ public static function canCreate(): bool
                         ->columnSpan(6),
 
                     Forms\Components\TextInput::make('billing_trusted_exporter_number')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-field-trusted-exporter bexia-bpac-code-field'])
                         ->label('Número de exportador confiable')
                         ->maxLength(80)
                         ->columnSpan(6),
 
                     Forms\Components\Placeholder::make('billing_pac_last_test_status_display')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-placeholder bexia-bpac-placeholder-last-test'])
                         ->label('Última prueba')
                         ->content(fn (?Company $record): string => static::lastTestText($record))
                         ->columnSpanFull(),
                 ]),
 
             Forms\Components\Section::make('Endpoints SW')
+                ->extraAttributes(['class' => 'bexia-bpac-section bexia-bpac-section-endpoints'])
                 ->description('Referencia técnica. No editable.')
                 ->columns(1)
                 ->collapsed()
                 ->schema([
                     Forms\Components\Placeholder::make('sw_endpoints')
+                        ->extraAttributes(['class' => 'bexia-bpac-field bexia-bpac-placeholder bexia-bpac-placeholder-endpoints bexia-bpac-endpoints-field'])
                         ->label('')
                         ->content(fn (?Company $record): string => static::endpointText((bool) ($record?->billing_pac_test_env ?? true))),
                 ]),
@@ -168,28 +186,40 @@ public static function canCreate(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes(['class' => 'bexia-bpac-col-id bexia-bpac-col-code bexia-bpac-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-bpac-col-id bexia-bpac-col-code bexia-bpac-col-compact'])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-bpac-col-company bexia-bpac-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-bpac-col-company bexia-bpac-col-primary'])
                     ->label('Empresa')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('billing_pac_provider')
+                    ->extraHeaderAttributes(['class' => 'bexia-bpac-col-provider bexia-bpac-col-context bexia-bpac-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-bpac-col-provider bexia-bpac-col-context bexia-bpac-col-badge'])
                     ->label('PAC')
                     ->formatStateUsing(fn ($state): string => $state === 'sw' ? 'SW' : ($state ?: 'Sin configurar'))
                     ->badge(),
 
                 Tables\Columns\TextColumn::make('billing_pac_username')
+                    ->extraHeaderAttributes(['class' => 'bexia-bpac-col-username bexia-bpac-col-code bexia-bpac-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-bpac-col-username bexia-bpac-col-code bexia-bpac-col-context'])
                     ->label('Usuario PAC')
                     ->placeholder('Sin usuario'),
 
                 Tables\Columns\IconColumn::make('billing_pac_test_env')
+                    ->extraHeaderAttributes(['class' => 'bexia-bpac-col-test-env bexia-bpac-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-bpac-col-test-env bexia-bpac-col-compact'])
                     ->label('Prueba')
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('billing_pac_last_test_status')
+                    ->extraHeaderAttributes(['class' => 'bexia-bpac-col-last-test-status bexia-bpac-col-context bexia-bpac-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-bpac-col-last-test-status bexia-bpac-col-context bexia-bpac-col-badge'])
                     ->label('Última prueba')
                     ->badge()
                     ->formatStateUsing(fn ($state): string => match ((string) $state) {
@@ -204,12 +234,15 @@ public static function canCreate(): bool
                     }),
 
                 Tables\Columns\TextColumn::make('billing_pac_last_test_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-bpac-col-last-test-at bexia-bpac-col-date bexia-bpac-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-bpac-col-last-test-at bexia-bpac-col-date bexia-bpac-col-context'])
                     ->label('Fecha prueba')
                     ->dateTime('d/m/Y H:i')
                     ->placeholder('—'),
             ])
             ->actions([
                 Tables\Actions\Action::make('test_sw_connection')
+                    ->extraAttributes(['class' => 'bexia-bpac-action bexia-bpac-action-test-connection'])
                     ->label('Probar conexión')
                     ->icon('heroicon-o-bolt')
                     ->color('info')
@@ -217,6 +250,7 @@ public static function canCreate(): bool
                     ->action(fn (Company $record): mixed => static::notifySwConnection($record)),
 
                 Tables\Actions\EditAction::make()
+                    ->extraAttributes(['class' => 'bexia-bpac-action bexia-bpac-action-edit'])
                     ->label('Editar')
                     ->visible(fn (): bool => static::isSuperAdminUser()),
             ])

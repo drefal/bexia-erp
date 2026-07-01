@@ -10781,4 +10781,227 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_REPAIR_ORDER_APPROVAL_RESOURCE_RESPONSIVE_V5_79_67C_END */
+
+/* BEXIA_BILLING_PAC_CONFIGURATION_RESOURCE_RESPONSIVE_V5_79_68C_START */
+/*
+ * BillingPacConfigurationResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de PAC, SAT, CFDI,
+ * timbrado, cancelaciones, credenciales, tokens, passwords,
+ * certificados, ambientes, endpoints, series, folios, empresa ni tenant.
+ */
+.bexia-bpac-section {
+    border-radius: 1rem;
+}
+
+.bexia-bpac-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-bpac-section,
+.bexia-bpac-field,
+.bexia-bpac-placeholder {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-bpac-section .fi-grid,
+.bexia-bpac-section .grid,
+.bexia-bpac-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-bpac-field .fi-input-wrp,
+.bexia-bpac-field .fi-select-input,
+.bexia-bpac-field .fi-fo-select,
+.bexia-bpac-field input,
+.bexia-bpac-field select,
+.bexia-bpac-field textarea,
+.bexia-bpac-field .choices,
+.bexia-bpac-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-bpac-placeholder .fi-fo-placeholder,
+.bexia-bpac-placeholder,
+.bexia-bpac-field-provider,
+.bexia-bpac-field-username,
+.bexia-bpac-field-password,
+.bexia-bpac-field-trusted-exporter,
+.bexia-bpac-col-company,
+.bexia-bpac-col-provider,
+.bexia-bpac-col-username,
+.bexia-bpac-col-last-test-status {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-bpac-code-field input,
+.bexia-bpac-secret-field input,
+.bexia-bpac-col-code,
+.bexia-bpac-col-date {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-bpac-placeholder-rfc .fi-fo-placeholder,
+.bexia-bpac-placeholder-endpoints .fi-fo-placeholder,
+.bexia-bpac-field-username input,
+.bexia-bpac-field-password input,
+.bexia-bpac-field-trusted-exporter input,
+.bexia-bpac-col-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.bexia-bpac-placeholder-endpoints .fi-fo-placeholder,
+.bexia-bpac-endpoints-field .fi-fo-placeholder {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-bpac-col-id,
+.bexia-bpac-col-company,
+.bexia-bpac-col-provider,
+.bexia-bpac-col-username,
+.bexia-bpac-col-test-env,
+.bexia-bpac-col-last-test-status,
+.bexia-bpac-col-last-test-at {
+    vertical-align: top;
+}
+
+.bexia-bpac-col-compact {
+    min-width: 4.75rem;
+    max-width: 6.5rem;
+    white-space: nowrap;
+}
+
+.bexia-bpac-col-primary {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-bpac-col-code {
+    min-width: 8rem;
+    max-width: 13rem;
+    white-space: normal;
+}
+
+.bexia-bpac-col-badge {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-bpac-col-date {
+    min-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-bpac-col-context {
+    overflow-wrap: anywhere;
+}
+
+.bexia-bpac-action {
+    max-width: 100%;
+}
+
+@media (max-width: 1024px) {
+    .bexia-bpac-section .fi-grid,
+    .bexia-bpac-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-bpac-col-primary {
+        max-width: 16rem;
+    }
+
+    .bexia-bpac-col-code {
+        max-width: 11rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-bpac-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-bpac-section .fi-section-header,
+    .bexia-bpac-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-bpac-field .fi-fo-field-wrp-label,
+    .bexia-bpac-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-bpac-field input,
+    .bexia-bpac-field select,
+    .bexia-bpac-field textarea,
+    .bexia-bpac-field .choices__inner,
+    .bexia-bpac-placeholder .fi-fo-placeholder {
+        font-size: 0.82rem;
+    }
+
+    .bexia-bpac-col-id,
+    .bexia-bpac-col-company,
+    .bexia-bpac-col-provider,
+    .bexia-bpac-col-username,
+    .bexia-bpac-col-test-env,
+    .bexia-bpac-col-last-test-status,
+    .bexia-bpac-col-last-test-at {
+        font-size: 0.76rem;
+    }
+
+    .bexia-bpac-col-compact {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+
+    .bexia-bpac-col-primary {
+        min-width: 8.75rem;
+        max-width: 12rem;
+    }
+
+    .bexia-bpac-col-code {
+        min-width: 6.75rem;
+        max-width: 9.25rem;
+    }
+
+    .bexia-bpac-col-badge {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-bpac-col-date {
+        min-width: 7rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-bpac-col-compact {
+        min-width: 3.75rem;
+        max-width: 5.25rem;
+    }
+
+    .bexia-bpac-col-primary {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-bpac-col-code,
+    .bexia-bpac-col-badge {
+        min-width: 5.75rem;
+        max-width: 7rem;
+    }
+
+    .bexia-bpac-col-date {
+        min-width: 6.5rem;
+    }
+}
+/* BEXIA_BILLING_PAC_CONFIGURATION_RESOURCE_RESPONSIVE_V5_79_68C_END */
 </style>
