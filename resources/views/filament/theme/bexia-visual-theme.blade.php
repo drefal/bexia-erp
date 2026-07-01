@@ -8378,4 +8378,225 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_EPPER_RESOURCE_RESPONSIVE_V5_79_56C_END */
+
+/* BEXIA_SCFDOC_RESOURCE_RESPONSIVE_V5_79_57C_START */
+/*
+ * SatCfdiDocumentResource responsive refinements.
+ * Alcance visual solamente. No cambia logica fiscal/SAT/CFDI,
+ * XML, PDF, UUID, cancelacion, permisos, empresa ni tenant.
+ */
+.bexia-scfdoc-section {
+    border-radius: 1rem;
+}
+
+.bexia-scfdoc-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-scfdoc-section,
+.bexia-scfdoc-field,
+.bexia-scfdoc-placeholder {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-scfdoc-field .fi-input-wrp,
+.bexia-scfdoc-field .fi-select-input,
+.bexia-scfdoc-field .fi-fo-select,
+.bexia-scfdoc-field input,
+.bexia-scfdoc-field select,
+.bexia-scfdoc-field textarea,
+.bexia-scfdoc-field .choices,
+.bexia-scfdoc-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-scfdoc-field-uuid input,
+.bexia-scfdoc-field-name input,
+.bexia-scfdoc-col-company,
+.bexia-scfdoc-col-uuid {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-scfdoc-mono,
+.bexia-scfdoc-field-rfc input,
+.bexia-scfdoc-field-uuid input,
+.bexia-scfdoc-col-rfc,
+.bexia-scfdoc-col-uuid {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    letter-spacing: 0.01em;
+}
+
+.bexia-scfdoc-field-money input,
+.bexia-scfdoc-col-money {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-scfdoc-col-company,
+.bexia-scfdoc-col-direction,
+.bexia-scfdoc-col-uuid,
+.bexia-scfdoc-col-type,
+.bexia-scfdoc-col-status,
+.bexia-scfdoc-col-rfc,
+.bexia-scfdoc-col-date,
+.bexia-scfdoc-col-money {
+    vertical-align: top;
+}
+
+.bexia-scfdoc-col-primary {
+    min-width: 11rem;
+    max-width: 22rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-scfdoc-col-uuid {
+    min-width: 18rem;
+    max-width: 24rem;
+    white-space: normal;
+}
+
+.bexia-scfdoc-col-rfc {
+    min-width: 8.75rem;
+    white-space: nowrap;
+}
+
+.bexia-scfdoc-col-badge,
+.bexia-scfdoc-col-direction,
+.bexia-scfdoc-col-type,
+.bexia-scfdoc-col-status {
+    min-width: 6.75rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-scfdoc-col-date {
+    min-width: 8rem;
+    white-space: nowrap;
+}
+
+.bexia-scfdoc-col-money {
+    min-width: 7.25rem;
+}
+
+.bexia-scfdoc-placeholder-warning {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-scfdoc-section-fiscal .fi-section-content,
+.bexia-scfdoc-section-parties .fi-section-content,
+.bexia-scfdoc-section-amounts .fi-section-content {
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-scfdoc-section .fi-grid,
+    .bexia-scfdoc-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-scfdoc-col-primary {
+        max-width: 17rem;
+    }
+
+    .bexia-scfdoc-col-uuid {
+        min-width: 14rem;
+        max-width: 18rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-scfdoc-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-scfdoc-section .fi-section-header,
+    .bexia-scfdoc-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-scfdoc-field .fi-fo-field-wrp-label,
+    .bexia-scfdoc-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-scfdoc-field input,
+    .bexia-scfdoc-field select,
+    .bexia-scfdoc-field textarea,
+    .bexia-scfdoc-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-scfdoc-col-company,
+    .bexia-scfdoc-col-direction,
+    .bexia-scfdoc-col-uuid,
+    .bexia-scfdoc-col-type,
+    .bexia-scfdoc-col-status,
+    .bexia-scfdoc-col-rfc,
+    .bexia-scfdoc-col-date,
+    .bexia-scfdoc-col-money {
+        font-size: 0.76rem;
+    }
+
+    .bexia-scfdoc-col-primary {
+        min-width: 9rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-scfdoc-col-uuid {
+        min-width: 11.5rem;
+        max-width: 14rem;
+    }
+
+    .bexia-scfdoc-col-rfc {
+        min-width: 7.25rem;
+    }
+
+    .bexia-scfdoc-col-badge,
+    .bexia-scfdoc-col-direction,
+    .bexia-scfdoc-col-type,
+    .bexia-scfdoc-col-status {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-scfdoc-col-date {
+        min-width: 6.75rem;
+    }
+
+    .bexia-scfdoc-col-money {
+        min-width: 6rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-scfdoc-col-primary {
+        min-width: 8rem;
+        max-width: 10.25rem;
+    }
+
+    .bexia-scfdoc-col-uuid {
+        min-width: 10rem;
+        max-width: 12rem;
+    }
+
+    .bexia-scfdoc-col-badge,
+    .bexia-scfdoc-col-direction,
+    .bexia-scfdoc-col-type,
+    .bexia-scfdoc-col-status {
+        min-width: 5.25rem;
+        max-width: 6.75rem;
+    }
+
+    .bexia-scfdoc-col-money {
+        min-width: 5.5rem;
+    }
+}
+/* BEXIA_SCFDOC_RESOURCE_RESPONSIVE_V5_79_57C_END */
 </style>
