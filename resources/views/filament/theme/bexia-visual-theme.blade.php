@@ -9426,4 +9426,239 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SLOT_RESOURCE_RESPONSIVE_V5_79_61C_END */
+
+/* BEXIA_SOPT_RESOURCE_RESPONSIVE_V5_79_62C_START */
+/*
+ * StockOperationTypeResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de tipos de operacion,
+ * inventario, movimientos, entradas/salidas, ajustes, transferencias,
+ * almacenes, ubicaciones, permisos, empresa ni tenant.
+ */
+.bexia-sopt-section {
+    border-radius: 1rem;
+}
+
+.bexia-sopt-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-sopt-section,
+.bexia-sopt-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-sopt-field .fi-input-wrp,
+.bexia-sopt-field .fi-select-input,
+.bexia-sopt-field .fi-fo-select,
+.bexia-sopt-field input,
+.bexia-sopt-field select,
+.bexia-sopt-field textarea,
+.bexia-sopt-field .choices,
+.bexia-sopt-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-sopt-field-warehouse,
+.bexia-sopt-field-operation-kind,
+.bexia-sopt-field-source-location,
+.bexia-sopt-field-destination-location,
+.bexia-sopt-field-name input,
+.bexia-sopt-field-description textarea,
+.bexia-sopt-col-code,
+.bexia-sopt-col-name,
+.bexia-sopt-col-warehouse,
+.bexia-sopt-col-source-location,
+.bexia-sopt-col-destination-location {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-sopt-code-field input,
+.bexia-sopt-col-code-text {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-sopt-number-field input,
+.bexia-sopt-col-number {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-sopt-col-code,
+.bexia-sopt-col-name,
+.bexia-sopt-col-operation-kind,
+.bexia-sopt-col-warehouse,
+.bexia-sopt-col-source-location,
+.bexia-sopt-col-destination-location,
+.bexia-sopt-col-reference-prefix,
+.bexia-sopt-col-next-number,
+.bexia-sopt-col-sequence,
+.bexia-sopt-col-active {
+    vertical-align: top;
+}
+
+.bexia-sopt-col-primary {
+    min-width: 7.5rem;
+    max-width: 11rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-sopt-col-primary-text {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-sopt-col-context {
+    min-width: 9rem;
+    max-width: 14rem;
+    white-space: normal;
+}
+
+.bexia-sopt-col-code-text {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-sopt-col-badge {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-sopt-col-number {
+    min-width: 5.75rem;
+}
+
+.bexia-sopt-col-icon {
+    width: 5rem;
+    min-width: 5rem;
+    text-align: center;
+}
+
+.bexia-sopt-section-main .fi-section-content {
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-sopt-section .fi-grid,
+    .bexia-sopt-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-sopt-col-primary-text {
+        max-width: 15rem;
+    }
+
+    .bexia-sopt-col-context {
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-sopt-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-sopt-section .fi-section-header,
+    .bexia-sopt-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-sopt-field .fi-fo-field-wrp-label,
+    .bexia-sopt-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-sopt-field input,
+    .bexia-sopt-field select,
+    .bexia-sopt-field textarea,
+    .bexia-sopt-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-sopt-col-code,
+    .bexia-sopt-col-name,
+    .bexia-sopt-col-operation-kind,
+    .bexia-sopt-col-warehouse,
+    .bexia-sopt-col-source-location,
+    .bexia-sopt-col-destination-location,
+    .bexia-sopt-col-reference-prefix,
+    .bexia-sopt-col-next-number,
+    .bexia-sopt-col-sequence,
+    .bexia-sopt-col-active {
+        font-size: 0.76rem;
+    }
+
+    .bexia-sopt-col-primary {
+        min-width: 6.25rem;
+        max-width: 8.5rem;
+    }
+
+    .bexia-sopt-col-primary-text {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-sopt-col-context {
+        min-width: 7rem;
+        max-width: 9.75rem;
+    }
+
+    .bexia-sopt-col-code-text {
+        min-width: 6rem;
+        max-width: 8rem;
+    }
+
+    .bexia-sopt-col-badge {
+        min-width: 6rem;
+        max-width: 8rem;
+    }
+
+    .bexia-sopt-col-number {
+        min-width: 5rem;
+    }
+
+    .bexia-sopt-col-icon {
+        width: 4.25rem;
+        min-width: 4.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-sopt-col-primary {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-sopt-col-primary-text {
+        min-width: 7.25rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-sopt-col-context,
+    .bexia-sopt-col-code-text,
+    .bexia-sopt-col-badge {
+        min-width: 6rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-sopt-col-number {
+        min-width: 4.5rem;
+    }
+
+    .bexia-sopt-col-icon {
+        width: 3.75rem;
+        min-width: 3.75rem;
+    }
+}
+/* BEXIA_SOPT_RESOURCE_RESPONSIVE_V5_79_62C_END */
 </style>

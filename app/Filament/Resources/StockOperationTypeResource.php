@@ -79,6 +79,12 @@ class StockOperationTypeResource extends Resource
             );
     }
 
+    /*
+     * BEXIA_SOPT_RESOURCE_RESPONSIVE_V5_79_62C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
@@ -87,8 +93,10 @@ class StockOperationTypeResource extends Resource
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Tipo de operación')
+                    ->extraAttributes(['class' => 'bexia-sopt-section bexia-sopt-section-main'])
                     ->schema([
                         Forms\Components\Select::make('warehouse_id')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-warehouse bexia-sopt-select'])
                             ->label('Almacén')
                             ->options(fn (): array => static::warehouseOptions())
                             ->searchable()
@@ -102,6 +110,7 @@ class StockOperationTypeResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\Select::make('operation_kind')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-operation-kind bexia-sopt-select'])
                             ->label('Tipo')
                             ->options([
                                 'receipt' => 'Recepción',
@@ -115,11 +124,13 @@ class StockOperationTypeResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-active bexia-sopt-toggle'])
                             ->label('Activo')
                             ->default(true)
                             ->columnSpan(2),
 
                         Forms\Components\TextInput::make('sequence')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-sequence bexia-sopt-number-field'])
                             ->label('Orden')
                             ->numeric()
                             ->default(10)
@@ -127,6 +138,7 @@ class StockOperationTypeResource extends Resource
                             ->columnSpan(2),
 
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-code bexia-sopt-code-field'])
                             ->label('Código interno')
                             ->required()
                             ->maxLength(80)
@@ -134,6 +146,7 @@ class StockOperationTypeResource extends Resource
                             ->columnSpan(3),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-name'])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(180)
@@ -141,12 +154,14 @@ class StockOperationTypeResource extends Resource
                             ->columnSpan(5),
 
                         Forms\Components\TextInput::make('reference_prefix')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-reference-prefix bexia-sopt-code-field'])
                             ->label('Prefijo de referencia')
                             ->maxLength(30)
                             ->placeholder('Ej. REC, ENT, TR')
                             ->columnSpan(2),
 
                         Forms\Components\TextInput::make('next_number')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-next-number bexia-sopt-number-field'])
                             ->label('Siguiente número')
                             ->numeric()
                             ->default(1)
@@ -154,6 +169,7 @@ class StockOperationTypeResource extends Resource
                             ->columnSpan(2),
 
                         Forms\Components\Select::make('source_location_id')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-source-location bexia-sopt-select'])
                             ->label('Ubicación origen')
                             ->options(fn (Forms\Get $get): array => static::locationOptions($get('warehouse_id')))
                             ->searchable()
@@ -162,6 +178,7 @@ class StockOperationTypeResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\Select::make('destination_location_id')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-destination-location bexia-sopt-select'])
                             ->label('Ubicación destino')
                             ->options(fn (Forms\Get $get): array => static::locationOptions($get('warehouse_id')))
                             ->searchable()
@@ -170,6 +187,7 @@ class StockOperationTypeResource extends Resource
                             ->columnSpan(6),
 
                         Forms\Components\Textarea::make('description')
+                            ->extraAttributes(['class' => 'bexia-sopt-field bexia-sopt-field-description'])
                             ->label('Descripción')
                             ->rows(3)
                             ->columnSpanFull(),
@@ -183,17 +201,23 @@ class StockOperationTypeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-code bexia-sopt-col-primary bexia-sopt-col-code-text'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-code bexia-sopt-col-primary bexia-sopt-col-code-text'])
                     ->label('Código')
                     ->badge()
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-name bexia-sopt-col-primary-text'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-name bexia-sopt-col-primary-text'])
                     ->label('Tipo de operación')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('operation_kind')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-operation-kind bexia-sopt-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-operation-kind bexia-sopt-col-badge'])
                     ->label('Tipo')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
@@ -207,36 +231,50 @@ class StockOperationTypeResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('warehouse.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-warehouse bexia-sopt-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-warehouse bexia-sopt-col-context'])
                     ->label('Almacén')
                     ->placeholder('General')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('sourceLocation.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-source-location bexia-sopt-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-source-location bexia-sopt-col-context'])
                     ->label('Origen')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('destinationLocation.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-destination-location bexia-sopt-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-destination-location bexia-sopt-col-context'])
                     ->label('Destino')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('reference_prefix')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-reference-prefix bexia-sopt-col-code-text'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-reference-prefix bexia-sopt-col-code-text'])
                     ->label('Prefijo')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('next_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-next-number bexia-sopt-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-next-number bexia-sopt-col-number'])
                     ->label('Siguiente')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sequence')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-sequence bexia-sopt-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-sequence bexia-sopt-col-number'])
                     ->label('Orden')
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-sopt-col-active bexia-sopt-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-sopt-col-active bexia-sopt-col-icon'])
                     ->label('Activo')
                     ->boolean()
                     ->sortable(),
