@@ -66,6 +66,12 @@ class StockLotResource extends Resource
         return $query;
     }
 
+    /*
+     * BEXIA_SLOT_RESOURCE_RESPONSIVE_V5_79_61C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
@@ -75,8 +81,10 @@ class StockLotResource extends Resource
                     ->dehydrated(true),
 
                 Forms\Components\Section::make('Datos del lote')
+                    ->extraAttributes(['class' => 'bexia-slot-section bexia-slot-section-main'])
                     ->schema([
                         Forms\Components\Select::make('product_id')
+                            ->extraAttributes(['class' => 'bexia-slot-field bexia-slot-field-product bexia-slot-select'])
                             ->label('Producto')
                             ->searchable()
                             ->getSearchResultsUsing(fn (string $search): array => static::productSearchOptions($search))
@@ -90,6 +98,7 @@ class StockLotResource extends Resource
                             ->columnSpan(5),
 
                         Forms\Components\Select::make('product_variant_id')
+                            ->extraAttributes(['class' => 'bexia-slot-field bexia-slot-field-variant bexia-slot-select'])
                             ->label('Variante')
                             ->options(fn (Forms\Get $get): array => static::variantOptions($get('product_id')))
                             ->searchable()
@@ -99,18 +108,21 @@ class StockLotResource extends Resource
                             ->columnSpan(4),
 
                         Forms\Components\TextInput::make('lot_number')
+                            ->extraAttributes(['class' => 'bexia-slot-field bexia-slot-field-lot-number bexia-slot-code-field'])
                             ->label('Número de lote')
                             ->required()
                             ->maxLength(120)
                             ->columnSpan(3),
 
                         Forms\Components\DatePicker::make('expiration_date')
+                            ->extraAttributes(['class' => 'bexia-slot-field bexia-slot-field-expiration-date bexia-slot-date-field'])
                             ->label('Fecha de caducidad')
                             ->native(false)
                             ->displayFormat('d/m/Y')
                             ->columnSpan(3),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-slot-field bexia-slot-field-status bexia-slot-select'])
                             ->label('Estado')
                             ->options(static::statusOptions())
                             ->default('available')
@@ -119,6 +131,7 @@ class StockLotResource extends Resource
                             ->columnSpan(3),
 
                         Forms\Components\Select::make('supplier_contact_id')
+                            ->extraAttributes(['class' => 'bexia-slot-field bexia-slot-field-supplier bexia-slot-select'])
                             ->label('Proveedor')
                             ->options(fn (): array => static::contactOptions())
                             ->searchable()
@@ -137,11 +150,15 @@ class StockLotResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('lot_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-slot-col-lot-number bexia-slot-col-primary bexia-slot-col-code'])
+                    ->extraCellAttributes(['class' => 'bexia-slot-col-lot-number bexia-slot-col-primary bexia-slot-col-code'])
                     ->label('Lote')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_label')
+                    ->extraHeaderAttributes(['class' => 'bexia-slot-col-product bexia-slot-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-slot-col-product bexia-slot-col-context'])
                     ->label('Producto')
                     ->state(fn (StockLot $record): string => static::productLabel($record->product_id) ?: '—')
                     ->searchable(false)
@@ -149,23 +166,31 @@ class StockLotResource extends Resource
                     ->wrap(),
 
                 Tables\Columns\TextColumn::make('variant_label')
+                    ->extraHeaderAttributes(['class' => 'bexia-slot-col-variant bexia-slot-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-slot-col-variant bexia-slot-col-context'])
                     ->label('Variante')
                     ->state(fn (StockLot $record): string => static::productLabel($record->product_variant_id) ?: '—')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('expiration_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-slot-col-expiration bexia-slot-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-slot-col-expiration bexia-slot-col-date'])
                     ->label('Caducidad')
                     ->date('d/m/Y')
                     ->placeholder('—')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('serial_numbers_count')
+                    ->extraHeaderAttributes(['class' => 'bexia-slot-col-series bexia-slot-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-slot-col-series bexia-slot-col-number'])
                     ->label('Series')
                     ->alignRight()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-slot-col-status bexia-slot-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-slot-col-status bexia-slot-col-badge'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
@@ -173,6 +198,8 @@ class StockLotResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-slot-col-created bexia-slot-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-slot-col-created bexia-slot-col-date'])
                     ->label('Creado')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
