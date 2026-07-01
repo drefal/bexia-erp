@@ -93,6 +93,12 @@ class RepairOrderApprovalResource extends Resource
         return $query;
     }
 
+    /*
+     * BEXIA_REPAIR_ORDER_APPROVAL_RESOURCE_RESPONSIVE_V5_79_67C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
@@ -101,43 +107,52 @@ class RepairOrderApprovalResource extends Resource
                     ->default(fn (): ?int => ServiceAccess::currentCompanyId()),
 
                 Forms\Components\Section::make('Solicitud')
+                    ->extraAttributes(['class' => 'bexia-roa-section bexia-roa-section-main'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('service_case_id')
+                            ->extraAttributes(['class' => 'bexia-roa-field bexia-roa-field-service-case bexia-roa-id-field'])
                             ->label('ID ticket')
                             ->numeric(),
 
                         Forms\Components\TextInput::make('repair_order_id')
+                            ->extraAttributes(['class' => 'bexia-roa-field bexia-roa-field-repair-order bexia-roa-id-field'])
                             ->label('ID reparacion')
                             ->numeric(),
 
                         Forms\Components\Select::make('approval_type')
+                            ->extraAttributes(['class' => 'bexia-roa-field bexia-roa-field-approval-type'])
                             ->label('Tipo de aprobacion')
                             ->options(RepairOrderApproval::TYPES)
                             ->required(),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-roa-field bexia-roa-field-status'])
                             ->label('Estado')
                             ->options(RepairOrderApproval::STATUSES)
                             ->required()
                             ->default('pendiente'),
 
                         Forms\Components\TextInput::make('amount')
+                            ->extraAttributes(['class' => 'bexia-roa-field bexia-roa-field-amount bexia-roa-money-field'])
                             ->label('Importe')
                             ->numeric()
                             ->default(0),
 
                         Forms\Components\DateTimePicker::make('requested_at')
+                            ->extraAttributes(['class' => 'bexia-roa-field bexia-roa-field-requested-at bexia-roa-date-field'])
                             ->label('Solicitado')
                             ->default(now()),
 
                         Forms\Components\Textarea::make('reason')
+                            ->extraAttributes(['class' => 'bexia-roa-field bexia-roa-field-reason'])
                             ->label('Motivo')
                             ->required()
                             ->rows(4)
                             ->columnSpanFull(),
 
                         Forms\Components\Textarea::make('comments')
+                            ->extraAttributes(['class' => 'bexia-roa-field bexia-roa-field-comments'])
                             ->label('Comentarios resolucion')
                             ->rows(4)
                             ->columnSpanFull(),
@@ -151,62 +166,86 @@ class RepairOrderApprovalResource extends Resource
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-id bexia-roa-col-code bexia-roa-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-id bexia-roa-col-code bexia-roa-col-compact'])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('approval_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-approval-type bexia-roa-col-context bexia-roa-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-approval-type bexia-roa-col-context bexia-roa-col-badge'])
                     ->label('Tipo')
                     ->badge()
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-status bexia-roa-col-context bexia-roa-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-status bexia-roa-col-context bexia-roa-col-badge'])
                     ->label('Estado')
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('repair_order_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-repair-order bexia-roa-col-code bexia-roa-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-repair-order bexia-roa-col-code bexia-roa-col-compact'])
                     ->label('Reparacion')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('service_case_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-service-case bexia-roa-col-code bexia-roa-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-service-case bexia-roa-col-code bexia-roa-col-compact'])
                     ->label('Ticket')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('amount')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-amount bexia-roa-col-money bexia-roa-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-amount bexia-roa-col-money bexia-roa-col-compact'])
                     ->label('Importe')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('requested_by')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-requested-by bexia-roa-col-person bexia-roa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-requested-by bexia-roa-col-person bexia-roa-col-context'])
                     ->label('Solicito')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('requested_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-requested-at bexia-roa-col-date bexia-roa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-requested-at bexia-roa-col-date bexia-roa-col-context'])
                     ->label('Fecha solicitud')
                     ->dateTime()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('decided_by')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-decided-by bexia-roa-col-person bexia-roa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-decided-by bexia-roa-col-person bexia-roa-col-context'])
                     ->label('Resolvió')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('decided_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-decided-at bexia-roa-col-date bexia-roa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-decided-at bexia-roa-col-date bexia-roa-col-context'])
                     ->label('Fecha resolucion')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('reason')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-reason bexia-roa-col-long-text bexia-roa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-reason bexia-roa-col-long-text bexia-roa-col-context'])
                     ->label('Motivo')
                     ->limit(50)
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-roa-col-company bexia-roa-col-code bexia-roa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-roa-col-company bexia-roa-col-code bexia-roa-col-context'])
                     ->label('Empresa')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])

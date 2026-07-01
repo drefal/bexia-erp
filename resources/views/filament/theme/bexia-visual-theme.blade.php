@@ -10554,4 +10554,231 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_EMPLOYEE_VACATION_BALANCE_RESOURCE_RESPONSIVE_V5_79_66C_END */
+
+/* BEXIA_REPAIR_ORDER_APPROVAL_RESOURCE_RESPONSIVE_V5_79_67C_START */
+/*
+ * RepairOrderApprovalResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de ordenes de reparacion,
+ * aprobaciones, autorizaciones/rechazos, estados, clientes, tecnicos,
+ * costos, productos, inventario, permisos, empresa ni tenant.
+ */
+.bexia-roa-section {
+    border-radius: 1rem;
+}
+
+.bexia-roa-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-roa-section,
+.bexia-roa-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-roa-section .fi-grid,
+.bexia-roa-section .grid,
+.bexia-roa-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-roa-field .fi-input-wrp,
+.bexia-roa-field .fi-select-input,
+.bexia-roa-field .fi-fo-select,
+.bexia-roa-field input,
+.bexia-roa-field select,
+.bexia-roa-field textarea,
+.bexia-roa-field .choices,
+.bexia-roa-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-roa-field-approval-type,
+.bexia-roa-field-status,
+.bexia-roa-field-reason textarea,
+.bexia-roa-field-comments textarea,
+.bexia-roa-col-approval-type,
+.bexia-roa-col-status,
+.bexia-roa-col-reason {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-roa-id-field input,
+.bexia-roa-money-field input,
+.bexia-roa-date-field input,
+.bexia-roa-col-code,
+.bexia-roa-col-money,
+.bexia-roa-col-date {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-roa-col-id,
+.bexia-roa-col-approval-type,
+.bexia-roa-col-status,
+.bexia-roa-col-repair-order,
+.bexia-roa-col-service-case,
+.bexia-roa-col-amount,
+.bexia-roa-col-requested-by,
+.bexia-roa-col-requested-at,
+.bexia-roa-col-decided-by,
+.bexia-roa-col-decided-at,
+.bexia-roa-col-reason,
+.bexia-roa-col-company {
+    vertical-align: top;
+}
+
+.bexia-roa-col-compact {
+    min-width: 5.75rem;
+    max-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-roa-col-code {
+    text-align: right;
+}
+
+.bexia-roa-col-money {
+    min-width: 7rem;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.bexia-roa-col-date {
+    min-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-roa-col-person {
+    min-width: 8rem;
+    max-width: 11.5rem;
+    white-space: normal;
+}
+
+.bexia-roa-col-badge {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-roa-col-long-text {
+    min-width: 12rem;
+    max-width: 20rem;
+    white-space: normal;
+}
+
+.bexia-roa-col-context {
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 1024px) {
+    .bexia-roa-section .fi-grid,
+    .bexia-roa-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-roa-col-long-text {
+        max-width: 16rem;
+    }
+
+    .bexia-roa-col-person {
+        max-width: 10rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-roa-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-roa-section .fi-section-header,
+    .bexia-roa-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-roa-field .fi-fo-field-wrp-label,
+    .bexia-roa-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-roa-field input,
+    .bexia-roa-field select,
+    .bexia-roa-field textarea,
+    .bexia-roa-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-roa-col-id,
+    .bexia-roa-col-approval-type,
+    .bexia-roa-col-status,
+    .bexia-roa-col-repair-order,
+    .bexia-roa-col-service-case,
+    .bexia-roa-col-amount,
+    .bexia-roa-col-requested-by,
+    .bexia-roa-col-requested-at,
+    .bexia-roa-col-decided-by,
+    .bexia-roa-col-decided-at,
+    .bexia-roa-col-reason,
+    .bexia-roa-col-company {
+        font-size: 0.76rem;
+    }
+
+    .bexia-roa-col-compact {
+        min-width: 5rem;
+        max-width: 6.75rem;
+    }
+
+    .bexia-roa-col-money {
+        min-width: 6rem;
+    }
+
+    .bexia-roa-col-date {
+        min-width: 7rem;
+    }
+
+    .bexia-roa-col-person {
+        min-width: 6.75rem;
+        max-width: 8.75rem;
+    }
+
+    .bexia-roa-col-badge {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-roa-col-long-text {
+        min-width: 8.75rem;
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-roa-col-compact {
+        min-width: 4.5rem;
+        max-width: 6rem;
+    }
+
+    .bexia-roa-col-money {
+        min-width: 5.5rem;
+    }
+
+    .bexia-roa-col-date {
+        min-width: 6.5rem;
+    }
+
+    .bexia-roa-col-person,
+    .bexia-roa-col-badge {
+        min-width: 5.75rem;
+        max-width: 7rem;
+    }
+
+    .bexia-roa-col-long-text {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+}
+/* BEXIA_REPAIR_ORDER_APPROVAL_RESOURCE_RESPONSIVE_V5_79_67C_END */
 </style>
