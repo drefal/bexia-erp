@@ -65,11 +65,18 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             );
     }
 
+    /*
+     * BEXIA_PURCHASE_ORDER_RESOURCE_RESPONSIVE_V5_79_65C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Section::make('Orden de compra')
+                    ->extraAttributes(['class' => 'bexia-po-section bexia-po-section-main'])
                     ->description('Editable mientras está en borrador. Los productos se editan en la tabla inferior.')
                     ->schema([
                         Forms\Components\ViewField::make('purchase_order_status_notice')
@@ -83,16 +90,19 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->columnSpanFull(),
 
                         Forms\Components\TextInput::make('number')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-number bexia-po-code-field'])
                             ->label('Folio')
                             ->disabled()
                             ->dehydrated(false),
 
                         Forms\Components\TextInput::make('supplier_name')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-supplier'])
                             ->label('Proveedor')
                             ->disabled()
                             ->dehydrated(false),
 
                         Forms\Components\TextInput::make('status')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-status bexia-po-code-field'])
                             ->label('Estado')
                             ->formatStateUsing(fn (?string $state): string => match ($state) {
                                 'draft' => 'Borrador',
@@ -110,27 +120,33 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->dehydrated(false),
 
                         Forms\Components\DateTimePicker::make('order_date')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-order-date bexia-po-date-field'])
                             ->label('Fecha de orden'),
 
                         Forms\Components\DateTimePicker::make('expected_date')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-expected-date bexia-po-date-field'])
                             ->label('Entrega esperada'),
 
                         Forms\Components\TextInput::make('origin')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-origin'])
                             ->label('Origen')
                             ->disabled()
                             ->dehydrated(false),
 
                         Forms\Components\TextInput::make('warehouse_label')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-warehouse'])
                             ->label('Almacén destino')
                             ->disabled()
                             ->dehydrated(false),
 
                         Forms\Components\TextInput::make('location_label')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-location'])
                             ->label('Ubicación / recepción')
                             ->disabled()
                             ->dehydrated(false),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-po-field bexia-po-field-notes'])
                             ->label('Notas / términos')
                             ->rows(3)
                             ->columnSpanFull(),
@@ -138,6 +154,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->columns(3),
 
                 Forms\Components\Section::make('Productos')
+                    ->extraAttributes(['class' => 'bexia-po-section bexia-po-section-products'])
                     ->description('Agrega, elimina o edita productos mientras la orden esté en borrador.')
                     ->schema([
                         Forms\Components\ViewField::make('purchase_order_lines_editor')
@@ -152,6 +169,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->collapsible(),
 
                 Forms\Components\Section::make('Historial de orden de compra')
+                    ->extraAttributes(['class' => 'bexia-po-section bexia-po-section-history'])
                     ->description('Registra creación, edición de productos, confirmaciones, envíos a aprobación y cambios de estado.')
                     ->schema([
                         Forms\Components\ViewField::make('purchase_order_history')
@@ -194,11 +212,15 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('number')
+                    ->extraHeaderAttributes(['class' => 'bexia-po-col-number bexia-po-col-primary bexia-po-col-code'])
+                    ->extraCellAttributes(['class' => 'bexia-po-col-number bexia-po-col-primary bexia-po-col-code'])
                     ->label('Folio')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\BadgeColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-po-col-status bexia-po-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-po-col-status bexia-po-col-badge'])
                     ->label('Estado')
                     ->formatStateUsing(fn ($state): string => self::purchaseOrderStatusLabel((string) $state))
                     ->colors([
@@ -211,23 +233,33 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ]),
 
                 Tables\Columns\IconColumn::make('differs_from_request')
+                    ->extraHeaderAttributes(['class' => 'bexia-po-col-differs bexia-po-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-po-col-differs bexia-po-col-icon'])
                     ->label('Modificada')
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('supplier_name')
+                    ->extraHeaderAttributes(['class' => 'bexia-po-col-supplier bexia-po-col-primary-text'])
+                    ->extraCellAttributes(['class' => 'bexia-po-col-supplier bexia-po-col-primary-text'])
                     ->label('Proveedor')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('origin')
+                    ->extraHeaderAttributes(['class' => 'bexia-po-col-origin bexia-po-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-po-col-origin bexia-po-col-context'])
                     ->label('Origen')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('total_with_tax')
+                    ->extraHeaderAttributes(['class' => 'bexia-po-col-total bexia-po-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-po-col-total bexia-po-col-money'])
                     ->label('Total')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('order_date')
+                    ->extraHeaderAttributes(['class' => 'bexia-po-col-order-date bexia-po-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-po-col-order-date bexia-po-col-date'])
                     ->label('Fecha')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),

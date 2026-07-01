@@ -10113,4 +10113,239 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_BRANCH_RESOURCE_RESPONSIVE_V5_79_64C_END */
+
+/* BEXIA_PURCHASE_ORDER_RESOURCE_RESPONSIVE_V5_79_65C_START */
+/*
+ * PurchaseOrderResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de ordenes de compra,
+ * proveedores, recepciones, XML/SAT/CFDI, productos, inventario,
+ * almacenes, costos, impuestos, totales, contabilidad, permisos,
+ * empresa ni tenant.
+ */
+.bexia-po-section {
+    border-radius: 1rem;
+}
+
+.bexia-po-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-po-section,
+.bexia-po-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-po-section .fi-grid,
+.bexia-po-section .grid,
+.bexia-po-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-po-field .fi-input-wrp,
+.bexia-po-field .fi-select-input,
+.bexia-po-field .fi-fo-select,
+.bexia-po-field input,
+.bexia-po-field select,
+.bexia-po-field textarea,
+.bexia-po-field .choices,
+.bexia-po-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-po-field-number input,
+.bexia-po-field-supplier input,
+.bexia-po-field-status input,
+.bexia-po-field-origin input,
+.bexia-po-field-warehouse input,
+.bexia-po-field-location input,
+.bexia-po-field-notes textarea,
+.bexia-po-col-number,
+.bexia-po-col-supplier,
+.bexia-po-col-origin {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-po-code-field input,
+.bexia-po-date-field input,
+.bexia-po-col-code,
+.bexia-po-col-date,
+.bexia-po-col-money {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-po-col-number,
+.bexia-po-col-status,
+.bexia-po-col-differs,
+.bexia-po-col-supplier,
+.bexia-po-col-origin,
+.bexia-po-col-total,
+.bexia-po-col-order-date {
+    vertical-align: top;
+}
+
+.bexia-po-col-primary {
+    min-width: 8rem;
+    max-width: 11rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-po-col-primary-text {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-po-col-context {
+    min-width: 8rem;
+    max-width: 13rem;
+    white-space: normal;
+}
+
+.bexia-po-col-badge {
+    min-width: 7.5rem;
+    max-width: 10.5rem;
+    white-space: normal;
+}
+
+.bexia-po-col-icon {
+    width: 5.25rem;
+    min-width: 5.25rem;
+    text-align: center;
+}
+
+.bexia-po-col-money {
+    min-width: 7.5rem;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.bexia-po-col-date {
+    min-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-po-section-products .fi-section-content,
+.bexia-po-section-history .fi-section-content {
+    overflow-x: auto;
+}
+
+@media (max-width: 1024px) {
+    .bexia-po-section .fi-grid,
+    .bexia-po-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-po-col-primary-text {
+        max-width: 15rem;
+    }
+
+    .bexia-po-col-context {
+        max-width: 11.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-po-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-po-section .fi-section-header,
+    .bexia-po-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-po-field .fi-fo-field-wrp-label,
+    .bexia-po-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-po-field input,
+    .bexia-po-field select,
+    .bexia-po-field textarea,
+    .bexia-po-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-po-col-number,
+    .bexia-po-col-status,
+    .bexia-po-col-differs,
+    .bexia-po-col-supplier,
+    .bexia-po-col-origin,
+    .bexia-po-col-total,
+    .bexia-po-col-order-date {
+        font-size: 0.76rem;
+    }
+
+    .bexia-po-col-primary {
+        min-width: 6.75rem;
+        max-width: 8.75rem;
+    }
+
+    .bexia-po-col-primary-text {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-po-col-context {
+        min-width: 6.75rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-po-col-badge {
+        min-width: 6.25rem;
+        max-width: 8.25rem;
+    }
+
+    .bexia-po-col-icon {
+        width: 4.25rem;
+        min-width: 4.25rem;
+    }
+
+    .bexia-po-col-money {
+        min-width: 6.25rem;
+    }
+
+    .bexia-po-col-date {
+        min-width: 7.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-po-col-primary {
+        min-width: 6rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-po-col-primary-text {
+        min-width: 7.25rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-po-col-context,
+    .bexia-po-col-badge {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-po-col-icon {
+        width: 3.75rem;
+        min-width: 3.75rem;
+    }
+
+    .bexia-po-col-money {
+        min-width: 5.75rem;
+    }
+
+    .bexia-po-col-date {
+        min-width: 6.75rem;
+    }
+}
+/* BEXIA_PURCHASE_ORDER_RESOURCE_RESPONSIVE_V5_79_65C_END */
 </style>
