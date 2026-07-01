@@ -9661,4 +9661,245 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SOPT_RESOURCE_RESPONSIVE_V5_79_62C_END */
+
+/* BEXIA_PAYROLL_CONCEPT_RESOURCE_RESPONSIVE_V5_79_63C_START */
+/*
+ * PayrollConceptResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de conceptos de nomina,
+ * percepciones/deducciones, SAT/CFDI, ISR/IMSS, formulas, montos,
+ * cuentas contables, permisos, empresa ni tenant.
+ */
+.bexia-payroll-concept-section {
+    border-radius: 1rem;
+}
+
+.bexia-payroll-concept-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-payroll-concept-section,
+.bexia-payroll-concept-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-payroll-concept-field .fi-input-wrp,
+.bexia-payroll-concept-field .fi-select-input,
+.bexia-payroll-concept-field .fi-fo-select,
+.bexia-payroll-concept-field input,
+.bexia-payroll-concept-field select,
+.bexia-payroll-concept-field textarea,
+.bexia-payroll-concept-field .choices,
+.bexia-payroll-concept-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-payroll-concept-field-company,
+.bexia-payroll-concept-field-type,
+.bexia-payroll-concept-field-category,
+.bexia-payroll-concept-field-source,
+.bexia-payroll-concept-field-unit,
+.bexia-payroll-concept-field-sat-key,
+.bexia-payroll-concept-field-name input,
+.bexia-payroll-concept-field-notes textarea,
+.bexia-payroll-concept-col-company,
+.bexia-payroll-concept-col-code,
+.bexia-payroll-concept-col-name,
+.bexia-payroll-concept-col-source,
+.bexia-payroll-concept-col-unit,
+.bexia-payroll-concept-col-sat-key {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-payroll-concept-code-field input,
+.bexia-payroll-concept-col-code-text {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-payroll-concept-money-field input,
+.bexia-payroll-concept-number-field input,
+.bexia-payroll-concept-col-number {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-payroll-concept-col-active,
+.bexia-payroll-concept-col-company,
+.bexia-payroll-concept-col-code,
+.bexia-payroll-concept-col-name,
+.bexia-payroll-concept-col-type,
+.bexia-payroll-concept-col-category,
+.bexia-payroll-concept-col-source,
+.bexia-payroll-concept-col-unit,
+.bexia-payroll-concept-col-sat-key,
+.bexia-payroll-concept-col-taxable,
+.bexia-payroll-concept-col-sort-order {
+    vertical-align: top;
+}
+
+.bexia-payroll-concept-col-primary {
+    min-width: 7.5rem;
+    max-width: 11rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-payroll-concept-col-primary-text {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-payroll-concept-col-context {
+    min-width: 8rem;
+    max-width: 13rem;
+    white-space: normal;
+}
+
+.bexia-payroll-concept-col-code-text {
+    min-width: 7rem;
+    max-width: 10.5rem;
+    white-space: normal;
+}
+
+.bexia-payroll-concept-col-badge {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-payroll-concept-col-number {
+    min-width: 5.75rem;
+}
+
+.bexia-payroll-concept-col-icon {
+    width: 5rem;
+    min-width: 5rem;
+    text-align: center;
+}
+
+.bexia-payroll-concept-section-main .fi-section-content {
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-payroll-concept-section .fi-grid,
+    .bexia-payroll-concept-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-payroll-concept-col-primary-text {
+        max-width: 15rem;
+    }
+
+    .bexia-payroll-concept-col-context {
+        max-width: 11.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-payroll-concept-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-payroll-concept-section .fi-section-header,
+    .bexia-payroll-concept-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-payroll-concept-field .fi-fo-field-wrp-label,
+    .bexia-payroll-concept-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-payroll-concept-field input,
+    .bexia-payroll-concept-field select,
+    .bexia-payroll-concept-field textarea,
+    .bexia-payroll-concept-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-payroll-concept-col-active,
+    .bexia-payroll-concept-col-company,
+    .bexia-payroll-concept-col-code,
+    .bexia-payroll-concept-col-name,
+    .bexia-payroll-concept-col-type,
+    .bexia-payroll-concept-col-category,
+    .bexia-payroll-concept-col-source,
+    .bexia-payroll-concept-col-unit,
+    .bexia-payroll-concept-col-sat-key,
+    .bexia-payroll-concept-col-taxable,
+    .bexia-payroll-concept-col-sort-order {
+        font-size: 0.76rem;
+    }
+
+    .bexia-payroll-concept-col-primary {
+        min-width: 6.25rem;
+        max-width: 8.5rem;
+    }
+
+    .bexia-payroll-concept-col-primary-text {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-payroll-concept-col-context {
+        min-width: 6.75rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-payroll-concept-col-code-text {
+        min-width: 6rem;
+        max-width: 8rem;
+    }
+
+    .bexia-payroll-concept-col-badge {
+        min-width: 6rem;
+        max-width: 8rem;
+    }
+
+    .bexia-payroll-concept-col-number {
+        min-width: 5rem;
+    }
+
+    .bexia-payroll-concept-col-icon {
+        width: 4.25rem;
+        min-width: 4.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-payroll-concept-col-primary {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-payroll-concept-col-primary-text {
+        min-width: 7.25rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-payroll-concept-col-context,
+    .bexia-payroll-concept-col-code-text,
+    .bexia-payroll-concept-col-badge {
+        min-width: 6rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-payroll-concept-col-number {
+        min-width: 4.5rem;
+    }
+
+    .bexia-payroll-concept-col-icon {
+        width: 3.75rem;
+        min-width: 3.75rem;
+    }
+}
+/* BEXIA_PAYROLL_CONCEPT_RESOURCE_RESPONSIVE_V5_79_63C_END */
 </style>
