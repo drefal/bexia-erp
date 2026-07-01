@@ -102,16 +102,25 @@ class EmployeeVacationBalanceResource extends Resource
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
 
+    /*
+     * BEXIA_EMPLOYEE_VACATION_BALANCE_RESOURCE_RESPONSIVE_V5_79_66C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Section::make('Saldo de vacaciones')
+                    ->extraAttributes(['class' => 'bexia-evb-section bexia-evb-section-main'])
                     ->description('Control anual de días asignados, tomados y disponibles.')
                     ->schema([
                         Grid::make(2)
+                            ->extraAttributes(['class' => 'bexia-evb-grid bexia-evb-grid-main'])
                             ->schema([
                                 Select::make('employee_id')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-employee'])
                                     ->label('Empleado')
                                     ->options(fn () => self::employeeOptions())
                                     ->searchable()
@@ -119,6 +128,7 @@ class EmployeeVacationBalanceResource extends Resource
                                     ->required(),
 
                                 Select::make('status')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-status'])
                                     ->label('Estado')
                                     ->options([
                                         'open' => 'Abierto',
@@ -129,56 +139,67 @@ class EmployeeVacationBalanceResource extends Resource
                                     ->required(),
 
                                 DatePicker::make('period_start')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-period-start bexia-evb-date-field'])
                                     ->label('Inicio del periodo')
                                     ->native(false)
                                     ->required(),
 
                                 DatePicker::make('period_end')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-period-end bexia-evb-date-field'])
                                     ->label('Fin del periodo')
                                     ->native(false)
                                     ->required(),
 
                                 TextInput::make('years_of_service')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-years bexia-evb-number-field'])
                                     ->label('Años de servicio')
                                     ->numeric()
                                     ->default(0),
 
                                 TextInput::make('entitled_days')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-entitled bexia-evb-days-field'])
                                     ->label('Días asignados')
                                     ->numeric()
                                     ->default(0),
 
                                 TextInput::make('carried_over_days')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-carried bexia-evb-days-field'])
                                     ->label('Días arrastrados')
                                     ->numeric()
                                     ->default(0),
 
                                 TextInput::make('adjusted_days')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-adjusted bexia-evb-days-field'])
                                     ->label('Ajustes')
                                     ->numeric()
                                     ->default(0),
 
                                 TextInput::make('taken_days')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-taken bexia-evb-days-field'])
                                     ->label('Días tomados')
                                     ->numeric()
                                     ->default(0),
 
                                 TextInput::make('pending_days')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-pending bexia-evb-days-field bexia-evb-field-important'])
                                     ->label('Días disponibles')
                                     ->numeric()
                                     ->default(0),
 
                                 TextInput::make('expired_days')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-expired bexia-evb-days-field'])
                                     ->label('Días vencidos')
                                     ->numeric()
                                     ->default(0),
 
                                 TextInput::make('policy_code')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-policy bexia-evb-code-field'])
                                     ->label('Política')
                                     ->default(EmployeeVacationBalanceCalculator::POLICY_MX_LFT_2023)
                                     ->maxLength(60),
 
                                 Textarea::make('notes')
+                                    ->extraAttributes(['class' => 'bexia-evb-field bexia-evb-field-notes'])
                                     ->label('Notas')
                                     ->rows(4)
                                     ->columnSpanFull(),
@@ -204,40 +225,56 @@ class EmployeeVacationBalanceResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('employee.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-employee bexia-evb-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-employee bexia-evb-col-primary'])
                     ->label('Empleado')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('period_start')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-period-start bexia-evb-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-period-start bexia-evb-col-date'])
                     ->label('Inicio')
                     ->date('d/m/Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('period_end')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-period-end bexia-evb-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-period-end bexia-evb-col-date'])
                     ->label('Fin')
                     ->date('d/m/Y')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('years_of_service')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-years bexia-evb-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-years bexia-evb-col-number'])
                     ->label('Antigüedad')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('entitled_days')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-entitled bexia-evb-col-days'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-entitled bexia-evb-col-days'])
                     ->label('Asignados')
                     ->numeric(2)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('taken_days')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-taken bexia-evb-col-days'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-taken bexia-evb-col-days'])
                     ->label('Tomados')
                     ->numeric(2)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('pending_days')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-pending bexia-evb-col-days bexia-evb-col-important'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-pending bexia-evb-col-days bexia-evb-col-important'])
                     ->label('Disponibles')
                     ->numeric(2)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-status bexia-evb-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-status bexia-evb-col-badge'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
@@ -248,6 +285,8 @@ class EmployeeVacationBalanceResource extends Resource
                     }),
 
                 Tables\Columns\TextColumn::make('policy_code')
+                    ->extraHeaderAttributes(['class' => 'bexia-evb-col-policy bexia-evb-col-code'])
+                    ->extraCellAttributes(['class' => 'bexia-evb-col-policy bexia-evb-col-code'])
                     ->label('Política')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])

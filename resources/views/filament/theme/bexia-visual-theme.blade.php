@@ -10348,4 +10348,210 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PURCHASE_ORDER_RESOURCE_RESPONSIVE_V5_79_65C_END */
+
+/* BEXIA_EMPLOYEE_VACATION_BALANCE_RESOURCE_RESPONSIVE_V5_79_66C_START */
+/*
+ * EmployeeVacationBalanceResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de empleados, vacaciones,
+ * saldos, dias devengados/tomados/disponibles, antiguedad, contratos,
+ * incidencias, nomina, aprobaciones, permisos, empresa ni tenant.
+ */
+.bexia-evb-section {
+    border-radius: 1rem;
+}
+
+.bexia-evb-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-evb-section,
+.bexia-evb-grid,
+.bexia-evb-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-evb-section .fi-grid,
+.bexia-evb-section .grid,
+.bexia-evb-grid,
+.bexia-evb-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-evb-field .fi-input-wrp,
+.bexia-evb-field .fi-select-input,
+.bexia-evb-field .fi-fo-select,
+.bexia-evb-field input,
+.bexia-evb-field select,
+.bexia-evb-field textarea,
+.bexia-evb-field .choices,
+.bexia-evb-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-evb-field-employee,
+.bexia-evb-field-status,
+.bexia-evb-field-policy input,
+.bexia-evb-field-notes textarea,
+.bexia-evb-col-employee,
+.bexia-evb-col-policy,
+.bexia-evb-col-status {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-evb-number-field input,
+.bexia-evb-days-field input,
+.bexia-evb-date-field input,
+.bexia-evb-col-number,
+.bexia-evb-col-days,
+.bexia-evb-col-date {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-evb-col-employee,
+.bexia-evb-col-period-start,
+.bexia-evb-col-period-end,
+.bexia-evb-col-years,
+.bexia-evb-col-entitled,
+.bexia-evb-col-taken,
+.bexia-evb-col-pending,
+.bexia-evb-col-status,
+.bexia-evb-col-policy {
+    vertical-align: top;
+}
+
+.bexia-evb-col-primary {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-evb-col-date {
+    min-width: 7.5rem;
+    white-space: nowrap;
+}
+
+.bexia-evb-col-number {
+    min-width: 6rem;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.bexia-evb-col-days {
+    min-width: 6.25rem;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.bexia-evb-col-important {
+    font-weight: 700;
+}
+
+.bexia-evb-col-badge {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-evb-col-code {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1024px) {
+    .bexia-evb-section .fi-grid,
+    .bexia-evb-section .grid,
+    .bexia-evb-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-evb-col-primary {
+        max-width: 15rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-evb-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-evb-section .fi-section-header,
+    .bexia-evb-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-evb-field .fi-fo-field-wrp-label,
+    .bexia-evb-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-evb-field input,
+    .bexia-evb-field select,
+    .bexia-evb-field textarea,
+    .bexia-evb-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-evb-col-employee,
+    .bexia-evb-col-period-start,
+    .bexia-evb-col-period-end,
+    .bexia-evb-col-years,
+    .bexia-evb-col-entitled,
+    .bexia-evb-col-taken,
+    .bexia-evb-col-pending,
+    .bexia-evb-col-status,
+    .bexia-evb-col-policy {
+        font-size: 0.76rem;
+    }
+
+    .bexia-evb-col-primary {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-evb-col-date {
+        min-width: 6.75rem;
+    }
+
+    .bexia-evb-col-number,
+    .bexia-evb-col-days {
+        min-width: 5.5rem;
+    }
+
+    .bexia-evb-col-badge,
+    .bexia-evb-col-code {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-evb-col-primary {
+        min-width: 7.25rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-evb-col-date {
+        min-width: 6.25rem;
+    }
+
+    .bexia-evb-col-number,
+    .bexia-evb-col-days {
+        min-width: 5rem;
+    }
+
+    .bexia-evb-col-badge,
+    .bexia-evb-col-code {
+        min-width: 5.25rem;
+        max-width: 7rem;
+    }
+}
+/* BEXIA_EMPLOYEE_VACATION_BALANCE_RESOURCE_RESPONSIVE_V5_79_66C_END */
 </style>
