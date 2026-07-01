@@ -82,6 +82,12 @@ class PayrollConceptResource extends Resource
         return static::bexiaCanConceptPermission('nomina.conceptos.eliminar');
     }
 
+    /*
+     * BEXIA_PAYROLL_CONCEPT_RESOURCE_RESPONSIVE_V5_79_63C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         $tenantId = Filament::getTenant()?->getKey();
@@ -89,9 +95,11 @@ class PayrollConceptResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Datos del concepto')
+                    ->extraAttributes(['class' => 'bexia-payroll-concept-section bexia-payroll-concept-section-main'])
                     ->columns(3)
                     ->schema([
                         Forms\Components\Select::make('company_id')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-company bexia-payroll-concept-select'])
                             ->label('Empresa')
                             ->relationship('company', 'name')
                             ->searchable()
@@ -102,6 +110,7 @@ class PayrollConceptResource extends Resource
                             ->dehydrated(),
 
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-code bexia-payroll-concept-code-field'])
                             ->label('Código')
                             ->required()
                             ->maxLength(80)
@@ -109,11 +118,13 @@ class PayrollConceptResource extends Resource
                             ->uppercase(),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-name'])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(255),
 
                         Forms\Components\Select::make('type')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-type bexia-payroll-concept-select'])
                             ->label('Tipo')
                             ->options(PayrollConcept::typeOptions())
                             ->required()
@@ -121,24 +132,28 @@ class PayrollConceptResource extends Resource
                             ->live(),
 
                         Forms\Components\Select::make('category')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-category bexia-payroll-concept-select'])
                             ->label('Categoría')
                             ->options(PayrollConcept::categoryOptions())
                             ->required()
                             ->default('other'),
 
                         Forms\Components\Select::make('source')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-source bexia-payroll-concept-select'])
                             ->label('Origen')
                             ->options(PayrollConcept::sourceOptions())
                             ->required()
                             ->default('system'),
 
                         Forms\Components\Select::make('unit')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-unit bexia-payroll-concept-select'])
                             ->label('Unidad')
                             ->options(PayrollConcept::unitOptions())
                             ->required()
                             ->default('amount'),
 
                         Forms\Components\Select::make('sat_key')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-sat-key bexia-payroll-concept-select'])
                             ->label('Clave SAT nómina')
                             ->options(fn (Forms\Get $get): array => self::satPayrollConceptOptions((string) $get('type')))
                             ->searchable()
@@ -146,30 +161,36 @@ class PayrollConceptResource extends Resource
                             ->helperText('Clave SAT del complemento de nómina según el tipo del concepto.'),
 
                         Forms\Components\Toggle::make('is_taxable')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-is-taxable bexia-payroll-concept-toggle'])
                             ->label('Gravado para CFDI')
                             ->helperText('Actívalo cuando el concepto se considere gravado. Si es exento o informativo, déjalo apagado.'),
 
                         Forms\Components\TextInput::make('taxable_amount_default')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-taxable-amount bexia-payroll-concept-money-field'])
                             ->label('Importe gravado default')
                             ->numeric()
                             ->prefix('$'),
 
                         Forms\Components\TextInput::make('exempt_amount_default')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-exempt-amount bexia-payroll-concept-money-field'])
                             ->label('Importe exento default')
                             ->numeric()
                             ->prefix('$'),
 
                         Forms\Components\TextInput::make('sort_order')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-sort-order bexia-payroll-concept-number-field'])
                             ->label('Orden')
                             ->numeric()
                             ->integer()
                             ->default(100),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-active bexia-payroll-concept-toggle'])
                             ->label('Activo')
                             ->default(true),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-notes'])
                             ->label('Notas')
                             ->rows(3)
                             ->columnSpanFull(),
@@ -235,56 +256,78 @@ class PayrollConceptResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-active bexia-payroll-concept-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-active bexia-payroll-concept-col-icon'])
                     ->label('Activo')
                     ->boolean()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('company.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-company bexia-payroll-concept-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-company bexia-payroll-concept-col-context'])
                     ->label('Empresa')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-code bexia-payroll-concept-col-primary bexia-payroll-concept-col-code-text'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-code bexia-payroll-concept-col-primary bexia-payroll-concept-col-code-text'])
                     ->label('Código')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-name bexia-payroll-concept-col-primary-text'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-name bexia-payroll-concept-col-primary-text'])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('type')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-type bexia-payroll-concept-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-type bexia-payroll-concept-col-badge'])
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => PayrollConcept::typeOptions()[$state] ?? ($state ?: '-'))
                     ->badge()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('category')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-category bexia-payroll-concept-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-category bexia-payroll-concept-col-badge'])
                     ->label('Categoría')
                     ->formatStateUsing(fn (?string $state): string => PayrollConcept::categoryOptions()[$state] ?? ($state ?: '-'))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('source')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-source bexia-payroll-concept-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-source bexia-payroll-concept-col-context'])
                     ->label('Origen')
                     ->formatStateUsing(fn (?string $state): string => PayrollConcept::sourceOptions()[$state] ?? ($state ?: '-'))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('unit')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-unit bexia-payroll-concept-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-unit bexia-payroll-concept-col-context'])
                     ->label('Unidad')
                     ->formatStateUsing(fn (?string $state): string => PayrollConcept::unitOptions()[$state] ?? ($state ?: '-'))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sat_key')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-sat-key bexia-payroll-concept-col-code-text'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-sat-key bexia-payroll-concept-col-code-text'])
                     ->label('Clave SAT')
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_taxable')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-taxable bexia-payroll-concept-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-taxable bexia-payroll-concept-col-icon'])
                     ->label('Gravado')
                     ->boolean()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sort_order')
+                    ->extraHeaderAttributes(['class' => 'bexia-payroll-concept-col-sort-order bexia-payroll-concept-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-sort-order bexia-payroll-concept-col-number'])
                     ->label('Orden')
                     ->sortable(),
             ])
