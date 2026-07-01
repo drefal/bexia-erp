@@ -9040,4 +9040,207 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PPOL_RESOURCE_RESPONSIVE_V5_79_59C_END */
+
+/* BEXIA_TBAC_RESOURCE_RESPONSIVE_V5_79_60C_START */
+/*
+ * TreasuryBankAccountResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de tesoreria, bancos,
+ * cuentas, saldos, movimientos, conciliacion, permisos, empresa ni tenant.
+ */
+.bexia-tbac-section {
+    border-radius: 1rem;
+}
+
+.bexia-tbac-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-tbac-section,
+.bexia-tbac-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-tbac-field .fi-input-wrp,
+.bexia-tbac-field .fi-select-input,
+.bexia-tbac-field .fi-fo-select,
+.bexia-tbac-field input,
+.bexia-tbac-field select,
+.bexia-tbac-field textarea,
+.bexia-tbac-field .choices,
+.bexia-tbac-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-tbac-field-name input,
+.bexia-tbac-field-bank,
+.bexia-tbac-field-account-number input,
+.bexia-tbac-field-clabe input,
+.bexia-tbac-field-notes textarea,
+.bexia-tbac-col-name,
+.bexia-tbac-col-company,
+.bexia-tbac-col-bank,
+.bexia-tbac-col-account-number,
+.bexia-tbac-col-clabe {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-tbac-code-field input,
+.bexia-tbac-col-code {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-tbac-money-field input,
+.bexia-tbac-col-money {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-tbac-col-name,
+.bexia-tbac-col-company,
+.bexia-tbac-col-bank,
+.bexia-tbac-col-account-number,
+.bexia-tbac-col-clabe,
+.bexia-tbac-col-current-balance,
+.bexia-tbac-col-default-concentrator,
+.bexia-tbac-col-active {
+    vertical-align: top;
+}
+
+.bexia-tbac-col-primary {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-tbac-col-context {
+    min-width: 9rem;
+    max-width: 14rem;
+    white-space: normal;
+}
+
+.bexia-tbac-col-code {
+    min-width: 9rem;
+    max-width: 13rem;
+    white-space: normal;
+}
+
+.bexia-tbac-col-money {
+    min-width: 8rem;
+}
+
+.bexia-tbac-col-icon {
+    width: 5rem;
+    min-width: 5rem;
+    text-align: center;
+}
+
+.bexia-tbac-section-main .fi-section-content,
+.bexia-tbac-section-balances .fi-section-content,
+.bexia-tbac-section-notes .fi-section-content {
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-tbac-section .fi-grid,
+    .bexia-tbac-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-tbac-col-primary {
+        max-width: 15rem;
+    }
+
+    .bexia-tbac-col-context,
+    .bexia-tbac-col-code {
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-tbac-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-tbac-section .fi-section-header,
+    .bexia-tbac-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-tbac-field .fi-fo-field-wrp-label,
+    .bexia-tbac-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-tbac-field input,
+    .bexia-tbac-field select,
+    .bexia-tbac-field textarea,
+    .bexia-tbac-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-tbac-col-name,
+    .bexia-tbac-col-company,
+    .bexia-tbac-col-bank,
+    .bexia-tbac-col-account-number,
+    .bexia-tbac-col-clabe,
+    .bexia-tbac-col-current-balance,
+    .bexia-tbac-col-default-concentrator,
+    .bexia-tbac-col-active {
+        font-size: 0.76rem;
+    }
+
+    .bexia-tbac-col-primary {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-tbac-col-context {
+        min-width: 7rem;
+        max-width: 9.75rem;
+    }
+
+    .bexia-tbac-col-code {
+        min-width: 7.5rem;
+        max-width: 10.25rem;
+    }
+
+    .bexia-tbac-col-money {
+        min-width: 6.75rem;
+    }
+
+    .bexia-tbac-col-icon {
+        width: 4.25rem;
+        min-width: 4.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-tbac-col-primary {
+        min-width: 7.5rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-tbac-col-context,
+    .bexia-tbac-col-code {
+        min-width: 6.5rem;
+        max-width: 8.25rem;
+    }
+
+    .bexia-tbac-col-money {
+        min-width: 6.25rem;
+    }
+
+    .bexia-tbac-col-icon {
+        width: 3.75rem;
+        min-width: 3.75rem;
+    }
+}
+/* BEXIA_TBAC_RESOURCE_RESPONSIVE_V5_79_60C_END */
 </style>
