@@ -236,11 +236,18 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             );
     }
 
+    /*
+     * BEXIA_PRODUCT_CATEGORY_RESOURCE_RESPONSIVE_V5_79_70C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 \Filament\Forms\Components\Select::make('costing_method')
+                    ->extraAttributes(['class' => 'bexia-pcat-field bexia-pcat-field-costing bexia-pcat-select-field'])
                     ->label('Método de costeo')
                     ->options([
                         'inherit' => 'Heredar de empresa',
@@ -253,12 +260,14 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->helperText('Solo configura este campo si esta categoría debe dominar el método de costeo de sus productos.'),
 
                 Forms\Components\Section::make('Categoría')
+                    ->extraAttributes(['class' => 'bexia-pcat-section bexia-pcat-section-main'])
                     ->schema([
                         Forms\Components\Hidden::make('company_id')
                             ->default(fn (): ?int => static::currentCompanyId())
                             ->required(),
 
                         Forms\Components\Select::make('parent_id')
+                            ->extraAttributes(['class' => 'bexia-pcat-field bexia-pcat-field-parent bexia-pcat-field-tree bexia-pcat-select-field'])
                             ->label('Categoría padre')
                             ->options(fn (): array => static::categoryTreeOptions())
                             ->getSearchResultsUsing(fn (string $search): array => static::categoryTreeOptions($search))
@@ -271,6 +280,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->columnSpan(12),
 
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes(['class' => 'bexia-pcat-field bexia-pcat-field-code bexia-pcat-code-field'])
                             ->label('Código')
                             ->required()
                             ->maxLength(80)
@@ -278,18 +288,21 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->columnSpan(3),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-pcat-field bexia-pcat-field-name bexia-pcat-primary-field'])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(255)
                             ->columnSpan(6),
 
                         Forms\Components\TextInput::make('sort_order')
+                            ->extraAttributes(['class' => 'bexia-pcat-field bexia-pcat-field-sort-order bexia-pcat-number-field'])
                             ->label('Orden')
                             ->numeric()
                             ->default(0)
                             ->columnSpan(2),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-pcat-field bexia-pcat-field-active'])
                             ->label('Activa')
                             ->default(true)
                             ->columnSpan(1),
@@ -303,6 +316,8 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $table
             ->columns([
                 \Filament\Tables\Columns\TextColumn::make('costing_method')
+                    ->extraHeaderAttributes(['class' => 'bexia-pcat-col-costing bexia-pcat-col-badge bexia-pcat-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-pcat-col-costing bexia-pcat-col-badge bexia-pcat-col-context'])
                     ->label('Costeo')
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'average' => 'Promedio',
@@ -314,11 +329,15 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes(['class' => 'bexia-pcat-col-code bexia-pcat-col-compact bexia-pcat-col-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-pcat-col-code bexia-pcat-col-compact bexia-pcat-col-mono'])
                     ->label('Código')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('tree_label')
+                    ->extraHeaderAttributes(['class' => 'bexia-pcat-col-tree bexia-pcat-col-primary bexia-pcat-col-long-text bexia-pcat-col-hierarchy'])
+                    ->extraCellAttributes(['class' => 'bexia-pcat-col-tree bexia-pcat-col-primary bexia-pcat-col-long-text bexia-pcat-col-hierarchy'])
                     ->label('Categoría')
                     ->getStateUsing(fn (ProductCategory $record): string => static::categoryTreePathLabel($record->id) ?? $record->name)
                     ->searchable(['code', 'name'])
@@ -326,17 +345,23 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderBy('name', $direction)),
 
                 Tables\Columns\TextColumn::make('parent_label')
+                    ->extraHeaderAttributes(['class' => 'bexia-pcat-col-parent bexia-pcat-col-context bexia-pcat-col-long-text'])
+                    ->extraCellAttributes(['class' => 'bexia-pcat-col-parent bexia-pcat-col-context bexia-pcat-col-long-text'])
                     ->label('Padre')
                     ->getStateUsing(fn (ProductCategory $record): string => $record->parent_id ? (static::categoryTreeLabel($record->parent_id) ?? '—') : '—')
                     ->wrap()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sort_order')
+                    ->extraHeaderAttributes(['class' => 'bexia-pcat-col-sort-order bexia-pcat-col-number bexia-pcat-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-pcat-col-sort-order bexia-pcat-col-number bexia-pcat-col-compact'])
                     ->label('Orden')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-pcat-col-active bexia-pcat-col-compact bexia-pcat-col-status'])
+                    ->extraCellAttributes(['class' => 'bexia-pcat-col-active bexia-pcat-col-compact bexia-pcat-col-status'])
                     ->label('Activa')
                     ->boolean()
                     ->sortable(),
@@ -348,9 +373,11 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
+                    ->extraAttributes(['class' => 'bexia-pcat-action bexia-pcat-action-edit'])
                     ->label('Editar'),
 
                 Tables\Actions\Action::make('archive_category')
+                    ->extraAttributes(['class' => 'bexia-pcat-action bexia-pcat-action-archive bexia-pcat-action-warning'])
                     ->label('Archivar')
                     ->icon('heroicon-o-archive-box')
                     ->color('warning')
@@ -366,6 +393,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\BulkAction::make('archive_categories')
+                        ->extraAttributes(['class' => 'bexia-pcat-action bexia-pcat-action-bulk-archive bexia-pcat-action-warning'])
                         ->label('Archivar seleccionadas')
                         ->icon('heroicon-o-archive-box')
                         ->color('warning')

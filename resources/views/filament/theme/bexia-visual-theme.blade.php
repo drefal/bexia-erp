@@ -11219,4 +11219,220 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_STOCK_ADJUSTMENT_AUDIT_RESOURCE_RESPONSIVE_V5_79_69C_END */
+
+/* BEXIA_PRODUCT_CATEGORY_RESOURCE_RESPONSIVE_V5_79_70C_START */
+/*
+ * ProductCategoryResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de categorias, productos,
+ * jerarquia padre/hijo, ordenamiento, slug/codigo, disponibilidad,
+ * inventario, SAT/UNSPSC, impuestos, permisos, empresa ni tenant.
+ */
+.bexia-pcat-section {
+    border-radius: 1rem;
+}
+
+.bexia-pcat-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-pcat-section,
+.bexia-pcat-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-pcat-section .fi-grid,
+.bexia-pcat-section .grid,
+.bexia-pcat-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-pcat-field .fi-input-wrp,
+.bexia-pcat-field .fi-select-input,
+.bexia-pcat-field .fi-fo-select,
+.bexia-pcat-field input,
+.bexia-pcat-field select,
+.bexia-pcat-field textarea,
+.bexia-pcat-field .choices,
+.bexia-pcat-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-pcat-field-name input,
+.bexia-pcat-field-parent,
+.bexia-pcat-field-tree,
+.bexia-pcat-col-tree,
+.bexia-pcat-col-parent,
+.bexia-pcat-col-context,
+.bexia-pcat-col-long-text {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-pcat-code-field input,
+.bexia-pcat-number-field input,
+.bexia-pcat-col-mono,
+.bexia-pcat-col-number {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-pcat-code-field input,
+.bexia-pcat-col-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.bexia-pcat-col-costing,
+.bexia-pcat-col-code,
+.bexia-pcat-col-tree,
+.bexia-pcat-col-parent,
+.bexia-pcat-col-sort-order,
+.bexia-pcat-col-active {
+    vertical-align: top;
+}
+
+.bexia-pcat-col-primary {
+    min-width: 13rem;
+    max-width: 24rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-pcat-col-long-text {
+    min-width: 11rem;
+    max-width: 22rem;
+    white-space: normal;
+}
+
+.bexia-pcat-col-hierarchy {
+    line-height: 1.35;
+}
+
+.bexia-pcat-col-compact {
+    min-width: 4.75rem;
+    max-width: 7.25rem;
+    white-space: nowrap;
+}
+
+.bexia-pcat-col-code {
+    min-width: 6rem;
+    max-width: 9rem;
+    white-space: normal;
+}
+
+.bexia-pcat-col-number {
+    min-width: 4.5rem;
+    max-width: 6.5rem;
+    text-align: right;
+}
+
+.bexia-pcat-col-badge {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-pcat-col-status {
+    min-width: 4.75rem;
+    max-width: 6.5rem;
+}
+
+.bexia-pcat-action {
+    max-width: 100%;
+}
+
+@media (max-width: 1024px) {
+    .bexia-pcat-section .fi-grid,
+    .bexia-pcat-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-pcat-col-primary,
+    .bexia-pcat-col-long-text {
+        max-width: 18rem;
+    }
+
+    .bexia-pcat-col-badge {
+        max-width: 8.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-pcat-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-pcat-section .fi-section-header,
+    .bexia-pcat-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-pcat-field .fi-fo-field-wrp-label,
+    .bexia-pcat-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-pcat-field input,
+    .bexia-pcat-field select,
+    .bexia-pcat-field textarea,
+    .bexia-pcat-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-pcat-col-costing,
+    .bexia-pcat-col-code,
+    .bexia-pcat-col-tree,
+    .bexia-pcat-col-parent,
+    .bexia-pcat-col-sort-order,
+    .bexia-pcat-col-active {
+        font-size: 0.76rem;
+    }
+
+    .bexia-pcat-col-primary,
+    .bexia-pcat-col-long-text {
+        min-width: 9rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-pcat-col-compact,
+    .bexia-pcat-col-code {
+        min-width: 4.75rem;
+        max-width: 6.75rem;
+    }
+
+    .bexia-pcat-col-badge {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-pcat-col-number,
+    .bexia-pcat-col-status {
+        min-width: 4rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-pcat-col-primary,
+    .bexia-pcat-col-long-text {
+        min-width: 7.75rem;
+        max-width: 10rem;
+    }
+
+    .bexia-pcat-col-badge,
+    .bexia-pcat-col-compact,
+    .bexia-pcat-col-code {
+        min-width: 4.5rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-pcat-col-number,
+    .bexia-pcat-col-status {
+        min-width: 3.75rem;
+        max-width: 5rem;
+    }
+}
+/* BEXIA_PRODUCT_CATEGORY_RESOURCE_RESPONSIVE_V5_79_70C_END */
 </style>
