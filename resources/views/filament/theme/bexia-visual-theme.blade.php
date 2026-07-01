@@ -9243,4 +9243,187 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_TBAC_RESOURCE_RESPONSIVE_V5_79_60C_END */
+
+/* BEXIA_SLOT_RESOURCE_RESPONSIVE_V5_79_61C_START */
+/*
+ * StockLotResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de lotes, inventario,
+ * productos, series, ubicaciones, cantidades, trazabilidad, QR/PDF/print,
+ * permisos, empresa ni tenant.
+ */
+.bexia-slot-section {
+    border-radius: 1rem;
+}
+
+.bexia-slot-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-slot-section,
+.bexia-slot-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-slot-field .fi-input-wrp,
+.bexia-slot-field .fi-select-input,
+.bexia-slot-field .fi-fo-select,
+.bexia-slot-field input,
+.bexia-slot-field select,
+.bexia-slot-field .choices,
+.bexia-slot-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-slot-field-product,
+.bexia-slot-field-variant,
+.bexia-slot-field-supplier,
+.bexia-slot-field-lot-number input,
+.bexia-slot-col-lot-number,
+.bexia-slot-col-product,
+.bexia-slot-col-variant {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-slot-code-field input,
+.bexia-slot-col-code {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-slot-col-lot-number,
+.bexia-slot-col-product,
+.bexia-slot-col-variant,
+.bexia-slot-col-expiration,
+.bexia-slot-col-series,
+.bexia-slot-col-status,
+.bexia-slot-col-created {
+    vertical-align: top;
+}
+
+.bexia-slot-col-primary {
+    min-width: 10rem;
+    max-width: 16rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-slot-col-context {
+    min-width: 10rem;
+    max-width: 16rem;
+    white-space: normal;
+}
+
+.bexia-slot-col-date {
+    min-width: 8rem;
+    max-width: 10rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-slot-col-number {
+    min-width: 6rem;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-slot-col-badge {
+    min-width: 7rem;
+    max-width: 9rem;
+    white-space: normal;
+}
+
+.bexia-slot-section-main .fi-section-content {
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-slot-section .fi-grid,
+    .bexia-slot-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-slot-col-primary,
+    .bexia-slot-col-context {
+        max-width: 13rem;
+    }
+
+    .bexia-slot-col-date {
+        min-width: 7.25rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-slot-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-slot-section .fi-section-header,
+    .bexia-slot-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-slot-field .fi-fo-field-wrp-label,
+    .bexia-slot-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-slot-field input,
+    .bexia-slot-field select,
+    .bexia-slot-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-slot-col-lot-number,
+    .bexia-slot-col-product,
+    .bexia-slot-col-variant,
+    .bexia-slot-col-expiration,
+    .bexia-slot-col-series,
+    .bexia-slot-col-status,
+    .bexia-slot-col-created {
+        font-size: 0.76rem;
+    }
+
+    .bexia-slot-col-primary,
+    .bexia-slot-col-context {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-slot-col-date {
+        min-width: 6.75rem;
+        max-width: 8.5rem;
+    }
+
+    .bexia-slot-col-number {
+        min-width: 5rem;
+    }
+
+    .bexia-slot-col-badge {
+        min-width: 5.75rem;
+        max-width: 7.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-slot-col-primary,
+    .bexia-slot-col-context {
+        min-width: 7rem;
+        max-width: 9rem;
+    }
+
+    .bexia-slot-col-date {
+        min-width: 6rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-slot-col-number {
+        min-width: 4.5rem;
+    }
+}
+/* BEXIA_SLOT_RESOURCE_RESPONSIVE_V5_79_61C_END */
 </style>
