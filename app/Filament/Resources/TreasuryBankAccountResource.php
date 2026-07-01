@@ -74,6 +74,12 @@ class TreasuryBankAccountResource extends Resource
             ->orderBy('name');
     }
 
+    /*
+     * BEXIA_TBAC_RESOURCE_RESPONSIVE_V5_79_60C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
@@ -82,49 +88,59 @@ class TreasuryBankAccountResource extends Resource
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Cuenta bancaria')
+                    ->extraAttributes(['class' => 'bexia-tbac-section bexia-tbac-section-main'])
                     ->description('Administra cuentas bancarias separadas de las cajas operativas.')
                     ->columns(3)
                     ->schema([
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-name'])
                             ->label('Nombre de la cuenta')
                             ->required()
                             ->maxLength(255),
 
                         Forms\Components\Select::make('bank_id')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-bank bexia-tbac-select'])
                             ->label('Banco')
                             ->options(fn (): array => static::bankOptions())
                             ->searchable()
                             ->preload(),
 
                         Forms\Components\TextInput::make('currency_code')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-currency'])
                             ->label('Moneda')
                             ->default('MXN')
                             ->required()
                             ->maxLength(10),
 
                         Forms\Components\TextInput::make('account_number')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-account-number bexia-tbac-code-field'])
                             ->label('Número de cuenta')
                             ->maxLength(100),
 
                         Forms\Components\TextInput::make('clabe')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-clabe bexia-tbac-code-field'])
                             ->label('CLABE')
                             ->maxLength(100),
 
                         Forms\Components\Toggle::make('is_default_concentrator')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-default-concentrator bexia-tbac-toggle'])
                             ->label('Concentradora por defecto de la empresa')
                             ->default(false)
                             ->helperText('Solo debe existir una por empresa. Si activas esta, se desactivan las demas.'),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-active bexia-tbac-toggle'])
                             ->label('Activa')
                             ->default(true),
                     ]),
 
                 Forms\Components\Section::make('Saldos')
+                    ->extraAttributes(['class' => 'bexia-tbac-section bexia-tbac-section-balances'])
                     ->description('El saldo actual se actualiza por movimientos de Tesorería.')
                     ->columns(2)
                     ->schema([
                         Forms\Components\TextInput::make('opening_balance')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-opening-balance bexia-tbac-money-field'])
                             ->label('Saldo inicial')
                             ->numeric()
                             ->default(0)
@@ -132,6 +148,7 @@ class TreasuryBankAccountResource extends Resource
                             ->step('0.01'),
 
                         Forms\Components\TextInput::make('current_balance')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-current-balance bexia-tbac-money-field'])
                             ->label('Saldo actual')
                             ->numeric()
                             ->prefix('$')
@@ -140,8 +157,10 @@ class TreasuryBankAccountResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Notas')
+                    ->extraAttributes(['class' => 'bexia-tbac-section bexia-tbac-section-notes'])
                     ->schema([
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-tbac-field bexia-tbac-field-notes'])
                             ->label('Notas')
                             ->rows(3)
                             ->maxLength(3000),
@@ -154,43 +173,59 @@ class TreasuryBankAccountResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-tbac-col-name bexia-tbac-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-tbac-col-name bexia-tbac-col-primary'])
                     ->label('Cuenta bancaria')
                     ->searchable()
                     ->sortable()
                     ->wrap(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-tbac-col-company bexia-tbac-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-tbac-col-company bexia-tbac-col-context'])
                     ->label('Empresa')
                     ->formatStateUsing(fn ($state): string => static::companyLabel($state))
                     ->toggleable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('bank_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-tbac-col-bank bexia-tbac-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-tbac-col-bank bexia-tbac-col-context'])
                     ->label('Banco')
                     ->formatStateUsing(fn ($state): string => static::bankLabel($state))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('account_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-tbac-col-account-number bexia-tbac-col-code'])
+                    ->extraCellAttributes(['class' => 'bexia-tbac-col-account-number bexia-tbac-col-code'])
                     ->label('Cuenta')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('clabe')
+                    ->extraHeaderAttributes(['class' => 'bexia-tbac-col-clabe bexia-tbac-col-code'])
+                    ->extraCellAttributes(['class' => 'bexia-tbac-col-clabe bexia-tbac-col-code'])
                     ->label('CLABE')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('current_balance')
+                    ->extraHeaderAttributes(['class' => 'bexia-tbac-col-current-balance bexia-tbac-col-money'])
+                    ->extraCellAttributes(['class' => 'bexia-tbac-col-current-balance bexia-tbac-col-money'])
                     ->label('Saldo')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_default_concentrator')
+                    ->extraHeaderAttributes(['class' => 'bexia-tbac-col-default-concentrator bexia-tbac-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-tbac-col-default-concentrator bexia-tbac-col-icon'])
                     ->label('Concentradora')
                     ->boolean()
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes(['class' => 'bexia-tbac-col-active bexia-tbac-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-tbac-col-active bexia-tbac-col-icon'])
                     ->label('Activa')
                     ->boolean(),
             ])
