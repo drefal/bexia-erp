@@ -8841,4 +8841,203 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_BSER_RESOURCE_RESPONSIVE_V5_79_58C_END */
+
+/* BEXIA_PPOL_RESOURCE_RESPONSIVE_V5_79_59C_START */
+/*
+ * PayrollPolicyResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de politicas de nomina,
+ * calculos, percepciones, deducciones, ISR/IMSS/subsidio, permisos,
+ * empresa ni tenant.
+ */
+.bexia-ppol-section {
+    border-radius: 1rem;
+}
+
+.bexia-ppol-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-ppol-section,
+.bexia-ppol-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-ppol-field .fi-input-wrp,
+.bexia-ppol-field .fi-select-input,
+.bexia-ppol-field .fi-fo-select,
+.bexia-ppol-field input,
+.bexia-ppol-field select,
+.bexia-ppol-field textarea,
+.bexia-ppol-field .choices,
+.bexia-ppol-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-ppol-field-name input,
+.bexia-ppol-field-notes textarea,
+.bexia-ppol-col-company,
+.bexia-ppol-col-name,
+.bexia-ppol-col-mode {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-ppol-number-field input,
+.bexia-ppol-col-number {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-ppol-col-active,
+.bexia-ppol-col-company,
+.bexia-ppol-col-name,
+.bexia-ppol-col-status,
+.bexia-ppol-col-overtime,
+.bexia-ppol-col-late-tolerance,
+.bexia-ppol-col-late-mode,
+.bexia-ppol-col-absence-mode {
+    vertical-align: top;
+}
+
+.bexia-ppol-col-primary {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-ppol-col-name {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+}
+
+.bexia-ppol-col-status,
+.bexia-ppol-col-badge {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-ppol-col-number {
+    min-width: 7rem;
+}
+
+.bexia-ppol-col-mode {
+    min-width: 9rem;
+    max-width: 14rem;
+    white-space: normal;
+}
+
+.bexia-ppol-col-icon {
+    width: 5rem;
+    min-width: 5rem;
+    text-align: center;
+}
+
+.bexia-ppol-section-general .fi-section-content,
+.bexia-ppol-section-overtime .fi-section-content,
+.bexia-ppol-section-attendance .fi-section-content {
+    overflow-x: hidden;
+}
+
+@media (max-width: 1024px) {
+    .bexia-ppol-section .fi-grid,
+    .bexia-ppol-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-ppol-col-primary,
+    .bexia-ppol-col-name {
+        max-width: 15rem;
+    }
+
+    .bexia-ppol-col-mode {
+        min-width: 8rem;
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-ppol-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-ppol-section .fi-section-header,
+    .bexia-ppol-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-ppol-field .fi-fo-field-wrp-label,
+    .bexia-ppol-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-ppol-field input,
+    .bexia-ppol-field select,
+    .bexia-ppol-field textarea,
+    .bexia-ppol-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-ppol-col-active,
+    .bexia-ppol-col-company,
+    .bexia-ppol-col-name,
+    .bexia-ppol-col-status,
+    .bexia-ppol-col-overtime,
+    .bexia-ppol-col-late-tolerance,
+    .bexia-ppol-col-late-mode,
+    .bexia-ppol-col-absence-mode {
+        font-size: 0.76rem;
+    }
+
+    .bexia-ppol-col-primary,
+    .bexia-ppol-col-name {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-ppol-col-status,
+    .bexia-ppol-col-badge {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-ppol-col-number {
+        min-width: 5.75rem;
+    }
+
+    .bexia-ppol-col-mode {
+        min-width: 7rem;
+        max-width: 9.75rem;
+    }
+
+    .bexia-ppol-col-icon {
+        width: 4.25rem;
+        min-width: 4.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-ppol-col-primary,
+    .bexia-ppol-col-name {
+        min-width: 7.5rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-ppol-col-mode {
+        min-width: 6.5rem;
+        max-width: 8.25rem;
+    }
+
+    .bexia-ppol-col-icon {
+        width: 3.75rem;
+        min-width: 3.75rem;
+    }
+}
+/* BEXIA_PPOL_RESOURCE_RESPONSIVE_V5_79_59C_END */
 </style>
