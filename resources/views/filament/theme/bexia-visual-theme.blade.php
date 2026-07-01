@@ -9902,4 +9902,215 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PAYROLL_CONCEPT_RESOURCE_RESPONSIVE_V5_79_63C_END */
+
+/* BEXIA_BRANCH_RESOURCE_RESPONSIVE_V5_79_64C_START */
+/*
+ * BranchResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de sucursales, empresas,
+ * tenant, direcciones, almacenes/ubicaciones, POS, fiscal/SAT,
+ * permisos ni relaciones.
+ */
+.bexia-branch-section {
+    border-radius: 1rem;
+}
+
+.bexia-branch-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-branch-section,
+.bexia-branch-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-branch-section .fi-grid,
+.bexia-branch-section .grid,
+.bexia-branch-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-branch-field .fi-input-wrp,
+.bexia-branch-field .fi-select-input,
+.bexia-branch-field input,
+.bexia-branch-field select,
+.bexia-branch-field textarea,
+.bexia-branch-field .choices,
+.bexia-branch-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-branch-field-name input,
+.bexia-branch-field-address-line1 input,
+.bexia-branch-field-address-line2 input,
+.bexia-branch-field-city input,
+.bexia-branch-field-state input,
+.bexia-branch-field-country input,
+.bexia-branch-field-contact-name input,
+.bexia-branch-field-contact-email input,
+.bexia-branch-field-notes textarea,
+.bexia-branch-col-name,
+.bexia-branch-col-code,
+.bexia-branch-col-city,
+.bexia-branch-col-contact-name {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-branch-code-field input,
+.bexia-branch-phone-field input,
+.bexia-branch-email-field input,
+.bexia-branch-col-code-text {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-branch-col-id,
+.bexia-branch-col-name,
+.bexia-branch-col-code,
+.bexia-branch-col-city,
+.bexia-branch-col-contact-name,
+.bexia-branch-col-active,
+.bexia-branch-col-created-at {
+    vertical-align: top;
+}
+
+.bexia-branch-col-number {
+    min-width: 4.5rem;
+    white-space: nowrap;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-branch-col-primary-text {
+    min-width: 11rem;
+    max-width: 18rem;
+    white-space: normal;
+    font-weight: 650;
+}
+
+.bexia-branch-col-code-text {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-branch-col-context {
+    min-width: 8rem;
+    max-width: 13rem;
+    white-space: normal;
+}
+
+.bexia-branch-col-icon {
+    width: 4.75rem;
+    min-width: 4.75rem;
+    text-align: center;
+}
+
+.bexia-branch-col-date {
+    min-width: 8.5rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1024px) {
+    .bexia-branch-section .fi-grid,
+    .bexia-branch-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-branch-col-primary-text {
+        max-width: 15rem;
+    }
+
+    .bexia-branch-col-context {
+        max-width: 11.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-branch-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-branch-section .fi-section-header,
+    .bexia-branch-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-branch-field .fi-fo-field-wrp-label,
+    .bexia-branch-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-branch-field input,
+    .bexia-branch-field select,
+    .bexia-branch-field textarea,
+    .bexia-branch-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-branch-col-id,
+    .bexia-branch-col-name,
+    .bexia-branch-col-code,
+    .bexia-branch-col-city,
+    .bexia-branch-col-contact-name,
+    .bexia-branch-col-active,
+    .bexia-branch-col-created-at {
+        font-size: 0.76rem;
+    }
+
+    .bexia-branch-col-number {
+        min-width: 3.75rem;
+    }
+
+    .bexia-branch-col-primary-text {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-branch-col-code-text {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-branch-col-context {
+        min-width: 6.75rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-branch-col-icon {
+        width: 4rem;
+        min-width: 4rem;
+    }
+
+    .bexia-branch-col-date {
+        min-width: 7.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-branch-col-primary-text {
+        min-width: 7rem;
+        max-width: 9.25rem;
+    }
+
+    .bexia-branch-col-code-text,
+    .bexia-branch-col-context {
+        min-width: 5.75rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-branch-col-icon {
+        width: 3.5rem;
+        min-width: 3.5rem;
+    }
+
+    .bexia-branch-col-date {
+        min-width: 6.75rem;
+    }
+}
+/* BEXIA_BRANCH_RESOURCE_RESPONSIVE_V5_79_64C_END */
 </style>
