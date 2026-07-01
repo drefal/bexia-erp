@@ -94,13 +94,21 @@ public static function canCreate(): bool
             );
     }
 
+    /*
+     * BEXIA_BSER_RESOURCE_RESPONSIVE_V5_79_58C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Section::make('Contexto')
+                ->extraAttributes(['class' => 'bexia-bser-section bexia-bser-section-context'])
                 ->columns(12)
                 ->schema([
                     Forms\Components\Select::make('company_id')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-company bexia-bser-select'])
                         ->label('Empresa')
                         ->options(fn (): array => static::companyOptions())
                         ->searchable()
@@ -109,6 +117,7 @@ public static function canCreate(): bool
                         ->columnSpan(4),
 
                     Forms\Components\Select::make('document_type')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-document-type bexia-bser-select'])
                         ->label('Tipo de documento')
                         ->options([
                             'invoice' => 'Factura',
@@ -121,6 +130,7 @@ public static function canCreate(): bool
                         ->columnSpan(3),
 
                     Forms\Components\Select::make('branch_id')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-branch bexia-bser-select'])
                         ->label('Sucursal')
                         ->options(fn (): array => static::branchOptions())
                         ->searchable()
@@ -130,6 +140,7 @@ public static function canCreate(): bool
                         ->columnSpan(3),
 
                     Forms\Components\Select::make('pos_point_id')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-pos-point bexia-bser-select'])
                         ->label('Punto de venta')
                         ->options(fn (): array => static::posPointOptions())
                         ->searchable()
@@ -140,9 +151,11 @@ public static function canCreate(): bool
                 ]),
 
             Forms\Components\Section::make('Serie y folio')
+                ->extraAttributes(['class' => 'bexia-bser-section bexia-bser-section-series'])
                 ->columns(12)
                 ->schema([
                     Forms\Components\TextInput::make('name')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-name'])
                         ->label('Nombre interno')
                         ->required()
                         ->maxLength(255)
@@ -150,6 +163,7 @@ public static function canCreate(): bool
                         ->columnSpan(4),
 
                     Forms\Components\TextInput::make('series')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-series bexia-bser-mono'])
                         ->label('Serie CFDI')
                         ->required()
                         ->maxLength(80)
@@ -157,12 +171,14 @@ public static function canCreate(): bool
                         ->columnSpan(3),
 
                     Forms\Components\TextInput::make('year')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-year bexia-bser-number-field'])
                         ->label('Año')
                         ->numeric()
                         ->default((int) date('Y'))
                         ->columnSpan(2),
 
                     Forms\Components\TextInput::make('next_number')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-next-number bexia-bser-number-field'])
                         ->label('Siguiente folio')
                         ->numeric()
                         ->minValue(1)
@@ -171,6 +187,7 @@ public static function canCreate(): bool
                         ->columnSpan(2),
 
                     Forms\Components\TextInput::make('padding')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-padding bexia-bser-number-field'])
                         ->label('Dígitos vista')
                         ->numeric()
                         ->minValue(1)
@@ -180,6 +197,7 @@ public static function canCreate(): bool
                         ->columnSpan(1),
 
                     Forms\Components\Select::make('reset_period')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-reset-period bexia-bser-select'])
                         ->label('Reinicio')
                         ->options([
                             'never' => 'Nunca',
@@ -190,17 +208,20 @@ public static function canCreate(): bool
                         ->columnSpan(3),
 
                     Forms\Components\Toggle::make('is_default')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-default bexia-bser-toggle'])
                         ->label('Serie default')
                         ->helperText('Se usa si no hay serie específica para sucursal/PDV.')
                         ->default(false)
                         ->columnSpan(2),
 
                     Forms\Components\Toggle::make('active')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-active bexia-bser-toggle'])
                         ->label('Activa')
                         ->default(true)
                         ->columnSpan(2),
 
                     Forms\Components\Placeholder::make('preview')
+                        ->extraAttributes(['class' => 'bexia-bser-placeholder bexia-bser-placeholder-preview bexia-bser-mono'])
                         ->label('Vista previa')
                         ->content(function (Forms\Get $get): string {
                             $series = trim((string) $get('series'));
@@ -213,6 +234,7 @@ public static function canCreate(): bool
                         ->columnSpan(5),
 
                     Forms\Components\Textarea::make('notes')
+                        ->extraAttributes(['class' => 'bexia-bser-field bexia-bser-field-notes'])
                         ->label('Notas')
                         ->rows(2)
                         ->columnSpanFull(),
@@ -225,11 +247,15 @@ public static function canCreate(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('company.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-company bexia-bser-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-company bexia-bser-col-primary'])
                     ->label('Empresa')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('document_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-document-type bexia-bser-col-badge'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-document-type bexia-bser-col-badge'])
                     ->label('Documento')
                     ->badge()
                     ->formatStateUsing(fn ($state): string => match ((string) $state) {
@@ -241,32 +267,46 @@ public static function canCreate(): bool
                     }),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-name'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-name'])
                     ->label('Nombre interno')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('series')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-series bexia-bser-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-series bexia-bser-mono'])
                     ->label('Serie')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('next_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-next-number bexia-bser-col-number'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-next-number bexia-bser-col-number'])
                     ->label('Siguiente')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('preview')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-preview bexia-bser-mono'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-preview bexia-bser-mono'])
                     ->label('Vista previa')
                     ->state(fn (BillingSeries $record): string => $record->previewNextNumber()),
 
                 Tables\Columns\IconColumn::make('is_default')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-default bexia-bser-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-default bexia-bser-col-icon'])
                     ->label('Default')
                     ->boolean(),
 
                 Tables\Columns\IconColumn::make('active')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-active bexia-bser-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-active bexia-bser-col-icon'])
                     ->label('Activa')
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('last_assigned_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-bser-col-last-use bexia-bser-col-date'])
+                    ->extraCellAttributes(['class' => 'bexia-bser-col-last-use bexia-bser-col-date'])
                     ->label('Último uso')
                     ->dateTime('d/m/Y H:i')
                     ->placeholder('—'),
