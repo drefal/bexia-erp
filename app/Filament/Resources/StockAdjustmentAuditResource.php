@@ -45,17 +45,26 @@ class StockAdjustmentAuditResource extends Resource
         return $query;
     }
 
+    /*
+     * BEXIA_STOCK_ADJUSTMENT_AUDIT_RESOURCE_RESPONSIVE_V5_79_69C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Section::make('Detalle')
+                ->extraAttributes(['class' => 'bexia-saudit-section bexia-saudit-section-detail'])
                 ->schema([
                     Forms\Components\TextInput::make('event')
+                        ->extraAttributes(['class' => 'bexia-saudit-field bexia-saudit-field-event bexia-saudit-code-field'])
                         ->label('Evento')
                         ->formatStateUsing(fn ($state): string => static::auditEventLabel($state))
                         ->disabled(),
 
                     Forms\Components\Textarea::make('description')
+                        ->extraAttributes(['class' => 'bexia-saudit-field bexia-saudit-field-description bexia-saudit-long-field'])
                         ->label('Descripción')
                         ->formatStateUsing(fn ($state): string => static::auditDescriptionLabel($state))
                         ->disabled()
@@ -95,11 +104,15 @@ class StockAdjustmentAuditResource extends Resource
             ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-saudit-col-created-at bexia-saudit-col-date bexia-saudit-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-saudit-col-created-at bexia-saudit-col-date bexia-saudit-col-context'])
                     ->label('Fecha')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('event')
+                    ->extraHeaderAttributes(['class' => 'bexia-saudit-col-event bexia-saudit-col-badge bexia-saudit-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-saudit-col-event bexia-saudit-col-badge bexia-saudit-col-context'])
                     ->label('Evento')
                     ->badge()
                     ->formatStateUsing(fn ($state): string => static::auditEventLabel($state))
@@ -107,27 +120,37 @@ class StockAdjustmentAuditResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('description')
+                    ->extraHeaderAttributes(['class' => 'bexia-saudit-col-description bexia-saudit-col-long-text bexia-saudit-col-primary'])
+                    ->extraCellAttributes(['class' => 'bexia-saudit-col-description bexia-saudit-col-long-text bexia-saudit-col-primary'])
                     ->label('Descripción')
                     ->searchable()
                     ->wrap(),
 
                 Tables\Columns\TextColumn::make('stock_adjustment_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-saudit-col-adjustment bexia-saudit-col-code bexia-saudit-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-saudit-col-adjustment bexia-saudit-col-code bexia-saudit-col-compact'])
                     ->label('Ajuste')
                     ->formatStateUsing(fn ($state): string => static::auditAdjustmentLabel($state))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('stock_adjustment_line_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-saudit-col-line bexia-saudit-col-code bexia-saudit-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-saudit-col-line bexia-saudit-col-code bexia-saudit-col-compact'])
                     ->label('Línea')
                     ->formatStateUsing(fn ($state): string => static::auditLineLabel($state))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('user_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-saudit-col-user bexia-saudit-col-context bexia-saudit-col-person'])
+                    ->extraCellAttributes(['class' => 'bexia-saudit-col-user bexia-saudit-col-context bexia-saudit-col-person'])
                     ->label('Usuario')
                     ->formatStateUsing(fn ($state): string => static::auditUserLabel($state))
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('ip_address')
+                    ->extraHeaderAttributes(['class' => 'bexia-saudit-col-ip bexia-saudit-col-code bexia-saudit-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-saudit-col-ip bexia-saudit-col-code bexia-saudit-col-compact'])
                     ->label('IP')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
