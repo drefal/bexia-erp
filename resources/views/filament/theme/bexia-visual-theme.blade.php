@@ -11004,4 +11004,219 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_BILLING_PAC_CONFIGURATION_RESOURCE_RESPONSIVE_V5_79_68C_END */
+
+/* BEXIA_STOCK_ADJUSTMENT_AUDIT_RESOURCE_RESPONSIVE_V5_79_69C_START */
+/*
+ * StockAdjustmentAuditResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de auditoria, ajustes,
+ * inventario, stock, movimientos, productos, lotes/series, ubicaciones,
+ * cantidades, costos, usuarios, permisos, empresa ni tenant.
+ */
+.bexia-saudit-section {
+    border-radius: 1rem;
+}
+
+.bexia-saudit-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-saudit-section,
+.bexia-saudit-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-saudit-section .fi-grid,
+.bexia-saudit-section .grid,
+.bexia-saudit-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-saudit-field .fi-input-wrp,
+.bexia-saudit-field input,
+.bexia-saudit-field textarea {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-saudit-field-description textarea,
+.bexia-saudit-long-field textarea,
+.bexia-saudit-col-description,
+.bexia-saudit-col-user,
+.bexia-saudit-col-event {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-saudit-code-field input,
+.bexia-saudit-col-code,
+.bexia-saudit-col-date {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-saudit-code-field input,
+.bexia-saudit-col-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.bexia-saudit-col-created-at,
+.bexia-saudit-col-event,
+.bexia-saudit-col-description,
+.bexia-saudit-col-adjustment,
+.bexia-saudit-col-line,
+.bexia-saudit-col-user,
+.bexia-saudit-col-ip {
+    vertical-align: top;
+}
+
+.bexia-saudit-col-primary {
+    min-width: 13rem;
+    max-width: 24rem;
+    white-space: normal;
+    font-weight: 600;
+}
+
+.bexia-saudit-col-long-text {
+    min-width: 12rem;
+    max-width: 24rem;
+    white-space: normal;
+}
+
+.bexia-saudit-col-context {
+    overflow-wrap: anywhere;
+}
+
+.bexia-saudit-col-compact {
+    min-width: 5.25rem;
+    max-width: 7.5rem;
+    white-space: nowrap;
+}
+
+.bexia-saudit-col-code {
+    min-width: 5.5rem;
+    max-width: 8.5rem;
+    white-space: normal;
+}
+
+.bexia-saudit-col-date {
+    min-width: 8.5rem;
+    white-space: nowrap;
+}
+
+.bexia-saudit-col-badge {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-saudit-col-person {
+    min-width: 8rem;
+    max-width: 12rem;
+    white-space: normal;
+}
+
+.bexia-saudit-col-ip {
+    min-width: 7rem;
+    max-width: 9rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-saudit-section .fi-grid,
+    .bexia-saudit-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-saudit-col-primary,
+    .bexia-saudit-col-long-text {
+        max-width: 18rem;
+    }
+
+    .bexia-saudit-col-person {
+        max-width: 10rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-saudit-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-saudit-section .fi-section-header,
+    .bexia-saudit-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-saudit-field .fi-fo-field-wrp-label,
+    .bexia-saudit-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-saudit-field input,
+    .bexia-saudit-field textarea {
+        font-size: 0.82rem;
+    }
+
+    .bexia-saudit-col-created-at,
+    .bexia-saudit-col-event,
+    .bexia-saudit-col-description,
+    .bexia-saudit-col-adjustment,
+    .bexia-saudit-col-line,
+    .bexia-saudit-col-user,
+    .bexia-saudit-col-ip {
+        font-size: 0.76rem;
+    }
+
+    .bexia-saudit-col-date {
+        min-width: 7rem;
+    }
+
+    .bexia-saudit-col-badge {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-saudit-col-primary,
+    .bexia-saudit-col-long-text {
+        min-width: 9rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-saudit-col-compact,
+    .bexia-saudit-col-code {
+        min-width: 4.75rem;
+        max-width: 6.75rem;
+    }
+
+    .bexia-saudit-col-person {
+        min-width: 6.5rem;
+        max-width: 8.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-saudit-col-date {
+        min-width: 6.5rem;
+    }
+
+    .bexia-saudit-col-badge,
+    .bexia-saudit-col-compact,
+    .bexia-saudit-col-code {
+        min-width: 4.5rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-saudit-col-primary,
+    .bexia-saudit-col-long-text {
+        min-width: 7.75rem;
+        max-width: 10rem;
+    }
+
+    .bexia-saudit-col-person {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+}
+/* BEXIA_STOCK_ADJUSTMENT_AUDIT_RESOURCE_RESPONSIVE_V5_79_69C_END */
 </style>
