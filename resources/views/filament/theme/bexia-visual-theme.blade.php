@@ -15763,4 +15763,135 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PAYROLL_EMPLOYER_REGISTRATION_RESOURCE_RESPONSIVE_V5_79_95C_END */
+
+/* BEXIA_STOCK_LOCATION_TYPE_RESOURCE_RESPONSIVE_V5_79_96C_START */
+.bexia-slt-form,
+.bexia-slt-shell {
+    min-width: 0;
+}
+
+.bexia-slt-form .fi-fo-component-ctn,
+.bexia-slt-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-slt-section .fi-section-header-description,
+.bexia-slt-field .fi-fo-field-wrp-label,
+.bexia-slt-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-slt-field .fi-input-wrp,
+.bexia-slt-field .fi-select-input,
+.bexia-slt-field textarea,
+.bexia-slt-field input {
+    min-width: 0;
+}
+
+.bexia-slt-wide-field .fi-fo-field-wrp,
+.bexia-slt-name-field .fi-input-wrp,
+.bexia-slt-description-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-slt-compact-field .fi-input-wrp,
+.bexia-slt-code-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-slt-textarea-field textarea {
+    width: 100%;
+}
+
+.bexia-slt-toggle-field .fi-fo-field-wrp,
+.bexia-slt-internal-field .fi-fo-field-wrp,
+.bexia-slt-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-slt-header,
+.bexia-slt-cell {
+    white-space: normal;
+}
+
+.bexia-slt-col-name {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-slt-col-code,
+.bexia-slt-col-compact {
+    min-width: 6.5rem;
+    max-width: 9rem;
+}
+
+.bexia-slt-col-bool,
+.bexia-slt-col-internal,
+.bexia-slt-col-active {
+    min-width: 5.5rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-slt-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-slt-wide-field,
+    .bexia-slt-name-field,
+    .bexia-slt-description-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-slt-col-name {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-slt-col-code,
+    .bexia-slt-col-compact {
+        min-width: 5.5rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-slt-col-bool,
+    .bexia-slt-col-internal,
+    .bexia-slt-col-active {
+        min-width: 4.75rem;
+        max-width: 6rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-slt-section .fi-section-header,
+    .bexia-slt-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-slt-compact-field .fi-input-wrp,
+    .bexia-slt-code-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-slt-textarea-field textarea {
+        min-width: 100%;
+    }
+
+    .bexia-slt-col-name {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-slt-col-code,
+    .bexia-slt-col-compact,
+    .bexia-slt-col-bool,
+    .bexia-slt-col-internal,
+    .bexia-slt-col-active {
+        min-width: 4rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_STOCK_LOCATION_TYPE_RESOURCE_RESPONSIVE_V5_79_96C_END */
 </style>
