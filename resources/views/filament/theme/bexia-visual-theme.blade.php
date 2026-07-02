@@ -13567,4 +13567,145 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_POS_CASHIER_RESOURCE_RESPONSIVE_V5_79_79C_END */
+
+/* BEXIA_TAX_RATE_RESOURCE_RESPONSIVE_V5_79_80C_START */
+.bexia-tax-section {
+    overflow: hidden;
+}
+
+.bexia-tax-section .fi-section-header,
+.bexia-tax-section .fi-section-content {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.bexia-tax-field .fi-fo-field-wrp-label,
+.bexia-tax-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-tax-field .fi-input-wrp,
+.bexia-tax-field .fi-select-input,
+.bexia-tax-field textarea {
+    min-width: 0;
+}
+
+.bexia-tax-wide-field .fi-input-wrp,
+.bexia-tax-description-field textarea {
+    width: 100%;
+}
+
+.bexia-tax-compact-field .fi-input-wrp,
+.bexia-tax-rate-field .fi-input-wrp,
+.bexia-tax-sort-field .fi-input-wrp {
+    max-width: 12rem;
+}
+
+.bexia-tax-toggle-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-tax-header,
+.bexia-tax-cell {
+    white-space: normal;
+}
+
+.bexia-tax-col-code,
+.bexia-tax-col-factor,
+.bexia-tax-col-rate,
+.bexia-tax-col-sort {
+    min-width: 5.5rem;
+    max-width: 7.5rem;
+}
+
+.bexia-tax-col-name {
+    min-width: 10rem;
+    max-width: 14rem;
+}
+
+.bexia-tax-col-type,
+.bexia-tax-col-badge {
+    min-width: 6.5rem;
+    max-width: 8.5rem;
+}
+
+.bexia-tax-col-bool {
+    min-width: 5rem;
+    max-width: 6rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-tax-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-tax-field {
+        min-width: 0;
+    }
+
+    .bexia-tax-wide-field,
+    .bexia-tax-description-field,
+    .bexia-tax-full-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-tax-col-code,
+    .bexia-tax-col-factor,
+    .bexia-tax-col-rate,
+    .bexia-tax-col-sort {
+        min-width: 4.75rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-tax-col-name {
+        min-width: 8.5rem;
+        max-width: 11rem;
+    }
+
+    .bexia-tax-col-type,
+    .bexia-tax-col-badge {
+        min-width: 5.5rem;
+        max-width: 7rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-tax-section .fi-section-header,
+    .bexia-tax-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-tax-compact-field .fi-input-wrp,
+    .bexia-tax-rate-field .fi-input-wrp,
+    .bexia-tax-sort-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-tax-col-code,
+    .bexia-tax-col-factor,
+    .bexia-tax-col-rate,
+    .bexia-tax-col-sort {
+        min-width: 4rem;
+        max-width: 5.25rem;
+    }
+
+    .bexia-tax-col-name {
+        min-width: 7.25rem;
+        max-width: 9rem;
+    }
+
+    .bexia-tax-col-type,
+    .bexia-tax-col-badge {
+        min-width: 4.75rem;
+        max-width: 6rem;
+    }
+
+    .bexia-tax-col-bool {
+        min-width: 4rem;
+        max-width: 5rem;
+    }
+}
+/* BEXIA_TAX_RATE_RESOURCE_RESPONSIVE_V5_79_80C_END */
 </style>
