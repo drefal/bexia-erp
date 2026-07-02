@@ -14,6 +14,11 @@ use Illuminate\Support\Facades\DB;
 
 class SaleDeliveryResource extends Resource
 {
+    /**
+     * BEXIA_SALE_DELIVERY_RESOURCE_RESPONSIVE_V5_79_98C
+     *
+     * Visual-only responsive classes for SaleDeliveryResource.
+     */
     protected static ?string $model = SaleDelivery::class;
 
     protected static ?string $navigationGroup = 'Ventas';
@@ -79,21 +84,45 @@ protected static ?string $modelLabel = 'entrega de venta';
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('number')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-delivery',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-delivery bexia-sdel-col-reference',
+                    ])
                     ->label('Entrega')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('order.number')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-order',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-order bexia-sdel-col-reference',
+                    ])
                     ->label('Orden de venta')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('order.customer_name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-customer',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-customer bexia-sdel-col-reference',
+                    ])
                     ->label('Cliente')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-status',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-status bexia-sdel-col-badge',
+                    ])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
@@ -110,6 +139,12 @@ protected static ?string $modelLabel = 'entrega de venta';
                     }),
 
                 Tables\Columns\TextColumn::make('delivery_type')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-type',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-type bexia-sdel-col-badge',
+                    ])
                     ->label('Tipo')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
@@ -124,6 +159,12 @@ protected static ?string $modelLabel = 'entrega de venta';
                     }),
 
                 Tables\Columns\TextColumn::make('lines_sum_quantity')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-quantity',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-quantity bexia-sdel-col-number',
+                    ])
                     ->label('Cantidad')
                     ->state(function (SaleDelivery $record): string {
                         $qty = DB::table('sale_delivery_lines')
@@ -134,11 +175,23 @@ protected static ?string $modelLabel = 'entrega de venta';
                     }),
 
                 Tables\Columns\TextColumn::make('stock_movement_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-movement',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-movement bexia-sdel-col-stock',
+                    ])
                     ->label('Movimiento')
                     ->formatStateUsing(fn ($state): string => $state ? ('#' . $state) : 'Pendiente')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('delivered_at')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-delivered',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-delivered bexia-sdel-col-date',
+                    ])
                     ->label('Validada')
                     ->dateTime('d/m/Y H:i')
                     ->placeholder('Pendiente')
@@ -146,6 +199,12 @@ protected static ?string $modelLabel = 'entrega de venta';
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sdel-header bexia-sdel-col-created',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sdel-cell bexia-sdel-col-created bexia-sdel-col-date',
+                    ])
                     ->label('Creada')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
@@ -184,6 +243,9 @@ protected static ?string $modelLabel = 'entrega de venta';
                     ->visible(fn (SaleDelivery $record): bool => (string) $record->status === 'done' && ! empty($record->stock_movement_id))
                     ->form([
                         \Filament\Forms\Components\Textarea::make('reason')
+                            ->extraAttributes([
+                                'class' => 'bexia-sdel-field bexia-sdel-return-reason-field',
+                            ])
                             ->label('Motivo de la devolución')
                             ->required()
                             ->maxLength(500),
