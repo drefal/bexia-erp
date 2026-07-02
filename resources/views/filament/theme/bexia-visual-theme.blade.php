@@ -11889,4 +11889,204 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_STOCK_SERIAL_SPECIAL_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_72C_END */
+
+/* BEXIA_POS_STAFF_ASSIGNMENT_RESOURCE_RESPONSIVE_V5_79_73C_START */
+/*
+ * PosStaffAssignmentResource responsive refinements.
+ * Alcance visual solamente. No cambia logica POS, asignaciones de personal,
+ * cajeros, puntos POS, turnos, usuarios/empleados, sucursales,
+ * estados, fechas, permisos, empresa ni tenant.
+ */
+.bexia-psa-section {
+    border-radius: 1rem;
+}
+
+.bexia-psa-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-psa-section,
+.bexia-psa-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-psa-section .fi-grid,
+.bexia-psa-section .grid,
+.bexia-psa-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-psa-field .fi-input-wrp,
+.bexia-psa-field .fi-select-input,
+.bexia-psa-field .fi-fo-select,
+.bexia-psa-field input,
+.bexia-psa-field select,
+.bexia-psa-field .choices,
+.bexia-psa-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-psa-primary-field .fi-input-wrp,
+.bexia-psa-primary-field .fi-select-input,
+.bexia-psa-primary-field .choices__inner {
+    min-height: 2.45rem;
+}
+
+.bexia-psa-toggle-field {
+    min-width: 0;
+}
+
+.bexia-psa-toggle-field .fi-fo-toggle,
+.bexia-psa-toggle-field .fi-toggle,
+.bexia-psa-toggle-field button {
+    max-width: 100%;
+}
+
+.bexia-psa-numeric-field input {
+    max-width: 9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-psa-col-pos-point,
+.bexia-psa-col-employee,
+.bexia-psa-col-role,
+.bexia-psa-col-ticket,
+.bexia-psa-col-charge,
+.bexia-psa-col-active {
+    vertical-align: top;
+}
+
+.bexia-psa-col-long-text,
+.bexia-psa-col-context,
+.bexia-psa-col-primary {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bexia-psa-col-primary {
+    min-width: 12rem;
+    max-width: 22rem;
+    font-weight: 650;
+}
+
+.bexia-psa-col-role {
+    min-width: 7.5rem;
+    max-width: 11rem;
+    white-space: normal;
+}
+
+.bexia-psa-col-badge {
+    font-weight: 650;
+}
+
+.bexia-psa-col-icon,
+.bexia-psa-col-permission,
+.bexia-psa-col-status {
+    min-width: 4.25rem;
+    max-width: 6.75rem;
+    text-align: center;
+    white-space: normal;
+}
+
+.bexia-psa-col-ticket,
+.bexia-psa-col-charge,
+.bexia-psa-col-active {
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1024px) {
+    .bexia-psa-section .fi-grid,
+    .bexia-psa-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-psa-col-primary {
+        max-width: 16rem;
+    }
+
+    .bexia-psa-col-role {
+        max-width: 9.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-psa-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-psa-section .fi-section-header,
+    .bexia-psa-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-psa-field .fi-fo-field-wrp-label,
+    .bexia-psa-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-psa-field input,
+    .bexia-psa-field select,
+    .bexia-psa-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-psa-toggle-field {
+        padding-top: 0.15rem;
+        padding-bottom: 0.15rem;
+    }
+
+    .bexia-psa-col-pos-point,
+    .bexia-psa-col-employee,
+    .bexia-psa-col-role,
+    .bexia-psa-col-ticket,
+    .bexia-psa-col-charge,
+    .bexia-psa-col-active {
+        font-size: 0.76rem;
+    }
+
+    .bexia-psa-col-primary {
+        min-width: 8.75rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-psa-col-role {
+        min-width: 6rem;
+        max-width: 8rem;
+    }
+
+    .bexia-psa-col-icon,
+    .bexia-psa-col-permission,
+    .bexia-psa-col-status {
+        min-width: 3.75rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-psa-col-primary {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-psa-col-role {
+        min-width: 5.5rem;
+        max-width: 7rem;
+    }
+
+    .bexia-psa-col-icon,
+    .bexia-psa-col-permission,
+    .bexia-psa-col-status {
+        min-width: 3.25rem;
+        max-width: 4.75rem;
+    }
+
+    .bexia-psa-numeric-field input {
+        max-width: 7rem;
+    }
+}
+/* BEXIA_POS_STAFF_ASSIGNMENT_RESOURCE_RESPONSIVE_V5_79_73C_END */
 </style>
