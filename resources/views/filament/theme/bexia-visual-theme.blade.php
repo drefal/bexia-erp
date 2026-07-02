@@ -16870,4 +16870,135 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_WAREHOUSE_RESOURCE_RESPONSIVE_V5_79_103C_END */
+
+/* BEXIA_BANK_RESOURCE_RESPONSIVE_V5_79_104C_START */
+.bexia-bank-form,
+.bexia-bank-shell {
+    min-width: 0;
+}
+
+.bexia-bank-field .fi-fo-field-wrp-label,
+.bexia-bank-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-bank-field .fi-input-wrp,
+.bexia-bank-field textarea,
+.bexia-bank-field input {
+    min-width: 0;
+}
+
+.bexia-bank-wide-field .fi-fo-field-wrp,
+.bexia-bank-legal-name-field .fi-fo-field-wrp,
+.bexia-bank-notes-field .fi-fo-field-wrp,
+.bexia-bank-textarea-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-bank-compact-field .fi-input-wrp,
+.bexia-bank-code-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-bank-textarea-field textarea {
+    width: 100%;
+}
+
+.bexia-bank-bool-field .fi-fo-field-wrp,
+.bexia-bank-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-bank-header,
+.bexia-bank-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-bank-cell {
+    vertical-align: top;
+}
+
+.bexia-bank-col-code,
+.bexia-bank-col-compact {
+    min-width: 5.5rem;
+    max-width: 7rem;
+}
+
+.bexia-bank-col-name,
+.bexia-bank-col-main {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-bank-col-legal-name,
+.bexia-bank-col-wide {
+    min-width: 11rem;
+    max-width: 17rem;
+}
+
+.bexia-bank-col-active,
+.bexia-bank-col-bool {
+    min-width: 5.25rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-bank-wide-field,
+    .bexia-bank-legal-name-field,
+    .bexia-bank-notes-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-bank-col-name,
+    .bexia-bank-col-main,
+    .bexia-bank-col-legal-name,
+    .bexia-bank-col-wide {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-bank-col-code,
+    .bexia-bank-col-compact,
+    .bexia-bank-col-active,
+    .bexia-bank-col-bool {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-bank-compact-field .fi-input-wrp,
+    .bexia-bank-code-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-bank-textarea-field textarea {
+        min-width: 100%;
+    }
+
+    .bexia-bank-header,
+    .bexia-bank-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-bank-col-name,
+    .bexia-bank-col-main,
+    .bexia-bank-col-legal-name,
+    .bexia-bank-col-wide {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-bank-col-code,
+    .bexia-bank-col-compact,
+    .bexia-bank-col-active,
+    .bexia-bank-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_BANK_RESOURCE_RESPONSIVE_V5_79_104C_END */
 </style>

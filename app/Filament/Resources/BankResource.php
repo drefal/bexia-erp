@@ -14,6 +14,11 @@ use Illuminate\Database\Eloquent\Builder;
 
 class BankResource extends Resource
 {
+    /**
+     * BEXIA_BANK_RESOURCE_RESPONSIVE_V5_79_104C
+     *
+     * Visual-only responsive classes for BankResource.
+     */
     protected static ?string $navigationLabel = 'Bancos';
     protected static ?string $model = Bank::class;
 
@@ -71,24 +76,39 @@ class BankResource extends Resource
                 ->default(fn (): ?int => static::companyId()),
 
             Forms\Components\TextInput::make('name')
+                ->extraAttributes([
+                    'class' => 'bexia-bank-field bexia-bank-name-field bexia-bank-main-field',
+                ])
                 ->label('Nombre corto')
                 ->required()
                 ->maxLength(255),
 
             Forms\Components\TextInput::make('legal_name')
+                ->extraAttributes([
+                    'class' => 'bexia-bank-field bexia-bank-legal-name-field bexia-bank-wide-field',
+                ])
                 ->label('Razón social')
                 ->maxLength(255),
 
             Forms\Components\TextInput::make('code')
+                ->extraAttributes([
+                    'class' => 'bexia-bank-field bexia-bank-code-field bexia-bank-compact-field',
+                ])
                 ->label('Clave bancaria sugerida')
                 ->helperText('Clave de 3 dígitos sugerida por catálogo. Puedes cambiarla si tu operación lo requiere.')
                 ->maxLength(50),
 
             Forms\Components\Toggle::make('is_active')
+                ->extraAttributes([
+                    'class' => 'bexia-bank-field bexia-bank-active-field bexia-bank-bool-field',
+                ])
                 ->label('Activo')
                 ->default(true),
 
             Forms\Components\Textarea::make('notes')
+                ->extraAttributes([
+                    'class' => 'bexia-bank-field bexia-bank-notes-field bexia-bank-wide-field bexia-bank-textarea-field',
+                ])
                 ->label('Notas')
                 ->columnSpanFull(),
         ]);
@@ -100,21 +120,45 @@ class BankResource extends Resource
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('company_id', static::companyId()))
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-bank-header bexia-bank-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-bank-cell bexia-bank-col-code bexia-bank-col-compact',
+                    ])
                     ->label('Clave')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-bank-header bexia-bank-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-bank-cell bexia-bank-col-name bexia-bank-col-main',
+                    ])
                     ->label('Nombre corto')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('legal_name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-bank-header bexia-bank-col-legal-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-bank-cell bexia-bank-col-legal-name bexia-bank-col-wide',
+                    ])
                     ->label('Razón social')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-bank-header bexia-bank-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-bank-cell bexia-bank-col-active bexia-bank-col-bool',
+                    ])
                     ->label('Activo')
                     ->boolean(),
             ])
