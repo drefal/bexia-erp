@@ -13317,4 +13317,254 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SERVICE_CASE_EVENT_RESOURCE_RESPONSIVE_V5_79_78C_END */
+
+/* BEXIA_POS_CASHIER_RESOURCE_RESPONSIVE_V5_79_79C_START */
+/*
+ * PosCashierResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de cajeros POS, usuarios,
+ * empleados, cajas, puntos de venta, tickets, sesiones, turnos,
+ * pagos, permisos, empresa ni tenant.
+ */
+.bexia-pcash-section {
+    border-radius: 1rem;
+}
+
+.bexia-pcash-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-pcash-section,
+.bexia-pcash-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-pcash-section .fi-grid,
+.bexia-pcash-section .grid,
+.bexia-pcash-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-pcash-field .fi-input-wrp,
+.bexia-pcash-field .fi-select-input,
+.bexia-pcash-field .fi-fo-select,
+.bexia-pcash-field input,
+.bexia-pcash-field select,
+.bexia-pcash-field .choices,
+.bexia-pcash-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-pcash-primary-field .fi-input-wrp,
+.bexia-pcash-primary-field input {
+    min-height: 2.45rem;
+}
+
+.bexia-pcash-code-field input,
+.bexia-pcash-identifier-field input,
+.bexia-pcash-pin-field input,
+.bexia-pcash-col-code,
+.bexia-pcash-col-identifier {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-pcash-percent-field input,
+.bexia-pcash-numeric-field input {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.bexia-pcash-toggle-field .fi-fo-field-wrp,
+.bexia-pcash-permission-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-pcash-section-permissions .fi-grid,
+.bexia-pcash-section-controls .fi-grid {
+    align-items: start;
+}
+
+.bexia-pcash-col-name,
+.bexia-pcash-col-code,
+.bexia-pcash-col-pos-point,
+.bexia-pcash-col-pin,
+.bexia-pcash-col-active {
+    vertical-align: top;
+}
+
+.bexia-pcash-col-primary,
+.bexia-pcash-col-name,
+.bexia-pcash-col-context {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bexia-pcash-col-name,
+.bexia-pcash-col-cashier {
+    min-width: 10rem;
+    max-width: 16rem;
+    font-weight: 650;
+}
+
+.bexia-pcash-col-code,
+.bexia-pcash-col-identifier,
+.bexia-pcash-col-compact {
+    min-width: 5.5rem;
+    max-width: 8rem;
+    white-space: nowrap;
+}
+
+.bexia-pcash-col-pos-point,
+.bexia-pcash-col-reference,
+.bexia-pcash-col-pos {
+    min-width: 6rem;
+    max-width: 9rem;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.bexia-pcash-col-pin,
+.bexia-pcash-col-security,
+.bexia-pcash-col-active,
+.bexia-pcash-col-status,
+.bexia-pcash-col-boolean {
+    min-width: 4.75rem;
+    max-width: 6.5rem;
+    text-align: center;
+}
+
+.bexia-pcash-secret-field .fi-input-wrp,
+.bexia-pcash-sensitive-field .fi-input-wrp {
+    max-width: 14rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-pcash-section .fi-grid,
+    .bexia-pcash-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-pcash-section-permissions .fi-grid,
+    .bexia-pcash-section-controls .fi-grid {
+        gap: 0.75rem;
+    }
+
+    .bexia-pcash-col-name,
+    .bexia-pcash-col-cashier {
+        max-width: 14rem;
+    }
+
+    .bexia-pcash-col-pos-point,
+    .bexia-pcash-col-reference,
+    .bexia-pcash-col-pos {
+        max-width: 8rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-pcash-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-pcash-section .fi-section-header,
+    .bexia-pcash-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-pcash-field .fi-fo-field-wrp-label,
+    .bexia-pcash-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-pcash-field input,
+    .bexia-pcash-field select,
+    .bexia-pcash-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-pcash-col-name,
+    .bexia-pcash-col-code,
+    .bexia-pcash-col-pos-point,
+    .bexia-pcash-col-pin,
+    .bexia-pcash-col-active {
+        font-size: 0.76rem;
+    }
+
+    .bexia-pcash-col-name,
+    .bexia-pcash-col-cashier {
+        min-width: 7.5rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-pcash-col-code,
+    .bexia-pcash-col-identifier,
+    .bexia-pcash-col-compact {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+
+    .bexia-pcash-col-pos-point,
+    .bexia-pcash-col-reference,
+    .bexia-pcash-col-pos {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+
+    .bexia-pcash-col-pin,
+    .bexia-pcash-col-security,
+    .bexia-pcash-col-active,
+    .bexia-pcash-col-status,
+    .bexia-pcash-col-boolean {
+        min-width: 4rem;
+        max-width: 5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-pcash-section .fi-section-header,
+    .bexia-pcash-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-pcash-secret-field .fi-input-wrp,
+    .bexia-pcash-sensitive-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-pcash-col-name,
+    .bexia-pcash-col-cashier {
+        min-width: 6.25rem;
+        max-width: 8rem;
+    }
+
+    .bexia-pcash-col-code,
+    .bexia-pcash-col-identifier,
+    .bexia-pcash-col-compact {
+        min-width: 4rem;
+        max-width: 5.25rem;
+    }
+
+    .bexia-pcash-col-pos-point,
+    .bexia-pcash-col-reference,
+    .bexia-pcash-col-pos {
+        min-width: 4rem;
+        max-width: 5.25rem;
+    }
+
+    .bexia-pcash-col-pin,
+    .bexia-pcash-col-security,
+    .bexia-pcash-col-active,
+    .bexia-pcash-col-status,
+    .bexia-pcash-col-boolean {
+        min-width: 3.5rem;
+        max-width: 4.5rem;
+    }
+}
+/* BEXIA_POS_CASHIER_RESOURCE_RESPONSIVE_V5_79_79C_END */
 </style>
