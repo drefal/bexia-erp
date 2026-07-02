@@ -11435,4 +11435,219 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PRODUCT_CATEGORY_RESOURCE_RESPONSIVE_V5_79_70C_END */
+
+/* BEXIA_SAT_DOWNLOAD_REQUEST_RESOURCE_RESPONSIVE_V5_79_71C_START */
+/*
+ * SatDownloadRequestResource responsive refinements.
+ * Alcance visual solamente. No cambia logica SAT, CFDI, XML,
+ * solicitudes de descarga, paquetes, estados, fechas,
+ * certificados/credenciales, RFC/emisor/receptor,
+ * jobs/procesamiento, permisos, empresa ni tenant.
+ */
+.bexia-sdr-section {
+    border-radius: 1rem;
+}
+
+.bexia-sdr-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-sdr-section,
+.bexia-sdr-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-sdr-section .fi-grid,
+.bexia-sdr-section .grid,
+.bexia-sdr-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-sdr-field .fi-input-wrp,
+.bexia-sdr-field .fi-select-input,
+.bexia-sdr-field .fi-fo-select,
+.bexia-sdr-field input,
+.bexia-sdr-field select,
+.bexia-sdr-field textarea,
+.bexia-sdr-field .choices,
+.bexia-sdr-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-sdr-long-field textarea,
+.bexia-sdr-field-notes textarea,
+.bexia-sdr-field-sat-message textarea,
+.bexia-sdr-field-error-message textarea {
+    min-height: 6rem;
+    resize: vertical;
+}
+
+.bexia-sdr-error-field textarea {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-sdr-code-field input,
+.bexia-sdr-uuid-field input,
+.bexia-sdr-col-code,
+.bexia-sdr-col-uuid {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-sdr-col-company,
+.bexia-sdr-col-direction,
+.bexia-sdr-col-request-kind,
+.bexia-sdr-col-date-from,
+.bexia-sdr-col-date-to,
+.bexia-sdr-col-status,
+.bexia-sdr-col-request-uuid,
+.bexia-sdr-col-sat-message,
+.bexia-sdr-col-created-at {
+    vertical-align: top;
+}
+
+.bexia-sdr-col-long-text,
+.bexia-sdr-col-message,
+.bexia-sdr-col-context {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bexia-sdr-col-company {
+    min-width: 10rem;
+    max-width: 16rem;
+}
+
+.bexia-sdr-col-badge {
+    min-width: 6.5rem;
+    max-width: 9rem;
+    white-space: normal;
+}
+
+.bexia-sdr-col-date {
+    min-width: 7.75rem;
+    max-width: 9.75rem;
+    white-space: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-sdr-col-compact {
+    min-width: 5rem;
+    max-width: 8rem;
+}
+
+.bexia-sdr-col-request-uuid {
+    min-width: 12rem;
+    max-width: 20rem;
+}
+
+.bexia-sdr-col-sat-message {
+    min-width: 13rem;
+    max-width: 24rem;
+    line-height: 1.35;
+}
+
+.bexia-sdr-col-status {
+    font-weight: 650;
+}
+
+@media (max-width: 1024px) {
+    .bexia-sdr-section .fi-grid,
+    .bexia-sdr-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-sdr-col-company,
+    .bexia-sdr-col-sat-message {
+        max-width: 18rem;
+    }
+
+    .bexia-sdr-col-request-uuid {
+        max-width: 16rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-sdr-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-sdr-section .fi-section-header,
+    .bexia-sdr-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-sdr-field .fi-fo-field-wrp-label,
+    .bexia-sdr-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-sdr-field input,
+    .bexia-sdr-field select,
+    .bexia-sdr-field textarea,
+    .bexia-sdr-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-sdr-col-company,
+    .bexia-sdr-col-direction,
+    .bexia-sdr-col-request-kind,
+    .bexia-sdr-col-date-from,
+    .bexia-sdr-col-date-to,
+    .bexia-sdr-col-status,
+    .bexia-sdr-col-request-uuid,
+    .bexia-sdr-col-sat-message,
+    .bexia-sdr-col-created-at {
+        font-size: 0.76rem;
+    }
+
+    .bexia-sdr-col-company,
+    .bexia-sdr-col-sat-message {
+        min-width: 9rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-sdr-col-request-uuid {
+        min-width: 9.5rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-sdr-col-badge,
+    .bexia-sdr-col-compact {
+        min-width: 4.75rem;
+        max-width: 7rem;
+    }
+
+    .bexia-sdr-col-date {
+        min-width: 6.25rem;
+        max-width: 8rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-sdr-col-company,
+    .bexia-sdr-col-sat-message,
+    .bexia-sdr-col-request-uuid {
+        min-width: 7.75rem;
+        max-width: 10rem;
+    }
+
+    .bexia-sdr-col-badge,
+    .bexia-sdr-col-compact {
+        min-width: 4.5rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-sdr-col-date {
+        min-width: 5.75rem;
+        max-width: 7rem;
+    }
+}
+/* BEXIA_SAT_DOWNLOAD_REQUEST_RESOURCE_RESPONSIVE_V5_79_71C_END */
 </style>
