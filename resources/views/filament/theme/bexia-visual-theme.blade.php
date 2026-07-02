@@ -13834,4 +13834,152 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PRODUCT_ATTRIBUTE_RESOURCE_RESPONSIVE_V5_79_81C_END */
+
+/* BEXIA_HR_WORK_SCHEDULE_RESOURCE_RESPONSIVE_V5_79_82C_START */
+.bexia-hrws-section {
+    overflow: hidden;
+}
+
+.bexia-hrws-section .fi-section-header,
+.bexia-hrws-section .fi-section-content {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.bexia-hrws-field .fi-fo-field-wrp-label,
+.bexia-hrws-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-hrws-field .fi-input-wrp,
+.bexia-hrws-field .fi-select-input,
+.bexia-hrws-field input {
+    min-width: 0;
+}
+
+.bexia-hrws-wide-field .fi-input-wrp,
+.bexia-hrws-full-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-hrws-compact-field .fi-input-wrp,
+.bexia-hrws-time-field .fi-input-wrp,
+.bexia-hrws-hours-field .fi-input-wrp {
+    max-width: 12rem;
+}
+
+.bexia-hrws-checklist-field .fi-fo-checkbox-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem 0.75rem;
+}
+
+.bexia-hrws-header,
+.bexia-hrws-cell {
+    white-space: normal;
+}
+
+.bexia-hrws-col-name {
+    min-width: 10rem;
+    max-width: 14rem;
+}
+
+.bexia-hrws-col-code {
+    min-width: 5.25rem;
+    max-width: 7rem;
+}
+
+.bexia-hrws-col-type {
+    min-width: 6rem;
+    max-width: 8rem;
+}
+
+.bexia-hrws-col-time,
+.bexia-hrws-col-hours {
+    min-width: 5.75rem;
+    max-width: 7.25rem;
+}
+
+.bexia-hrws-col-bool {
+    min-width: 4.75rem;
+    max-width: 5.75rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-hrws-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-hrws-field {
+        min-width: 0;
+    }
+
+    .bexia-hrws-wide-field,
+    .bexia-hrws-full-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-hrws-checklist-field .fi-fo-checkbox-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .bexia-hrws-col-name {
+        min-width: 8.5rem;
+        max-width: 11rem;
+    }
+
+    .bexia-hrws-col-code,
+    .bexia-hrws-col-type {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+
+    .bexia-hrws-col-time,
+    .bexia-hrws-col-hours {
+        min-width: 5rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-hrws-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-hrws-section .fi-section-header,
+    .bexia-hrws-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-hrws-compact-field .fi-input-wrp,
+    .bexia-hrws-time-field .fi-input-wrp,
+    .bexia-hrws-hours-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-hrws-checklist-field .fi-fo-checkbox-list {
+        grid-template-columns: 1fr;
+    }
+
+    .bexia-hrws-col-name {
+        min-width: 7.25rem;
+        max-width: 9rem;
+    }
+
+    .bexia-hrws-col-code,
+    .bexia-hrws-col-type,
+    .bexia-hrws-col-time,
+    .bexia-hrws-col-hours {
+        min-width: 4rem;
+        max-width: 5.25rem;
+    }
+
+    .bexia-hrws-col-bool {
+        min-width: 3.75rem;
+        max-width: 4.75rem;
+    }
+}
+/* BEXIA_HR_WORK_SCHEDULE_RESOURCE_RESPONSIVE_V5_79_82C_END */
 </style>
