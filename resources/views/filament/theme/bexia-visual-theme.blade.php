@@ -16293,4 +16293,146 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SERVICE_TECHNICIAN_RESOURCE_RESPONSIVE_V5_79_99C_END */
+
+/* BEXIA_CUSTOMS_OFFICE_RESOURCE_RESPONSIVE_V5_79_100C_START */
+.bexia-coff-form,
+.bexia-coff-shell {
+    min-width: 0;
+}
+
+.bexia-coff-section .fi-section-content,
+.bexia-coff-customs-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-coff-section .fi-section-header-description,
+.bexia-coff-field .fi-fo-field-wrp-label,
+.bexia-coff-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-coff-field .fi-input-wrp,
+.bexia-coff-field textarea,
+.bexia-coff-field input {
+    min-width: 0;
+}
+
+.bexia-coff-wide-field .fi-fo-field-wrp,
+.bexia-coff-display-name-field .fi-input-wrp,
+.bexia-coff-notes-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-coff-compact-field .fi-input-wrp,
+.bexia-coff-code-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-coff-textarea-field textarea {
+    width: 100%;
+}
+
+.bexia-coff-bool-field .fi-fo-field-wrp,
+.bexia-coff-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-coff-header,
+.bexia-coff-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-coff-cell {
+    vertical-align: top;
+}
+
+.bexia-coff-col-code,
+.bexia-coff-col-compact {
+    min-width: 5.5rem;
+    max-width: 7rem;
+}
+
+.bexia-coff-col-name,
+.bexia-coff-col-main,
+.bexia-coff-col-display-name,
+.bexia-coff-col-wide {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-coff-col-active,
+.bexia-coff-col-bool {
+    min-width: 5.25rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-coff-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-coff-wide-field,
+    .bexia-coff-display-name-field,
+    .bexia-coff-notes-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-coff-col-name,
+    .bexia-coff-col-main,
+    .bexia-coff-col-display-name,
+    .bexia-coff-col-wide {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-coff-col-code,
+    .bexia-coff-col-compact,
+    .bexia-coff-col-active,
+    .bexia-coff-col-bool {
+        min-width: 4.75rem;
+        max-width: 6rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-coff-section .fi-section-header,
+    .bexia-coff-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-coff-compact-field .fi-input-wrp,
+    .bexia-coff-code-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-coff-textarea-field textarea {
+        min-width: 100%;
+    }
+
+    .bexia-coff-header,
+    .bexia-coff-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-coff-col-name,
+    .bexia-coff-col-main,
+    .bexia-coff-col-display-name,
+    .bexia-coff-col-wide {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-coff-col-code,
+    .bexia-coff-col-compact,
+    .bexia-coff-col-active,
+    .bexia-coff-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_CUSTOMS_OFFICE_RESOURCE_RESPONSIVE_V5_79_100C_END */
 </style>

@@ -13,6 +13,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class CustomsOfficeResource extends Resource
 {
+    /**
+     * BEXIA_CUSTOMS_OFFICE_RESOURCE_RESPONSIVE_V5_79_100C
+     *
+     * Visual-only responsive classes for CustomsOfficeResource.
+     */
     protected static ?string $model = CustomsOffice::class;
 
     protected static bool $isScopedToTenant = false;
@@ -78,27 +83,45 @@ class CustomsOfficeResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Aduana')
+                    ->extraAttributes([
+                        'class' => 'bexia-coff-section bexia-coff-customs-section',
+                    ])
                     ->schema([
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes([
+                                'class' => 'bexia-coff-field bexia-coff-code-field bexia-coff-compact-field',
+                            ])
                             ->label('Código')
                             ->maxLength(20),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes([
+                                'class' => 'bexia-coff-field bexia-coff-name-field bexia-coff-main-field',
+                            ])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(160)
                             ->helperText('Ej. MANZANILLO'),
 
                         Forms\Components\TextInput::make('display_name')
+                            ->extraAttributes([
+                                'class' => 'bexia-coff-field bexia-coff-display-name-field bexia-coff-wide-field',
+                            ])
                             ->label('Nombre para mostrar')
                             ->maxLength(220)
                             ->helperText('Opcional. Si se deja vacío se usa el nombre.'),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes([
+                                'class' => 'bexia-coff-field bexia-coff-active-field bexia-coff-bool-field',
+                            ])
                             ->label('Activa')
                             ->default(true),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes([
+                                'class' => 'bexia-coff-field bexia-coff-notes-field bexia-coff-wide-field bexia-coff-textarea-field',
+                            ])
                             ->label('Notas')
                             ->rows(2)
                             ->columnSpanFull(),
@@ -112,21 +135,45 @@ class CustomsOfficeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-coff-header bexia-coff-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-coff-cell bexia-coff-col-code bexia-coff-col-compact',
+                    ])
                     ->label('Código')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-coff-header bexia-coff-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-coff-cell bexia-coff-col-name bexia-coff-col-main',
+                    ])
                     ->label('Aduana')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('display_name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-coff-header bexia-coff-col-display-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-coff-cell bexia-coff-col-display-name bexia-coff-col-wide',
+                    ])
                     ->label('Nombre para mostrar')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-coff-header bexia-coff-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-coff-cell bexia-coff-col-active bexia-coff-col-bool',
+                    ])
                     ->label('Activa')
                     ->boolean()
                     ->sortable(),
