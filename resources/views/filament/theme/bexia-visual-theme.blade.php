@@ -14108,4 +14108,150 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SAT_PRODUCT_SERVICE_CODE_RESOURCE_RESPONSIVE_V5_79_83C_END */
+
+/* BEXIA_SAT_BILLING_CATALOG_ITEM_RESOURCE_RESPONSIVE_V5_79_84C_START */
+.bexia-sbci-section {
+    overflow: hidden;
+}
+
+.bexia-sbci-section .fi-section-header,
+.bexia-sbci-section .fi-section-content {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.bexia-sbci-field .fi-fo-field-wrp-label,
+.bexia-sbci-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-sbci-field .fi-input-wrp,
+.bexia-sbci-field .fi-textarea,
+.bexia-sbci-field input,
+.bexia-sbci-field textarea {
+    min-width: 0;
+}
+
+.bexia-sbci-wide-field .fi-fo-field-wrp,
+.bexia-sbci-name-field .fi-input-wrp,
+.bexia-sbci-description-field .fi-input-wrp,
+.bexia-sbci-textarea-field .fi-input-wrp {
+    width: 100%;
+}
+
+.bexia-sbci-compact-field .fi-input-wrp,
+.bexia-sbci-medium-field .fi-input-wrp,
+.bexia-sbci-date-field .fi-input-wrp {
+    max-width: 12rem;
+}
+
+.bexia-sbci-toggle-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-sbci-header,
+.bexia-sbci-cell {
+    white-space: normal;
+}
+
+.bexia-sbci-col-catalog {
+    min-width: 8rem;
+    max-width: 12rem;
+}
+
+.bexia-sbci-col-code,
+.bexia-sbci-col-sheet {
+    min-width: 5.25rem;
+    max-width: 7.5rem;
+}
+
+.bexia-sbci-col-name {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-sbci-col-description {
+    min-width: 14rem;
+    max-width: 22rem;
+}
+
+.bexia-sbci-col-date {
+    min-width: 5.75rem;
+    max-width: 7.25rem;
+}
+
+.bexia-sbci-col-bool {
+    min-width: 4.75rem;
+    max-width: 5.75rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-sbci-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-sbci-field {
+        min-width: 0;
+    }
+
+    .bexia-sbci-wide-field,
+    .bexia-sbci-description-field,
+    .bexia-sbci-textarea-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-sbci-col-catalog,
+    .bexia-sbci-col-name {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-sbci-col-code,
+    .bexia-sbci-col-sheet,
+    .bexia-sbci-col-date {
+        min-width: 4.75rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-sbci-col-description {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
+    .bexia-sbci-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-sbci-section .fi-section-header,
+    .bexia-sbci-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-sbci-compact-field .fi-input-wrp,
+    .bexia-sbci-medium-field .fi-input-wrp,
+    .bexia-sbci-date-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-sbci-col-catalog,
+    .bexia-sbci-col-code,
+    .bexia-sbci-col-sheet,
+    .bexia-sbci-col-date,
+    .bexia-sbci-col-bool {
+        min-width: 4rem;
+        max-width: 5.5rem;
+    }
+
+    .bexia-sbci-col-name,
+    .bexia-sbci-col-description {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+}
+/* BEXIA_SAT_BILLING_CATALOG_ITEM_RESOURCE_RESPONSIVE_V5_79_84C_END */
 </style>
