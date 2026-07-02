@@ -16575,4 +16575,153 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SAT_UNIT_RESOURCE_RESPONSIVE_V5_79_101C_END */
+
+/* BEXIA_SAT_CFDI_USE_TAX_REGIME_RESOURCE_RESPONSIVE_V5_79_102C_START */
+.bexia-cutr-form,
+.bexia-cutr-shell {
+    min-width: 0;
+}
+
+.bexia-cutr-section .fi-section-content,
+.bexia-cutr-relation-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-cutr-section .fi-section-header-description,
+.bexia-cutr-field .fi-fo-field-wrp-label,
+.bexia-cutr-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-cutr-field .fi-input-wrp,
+.bexia-cutr-field .fi-select-input,
+.bexia-cutr-field textarea,
+.bexia-cutr-field input {
+    min-width: 0;
+}
+
+.bexia-cutr-wide-field .fi-fo-field-wrp,
+.bexia-cutr-tax-regime-field .fi-input-wrp,
+.bexia-cutr-cfdi-use-field .fi-input-wrp,
+.bexia-cutr-notes-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-cutr-select-field .fi-input-wrp,
+.bexia-cutr-select-field .fi-select-input {
+    min-width: 0;
+}
+
+.bexia-cutr-textarea-field textarea {
+    width: 100%;
+}
+
+.bexia-cutr-bool-field .fi-fo-field-wrp,
+.bexia-cutr-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-cutr-header,
+.bexia-cutr-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-cutr-cell {
+    vertical-align: top;
+}
+
+.bexia-cutr-col-tax-regime,
+.bexia-cutr-col-cfdi-use,
+.bexia-cutr-col-regime,
+.bexia-cutr-col-use,
+.bexia-cutr-col-wide {
+    min-width: 10rem;
+    max-width: 16rem;
+}
+
+.bexia-cutr-col-active,
+.bexia-cutr-col-bool {
+    min-width: 5.25rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+.bexia-cutr-col-updated-at,
+.bexia-cutr-col-date {
+    min-width: 7rem;
+    max-width: 9rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-cutr-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-cutr-wide-field,
+    .bexia-cutr-tax-regime-field,
+    .bexia-cutr-cfdi-use-field,
+    .bexia-cutr-notes-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-cutr-col-tax-regime,
+    .bexia-cutr-col-cfdi-use,
+    .bexia-cutr-col-regime,
+    .bexia-cutr-col-use,
+    .bexia-cutr-col-wide {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-cutr-col-active,
+    .bexia-cutr-col-bool,
+    .bexia-cutr-col-updated-at,
+    .bexia-cutr-col-date {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-cutr-section .fi-section-header,
+    .bexia-cutr-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-cutr-select-field .fi-input-wrp,
+    .bexia-cutr-tax-regime-field .fi-input-wrp,
+    .bexia-cutr-cfdi-use-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-cutr-textarea-field textarea {
+        min-width: 100%;
+    }
+
+    .bexia-cutr-header,
+    .bexia-cutr-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-cutr-col-tax-regime,
+    .bexia-cutr-col-cfdi-use,
+    .bexia-cutr-col-regime,
+    .bexia-cutr-col-use,
+    .bexia-cutr-col-wide {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-cutr-col-active,
+    .bexia-cutr-col-bool,
+    .bexia-cutr-col-updated-at,
+    .bexia-cutr-col-date {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_SAT_CFDI_USE_TAX_REGIME_RESOURCE_RESPONSIVE_V5_79_102C_END */
 </style>
