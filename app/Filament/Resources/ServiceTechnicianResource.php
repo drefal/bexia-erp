@@ -15,6 +15,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class ServiceTechnicianResource extends Resource
 {
+    /**
+     * BEXIA_SERVICE_TECHNICIAN_RESOURCE_RESPONSIVE_V5_79_99C
+     *
+     * Visual-only responsive classes for ServiceTechnicianResource.
+     */
     protected static ?string $model = Employee::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-user-circle';
@@ -90,18 +95,30 @@ class ServiceTechnicianResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Empleado')
+                    ->extraAttributes([
+                        'class' => 'bexia-stec-section bexia-stec-employee-section',
+                    ])
                     ->columns(2)
                     ->schema([
                         Forms\Components\Placeholder::make('employee_label')
+                            ->extraAttributes([
+                                'class' => 'bexia-stec-field bexia-stec-employee-label-field bexia-stec-wide-field',
+                            ])
                             ->label('Empleado')
                             ->content(fn (?Employee $record): string => $record ? (ServiceAccess::employeeLabel((int) $record->getKey()) ?? ('#' . $record->getKey())) : 'Empleado'),
 
                         Forms\Components\TextInput::make('company_id')
+                            ->extraAttributes([
+                                'class' => 'bexia-stec-field bexia-stec-company-field bexia-stec-compact-field',
+                            ])
                             ->label('Empresa')
                             ->disabled()
                             ->dehydrated(false),
 
                         Forms\Components\Toggle::make('is_service_technician')
+                            ->extraAttributes([
+                                'class' => 'bexia-stec-field bexia-stec-technician-toggle-field bexia-stec-bool-field',
+                            ])
                             ->label('Es tecnico de servicio')
                             ->helperText('Si esta activo, puede seleccionarse como tecnico responsable en tickets y reparaciones.')
                             ->inline(false),
@@ -115,38 +132,86 @@ class ServiceTechnicianResource extends Resource
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stec-header bexia-stec-col-id',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stec-cell bexia-stec-col-id bexia-stec-col-compact',
+                    ])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('employee_number')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stec-header bexia-stec-col-employee-number',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stec-cell bexia-stec-col-employee-number bexia-stec-col-number',
+                    ])
                     ->label('No. empleado')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stec-header bexia-stec-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stec-cell bexia-stec-col-name bexia-stec-col-person',
+                    ])
                     ->label('Nombre')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('first_name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stec-header bexia-stec-col-first-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stec-cell bexia-stec-col-first-name bexia-stec-col-person',
+                    ])
                     ->label('Nombre(s)')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('last_name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stec-header bexia-stec-col-last-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stec-cell bexia-stec-col-last-name bexia-stec-col-person',
+                    ])
                     ->label('Apellidos')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('email')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stec-header bexia-stec-col-email',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stec-cell bexia-stec-col-email bexia-stec-col-person',
+                    ])
                     ->label('Correo')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('is_service_technician')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stec-header bexia-stec-col-technician',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stec-cell bexia-stec-col-technician bexia-stec-col-bool',
+                    ])
                     ->label('Tecnico')
                     ->boolean(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stec-header bexia-stec-col-company',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stec-cell bexia-stec-col-company bexia-stec-col-compact',
+                    ])
                     ->label('Empresa')
                     ->sortable()
                     ->toggleable(),
