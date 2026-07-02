@@ -83,19 +83,28 @@ class StockSerialSpecialMovementResource extends Resource
         return $query;
     }
 
+    /*
+     * BEXIA_STOCK_SERIAL_SPECIAL_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_72C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Section::make('Auditoría')
+                    ->extraAttributes(['class' => 'bexia-sssm-section bexia-sssm-section-audit'])
                     ->schema([
                         Forms\Components\Select::make('movement_type')
+                            ->extraAttributes(['class' => 'bexia-sssm-field bexia-sssm-field-movement-type bexia-sssm-select-field'])
                             ->label('Tipo')
                             ->options(StockSerialSpecialMovement::typeLabels())
                             ->native(false)
                             ->disabled(),
 
                         Forms\Components\Select::make('status')
+                            ->extraAttributes(['class' => 'bexia-sssm-field bexia-sssm-field-status bexia-sssm-select-field'])
                             ->label('Estado')
                             ->options([
                                 'draft' => 'Borrador',
@@ -106,10 +115,12 @@ class StockSerialSpecialMovementResource extends Resource
                             ->disabled(),
 
                         Forms\Components\TextInput::make('serial_number_before')
+                            ->extraAttributes(['class' => 'bexia-sssm-field bexia-sssm-field-serial-before bexia-sssm-code-field bexia-sssm-serial-field'])
                             ->label('Serie original / actual')
                             ->disabled(),
 
                         Forms\Components\TextInput::make('serial_number_after')
+                            ->extraAttributes(['class' => 'bexia-sssm-field bexia-sssm-field-serial-after bexia-sssm-code-field bexia-sssm-serial-field'])
                             ->label(fn (?StockSerialSpecialMovement $record): string => match ($record?->movement_type) {
                                 StockSerialSpecialMovement::TYPE_SERIAL_CORRECTION => 'Serie nueva',
                                 StockSerialSpecialMovement::TYPE_DUPLICATE_CONFLICT => 'Serie relacionada / conflictiva',
@@ -121,11 +132,13 @@ class StockSerialSpecialMovementResource extends Resource
                             ->disabled(),
 
                         Forms\Components\Textarea::make('reason')
+                            ->extraAttributes(['class' => 'bexia-sssm-field bexia-sssm-field-reason bexia-sssm-long-field'])
                             ->label('Motivo')
                             ->disabled()
                             ->columnSpanFull(),
 
                         Forms\Components\Textarea::make('notes')
+                            ->extraAttributes(['class' => 'bexia-sssm-field bexia-sssm-field-notes bexia-sssm-long-field'])
                             ->label('Notas')
                             ->disabled()
                             ->columnSpanFull(),
@@ -139,11 +152,15 @@ class StockSerialSpecialMovementResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-created-at bexia-sssm-col-date bexia-sssm-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-created-at bexia-sssm-col-date bexia-sssm-col-compact'])
                     ->label('Fecha')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('movement_type')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-movement-type bexia-sssm-col-badge bexia-sssm-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-movement-type bexia-sssm-col-badge bexia-sssm-col-context'])
                     ->label('Tipo')
                     ->formatStateUsing(fn (?string $state): string => static::movementTypeLabel($state))
                     ->badge()
@@ -151,18 +168,24 @@ class StockSerialSpecialMovementResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('serial_number_before')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-serial-before bexia-sssm-col-code bexia-sssm-col-serial bexia-sssm-col-long-text'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-serial-before bexia-sssm-col-code bexia-sssm-col-serial bexia-sssm-col-long-text'])
                     ->label('Serie original')
                     ->placeholder('—')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('serial_number_after')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-serial-after bexia-sssm-col-code bexia-sssm-col-serial bexia-sssm-col-long-text'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-serial-after bexia-sssm-col-code bexia-sssm-col-serial bexia-sssm-col-long-text'])
                     ->label('Serie relacionada / nueva')
                     ->placeholder('—')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_label')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-product bexia-sssm-col-primary bexia-sssm-col-long-text'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-product bexia-sssm-col-primary bexia-sssm-col-long-text'])
                     ->label('Producto')
                     ->state(fn (StockSerialSpecialMovement $record): string => static::productLabel($record))
                     ->wrap()
@@ -170,35 +193,47 @@ class StockSerialSpecialMovementResource extends Resource
                     ->sortable(false),
 
                 Tables\Columns\TextColumn::make('source_label')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-source bexia-sssm-col-location bexia-sssm-col-long-text bexia-sssm-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-source bexia-sssm-col-location bexia-sssm-col-long-text bexia-sssm-col-context'])
                     ->label('Origen')
                     ->state(fn (StockSerialSpecialMovement $record): string => static::locationLabel($record->sourceWarehouse?->name, $record->sourceLocation?->name))
                     ->wrap()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('destination_label')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-destination bexia-sssm-col-location bexia-sssm-col-long-text bexia-sssm-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-destination bexia-sssm-col-location bexia-sssm-col-long-text bexia-sssm-col-context'])
                     ->label('Destino')
                     ->state(fn (StockSerialSpecialMovement $record): string => static::locationLabel($record->destinationWarehouse?->name, $record->destinationLocation?->name))
                     ->wrap()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('reason')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-reason bexia-sssm-col-message bexia-sssm-col-long-text'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-reason bexia-sssm-col-message bexia-sssm-col-long-text'])
                     ->label('Motivo')
                     ->limit(60)
                     ->wrap()
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('reference')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-reference bexia-sssm-col-code bexia-sssm-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-reference bexia-sssm-col-code bexia-sssm-col-context'])
                     ->label('Referencia')
                     ->placeholder('—')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('createdByUser.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-user bexia-sssm-col-context bexia-sssm-col-long-text'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-user bexia-sssm-col-context bexia-sssm-col-long-text'])
                     ->label('Usuario')
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-sssm-col-status bexia-sssm-col-badge bexia-sssm-col-compact'])
+                    ->extraCellAttributes(['class' => 'bexia-sssm-col-status bexia-sssm-col-badge bexia-sssm-col-compact'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::statusLabel($state))
@@ -227,8 +262,10 @@ class StockSerialSpecialMovementResource extends Resource
                     ->label('Fecha')
                     ->form([
                         Forms\Components\DatePicker::make('from')
+                            ->extraAttributes(['class' => 'bexia-sssm-field bexia-sssm-filter-date-from bexia-sssm-date-field'])
                             ->label('Desde'),
                         Forms\Components\DatePicker::make('until')
+                            ->extraAttributes(['class' => 'bexia-sssm-field bexia-sssm-filter-date-until bexia-sssm-date-field'])
                             ->label('Hasta'),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
