@@ -13708,4 +13708,130 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_TAX_RATE_RESOURCE_RESPONSIVE_V5_79_80C_END */
+
+/* BEXIA_PRODUCT_ATTRIBUTE_RESOURCE_RESPONSIVE_V5_79_81C_START */
+.bexia-pattr-section {
+    overflow: hidden;
+}
+
+.bexia-pattr-section .fi-section-header,
+.bexia-pattr-section .fi-section-content {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.bexia-pattr-field .fi-fo-field-wrp-label,
+.bexia-pattr-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-pattr-field .fi-input-wrp,
+.bexia-pattr-field .fi-toggle,
+.bexia-pattr-field input {
+    min-width: 0;
+}
+
+.bexia-pattr-wide-field .fi-input-wrp {
+    width: 100%;
+}
+
+.bexia-pattr-compact-field .fi-input-wrp,
+.bexia-pattr-sort-field .fi-input-wrp {
+    max-width: 12rem;
+}
+
+.bexia-pattr-toggle-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-pattr-header,
+.bexia-pattr-cell {
+    white-space: normal;
+}
+
+.bexia-pattr-col-code,
+.bexia-pattr-col-sort {
+    min-width: 5.25rem;
+    max-width: 7rem;
+}
+
+.bexia-pattr-col-name {
+    min-width: 10rem;
+    max-width: 14rem;
+}
+
+.bexia-pattr-col-bool,
+.bexia-pattr-col-variant,
+.bexia-pattr-col-active,
+.bexia-pattr-col-system {
+    min-width: 5rem;
+    max-width: 6.25rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-pattr-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-pattr-field {
+        min-width: 0;
+    }
+
+    .bexia-pattr-wide-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-pattr-col-code,
+    .bexia-pattr-col-sort {
+        min-width: 4.5rem;
+        max-width: 6rem;
+    }
+
+    .bexia-pattr-col-name {
+        min-width: 8.5rem;
+        max-width: 11rem;
+    }
+
+    .bexia-pattr-col-bool,
+    .bexia-pattr-col-variant,
+    .bexia-pattr-col-active,
+    .bexia-pattr-col-system {
+        min-width: 4.5rem;
+        max-width: 5.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-pattr-section .fi-section-header,
+    .bexia-pattr-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-pattr-compact-field .fi-input-wrp,
+    .bexia-pattr-sort-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-pattr-col-code,
+    .bexia-pattr-col-sort {
+        min-width: 4rem;
+        max-width: 5.25rem;
+    }
+
+    .bexia-pattr-col-name {
+        min-width: 7.25rem;
+        max-width: 9rem;
+    }
+
+    .bexia-pattr-col-bool,
+    .bexia-pattr-col-variant,
+    .bexia-pattr-col-active,
+    .bexia-pattr-col-system {
+        min-width: 4rem;
+        max-width: 5rem;
+    }
+}
+/* BEXIA_PRODUCT_ATTRIBUTE_RESOURCE_RESPONSIVE_V5_79_81C_END */
 </style>

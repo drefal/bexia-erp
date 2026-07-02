@@ -16,6 +16,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductAttributeResource extends Resource
 {
+    /**
+     * BEXIA_PRODUCT_ATTRIBUTE_RESOURCE_RESPONSIVE_V5_79_81C
+     *
+     * Visual-only responsive classes for ProductAttributeResource.
+     */
     protected static ?string $model = ProductAttribute::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-adjustments-horizontal';
@@ -92,8 +97,14 @@ public static function form(Form $form): Form
                     ->required(),
 
                 Forms\Components\Section::make('Datos del atributo')
+                    ->extraAttributes([
+                        'class' => 'bexia-pattr-section bexia-pattr-section-main',
+                    ])
                     ->schema([
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes([
+                                'class' => 'bexia-pattr-field bexia-pattr-code-field bexia-pattr-compact-field',
+                            ])
                             ->label('Código')
                             ->helperText('Ejemplo: COLOR, TALLA, MATERIAL.')
                             ->required()
@@ -108,6 +119,9 @@ public static function form(Form $form): Form
                             ->columnSpan(4),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes([
+                                'class' => 'bexia-pattr-field bexia-pattr-name-field bexia-pattr-wide-field',
+                            ])
                             ->label('Nombre')
                             ->helperText('Ejemplo: Color, Talla, Material.')
                             ->required()
@@ -115,23 +129,35 @@ public static function form(Form $form): Form
                             ->columnSpan(5),
 
                         Forms\Components\TextInput::make('sort_order')
+                            ->extraAttributes([
+                                'class' => 'bexia-pattr-field bexia-pattr-sort-field bexia-pattr-compact-field',
+                            ])
                             ->label('Orden')
                             ->numeric()
                             ->default(0)
                             ->columnSpan(3),
 
                         Forms\Components\Toggle::make('is_variant')
+                            ->extraAttributes([
+                                'class' => 'bexia-pattr-field bexia-pattr-toggle-field bexia-pattr-variant-field',
+                            ])
                             ->label('Usar para variantes')
                             ->helperText('Actívalo si este atributo genera variantes del producto.')
                             ->default(true)
                             ->columnSpan(4),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes([
+                                'class' => 'bexia-pattr-field bexia-pattr-toggle-field bexia-pattr-active-field',
+                            ])
                             ->label('Activo')
                             ->default(true)
                             ->columnSpan(4),
 
                         Forms\Components\Toggle::make('is_system')
+                            ->extraAttributes([
+                                'class' => 'bexia-pattr-field bexia-pattr-toggle-field bexia-pattr-system-field',
+                            ])
                             ->label('Sistema')
                             ->helperText('Los registros del sistema no se deberían eliminar.')
                             ->disabled()
@@ -177,30 +203,66 @@ public static function form(Form $form): Form
             ->defaultSort('sort_order')
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pattr-header bexia-pattr-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pattr-cell bexia-pattr-col-code bexia-pattr-col-compact',
+                    ])
                     ->label('Código')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pattr-header bexia-pattr-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pattr-cell bexia-pattr-col-name bexia-pattr-col-wide',
+                    ])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable()
                     ->weight('medium'),
 
                 Tables\Columns\IconColumn::make('is_variant')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pattr-header bexia-pattr-col-variant',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pattr-cell bexia-pattr-col-variant bexia-pattr-col-bool',
+                    ])
                     ->label('Variante')
                     ->boolean(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pattr-header bexia-pattr-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pattr-cell bexia-pattr-col-active bexia-pattr-col-bool',
+                    ])
                     ->label('Activo')
                     ->boolean(),
 
                 Tables\Columns\IconColumn::make('is_system')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pattr-header bexia-pattr-col-system',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pattr-cell bexia-pattr-col-system bexia-pattr-col-bool',
+                    ])
                     ->label('Sistema')
                     ->boolean()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sort_order')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pattr-header bexia-pattr-col-sort',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pattr-cell bexia-pattr-col-sort bexia-pattr-col-compact',
+                    ])
                     ->label('Orden')
                     ->sortable()
                     ->toggleable(),
