@@ -13029,4 +13029,292 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_STOCK_LOCATION_RESOURCE_RESPONSIVE_V5_79_77C_END */
+
+/* BEXIA_SERVICE_CASE_EVENT_RESOURCE_RESPONSIVE_V5_79_78C_START */
+/*
+ * ServiceCaseEventResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de eventos de casos de servicio,
+ * bitacora, cliente/contacto, tecnico, estado, prioridad, SLA,
+ * fechas, permisos, empresa ni tenant.
+ */
+.bexia-scer-section {
+    border-radius: 1rem;
+}
+
+.bexia-scer-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-scer-section,
+.bexia-scer-field,
+.bexia-scer-filter {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-scer-section .fi-grid,
+.bexia-scer-section .grid,
+.bexia-scer-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-scer-field .fi-input-wrp,
+.bexia-scer-field .fi-select-input,
+.bexia-scer-field .fi-fo-select,
+.bexia-scer-field input,
+.bexia-scer-field select,
+.bexia-scer-field textarea,
+.bexia-scer-field .choices,
+.bexia-scer-field .choices__inner,
+.bexia-scer-filter .fi-select-input,
+.bexia-scer-filter .choices,
+.bexia-scer-filter .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-scer-primary-field .fi-input-wrp,
+.bexia-scer-primary-field input {
+    min-height: 2.45rem;
+}
+
+.bexia-scer-code-field input,
+.bexia-scer-reference-field input,
+.bexia-scer-company-field input,
+.bexia-scer-col-code,
+.bexia-scer-col-reference {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-scer-date-field input,
+.bexia-scer-timeline-field input {
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-scer-long-field textarea,
+.bexia-scer-notes-field textarea,
+.bexia-scer-metadata-field textarea {
+    min-height: 6.5rem;
+    resize: vertical;
+}
+
+.bexia-scer-technical-field textarea {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.82rem;
+}
+
+.bexia-scer-col-performed-at,
+.bexia-scer-col-event-type,
+.bexia-scer-col-service-case,
+.bexia-scer-col-repair-order,
+.bexia-scer-col-from-status,
+.bexia-scer-col-to-status,
+.bexia-scer-col-performed-by,
+.bexia-scer-col-notes,
+.bexia-scer-col-company {
+    vertical-align: top;
+}
+
+.bexia-scer-col-long-text,
+.bexia-scer-col-related,
+.bexia-scer-col-context,
+.bexia-scer-col-bitacora {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bexia-scer-col-primary,
+.bexia-scer-col-event-type {
+    min-width: 8rem;
+    max-width: 12rem;
+    font-weight: 650;
+}
+
+.bexia-scer-col-date,
+.bexia-scer-col-timeline {
+    min-width: 8rem;
+    max-width: 10rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-scer-col-reference,
+.bexia-scer-col-service-case,
+.bexia-scer-col-repair-order,
+.bexia-scer-col-company {
+    min-width: 5.75rem;
+    max-width: 8rem;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.bexia-scer-col-status,
+.bexia-scer-col-state,
+.bexia-scer-col-from-status,
+.bexia-scer-col-to-status {
+    min-width: 7rem;
+    max-width: 10rem;
+    white-space: normal;
+}
+
+.bexia-scer-col-user,
+.bexia-scer-col-performed-by {
+    min-width: 7rem;
+    max-width: 11rem;
+}
+
+.bexia-scer-col-notes {
+    min-width: 12rem;
+    max-width: 22rem;
+}
+
+.bexia-scer-filter-event-type,
+.bexia-scer-filter-case,
+.bexia-scer-filter-repair {
+    min-width: 0;
+}
+
+@media (max-width: 1024px) {
+    .bexia-scer-section .fi-grid,
+    .bexia-scer-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-scer-col-notes {
+        max-width: 18rem;
+    }
+
+    .bexia-scer-col-status,
+    .bexia-scer-col-state,
+    .bexia-scer-col-from-status,
+    .bexia-scer-col-to-status {
+        max-width: 9rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-scer-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-scer-section .fi-section-header,
+    .bexia-scer-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-scer-field .fi-fo-field-wrp-label,
+    .bexia-scer-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-scer-field input,
+    .bexia-scer-field select,
+    .bexia-scer-field textarea,
+    .bexia-scer-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-scer-col-performed-at,
+    .bexia-scer-col-event-type,
+    .bexia-scer-col-service-case,
+    .bexia-scer-col-repair-order,
+    .bexia-scer-col-from-status,
+    .bexia-scer-col-to-status,
+    .bexia-scer-col-performed-by,
+    .bexia-scer-col-notes,
+    .bexia-scer-col-company {
+        font-size: 0.76rem;
+    }
+
+    .bexia-scer-col-primary,
+    .bexia-scer-col-event-type {
+        min-width: 6.5rem;
+        max-width: 9rem;
+    }
+
+    .bexia-scer-col-date,
+    .bexia-scer-col-timeline {
+        min-width: 6.5rem;
+        max-width: 8rem;
+    }
+
+    .bexia-scer-col-reference,
+    .bexia-scer-col-service-case,
+    .bexia-scer-col-repair-order,
+    .bexia-scer-col-company {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+
+    .bexia-scer-col-status,
+    .bexia-scer-col-state,
+    .bexia-scer-col-from-status,
+    .bexia-scer-col-to-status {
+        min-width: 5.75rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-scer-col-user,
+    .bexia-scer-col-performed-by {
+        min-width: 5.75rem;
+        max-width: 8rem;
+    }
+
+    .bexia-scer-col-notes {
+        min-width: 8.5rem;
+        max-width: 13rem;
+    }
+
+    .bexia-scer-long-field textarea,
+    .bexia-scer-notes-field textarea,
+    .bexia-scer-metadata-field textarea {
+        min-height: 5.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-scer-col-primary,
+    .bexia-scer-col-event-type {
+        min-width: 5.75rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-scer-col-date,
+    .bexia-scer-col-timeline {
+        min-width: 5.75rem;
+        max-width: 7rem;
+    }
+
+    .bexia-scer-col-reference,
+    .bexia-scer-col-service-case,
+    .bexia-scer-col-repair-order,
+    .bexia-scer-col-company {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+
+    .bexia-scer-col-status,
+    .bexia-scer-col-state,
+    .bexia-scer-col-from-status,
+    .bexia-scer-col-to-status {
+        min-width: 5rem;
+        max-width: 6.5rem;
+    }
+
+    .bexia-scer-col-user,
+    .bexia-scer-col-performed-by {
+        min-width: 5rem;
+        max-width: 6.75rem;
+    }
+
+    .bexia-scer-col-notes {
+        min-width: 7.25rem;
+        max-width: 10rem;
+    }
+}
+/* BEXIA_SERVICE_CASE_EVENT_RESOURCE_RESPONSIVE_V5_79_78C_END */
 </style>
