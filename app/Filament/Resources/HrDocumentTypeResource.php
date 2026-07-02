@@ -15,6 +15,11 @@ use Filament\Tables\Table;
 
 class HrDocumentTypeResource extends Resource
 {
+    /**
+     * BEXIA_HR_DOCUMENT_TYPE_RESOURCE_RESPONSIVE_V5_79_93C
+     *
+     * Visual-only responsive classes for HrDocumentTypeResource.
+     */
     use UsesTenantCompany;
 
     protected static ?string $model = HrDocumentType::class;
@@ -28,26 +33,48 @@ class HrDocumentTypeResource extends Resource
 
     public static function form(Form $form): Form
     {
-        return $form->schema([
+        return $form
+            ->extraAttributes([
+                'class' => 'bexia-hdt-form bexia-hdt-form-main bexia-hdt-shell',
+            ])
+            ->schema([
             Forms\Components\Section::make('Tipo de documento')
+                ->extraAttributes([
+                    'class' => 'bexia-hdt-section bexia-hdt-section-main',
+                ])
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('name')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdt-field bexia-hdt-name-field bexia-hdt-wide-field',
+                        ])
                         ->label('Nombre')
                         ->required()
                         ->maxLength(255),
 
                     Forms\Components\TextInput::make('code')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdt-field bexia-hdt-code-field bexia-hdt-compact-field',
+                        ])
                         ->label('Código')
                         ->maxLength(80),
 
                     Forms\Components\Toggle::make('requires_expiration_date')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdt-field bexia-hdt-expiration-field bexia-hdt-toggle-field',
+                        ])
                         ->label('Requiere vencimiento'),
 
                     Forms\Components\Toggle::make('is_required_by_default')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdt-field bexia-hdt-required-field bexia-hdt-toggle-field',
+                        ])
                         ->label('Requerido por default'),
 
                     Forms\Components\Toggle::make('is_active')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdt-field bexia-hdt-active-field bexia-hdt-toggle-field',
+                        ])
                         ->label('Activo')
                         ->default(true),
                 ]),
@@ -58,11 +85,52 @@ class HrDocumentTypeResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Nombre')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('code')->label('Código')->searchable(),
-                Tables\Columns\IconColumn::make('requires_expiration_date')->label('Vence')->boolean(),
-                Tables\Columns\IconColumn::make('is_required_by_default')->label('Requerido')->boolean(),
-                Tables\Columns\IconColumn::make('is_active')->label('Activo')->boolean(),
+                Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdt-header bexia-hdt-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdt-cell bexia-hdt-col-name bexia-hdt-col-wide',
+                    ])
+                    ->label('Nombre')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdt-header bexia-hdt-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdt-cell bexia-hdt-col-code bexia-hdt-col-compact',
+                    ])
+                    ->label('Código')
+                    ->searchable(),
+                Tables\Columns\IconColumn::make('requires_expiration_date')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdt-header bexia-hdt-col-expiration',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdt-cell bexia-hdt-col-expiration bexia-hdt-col-bool',
+                    ])
+                    ->label('Vence')
+                    ->boolean(),
+                Tables\Columns\IconColumn::make('is_required_by_default')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdt-header bexia-hdt-col-required',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdt-cell bexia-hdt-col-required bexia-hdt-col-bool',
+                    ])
+                    ->label('Requerido')
+                    ->boolean(),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdt-header bexia-hdt-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdt-cell bexia-hdt-col-active bexia-hdt-col-bool',
+                    ])
+                    ->label('Activo')
+                    ->boolean(),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_active')->label('Activo'),

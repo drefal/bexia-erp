@@ -15368,4 +15368,129 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_CASH_DENOMINATION_RESOURCE_RESPONSIVE_V5_79_92C_END */
+
+/* BEXIA_HR_DOCUMENT_TYPE_RESOURCE_RESPONSIVE_V5_79_93C_START */
+.bexia-hdt-form,
+.bexia-hdt-shell {
+    min-width: 0;
+}
+
+.bexia-hdt-form .fi-fo-component-ctn,
+.bexia-hdt-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-hdt-section .fi-section-header-description,
+.bexia-hdt-field .fi-fo-field-wrp-label,
+.bexia-hdt-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-hdt-field .fi-input-wrp,
+.bexia-hdt-field .fi-select-input,
+.bexia-hdt-field textarea,
+.bexia-hdt-field input {
+    min-width: 0;
+}
+
+.bexia-hdt-wide-field .fi-fo-field-wrp,
+.bexia-hdt-name-field .fi-input-wrp {
+    width: 100%;
+}
+
+.bexia-hdt-compact-field .fi-input-wrp,
+.bexia-hdt-code-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-hdt-toggle-field .fi-fo-field-wrp,
+.bexia-hdt-required-field .fi-fo-field-wrp,
+.bexia-hdt-active-field .fi-fo-field-wrp,
+.bexia-hdt-expiration-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-hdt-header,
+.bexia-hdt-cell {
+    white-space: normal;
+}
+
+.bexia-hdt-col-name {
+    min-width: 9.5rem;
+    max-width: 14rem;
+}
+
+.bexia-hdt-col-code,
+.bexia-hdt-col-compact {
+    min-width: 6rem;
+    max-width: 8.5rem;
+}
+
+.bexia-hdt-col-bool,
+.bexia-hdt-col-expiration,
+.bexia-hdt-col-required,
+.bexia-hdt-col-active {
+    min-width: 5rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-hdt-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-hdt-wide-field,
+    .bexia-hdt-name-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-hdt-col-name {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-hdt-col-code,
+    .bexia-hdt-col-compact {
+        min-width: 5.5rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-hdt-col-bool,
+    .bexia-hdt-col-expiration,
+    .bexia-hdt-col-required,
+    .bexia-hdt-col-active {
+        min-width: 4.5rem;
+        max-width: 6rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-hdt-section .fi-section-header,
+    .bexia-hdt-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-hdt-compact-field .fi-input-wrp,
+    .bexia-hdt-code-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-hdt-col-name {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-hdt-col-code,
+    .bexia-hdt-col-compact,
+    .bexia-hdt-col-bool,
+    .bexia-hdt-col-expiration,
+    .bexia-hdt-col-required,
+    .bexia-hdt-col-active {
+        min-width: 4rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_HR_DOCUMENT_TYPE_RESOURCE_RESPONSIVE_V5_79_93C_END */
 </style>
