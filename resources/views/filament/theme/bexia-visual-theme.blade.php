@@ -12089,4 +12089,237 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_POS_STAFF_ASSIGNMENT_RESOURCE_RESPONSIVE_V5_79_73C_END */
+
+/* BEXIA_PAYMENT_FORM_RESOURCE_RESPONSIVE_V5_79_74C_START */
+/*
+ * PaymentFormResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de formas de pago,
+ * claves SAT, fiscal, catalogos, bancos, estados, permisos, empresa ni tenant.
+ */
+.bexia-pfr-section {
+    border-radius: 1rem;
+}
+
+.bexia-pfr-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-pfr-section,
+.bexia-pfr-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-pfr-section .fi-grid,
+.bexia-pfr-section .grid,
+.bexia-pfr-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-pfr-field .fi-input-wrp,
+.bexia-pfr-field .fi-select-input,
+.bexia-pfr-field .fi-fo-select,
+.bexia-pfr-field input,
+.bexia-pfr-field select,
+.bexia-pfr-field .choices,
+.bexia-pfr-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-pfr-primary-field .fi-input-wrp,
+.bexia-pfr-primary-field input {
+    min-height: 2.45rem;
+}
+
+.bexia-pfr-code-field input,
+.bexia-pfr-sat-field .fi-select-input,
+.bexia-pfr-sat-field .choices__inner {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-pfr-numeric-field input {
+    max-width: 8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-pfr-toggle-field {
+    min-width: 0;
+}
+
+.bexia-pfr-toggle-field .fi-fo-toggle,
+.bexia-pfr-toggle-field .fi-toggle,
+.bexia-pfr-toggle-field button {
+    max-width: 100%;
+}
+
+.bexia-pfr-col-code,
+.bexia-pfr-col-name,
+.bexia-pfr-col-sat-form,
+.bexia-pfr-col-sat-method,
+.bexia-pfr-col-payment-term,
+.bexia-pfr-col-cash,
+.bexia-pfr-col-credit,
+.bexia-pfr-col-reference,
+.bexia-pfr-col-active,
+.bexia-pfr-col-sort-order {
+    vertical-align: top;
+}
+
+.bexia-pfr-col-long-text,
+.bexia-pfr-col-related,
+.bexia-pfr-col-context {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bexia-pfr-col-primary {
+    min-width: 12rem;
+    max-width: 22rem;
+    font-weight: 650;
+}
+
+.bexia-pfr-col-code,
+.bexia-pfr-col-key,
+.bexia-pfr-col-sat,
+.bexia-pfr-col-number {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bexia-pfr-col-short {
+    min-width: 4.75rem;
+    max-width: 7rem;
+}
+
+.bexia-pfr-col-payment-term {
+    min-width: 10rem;
+    max-width: 16rem;
+}
+
+.bexia-pfr-col-icon,
+.bexia-pfr-col-flag,
+.bexia-pfr-col-status,
+.bexia-pfr-col-requirement,
+.bexia-pfr-col-payment-kind {
+    min-width: 4.25rem;
+    max-width: 7rem;
+    text-align: center;
+    white-space: normal;
+}
+
+@media (max-width: 1024px) {
+    .bexia-pfr-section .fi-grid,
+    .bexia-pfr-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-pfr-col-primary {
+        max-width: 16rem;
+    }
+
+    .bexia-pfr-col-payment-term {
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-pfr-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-pfr-section .fi-section-header,
+    .bexia-pfr-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-pfr-field .fi-fo-field-wrp-label,
+    .bexia-pfr-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-pfr-field input,
+    .bexia-pfr-field select,
+    .bexia-pfr-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-pfr-toggle-field {
+        padding-top: 0.15rem;
+        padding-bottom: 0.15rem;
+    }
+
+    .bexia-pfr-col-code,
+    .bexia-pfr-col-name,
+    .bexia-pfr-col-sat-form,
+    .bexia-pfr-col-sat-method,
+    .bexia-pfr-col-payment-term,
+    .bexia-pfr-col-cash,
+    .bexia-pfr-col-credit,
+    .bexia-pfr-col-reference,
+    .bexia-pfr-col-active,
+    .bexia-pfr-col-sort-order {
+        font-size: 0.76rem;
+    }
+
+    .bexia-pfr-col-primary {
+        min-width: 8.75rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-pfr-col-short {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+
+    .bexia-pfr-col-payment-term {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-pfr-col-icon,
+    .bexia-pfr-col-flag,
+    .bexia-pfr-col-status,
+    .bexia-pfr-col-requirement,
+    .bexia-pfr-col-payment-kind {
+        min-width: 3.75rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-pfr-col-primary {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-pfr-col-short {
+        min-width: 3.75rem;
+        max-width: 5rem;
+    }
+
+    .bexia-pfr-col-payment-term {
+        min-width: 6.75rem;
+        max-width: 8.75rem;
+    }
+
+    .bexia-pfr-col-icon,
+    .bexia-pfr-col-flag,
+    .bexia-pfr-col-status,
+    .bexia-pfr-col-requirement,
+    .bexia-pfr-col-payment-kind {
+        min-width: 3.25rem;
+        max-width: 4.75rem;
+    }
+
+    .bexia-pfr-numeric-field input {
+        max-width: 6.5rem;
+    }
+}
+/* BEXIA_PAYMENT_FORM_RESOURCE_RESPONSIVE_V5_79_74C_END */
 </style>
