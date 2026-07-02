@@ -74,13 +74,21 @@ public static function getEloquentQuery(): Builder
             );
     }
 
+    /*
+     * BEXIA_PAYMENT_FORM_RESOURCE_RESPONSIVE_V5_79_74C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Section::make('Forma de pago')
+                ->extraAttributes(['class' => 'bexia-pfr-section bexia-pfr-section-main'])
                 ->columns(3)
                 ->schema([
                     Forms\Components\Select::make('company_id')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-field-company bexia-pfr-select-field'])
                         ->label('Empresa')
                         ->options(fn () => static::companyOptions())
                         ->default(fn () => static::currentCompanyId())
@@ -88,11 +96,13 @@ public static function getEloquentQuery(): Builder
                         ->preload(),
 
                     Forms\Components\TextInput::make('code')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-field-code bexia-pfr-code-field'])
                         ->label('Código')
                         ->required()
                         ->maxLength(20),
 
                     Forms\Components\TextInput::make('name')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-field-name bexia-pfr-primary-field'])
                         ->label('Nombre')
                         ->required()
                         ->maxLength(255),
@@ -101,6 +111,7 @@ public static function getEloquentQuery(): Builder
                      * BEXIA_V5525J2_PAYMENT_FORM_SAT_FIELDS
                      */
                     Forms\Components\Select::make('sat_payment_form_code')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-field-sat-form bexia-pfr-select-field bexia-pfr-sat-field'])
                         ->label('Forma SAT CFDI')
                         ->options(static::satPaymentFormOptions())
                         ->searchable()
@@ -108,6 +119,7 @@ public static function getEloquentQuery(): Builder
                         ->columnSpan(1),
 
                     Forms\Components\Select::make('default_payment_method_code')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-field-sat-method bexia-pfr-select-field bexia-pfr-sat-field'])
                         ->label('Método SAT default')
                         ->options([
                             'PUE' => 'PUE - Pago en una sola exhibición',
@@ -118,6 +130,7 @@ public static function getEloquentQuery(): Builder
                         ->columnSpan(1),
 
                     Forms\Components\Select::make('default_payment_term_id')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-field-payment-term bexia-pfr-select-field bexia-pfr-related-field'])
                         ->label('Condición de pago default')
                         ->options(fn (): array => static::paymentTermOptions())
                         ->searchable()
@@ -126,29 +139,36 @@ public static function getEloquentQuery(): Builder
                         ->columnSpan(1),
 
                     Forms\Components\TextInput::make('description')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-field-description bexia-pfr-long-field'])
                         ->label('Descripción')
                         ->maxLength(255)
                         ->columnSpan(2),
 
                     Forms\Components\TextInput::make('sort_order')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-field-sort-order bexia-pfr-numeric-field'])
                         ->label('Orden')
                         ->numeric()
                         ->default(10),
 
                     Forms\Components\Toggle::make('is_active')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-toggle-field bexia-pfr-toggle-active'])
                         ->label('Activo')
                         ->default(true),
 
                     Forms\Components\Toggle::make('is_cash')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-toggle-field bexia-pfr-toggle-cash'])
                         ->label('Es efectivo'),
 
                     Forms\Components\Toggle::make('is_credit')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-toggle-field bexia-pfr-toggle-credit'])
                         ->label('Es crédito / cuenta por cobrar'),
 
                     Forms\Components\Toggle::make('requires_reference')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-toggle-field bexia-pfr-toggle-reference'])
                         ->label('Requiere referencia'),
 
                     Forms\Components\Toggle::make('requires_bank')
+                        ->extraAttributes(['class' => 'bexia-pfr-field bexia-pfr-toggle-field bexia-pfr-toggle-bank'])
                         ->label('Requiere banco'),
                 ]),
         ]);
@@ -159,16 +179,36 @@ public static function getEloquentQuery(): Builder
         return $table
             ->defaultSort('sort_order')
             ->columns([
-                Tables\Columns\TextColumn::make('code')->label('Código')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('name')->label('Forma de pago')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('sat_payment_form_code')->label('SAT')->sortable(),
-                Tables\Columns\TextColumn::make('default_payment_method_code')->label('Método')->sortable(),
-                Tables\Columns\TextColumn::make('defaultPaymentTerm.name')->label('Condición')->placeholder('—'),
-                Tables\Columns\IconColumn::make('is_cash')->label('Efectivo')->boolean(),
-                Tables\Columns\IconColumn::make('is_credit')->label('Crédito')->boolean(),
-                Tables\Columns\IconColumn::make('requires_reference')->label('Referencia')->boolean(),
-                Tables\Columns\IconColumn::make('is_active')->label('Activo')->boolean(),
-                Tables\Columns\TextColumn::make('sort_order')->label('Orden')->sortable(),
+                Tables\Columns\TextColumn::make('code')->label('Código')->searchable()->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-code bexia-pfr-col-key bexia-pfr-col-short bexia-pfr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-code bexia-pfr-col-key bexia-pfr-col-short bexia-pfr-col-context']),
+                Tables\Columns\TextColumn::make('name')->label('Forma de pago')->searchable()->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-name bexia-pfr-col-primary bexia-pfr-col-long-text bexia-pfr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-name bexia-pfr-col-primary bexia-pfr-col-long-text bexia-pfr-col-context']),
+                Tables\Columns\TextColumn::make('sat_payment_form_code')->label('SAT')->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-sat-form bexia-pfr-col-key bexia-pfr-col-sat bexia-pfr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-sat-form bexia-pfr-col-key bexia-pfr-col-sat bexia-pfr-col-context']),
+                Tables\Columns\TextColumn::make('default_payment_method_code')->label('Método')->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-sat-method bexia-pfr-col-key bexia-pfr-col-sat bexia-pfr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-sat-method bexia-pfr-col-key bexia-pfr-col-sat bexia-pfr-col-context']),
+                Tables\Columns\TextColumn::make('defaultPaymentTerm.name')->label('Condición')->placeholder('—')
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-payment-term bexia-pfr-col-related bexia-pfr-col-long-text bexia-pfr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-payment-term bexia-pfr-col-related bexia-pfr-col-long-text bexia-pfr-col-context']),
+                Tables\Columns\IconColumn::make('is_cash')->label('Efectivo')->boolean()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-cash bexia-pfr-col-flag bexia-pfr-col-icon bexia-pfr-col-payment-kind'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-cash bexia-pfr-col-flag bexia-pfr-col-icon bexia-pfr-col-payment-kind']),
+                Tables\Columns\IconColumn::make('is_credit')->label('Crédito')->boolean()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-credit bexia-pfr-col-flag bexia-pfr-col-icon bexia-pfr-col-payment-kind'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-credit bexia-pfr-col-flag bexia-pfr-col-icon bexia-pfr-col-payment-kind']),
+                Tables\Columns\IconColumn::make('requires_reference')->label('Referencia')->boolean()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-reference bexia-pfr-col-flag bexia-pfr-col-icon bexia-pfr-col-requirement'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-reference bexia-pfr-col-flag bexia-pfr-col-icon bexia-pfr-col-requirement']),
+                Tables\Columns\IconColumn::make('is_active')->label('Activo')->boolean()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-active bexia-pfr-col-status bexia-pfr-col-icon bexia-pfr-col-flag'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-active bexia-pfr-col-status bexia-pfr-col-icon bexia-pfr-col-flag']),
+                Tables\Columns\TextColumn::make('sort_order')->label('Orden')->sortable()
+                    ->extraHeaderAttributes(['class' => 'bexia-pfr-col-sort-order bexia-pfr-col-number bexia-pfr-col-short bexia-pfr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-pfr-col-sort-order bexia-pfr-col-number bexia-pfr-col-short bexia-pfr-col-context']),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('Editar'),
