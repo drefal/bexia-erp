@@ -16435,4 +16435,144 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_CUSTOMS_OFFICE_RESOURCE_RESPONSIVE_V5_79_100C_END */
+
+/* BEXIA_SAT_UNIT_RESOURCE_RESPONSIVE_V5_79_101C_START */
+.bexia-satu-form,
+.bexia-satu-shell {
+    min-width: 0;
+}
+
+.bexia-satu-section .fi-section-content,
+.bexia-satu-unit-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-satu-section .fi-section-header-description,
+.bexia-satu-field .fi-fo-field-wrp-label,
+.bexia-satu-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-satu-field .fi-input-wrp,
+.bexia-satu-field textarea,
+.bexia-satu-field input {
+    min-width: 0;
+}
+
+.bexia-satu-wide-field .fi-fo-field-wrp,
+.bexia-satu-description-field .fi-fo-field-wrp,
+.bexia-satu-textarea-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-satu-compact-field .fi-input-wrp,
+.bexia-satu-code-field .fi-input-wrp,
+.bexia-satu-symbol-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-satu-textarea-field textarea {
+    width: 100%;
+}
+
+.bexia-satu-bool-field .fi-fo-field-wrp,
+.bexia-satu-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-satu-header,
+.bexia-satu-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-satu-cell {
+    vertical-align: top;
+}
+
+.bexia-satu-col-code,
+.bexia-satu-col-symbol,
+.bexia-satu-col-compact {
+    min-width: 5.5rem;
+    max-width: 7rem;
+}
+
+.bexia-satu-col-name,
+.bexia-satu-col-main {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-satu-col-active,
+.bexia-satu-col-bool {
+    min-width: 5.25rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-satu-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-satu-wide-field,
+    .bexia-satu-description-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-satu-col-name,
+    .bexia-satu-col-main {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-satu-col-code,
+    .bexia-satu-col-symbol,
+    .bexia-satu-col-compact,
+    .bexia-satu-col-active,
+    .bexia-satu-col-bool {
+        min-width: 4.75rem;
+        max-width: 6rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-satu-section .fi-section-header,
+    .bexia-satu-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-satu-compact-field .fi-input-wrp,
+    .bexia-satu-code-field .fi-input-wrp,
+    .bexia-satu-symbol-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-satu-textarea-field textarea {
+        min-width: 100%;
+    }
+
+    .bexia-satu-header,
+    .bexia-satu-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-satu-col-name,
+    .bexia-satu-col-main {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-satu-col-code,
+    .bexia-satu-col-symbol,
+    .bexia-satu-col-compact,
+    .bexia-satu-col-active,
+    .bexia-satu-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_SAT_UNIT_RESOURCE_RESPONSIVE_V5_79_101C_END */
 </style>
