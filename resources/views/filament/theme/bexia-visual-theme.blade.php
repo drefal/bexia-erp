@@ -16724,4 +16724,150 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SAT_CFDI_USE_TAX_REGIME_RESOURCE_RESPONSIVE_V5_79_102C_END */
+
+/* BEXIA_WAREHOUSE_RESOURCE_RESPONSIVE_V5_79_103C_START */
+.bexia-whse-form,
+.bexia-whse-shell {
+    min-width: 0;
+}
+
+.bexia-whse-section .fi-section-content,
+.bexia-whse-main-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-whse-section .fi-section-header-description,
+.bexia-whse-field .fi-fo-field-wrp-label,
+.bexia-whse-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-whse-field .fi-input-wrp,
+.bexia-whse-field textarea,
+.bexia-whse-field input {
+    min-width: 0;
+}
+
+.bexia-whse-wide-field .fi-fo-field-wrp,
+.bexia-whse-description-field .fi-fo-field-wrp,
+.bexia-whse-textarea-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-whse-compact-field .fi-input-wrp,
+.bexia-whse-code-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-whse-textarea-field textarea {
+    width: 100%;
+}
+
+.bexia-whse-bool-field .fi-fo-field-wrp,
+.bexia-whse-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-whse-header,
+.bexia-whse-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-whse-cell {
+    vertical-align: top;
+}
+
+.bexia-whse-col-code,
+.bexia-whse-col-compact {
+    min-width: 5.5rem;
+    max-width: 7rem;
+}
+
+.bexia-whse-col-name,
+.bexia-whse-col-main {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-whse-col-locations,
+.bexia-whse-col-count {
+    min-width: 6rem;
+    max-width: 8rem;
+    text-align: center;
+}
+
+.bexia-whse-col-active,
+.bexia-whse-col-bool {
+    min-width: 5.25rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-whse-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-whse-wide-field,
+    .bexia-whse-description-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-whse-col-name,
+    .bexia-whse-col-main {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-whse-col-code,
+    .bexia-whse-col-compact,
+    .bexia-whse-col-locations,
+    .bexia-whse-col-count,
+    .bexia-whse-col-active,
+    .bexia-whse-col-bool {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-whse-section .fi-section-header,
+    .bexia-whse-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-whse-compact-field .fi-input-wrp,
+    .bexia-whse-code-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-whse-textarea-field textarea {
+        min-width: 100%;
+    }
+
+    .bexia-whse-header,
+    .bexia-whse-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-whse-col-name,
+    .bexia-whse-col-main {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-whse-col-code,
+    .bexia-whse-col-compact,
+    .bexia-whse-col-locations,
+    .bexia-whse-col-count,
+    .bexia-whse-col-active,
+    .bexia-whse-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_WAREHOUSE_RESOURCE_RESPONSIVE_V5_79_103C_END */
 </style>
