@@ -15894,4 +15894,126 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_STOCK_LOCATION_TYPE_RESOURCE_RESPONSIVE_V5_79_96C_END */
+
+/* BEXIA_ACCOUNTING_INVENTORY_VALUATION_LAYER_RESOURCE_RESPONSIVE_V5_79_97C_START */
+.bexia-aivl-form,
+.bexia-aivl-shell {
+    min-width: 0;
+}
+
+.bexia-aivl-readonly-form {
+    min-width: 0;
+}
+
+.bexia-aivl-header,
+.bexia-aivl-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-aivl-cell {
+    vertical-align: top;
+}
+
+.bexia-aivl-col-id,
+.bexia-aivl-col-company,
+.bexia-aivl-col-compact {
+    min-width: 4.75rem;
+    max-width: 6.5rem;
+}
+
+.bexia-aivl-col-product,
+.bexia-aivl-col-reference,
+.bexia-aivl-col-source-id,
+.bexia-aivl-col-entry {
+    min-width: 5.75rem;
+    max-width: 8rem;
+}
+
+.bexia-aivl-col-operation,
+.bexia-aivl-col-direction,
+.bexia-aivl-col-source,
+.bexia-aivl-col-badge {
+    min-width: 8rem;
+    max-width: 11.5rem;
+}
+
+.bexia-aivl-col-date {
+    min-width: 6.5rem;
+    max-width: 8.5rem;
+}
+
+.bexia-aivl-col-quantity,
+.bexia-aivl-col-number,
+.bexia-aivl-col-unit-cost,
+.bexia-aivl-col-total-cost,
+.bexia-aivl-col-money {
+    min-width: 7rem;
+    max-width: 9.5rem;
+}
+
+.bexia-aivl-col-number,
+.bexia-aivl-col-money {
+    text-align: right;
+}
+
+@media (max-width: 1024px) {
+    .bexia-aivl-col-operation,
+    .bexia-aivl-col-direction,
+    .bexia-aivl-col-source,
+    .bexia-aivl-col-badge {
+        min-width: 7rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-aivl-col-quantity,
+    .bexia-aivl-col-number,
+    .bexia-aivl-col-unit-cost,
+    .bexia-aivl-col-total-cost,
+    .bexia-aivl-col-money {
+        min-width: 6.5rem;
+        max-width: 8.5rem;
+    }
+
+    .bexia-aivl-col-product,
+    .bexia-aivl-col-reference,
+    .bexia-aivl-col-source-id,
+    .bexia-aivl-col-entry {
+        min-width: 5.25rem;
+        max-width: 7rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-aivl-header,
+    .bexia-aivl-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-aivl-col-id,
+    .bexia-aivl-col-company,
+    .bexia-aivl-col-compact,
+    .bexia-aivl-col-product,
+    .bexia-aivl-col-reference,
+    .bexia-aivl-col-source-id,
+    .bexia-aivl-col-entry {
+        min-width: 4.25rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-aivl-col-operation,
+    .bexia-aivl-col-direction,
+    .bexia-aivl-col-source,
+    .bexia-aivl-col-badge,
+    .bexia-aivl-col-quantity,
+    .bexia-aivl-col-number,
+    .bexia-aivl-col-unit-cost,
+    .bexia-aivl-col-total-cost,
+    .bexia-aivl-col-money {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+}
+/* BEXIA_ACCOUNTING_INVENTORY_VALUATION_LAYER_RESOURCE_RESPONSIVE_V5_79_97C_END */
 </style>

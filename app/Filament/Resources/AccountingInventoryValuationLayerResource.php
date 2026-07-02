@@ -16,6 +16,11 @@ use Throwable;
 
 class AccountingInventoryValuationLayerResource extends Resource
 {
+    /**
+     * BEXIA_ACCOUNTING_INVENTORY_VALUATION_LAYER_RESOURCE_RESPONSIVE_V5_79_97C
+     *
+     * Visual-only responsive classes for AccountingInventoryValuationLayerResource.
+     */
     protected static ?string $model = AccountingInventoryValuationLayer::class;
 
     protected static bool $isScopedToTenant = false;
@@ -147,7 +152,11 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
     public static function form(Form $form): Form
     {
-        return $form->schema([]);
+        return $form
+            ->extraAttributes([
+                'class' => 'bexia-aivl-form bexia-aivl-shell bexia-aivl-readonly-form',
+            ])
+            ->schema([]);
     }
 
     public static function table(Table $table): Table
@@ -156,18 +165,42 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-id',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-id bexia-aivl-col-compact',
+                    ])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-company',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-company bexia-aivl-col-compact',
+                    ])
                     ->label('Empresa')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-product',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-product bexia-aivl-col-reference',
+                    ])
                     ->label('Producto')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('operation_type')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-operation',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-operation bexia-aivl-col-badge',
+                    ])
                     ->label('Operación')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::operationLabel($state))
@@ -176,6 +209,12 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('direction')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-direction',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-direction bexia-aivl-col-badge',
+                    ])
                     ->label('Movimiento')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::directionLabel($state))
@@ -183,26 +222,56 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('movement_date')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-date',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-date bexia-aivl-col-compact',
+                    ])
                     ->label('Fecha')
                     ->date()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('quantity')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-quantity',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-quantity bexia-aivl-col-number',
+                    ])
                     ->label('Cantidad')
                     ->alignRight()
                     ->formatStateUsing(fn ($state) => number_format((float) $state, 6)),
 
                 Tables\Columns\TextColumn::make('unit_cost')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-unit-cost',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-unit-cost bexia-aivl-col-money',
+                    ])
                     ->label('Costo unit.')
                     ->alignRight()
                     ->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN'),
 
                 Tables\Columns\TextColumn::make('total_cost')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-total-cost',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-total-cost bexia-aivl-col-money',
+                    ])
                     ->label('Costo total')
                     ->alignRight()
                     ->formatStateUsing(fn ($state) => '$ ' . number_format((float) $state, 2) . ' MXN'),
 
                 Tables\Columns\TextColumn::make('source_type')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-source',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-source bexia-aivl-col-badge',
+                    ])
                     ->label('Origen')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::sourceLabel($state))
@@ -211,10 +280,22 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('source_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-source-id',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-source-id bexia-aivl-col-reference',
+                    ])
                     ->label('ID origen')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('accounting_entry_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-aivl-header bexia-aivl-col-entry',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-aivl-cell bexia-aivl-col-entry bexia-aivl-col-reference',
+                    ])
                     ->label('Asiento')
                     ->sortable(),
             ])
