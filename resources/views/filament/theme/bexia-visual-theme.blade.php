@@ -17001,4 +17001,135 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_BANK_RESOURCE_RESPONSIVE_V5_79_104C_END */
+
+/* BEXIA_PAYROLL_PERIODICITY_RESOURCE_RESPONSIVE_V5_79_105C_START */
+.bexia-pper-form,
+.bexia-pper-shell {
+    min-width: 0;
+}
+
+.bexia-pper-section .fi-section-content,
+.bexia-pper-main-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-pper-section .fi-section-header-description,
+.bexia-pper-field .fi-fo-field-wrp-label,
+.bexia-pper-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-pper-field .fi-input-wrp,
+.bexia-pper-field input {
+    min-width: 0;
+}
+
+.bexia-pper-compact-field .fi-input-wrp,
+.bexia-pper-code-field .fi-input-wrp,
+.bexia-pper-number-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-pper-bool-field .fi-fo-field-wrp,
+.bexia-pper-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-pper-header,
+.bexia-pper-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-pper-cell {
+    vertical-align: top;
+}
+
+.bexia-pper-col-name,
+.bexia-pper-col-main {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-pper-col-sat-code,
+.bexia-pper-col-code,
+.bexia-pper-col-compact {
+    min-width: 5.75rem;
+    max-width: 7.5rem;
+}
+
+.bexia-pper-col-days,
+.bexia-pper-col-number {
+    min-width: 4.75rem;
+    max-width: 6.25rem;
+    text-align: right;
+}
+
+.bexia-pper-col-active,
+.bexia-pper-col-bool {
+    min-width: 5.25rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-pper-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-pper-col-name,
+    .bexia-pper-col-main {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-pper-col-sat-code,
+    .bexia-pper-col-code,
+    .bexia-pper-col-compact,
+    .bexia-pper-col-days,
+    .bexia-pper-col-number,
+    .bexia-pper-col-active,
+    .bexia-pper-col-bool {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-pper-section .fi-section-header,
+    .bexia-pper-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-pper-compact-field .fi-input-wrp,
+    .bexia-pper-code-field .fi-input-wrp,
+    .bexia-pper-number-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-pper-header,
+    .bexia-pper-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-pper-col-name,
+    .bexia-pper-col-main {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-pper-col-sat-code,
+    .bexia-pper-col-code,
+    .bexia-pper-col-compact,
+    .bexia-pper-col-days,
+    .bexia-pper-col-number,
+    .bexia-pper-col-active,
+    .bexia-pper-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_PAYROLL_PERIODICITY_RESOURCE_RESPONSIVE_V5_79_105C_END */
 </style>

@@ -15,6 +15,11 @@ use Filament\Tables\Table;
 
 class PayrollPeriodicityResource extends Resource
 {
+    /**
+     * BEXIA_PAYROLL_PERIODICITY_RESOURCE_RESPONSIVE_V5_79_105C
+     *
+     * Visual-only responsive classes for PayrollPeriodicityResource.
+     */
     use UsesTenantCompany;
 
     protected static ?string $model = PayrollPeriodicity::class;
@@ -30,22 +35,37 @@ class PayrollPeriodicityResource extends Resource
     {
         return $form->schema([
             Forms\Components\Section::make('Periodicidad')
+                ->extraAttributes([
+                    'class' => 'bexia-pper-section bexia-pper-main-section',
+                ])
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('name')
+                        ->extraAttributes([
+                            'class' => 'bexia-pper-field bexia-pper-name-field bexia-pper-main-field',
+                        ])
                         ->label('Nombre')
                         ->required()
                         ->maxLength(255),
 
                     Forms\Components\TextInput::make('sat_code')
+                        ->extraAttributes([
+                            'class' => 'bexia-pper-field bexia-pper-sat-code-field bexia-pper-code-field bexia-pper-compact-field',
+                        ])
                         ->label('Código SAT')
                         ->maxLength(20),
 
                     Forms\Components\TextInput::make('days')
+                        ->extraAttributes([
+                            'class' => 'bexia-pper-field bexia-pper-days-field bexia-pper-number-field bexia-pper-compact-field',
+                        ])
                         ->label('Días')
                         ->numeric(),
 
                     Forms\Components\Toggle::make('is_active')
+                        ->extraAttributes([
+                            'class' => 'bexia-pper-field bexia-pper-active-field bexia-pper-bool-field',
+                        ])
                         ->label('Activo')
                         ->default(true),
                 ]),
@@ -56,10 +76,43 @@ class PayrollPeriodicityResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Nombre')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('sat_code')->label('Código SAT')->searchable(),
-                Tables\Columns\TextColumn::make('days')->label('Días')->sortable(),
-                Tables\Columns\IconColumn::make('is_active')->label('Activo')->boolean(),
+                Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pper-header bexia-pper-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pper-cell bexia-pper-col-name bexia-pper-col-main',
+                    ])
+                    ->label('Nombre')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('sat_code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pper-header bexia-pper-col-sat-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pper-cell bexia-pper-col-sat-code bexia-pper-col-code bexia-pper-col-compact',
+                    ])
+                    ->label('Código SAT')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('days')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pper-header bexia-pper-col-days',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pper-cell bexia-pper-col-days bexia-pper-col-number bexia-pper-col-compact',
+                    ])
+                    ->label('Días')
+                    ->sortable(),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pper-header bexia-pper-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pper-cell bexia-pper-col-active bexia-pper-col-bool',
+                    ])
+                    ->label('Activo')
+                    ->boolean(),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_active')->label('Activo'),
