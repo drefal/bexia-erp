@@ -17132,4 +17132,132 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PAYROLL_PERIODICITY_RESOURCE_RESPONSIVE_V5_79_105C_END */
+
+/* BEXIA_SAT_CFDI_CANCELLATION_REASON_RESOURCE_RESPONSIVE_V5_79_106C_START */
+.bexia-sccr-form,
+.bexia-sccr-shell {
+    min-width: 0;
+}
+
+.bexia-sccr-field .fi-fo-field-wrp-label,
+.bexia-sccr-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-sccr-field .fi-input-wrp,
+.bexia-sccr-field textarea,
+.bexia-sccr-field input {
+    min-width: 0;
+}
+
+.bexia-sccr-wide-field .fi-fo-field-wrp,
+.bexia-sccr-description-field .fi-fo-field-wrp,
+.bexia-sccr-notes-field .fi-fo-field-wrp,
+.bexia-sccr-textarea-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-sccr-compact-field .fi-input-wrp,
+.bexia-sccr-code-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-sccr-textarea-field textarea {
+    width: 100%;
+}
+
+.bexia-sccr-bool-field .fi-fo-field-wrp,
+.bexia-sccr-replacement-uuid-field .fi-fo-field-wrp,
+.bexia-sccr-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-sccr-header,
+.bexia-sccr-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-sccr-cell {
+    vertical-align: top;
+}
+
+.bexia-sccr-col-code,
+.bexia-sccr-col-compact {
+    min-width: 5.5rem;
+    max-width: 7rem;
+}
+
+.bexia-sccr-col-name,
+.bexia-sccr-col-main,
+.bexia-sccr-col-wide {
+    min-width: 10rem;
+    max-width: 16rem;
+}
+
+.bexia-sccr-col-replacement-uuid,
+.bexia-sccr-col-active,
+.bexia-sccr-col-bool {
+    min-width: 5.25rem;
+    max-width: 7.5rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-sccr-wide-field,
+    .bexia-sccr-description-field,
+    .bexia-sccr-notes-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-sccr-col-name,
+    .bexia-sccr-col-main,
+    .bexia-sccr-col-wide {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-sccr-col-code,
+    .bexia-sccr-col-compact,
+    .bexia-sccr-col-replacement-uuid,
+    .bexia-sccr-col-active,
+    .bexia-sccr-col-bool {
+        min-width: 4.75rem;
+        max-width: 6.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-sccr-compact-field .fi-input-wrp,
+    .bexia-sccr-code-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-sccr-textarea-field textarea {
+        min-width: 100%;
+    }
+
+    .bexia-sccr-header,
+    .bexia-sccr-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-sccr-col-name,
+    .bexia-sccr-col-main,
+    .bexia-sccr-col-wide {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-sccr-col-code,
+    .bexia-sccr-col-compact,
+    .bexia-sccr-col-replacement-uuid,
+    .bexia-sccr-col-active,
+    .bexia-sccr-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_SAT_CFDI_CANCELLATION_REASON_RESOURCE_RESPONSIVE_V5_79_106C_END */
 </style>

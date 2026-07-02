@@ -12,6 +12,11 @@ use Filament\Tables\Table;
 
 class SatCfdiCancellationReasonResource extends Resource
 {
+    /**
+     * BEXIA_SAT_CFDI_CANCELLATION_REASON_RESOURCE_RESPONSIVE_V5_79_106C
+     *
+     * Visual-only responsive classes for SatCfdiCancellationReasonResource.
+     */
     protected static ?string $model = SatCfdiCancellationReason::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-x-circle';
@@ -59,21 +64,36 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $form
             ->schema([
                 Forms\Components\TextInput::make('code')
+                    ->extraAttributes([
+                        'class' => 'bexia-sccr-field bexia-sccr-code-field bexia-sccr-compact-field',
+                    ])
                     ->label('Clave SAT')
                     ->required()
                     ->maxLength(2)
                     ->unique(ignoreRecord: true),
                 Forms\Components\TextInput::make('name')
+                    ->extraAttributes([
+                        'class' => 'bexia-sccr-field bexia-sccr-name-field bexia-sccr-description-field bexia-sccr-wide-field',
+                    ])
                     ->label('Descripción')
                     ->required()
                     ->maxLength(255)
                     ->columnSpanFull(),
                 Forms\Components\Toggle::make('requires_replacement_uuid')
+                    ->extraAttributes([
+                        'class' => 'bexia-sccr-field bexia-sccr-replacement-uuid-field bexia-sccr-bool-field',
+                    ])
                     ->label('Requiere UUID sustituto'),
                 Forms\Components\Toggle::make('active')
+                    ->extraAttributes([
+                        'class' => 'bexia-sccr-field bexia-sccr-active-field bexia-sccr-bool-field',
+                    ])
                     ->label('Activo')
                     ->default(true),
                 Forms\Components\Textarea::make('notes')
+                    ->extraAttributes([
+                        'class' => 'bexia-sccr-field bexia-sccr-notes-field bexia-sccr-wide-field bexia-sccr-textarea-field',
+                    ])
                     ->label('Notas')
                     ->rows(3)
                     ->columnSpanFull(),
@@ -86,17 +106,41 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sccr-header bexia-sccr-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sccr-cell bexia-sccr-col-code bexia-sccr-col-compact',
+                    ])
                     ->label('Clave')
                     ->sortable()
                     ->searchable(),
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sccr-header bexia-sccr-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sccr-cell bexia-sccr-col-name bexia-sccr-col-main bexia-sccr-col-wide',
+                    ])
                     ->label('Descripción')
                     ->searchable()
                     ->wrap(),
                 Tables\Columns\IconColumn::make('requires_replacement_uuid')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sccr-header bexia-sccr-col-replacement-uuid',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sccr-cell bexia-sccr-col-replacement-uuid bexia-sccr-col-bool',
+                    ])
                     ->label('UUID sustituto')
                     ->boolean(),
                 Tables\Columns\IconColumn::make('active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-sccr-header bexia-sccr-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-sccr-cell bexia-sccr-col-active bexia-sccr-col-bool',
+                    ])
                     ->label('Activo')
                     ->boolean(),
             ])
