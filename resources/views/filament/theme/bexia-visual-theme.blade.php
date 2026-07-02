@@ -11650,4 +11650,243 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SAT_DOWNLOAD_REQUEST_RESOURCE_RESPONSIVE_V5_79_71C_END */
+
+/* BEXIA_STOCK_SERIAL_SPECIAL_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_72C_START */
+/*
+ * StockSerialSpecialMovementResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de inventario, series/lotes,
+ * productos/variantes, movimientos especiales, almacenes/ubicaciones,
+ * cantidades, estados, referencias, usuarios, permisos, empresa ni tenant.
+ */
+.bexia-sssm-section {
+    border-radius: 1rem;
+}
+
+.bexia-sssm-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-sssm-section,
+.bexia-sssm-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-sssm-section .fi-grid,
+.bexia-sssm-section .grid,
+.bexia-sssm-section .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-sssm-field .fi-input-wrp,
+.bexia-sssm-field .fi-select-input,
+.bexia-sssm-field .fi-fo-select,
+.bexia-sssm-field input,
+.bexia-sssm-field select,
+.bexia-sssm-field textarea,
+.bexia-sssm-field .choices,
+.bexia-sssm-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-sssm-long-field textarea,
+.bexia-sssm-field-reason textarea,
+.bexia-sssm-field-notes textarea {
+    min-height: 5.75rem;
+    resize: vertical;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.bexia-sssm-code-field input,
+.bexia-sssm-serial-field input,
+.bexia-sssm-col-code,
+.bexia-sssm-col-serial {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-sssm-col-created-at,
+.bexia-sssm-col-movement-type,
+.bexia-sssm-col-serial-before,
+.bexia-sssm-col-serial-after,
+.bexia-sssm-col-product,
+.bexia-sssm-col-source,
+.bexia-sssm-col-destination,
+.bexia-sssm-col-reason,
+.bexia-sssm-col-reference,
+.bexia-sssm-col-user,
+.bexia-sssm-col-status {
+    vertical-align: top;
+}
+
+.bexia-sssm-col-long-text,
+.bexia-sssm-col-message,
+.bexia-sssm-col-context,
+.bexia-sssm-col-product,
+.bexia-sssm-col-location {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bexia-sssm-col-primary {
+    min-width: 12rem;
+    max-width: 22rem;
+    font-weight: 650;
+}
+
+.bexia-sssm-col-location {
+    min-width: 10rem;
+    max-width: 18rem;
+}
+
+.bexia-sssm-col-serial {
+    min-width: 11rem;
+    max-width: 17rem;
+}
+
+.bexia-sssm-col-message {
+    min-width: 10rem;
+    max-width: 18rem;
+    line-height: 1.35;
+}
+
+.bexia-sssm-col-reference {
+    min-width: 7rem;
+    max-width: 10rem;
+}
+
+.bexia-sssm-col-user {
+    min-width: 8rem;
+    max-width: 12rem;
+}
+
+.bexia-sssm-col-badge {
+    min-width: 6.5rem;
+    max-width: 9rem;
+    white-space: normal;
+}
+
+.bexia-sssm-col-date {
+    min-width: 7.75rem;
+    max-width: 9.75rem;
+    white-space: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-sssm-col-compact {
+    min-width: 5rem;
+    max-width: 8rem;
+}
+
+.bexia-sssm-col-status {
+    font-weight: 650;
+}
+
+@media (max-width: 1024px) {
+    .bexia-sssm-section .fi-grid,
+    .bexia-sssm-section .grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-sssm-col-primary,
+    .bexia-sssm-col-location,
+    .bexia-sssm-col-message {
+        max-width: 16rem;
+    }
+
+    .bexia-sssm-col-serial {
+        max-width: 15rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-sssm-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-sssm-section .fi-section-header,
+    .bexia-sssm-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-sssm-field .fi-fo-field-wrp-label,
+    .bexia-sssm-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-sssm-field input,
+    .bexia-sssm-field select,
+    .bexia-sssm-field textarea,
+    .bexia-sssm-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-sssm-col-created-at,
+    .bexia-sssm-col-movement-type,
+    .bexia-sssm-col-serial-before,
+    .bexia-sssm-col-serial-after,
+    .bexia-sssm-col-product,
+    .bexia-sssm-col-source,
+    .bexia-sssm-col-destination,
+    .bexia-sssm-col-reason,
+    .bexia-sssm-col-reference,
+    .bexia-sssm-col-user,
+    .bexia-sssm-col-status {
+        font-size: 0.76rem;
+    }
+
+    .bexia-sssm-col-primary,
+    .bexia-sssm-col-location,
+    .bexia-sssm-col-message {
+        min-width: 8.75rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-sssm-col-serial {
+        min-width: 9rem;
+        max-width: 12rem;
+    }
+
+    .bexia-sssm-col-badge,
+    .bexia-sssm-col-compact,
+    .bexia-sssm-col-reference,
+    .bexia-sssm-col-user {
+        min-width: 4.75rem;
+        max-width: 7rem;
+    }
+
+    .bexia-sssm-col-date {
+        min-width: 6.25rem;
+        max-width: 8rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-sssm-col-primary,
+    .bexia-sssm-col-location,
+    .bexia-sssm-col-message,
+    .bexia-sssm-col-serial {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-sssm-col-badge,
+    .bexia-sssm-col-compact,
+    .bexia-sssm-col-reference,
+    .bexia-sssm-col-user {
+        min-width: 4.5rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-sssm-col-date {
+        min-width: 5.75rem;
+        max-width: 7rem;
+    }
+}
+/* BEXIA_STOCK_SERIAL_SPECIAL_MOVEMENT_RESOURCE_RESPONSIVE_V5_79_72C_END */
 </style>
