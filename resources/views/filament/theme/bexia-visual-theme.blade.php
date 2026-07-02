@@ -15224,4 +15224,148 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_AI_INSIGHT_USER_ACCESS_RESOURCE_RESPONSIVE_V5_79_91C_END */
+
+/* BEXIA_CASH_DENOMINATION_RESOURCE_RESPONSIVE_V5_79_92C_START */
+.bexia-cdn-form,
+.bexia-cdn-shell {
+    min-width: 0;
+}
+
+.bexia-cdn-form .fi-fo-component-ctn,
+.bexia-cdn-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-cdn-section .fi-section-header-description,
+.bexia-cdn-field .fi-fo-field-wrp-label,
+.bexia-cdn-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-cdn-field .fi-input-wrp,
+.bexia-cdn-field .fi-select-input,
+.bexia-cdn-field textarea,
+.bexia-cdn-field input {
+    min-width: 0;
+}
+
+.bexia-cdn-wide-field .fi-fo-field-wrp,
+.bexia-cdn-name-field .fi-input-wrp,
+.bexia-cdn-company-field .fi-input-wrp {
+    width: 100%;
+}
+
+.bexia-cdn-select-field .fi-input-wrp,
+.bexia-cdn-company-field .fi-input-wrp,
+.bexia-cdn-currency-field .fi-input-wrp,
+.bexia-cdn-type-field .fi-input-wrp {
+    min-width: 0;
+}
+
+.bexia-cdn-compact-field .fi-input-wrp,
+.bexia-cdn-value-field .fi-input-wrp,
+.bexia-cdn-sort-order-field .fi-input-wrp {
+    max-width: 9rem;
+}
+
+.bexia-cdn-toggle-field .fi-fo-field-wrp,
+.bexia-cdn-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-cdn-header,
+.bexia-cdn-cell {
+    white-space: normal;
+}
+
+.bexia-cdn-col-name {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-cdn-col-value,
+.bexia-cdn-col-amount {
+    min-width: 6rem;
+    max-width: 8rem;
+}
+
+.bexia-cdn-col-type,
+.bexia-cdn-col-badge {
+    min-width: 6.5rem;
+    max-width: 8.5rem;
+}
+
+.bexia-cdn-col-currency {
+    min-width: 9rem;
+    max-width: 13rem;
+}
+
+.bexia-cdn-col-bool,
+.bexia-cdn-col-active {
+    min-width: 4.75rem;
+    max-width: 6rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-cdn-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-cdn-wide-field,
+    .bexia-cdn-name-field,
+    .bexia-cdn-company-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-cdn-col-name,
+    .bexia-cdn-col-currency {
+        min-width: 8.5rem;
+        max-width: 11rem;
+    }
+
+    .bexia-cdn-col-value,
+    .bexia-cdn-col-amount,
+    .bexia-cdn-col-type,
+    .bexia-cdn-col-badge {
+        min-width: 5.5rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-cdn-col-bool,
+    .bexia-cdn-col-active {
+        min-width: 4.25rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-cdn-section .fi-section-header,
+    .bexia-cdn-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-cdn-select-field .fi-input-wrp,
+    .bexia-cdn-compact-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-cdn-col-name,
+    .bexia-cdn-col-currency {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-cdn-col-value,
+    .bexia-cdn-col-amount,
+    .bexia-cdn-col-type,
+    .bexia-cdn-col-badge,
+    .bexia-cdn-col-bool,
+    .bexia-cdn-col-active {
+        min-width: 4rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_CASH_DENOMINATION_RESOURCE_RESPONSIVE_V5_79_92C_END */
 </style>

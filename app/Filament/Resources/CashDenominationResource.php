@@ -16,6 +16,11 @@ use Illuminate\Support\Facades\Schema;
 
 class CashDenominationResource extends Resource
 {
+    /**
+     * BEXIA_CASH_DENOMINATION_RESOURCE_RESPONSIVE_V5_79_92C
+     *
+     * Visual-only responsive classes for CashDenominationResource.
+     */
     protected static ?string $model = CashDenomination::class;
 
     protected static ?string $navigationGroup = 'Catálogos';
@@ -76,11 +81,21 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
     public static function form(Form $form): Form
     {
-        return $form->schema([
+        return $form
+            ->extraAttributes([
+                'class' => 'bexia-cdn-form bexia-cdn-form-main bexia-cdn-shell',
+            ])
+            ->schema([
             Forms\Components\Section::make('Denominación')
+                ->extraAttributes([
+                    'class' => 'bexia-cdn-section bexia-cdn-section-main',
+                ])
                 ->columns(3)
                 ->schema([
                     Forms\Components\Select::make('company_id')
+                        ->extraAttributes([
+                            'class' => 'bexia-cdn-field bexia-cdn-company-field bexia-cdn-select-field bexia-cdn-wide-field',
+                        ])
                         ->label('Empresa')
                         ->options(fn () => static::companyOptions())
                         ->default(fn () => static::currentCompanyId())
@@ -88,23 +103,35 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                         ->preload(),
 
                     Forms\Components\Select::make('currency_id')
+                        ->extraAttributes([
+                            'class' => 'bexia-cdn-field bexia-cdn-currency-field bexia-cdn-select-field',
+                        ])
                         ->label('Moneda')
                         ->options(fn () => static::currencyOptions())
                         ->searchable()
                         ->preload(),
 
                     Forms\Components\TextInput::make('name')
+                        ->extraAttributes([
+                            'class' => 'bexia-cdn-field bexia-cdn-name-field bexia-cdn-wide-field',
+                        ])
                         ->label('Nombre')
                         ->required()
                         ->maxLength(255)
                         ->placeholder('Billete de 500'),
 
                     Forms\Components\TextInput::make('value')
+                        ->extraAttributes([
+                            'class' => 'bexia-cdn-field bexia-cdn-value-field bexia-cdn-amount-field bexia-cdn-compact-field',
+                        ])
                         ->label('Valor')
                         ->required()
                         ->numeric(),
 
                     Forms\Components\Select::make('type')
+                        ->extraAttributes([
+                            'class' => 'bexia-cdn-field bexia-cdn-type-field bexia-cdn-select-field bexia-cdn-compact-field',
+                        ])
                         ->label('Tipo')
                         ->options([
                             'coin' => 'Moneda',
@@ -114,11 +141,17 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                         ->required(),
 
                     Forms\Components\TextInput::make('sort_order')
+                        ->extraAttributes([
+                            'class' => 'bexia-cdn-field bexia-cdn-sort-order-field bexia-cdn-compact-field',
+                        ])
                         ->label('Orden')
                         ->numeric()
                         ->default(10),
 
                     Forms\Components\Toggle::make('is_active')
+                        ->extraAttributes([
+                            'class' => 'bexia-cdn-field bexia-cdn-active-field bexia-cdn-toggle-field',
+                        ])
                         ->label('Activa')
                         ->default(true),
                 ]),
@@ -130,14 +163,53 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $table
             ->defaultSort('value')
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Denominación')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-cdn-header bexia-cdn-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-cdn-cell bexia-cdn-col-name bexia-cdn-col-wide',
+                    ])
+                    ->label('Denominación')
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('value')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-cdn-header bexia-cdn-col-value',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-cdn-cell bexia-cdn-col-value bexia-cdn-col-amount',
+                    ])
                     ->label('Valor')
                     ->formatStateUsing(fn ($state): string => '$' . number_format((float) $state, 2, '.', ','))
                     ->sortable(),
-                Tables\Columns\TextColumn::make('type')->label('Tipo')->formatStateUsing(fn ($state) => $state === 'coin' ? 'Moneda' : 'Billete'),
-                Tables\Columns\TextColumn::make('currency_id')->label('Moneda')->state(fn ($record) => static::currencyLabel($record->currency_id)),
-                Tables\Columns\IconColumn::make('is_active')->label('Activa')->boolean(),
+                Tables\Columns\TextColumn::make('type')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-cdn-header bexia-cdn-col-type',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-cdn-cell bexia-cdn-col-type bexia-cdn-col-badge',
+                    ])
+                    ->label('Tipo')
+                    ->formatStateUsing(fn ($state) => $state === 'coin' ? 'Moneda' : 'Billete'),
+                Tables\Columns\TextColumn::make('currency_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-cdn-header bexia-cdn-col-currency',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-cdn-cell bexia-cdn-col-currency bexia-cdn-col-relation',
+                    ])
+                    ->label('Moneda')
+                    ->state(fn ($record) => static::currencyLabel($record->currency_id)),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-cdn-header bexia-cdn-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-cdn-cell bexia-cdn-col-active bexia-cdn-col-bool',
+                    ])
+                    ->label('Activa')
+                    ->boolean(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('Editar'),
