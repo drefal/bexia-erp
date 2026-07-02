@@ -12322,4 +12322,256 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PAYMENT_FORM_RESOURCE_RESPONSIVE_V5_79_74C_END */
+
+/* BEXIA_EMPLOYEE_DOCUMENT_RESOURCE_RESPONSIVE_V5_79_75C_START */
+/*
+ * EmployeeDocumentResource responsive refinements.
+ * Alcance visual solamente. No cambia logica RRHH, documentos,
+ * archivos, upload/download, storage, vencimientos, tipos de documento,
+ * empleados, estados, permisos, empresa ni tenant.
+ */
+.bexia-edr-section {
+    border-radius: 1rem;
+}
+
+.bexia-edr-section .fi-section-content {
+    overflow-x: hidden;
+}
+
+.bexia-edr-section,
+.bexia-edr-grid,
+.bexia-edr-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-edr-section .fi-grid,
+.bexia-edr-section .grid,
+.bexia-edr-section .fi-fo-component-ctn,
+.bexia-edr-grid {
+    min-width: 0;
+}
+
+.bexia-edr-field .fi-input-wrp,
+.bexia-edr-field .fi-select-input,
+.bexia-edr-field .fi-fo-select,
+.bexia-edr-field textarea,
+.bexia-edr-field input,
+.bexia-edr-field select,
+.bexia-edr-field .choices,
+.bexia-edr-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-edr-primary-field .fi-input-wrp,
+.bexia-edr-primary-field input {
+    min-height: 2.45rem;
+}
+
+.bexia-edr-code-field input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.bexia-edr-date-field .fi-input-wrp,
+.bexia-edr-date-field input {
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-edr-file-upload-field .fi-fo-file-upload,
+.bexia-edr-file-upload-field .filepond--root,
+.bexia-edr-file-upload-field [data-filepond-item-state],
+.bexia-edr-file-upload-field .filepond--drop-label {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-edr-file-upload-field .filepond--drop-label {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+}
+
+.bexia-edr-notes-field textarea {
+    min-height: 5.5rem;
+    resize: vertical;
+}
+
+.bexia-edr-col-employee,
+.bexia-edr-col-document-type,
+.bexia-edr-col-document-name,
+.bexia-edr-col-document-number,
+.bexia-edr-col-status,
+.bexia-edr-col-issued-at,
+.bexia-edr-col-expires-at,
+.bexia-edr-col-file,
+.bexia-edr-col-created-at {
+    vertical-align: top;
+}
+
+.bexia-edr-col-long-text,
+.bexia-edr-col-related,
+.bexia-edr-col-context {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bexia-edr-col-primary {
+    min-width: 11rem;
+    max-width: 22rem;
+    font-weight: 650;
+}
+
+.bexia-edr-col-document-type {
+    min-width: 10rem;
+    max-width: 18rem;
+}
+
+.bexia-edr-col-key,
+.bexia-edr-col-date {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bexia-edr-col-key {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.bexia-edr-col-short {
+    min-width: 5.75rem;
+    max-width: 8.5rem;
+}
+
+.bexia-edr-col-state,
+.bexia-edr-col-badge {
+    min-width: 5.75rem;
+    max-width: 8rem;
+    white-space: normal;
+}
+
+.bexia-edr-col-expiration {
+    min-width: 6.75rem;
+    max-width: 9rem;
+}
+
+.bexia-edr-col-file,
+.bexia-edr-col-icon,
+.bexia-edr-col-file-status {
+    min-width: 4.5rem;
+    max-width: 6.5rem;
+    text-align: center;
+    white-space: normal;
+}
+
+@media (max-width: 1024px) {
+    .bexia-edr-section .fi-grid,
+    .bexia-edr-section .grid,
+    .bexia-edr-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .bexia-edr-col-primary {
+        max-width: 16rem;
+    }
+
+    .bexia-edr-col-document-type {
+        max-width: 13rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-edr-section {
+        border-radius: 0.85rem;
+    }
+
+    .bexia-edr-section .fi-section-header,
+    .bexia-edr-section .fi-section-content {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .bexia-edr-field .fi-fo-field-wrp-label,
+    .bexia-edr-field label {
+        font-size: 0.78rem;
+    }
+
+    .bexia-edr-field input,
+    .bexia-edr-field select,
+    .bexia-edr-field textarea,
+    .bexia-edr-field .choices__inner {
+        font-size: 0.82rem;
+    }
+
+    .bexia-edr-file-upload-field .filepond--drop-label {
+        font-size: 0.78rem;
+        min-height: 3rem;
+    }
+
+    .bexia-edr-col-employee,
+    .bexia-edr-col-document-type,
+    .bexia-edr-col-document-name,
+    .bexia-edr-col-document-number,
+    .bexia-edr-col-status,
+    .bexia-edr-col-issued-at,
+    .bexia-edr-col-expires-at,
+    .bexia-edr-col-file,
+    .bexia-edr-col-created-at {
+        font-size: 0.76rem;
+    }
+
+    .bexia-edr-col-primary {
+        min-width: 8.75rem;
+        max-width: 12.5rem;
+    }
+
+    .bexia-edr-col-document-type {
+        min-width: 7.75rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-edr-col-short,
+    .bexia-edr-col-state,
+    .bexia-edr-col-badge,
+    .bexia-edr-col-expiration {
+        min-width: 4.75rem;
+        max-width: 6.75rem;
+    }
+
+    .bexia-edr-col-file,
+    .bexia-edr-col-icon,
+    .bexia-edr-col-file-status {
+        min-width: 3.75rem;
+        max-width: 5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-edr-col-primary {
+        min-width: 7.25rem;
+        max-width: 10rem;
+    }
+
+    .bexia-edr-col-document-type {
+        min-width: 6.75rem;
+        max-width: 8.75rem;
+    }
+
+    .bexia-edr-col-short,
+    .bexia-edr-col-state,
+    .bexia-edr-col-badge,
+    .bexia-edr-col-expiration {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+
+    .bexia-edr-col-file,
+    .bexia-edr-col-icon,
+    .bexia-edr-col-file-status {
+        min-width: 3.25rem;
+        max-width: 4.5rem;
+    }
+}
+/* BEXIA_EMPLOYEE_DOCUMENT_RESOURCE_RESPONSIVE_V5_79_75C_END */
 </style>

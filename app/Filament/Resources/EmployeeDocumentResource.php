@@ -109,16 +109,25 @@ class EmployeeDocumentResource extends Resource
             ->when($tenantId, fn (Builder $query) => $query->where('company_id', $tenantId));
     }
 
+    /*
+     * BEXIA_EMPLOYEE_DOCUMENT_RESOURCE_RESPONSIVE_V5_79_75C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Section::make('Documento del expediente')
+                    ->extraAttributes(['class' => 'bexia-edr-section bexia-edr-section-main'])
                     ->description('Captura documentos del expediente laboral del empleado.')
                     ->schema([
                         Grid::make(2)
+                            ->extraAttributes(['class' => 'bexia-edr-grid bexia-edr-grid-main'])
                             ->schema([
                                 Select::make('employee_id')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-employee bexia-edr-select-field bexia-edr-related-field'])
                                     ->label('Empleado')
                                     ->options(fn () => self::employeeOptions())
                                     ->searchable()
@@ -126,6 +135,7 @@ class EmployeeDocumentResource extends Resource
                                     ->required(),
 
                                 Select::make('hr_document_type_id')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-document-type bexia-edr-select-field bexia-edr-related-field'])
                                     ->label('Tipo de documento')
                                     ->options(fn () => self::documentTypeOptions())
                                     ->searchable()
@@ -133,15 +143,18 @@ class EmployeeDocumentResource extends Resource
                                     ->required(),
 
                                 TextInput::make('name')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-name bexia-edr-primary-field'])
                                     ->label('Nombre del documento')
                                     ->required()
                                     ->maxLength(255),
 
                                 TextInput::make('document_number')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-document-number bexia-edr-code-field'])
                                     ->label('Folio / número')
                                     ->maxLength(255),
 
                                 Select::make('status')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-status bexia-edr-select-field bexia-edr-status-field'])
                                     ->label('Estado')
                                     ->options([
                                         'pending' => 'Pendiente',
@@ -153,14 +166,17 @@ class EmployeeDocumentResource extends Resource
                                     ->required(),
 
                                 DatePicker::make('issued_at')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-issued-at bexia-edr-date-field'])
                                     ->label('Fecha de emisión')
                                     ->native(false),
 
                                 DatePicker::make('expires_at')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-expires-at bexia-edr-date-field bexia-edr-expiration-field'])
                                     ->label('Fecha de vencimiento')
                                     ->native(false),
 
                                 FileUpload::make('file_path')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-file bexia-edr-file-upload-field'])
                                     ->label('Archivo')
                                     ->disk('public')
                                     ->directory('employee-documents')
@@ -170,6 +186,7 @@ class EmployeeDocumentResource extends Resource
                                     ->columnSpanFull(),
 
                                 Textarea::make('notes')
+                                    ->extraAttributes(['class' => 'bexia-edr-field bexia-edr-field-notes bexia-edr-notes-field bexia-edr-long-field'])
                                     ->label('Notas')
                                     ->rows(4)
                                     ->columnSpanFull(),
@@ -208,26 +225,36 @@ class EmployeeDocumentResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('employee.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-employee bexia-edr-col-primary bexia-edr-col-long-text bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-employee bexia-edr-col-primary bexia-edr-col-long-text bexia-edr-col-context'])
                     ->label('Empleado')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('documentType.name')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-document-type bexia-edr-col-related bexia-edr-col-long-text bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-document-type bexia-edr-col-related bexia-edr-col-long-text bexia-edr-col-context'])
                     ->label('Tipo')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-document-name bexia-edr-col-primary bexia-edr-col-long-text bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-document-name bexia-edr-col-primary bexia-edr-col-long-text bexia-edr-col-context'])
                     ->label('Documento')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('document_number')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-document-number bexia-edr-col-key bexia-edr-col-short bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-document-number bexia-edr-col-key bexia-edr-col-short bexia-edr-col-context'])
                     ->label('Folio')
                     ->searchable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-status bexia-edr-col-state bexia-edr-col-badge bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-status bexia-edr-col-state bexia-edr-col-badge bexia-edr-col-context'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
@@ -239,23 +266,31 @@ class EmployeeDocumentResource extends Resource
                     }),
 
                 Tables\Columns\TextColumn::make('issued_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-issued-at bexia-edr-col-date bexia-edr-col-short bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-issued-at bexia-edr-col-date bexia-edr-col-short bexia-edr-col-context'])
                     ->label('Emisión')
                     ->date('d/m/Y')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('expires_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-expires-at bexia-edr-col-expiration bexia-edr-col-date bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-expires-at bexia-edr-col-expiration bexia-edr-col-date bexia-edr-col-context'])
                     ->label('Vencimiento')
                     ->date('d/m/Y')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\IconColumn::make('file_path')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-file bexia-edr-col-icon bexia-edr-col-file-status bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-file bexia-edr-col-icon bexia-edr-col-file-status bexia-edr-col-context'])
                     ->label('Archivo')
                     ->boolean()
                     ->getStateUsing(fn ($record): bool => filled($record->file_path)),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-edr-col-created-at bexia-edr-col-date bexia-edr-col-short bexia-edr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-edr-col-created-at bexia-edr-col-date bexia-edr-col-short bexia-edr-col-context'])
                     ->label('Creado')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
