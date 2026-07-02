@@ -16016,4 +16016,124 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_ACCOUNTING_INVENTORY_VALUATION_LAYER_RESOURCE_RESPONSIVE_V5_79_97C_END */
+
+/* BEXIA_SALE_DELIVERY_RESOURCE_RESPONSIVE_V5_79_98C_START */
+.bexia-sdel-shell {
+    min-width: 0;
+}
+
+.bexia-sdel-return-reason-field .fi-fo-field-wrp,
+.bexia-sdel-return-reason-field textarea {
+    min-width: 0;
+    width: 100%;
+}
+
+.bexia-sdel-return-reason-field .fi-fo-field-wrp-label,
+.bexia-sdel-return-reason-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-sdel-header,
+.bexia-sdel-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-sdel-cell {
+    vertical-align: top;
+}
+
+.bexia-sdel-col-delivery,
+.bexia-sdel-col-order,
+.bexia-sdel-col-customer,
+.bexia-sdel-col-reference {
+    min-width: 8.5rem;
+    max-width: 12rem;
+}
+
+.bexia-sdel-col-status,
+.bexia-sdel-col-type,
+.bexia-sdel-col-badge {
+    min-width: 6.75rem;
+    max-width: 9rem;
+}
+
+.bexia-sdel-col-quantity,
+.bexia-sdel-col-number,
+.bexia-sdel-col-movement,
+.bexia-sdel-col-stock {
+    min-width: 6rem;
+    max-width: 8rem;
+}
+
+.bexia-sdel-col-date,
+.bexia-sdel-col-created,
+.bexia-sdel-col-delivered {
+    min-width: 7.25rem;
+    max-width: 9.75rem;
+}
+
+.bexia-sdel-col-quantity,
+.bexia-sdel-col-number {
+    text-align: right;
+}
+
+@media (max-width: 1024px) {
+    .bexia-sdel-col-delivery,
+    .bexia-sdel-col-order,
+    .bexia-sdel-col-customer,
+    .bexia-sdel-col-reference {
+        min-width: 7.25rem;
+        max-width: 10rem;
+    }
+
+    .bexia-sdel-col-status,
+    .bexia-sdel-col-type,
+    .bexia-sdel-col-badge {
+        min-width: 6rem;
+        max-width: 8rem;
+    }
+
+    .bexia-sdel-col-date,
+    .bexia-sdel-col-created,
+    .bexia-sdel-col-delivered,
+    .bexia-sdel-col-quantity,
+    .bexia-sdel-col-number,
+    .bexia-sdel-col-movement,
+    .bexia-sdel-col-stock {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-sdel-header,
+    .bexia-sdel-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-sdel-col-delivery,
+    .bexia-sdel-col-order,
+    .bexia-sdel-col-customer,
+    .bexia-sdel-col-reference,
+    .bexia-sdel-col-status,
+    .bexia-sdel-col-type,
+    .bexia-sdel-col-badge {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-sdel-col-date,
+    .bexia-sdel-col-created,
+    .bexia-sdel-col-delivered,
+    .bexia-sdel-col-quantity,
+    .bexia-sdel-col-number,
+    .bexia-sdel-col-movement,
+    .bexia-sdel-col-stock {
+        min-width: 5.25rem;
+        max-width: 6.75rem;
+    }
+}
+/* BEXIA_SALE_DELIVERY_RESOURCE_RESPONSIVE_V5_79_98C_END */
 </style>
