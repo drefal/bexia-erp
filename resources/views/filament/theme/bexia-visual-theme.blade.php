@@ -14927,4 +14927,147 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_HR_DEPARTMENT_RESOURCE_RESPONSIVE_V5_79_89C_END */
+
+/* BEXIA_HR_JOB_POSITION_RESOURCE_RESPONSIVE_V5_79_90C_START */
+.bexia-hjp-form {
+    min-width: 0;
+}
+
+.bexia-hjp-form .fi-fo-component-ctn,
+.bexia-hjp-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-hjp-field .fi-fo-field-wrp-label,
+.bexia-hjp-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-hjp-field .fi-input-wrp,
+.bexia-hjp-field .fi-select-input,
+.bexia-hjp-field textarea,
+.bexia-hjp-field input {
+    min-width: 0;
+}
+
+.bexia-hjp-wide-field .fi-fo-field-wrp,
+.bexia-hjp-name-field .fi-input-wrp,
+.bexia-hjp-description-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-hjp-compact-field .fi-input-wrp,
+.bexia-hjp-code-field .fi-input-wrp,
+.bexia-hjp-level-field .fi-input-wrp {
+    max-width: 9rem;
+}
+
+.bexia-hjp-select-field .fi-input-wrp,
+.bexia-hjp-department-field .fi-input-wrp {
+    min-width: 0;
+}
+
+.bexia-hjp-toggle-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-hjp-header,
+.bexia-hjp-cell {
+    white-space: normal;
+}
+
+.bexia-hjp-col-name {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-hjp-col-code,
+.bexia-hjp-col-level {
+    min-width: 5rem;
+    max-width: 7rem;
+}
+
+.bexia-hjp-col-department {
+    min-width: 9rem;
+    max-width: 13rem;
+}
+
+.bexia-hjp-col-date,
+.bexia-hjp-col-updated {
+    min-width: 7.5rem;
+    max-width: 9.5rem;
+}
+
+.bexia-hjp-col-bool,
+.bexia-hjp-col-active {
+    min-width: 4.75rem;
+    max-width: 6rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-hjp-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-hjp-wide-field,
+    .bexia-hjp-name-field,
+    .bexia-hjp-description-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-hjp-col-name {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-hjp-col-code,
+    .bexia-hjp-col-level,
+    .bexia-hjp-col-department {
+        min-width: 5.5rem;
+        max-width: 8rem;
+    }
+
+    .bexia-hjp-col-date,
+    .bexia-hjp-col-updated {
+        min-width: 6.5rem;
+        max-width: 8rem;
+    }
+
+    .bexia-hjp-col-bool,
+    .bexia-hjp-col-active {
+        min-width: 4.25rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-hjp-section .fi-section-header,
+    .bexia-hjp-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-hjp-compact-field .fi-input-wrp,
+    .bexia-hjp-select-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-hjp-col-name {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-hjp-col-code,
+    .bexia-hjp-col-level,
+    .bexia-hjp-col-department,
+    .bexia-hjp-col-date,
+    .bexia-hjp-col-updated,
+    .bexia-hjp-col-bool,
+    .bexia-hjp-col-active {
+        min-width: 4rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_HR_JOB_POSITION_RESOURCE_RESPONSIVE_V5_79_90C_END */
 </style>
