@@ -14393,4 +14393,125 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SAT_UNIT_CODE_RESOURCE_RESPONSIVE_V5_79_85C_END */
+
+/* BEXIA_COMPANY_GROUP_RESOURCE_RESPONSIVE_V5_79_86C_START */
+.bexia-cgr-form {
+    min-width: 0;
+}
+
+.bexia-cgr-form .fi-fo-component-ctn {
+    min-width: 0;
+}
+
+.bexia-cgr-field .fi-fo-field-wrp-label,
+.bexia-cgr-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-cgr-field .fi-input-wrp,
+.bexia-cgr-field .fi-select-input,
+.bexia-cgr-field input {
+    min-width: 0;
+}
+
+.bexia-cgr-wide-field .fi-fo-field-wrp,
+.bexia-cgr-organization-field .fi-input-wrp,
+.bexia-cgr-name-field .fi-input-wrp,
+.bexia-cgr-slug-field .fi-input-wrp,
+.bexia-cgr-admins-field .fi-input-wrp {
+    width: 100%;
+}
+
+.bexia-cgr-number-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-cgr-toggle-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-cgr-header,
+.bexia-cgr-cell {
+    white-space: normal;
+}
+
+.bexia-cgr-col-organization,
+.bexia-cgr-col-name {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-cgr-col-limit,
+.bexia-cgr-col-number {
+    min-width: 5.75rem;
+    max-width: 7.5rem;
+    text-align: right;
+}
+
+.bexia-cgr-col-bool,
+.bexia-cgr-col-free-trial,
+.bexia-cgr-col-active {
+    min-width: 5rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-cgr-form .fi-fo-component-ctn {
+        gap: 0.75rem;
+    }
+
+    .bexia-cgr-wide-field,
+    .bexia-cgr-organization-field,
+    .bexia-cgr-name-field,
+    .bexia-cgr-slug-field,
+    .bexia-cgr-admins-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-cgr-col-organization,
+    .bexia-cgr-col-name {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-cgr-col-limit,
+    .bexia-cgr-col-number {
+        min-width: 5rem;
+        max-width: 6.5rem;
+    }
+
+    .bexia-cgr-col-bool,
+    .bexia-cgr-col-free-trial,
+    .bexia-cgr-col-active {
+        min-width: 4.5rem;
+        max-width: 6rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-cgr-form .fi-fo-component-ctn {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .bexia-cgr-number-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-cgr-col-organization,
+    .bexia-cgr-col-name {
+        min-width: 8rem;
+        max-width: 10rem;
+    }
+
+    .bexia-cgr-col-limit,
+    .bexia-cgr-col-number,
+    .bexia-cgr-col-bool,
+    .bexia-cgr-col-free-trial,
+    .bexia-cgr-col-active {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_COMPANY_GROUP_RESOURCE_RESPONSIVE_V5_79_86C_END */
 </style>
