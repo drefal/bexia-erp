@@ -16136,4 +16136,161 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SALE_DELIVERY_RESOURCE_RESPONSIVE_V5_79_98C_END */
+
+/* BEXIA_SERVICE_TECHNICIAN_RESOURCE_RESPONSIVE_V5_79_99C_START */
+.bexia-stec-form,
+.bexia-stec-shell {
+    min-width: 0;
+}
+
+.bexia-stec-section .fi-section-content,
+.bexia-stec-employee-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-stec-section .fi-section-header-description,
+.bexia-stec-field .fi-fo-field-wrp-label,
+.bexia-stec-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-stec-field .fi-input-wrp,
+.bexia-stec-field .fi-toggle,
+.bexia-stec-field input {
+    min-width: 0;
+}
+
+.bexia-stec-wide-field .fi-fo-field-wrp,
+.bexia-stec-employee-label-field .fi-fo-placeholder,
+.bexia-stec-employee-label-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-stec-compact-field .fi-input-wrp,
+.bexia-stec-company-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-stec-bool-field .fi-fo-field-wrp,
+.bexia-stec-technician-toggle-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-stec-header,
+.bexia-stec-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stec-cell {
+    vertical-align: top;
+}
+
+.bexia-stec-col-id,
+.bexia-stec-col-company,
+.bexia-stec-col-compact {
+    min-width: 4.5rem;
+    max-width: 6.5rem;
+}
+
+.bexia-stec-col-employee-number,
+.bexia-stec-col-number {
+    min-width: 6rem;
+    max-width: 8rem;
+}
+
+.bexia-stec-col-name,
+.bexia-stec-col-first-name,
+.bexia-stec-col-last-name,
+.bexia-stec-col-person {
+    min-width: 8.5rem;
+    max-width: 12rem;
+}
+
+.bexia-stec-col-email {
+    min-width: 10rem;
+    max-width: 14rem;
+}
+
+.bexia-stec-col-technician,
+.bexia-stec-col-bool {
+    min-width: 5.25rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-stec-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-stec-wide-field,
+    .bexia-stec-employee-label-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-stec-col-name,
+    .bexia-stec-col-first-name,
+    .bexia-stec-col-last-name,
+    .bexia-stec-col-person,
+    .bexia-stec-col-email {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-stec-col-employee-number,
+    .bexia-stec-col-number {
+        min-width: 5.5rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-stec-col-id,
+    .bexia-stec-col-company,
+    .bexia-stec-col-compact,
+    .bexia-stec-col-technician,
+    .bexia-stec-col-bool {
+        min-width: 4.75rem;
+        max-width: 6.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-stec-section .fi-section-header,
+    .bexia-stec-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-stec-compact-field .fi-input-wrp,
+    .bexia-stec-company-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-stec-header,
+    .bexia-stec-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-stec-col-name,
+    .bexia-stec-col-first-name,
+    .bexia-stec-col-last-name,
+    .bexia-stec-col-person,
+    .bexia-stec-col-email,
+    .bexia-stec-col-employee-number,
+    .bexia-stec-col-number {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-stec-col-id,
+    .bexia-stec-col-company,
+    .bexia-stec-col-compact,
+    .bexia-stec-col-technician,
+    .bexia-stec-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_SERVICE_TECHNICIAN_RESOURCE_RESPONSIVE_V5_79_99C_END */
 </style>
