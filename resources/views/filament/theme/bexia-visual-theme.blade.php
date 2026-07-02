@@ -13982,4 +13982,130 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_HR_WORK_SCHEDULE_RESOURCE_RESPONSIVE_V5_79_82C_END */
+
+/* BEXIA_SAT_PRODUCT_SERVICE_CODE_RESOURCE_RESPONSIVE_V5_79_83C_START */
+.bexia-spsc-section {
+    overflow: hidden;
+}
+
+.bexia-spsc-section .fi-section-header,
+.bexia-spsc-section .fi-section-content {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.bexia-spsc-field .fi-fo-field-wrp-label,
+.bexia-spsc-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-spsc-field .fi-input-wrp,
+.bexia-spsc-field .fi-textarea,
+.bexia-spsc-field input,
+.bexia-spsc-field textarea {
+    min-width: 0;
+}
+
+.bexia-spsc-wide-field .fi-fo-field-wrp,
+.bexia-spsc-description-field .fi-input-wrp,
+.bexia-spsc-textarea-field .fi-input-wrp {
+    width: 100%;
+}
+
+.bexia-spsc-compact-field .fi-input-wrp,
+.bexia-spsc-date-field .fi-input-wrp {
+    max-width: 12rem;
+}
+
+.bexia-spsc-toggle-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-spsc-header,
+.bexia-spsc-cell {
+    white-space: normal;
+}
+
+.bexia-spsc-col-code {
+    min-width: 5.25rem;
+    max-width: 7rem;
+}
+
+.bexia-spsc-col-description {
+    min-width: 14rem;
+    max-width: 22rem;
+}
+
+.bexia-spsc-col-bool {
+    min-width: 4.75rem;
+    max-width: 5.75rem;
+    text-align: center;
+}
+
+.bexia-spsc-col-date {
+    min-width: 5.75rem;
+    max-width: 7.25rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-spsc-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-spsc-field {
+        min-width: 0;
+    }
+
+    .bexia-spsc-wide-field,
+    .bexia-spsc-description-field,
+    .bexia-spsc-textarea-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-spsc-col-code {
+        min-width: 4.75rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-spsc-col-description {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
+    .bexia-spsc-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.25rem;
+    }
+
+    .bexia-spsc-col-date {
+        min-width: 5rem;
+        max-width: 6.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-spsc-section .fi-section-header,
+    .bexia-spsc-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-spsc-compact-field .fi-input-wrp,
+    .bexia-spsc-date-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-spsc-col-code,
+    .bexia-spsc-col-bool,
+    .bexia-spsc-col-date {
+        min-width: 4rem;
+        max-width: 5.25rem;
+    }
+
+    .bexia-spsc-col-description {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+}
+/* BEXIA_SAT_PRODUCT_SERVICE_CODE_RESOURCE_RESPONSIVE_V5_79_83C_END */
 </style>
