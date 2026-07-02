@@ -14514,4 +14514,143 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_COMPANY_GROUP_RESOURCE_RESPONSIVE_V5_79_86C_END */
+
+/* BEXIA_CURRENCY_RESOURCE_RESPONSIVE_V5_79_87C_START */
+.bexia-cur-form {
+    min-width: 0;
+}
+
+.bexia-cur-form .fi-fo-component-ctn,
+.bexia-cur-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-cur-field .fi-fo-field-wrp-label,
+.bexia-cur-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-cur-field .fi-input-wrp,
+.bexia-cur-field .fi-select-input,
+.bexia-cur-field input {
+    min-width: 0;
+}
+
+.bexia-cur-wide-field .fi-fo-field-wrp,
+.bexia-cur-company-field .fi-input-wrp,
+.bexia-cur-name-field .fi-input-wrp {
+    width: 100%;
+}
+
+.bexia-cur-compact-field .fi-input-wrp,
+.bexia-cur-symbol-field .fi-input-wrp {
+    max-width: 9rem;
+}
+
+.bexia-cur-number-field .fi-input-wrp,
+.bexia-cur-rate-field .fi-input-wrp,
+.bexia-cur-sort-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-cur-toggle-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-cur-header,
+.bexia-cur-cell {
+    white-space: normal;
+}
+
+.bexia-cur-col-code,
+.bexia-cur-col-symbol {
+    min-width: 5rem;
+    max-width: 7rem;
+}
+
+.bexia-cur-col-name {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-cur-col-rate,
+.bexia-cur-col-number {
+    min-width: 6.5rem;
+    max-width: 8.5rem;
+    text-align: right;
+}
+
+.bexia-cur-col-bool,
+.bexia-cur-col-default,
+.bexia-cur-col-active {
+    min-width: 4.75rem;
+    max-width: 6.25rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-cur-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-cur-wide-field,
+    .bexia-cur-company-field,
+    .bexia-cur-name-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-cur-col-code,
+    .bexia-cur-col-symbol {
+        min-width: 4.75rem;
+        max-width: 6.25rem;
+    }
+
+    .bexia-cur-col-name {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-cur-col-rate,
+    .bexia-cur-col-number {
+        min-width: 5.75rem;
+        max-width: 7rem;
+    }
+
+    .bexia-cur-col-bool,
+    .bexia-cur-col-default,
+    .bexia-cur-col-active {
+        min-width: 4.25rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-cur-section .fi-section-header,
+    .bexia-cur-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-cur-compact-field .fi-input-wrp,
+    .bexia-cur-number-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-cur-col-code,
+    .bexia-cur-col-symbol,
+    .bexia-cur-col-rate,
+    .bexia-cur-col-number,
+    .bexia-cur-col-bool,
+    .bexia-cur-col-default,
+    .bexia-cur-col-active {
+        min-width: 4rem;
+        max-width: 5.5rem;
+    }
+
+    .bexia-cur-col-name {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+}
+/* BEXIA_CURRENCY_RESOURCE_RESPONSIVE_V5_79_87C_END */
 </style>
