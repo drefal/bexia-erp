@@ -16,6 +16,11 @@ use Filament\Tables\Table;
 
 class HrDepartmentResource extends Resource
 {
+    /**
+     * BEXIA_HR_DEPARTMENT_RESOURCE_RESPONSIVE_V5_79_89C
+     *
+     * Visual-only responsive classes for HrDepartmentResource.
+     */
     use UsesTenantCompany;
 
     protected static ?string $model = HrDepartment::class;
@@ -29,20 +34,36 @@ class HrDepartmentResource extends Resource
 
     public static function form(Form $form): Form
     {
-        return $form->schema([
+        return $form
+            ->extraAttributes([
+                'class' => 'bexia-hdp-form bexia-hdp-form-main',
+            ])
+            ->schema([
             Forms\Components\Section::make('Departamento')
+                ->extraAttributes([
+                    'class' => 'bexia-hdp-section bexia-hdp-section-main',
+                ])
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('name')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdp-field bexia-hdp-name-field bexia-hdp-wide-field',
+                        ])
                         ->label('Nombre')
                         ->required()
                         ->maxLength(255),
 
                     Forms\Components\TextInput::make('code')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdp-field bexia-hdp-code-field bexia-hdp-compact-field',
+                        ])
                         ->label('Código')
                         ->maxLength(80),
 
                     Forms\Components\Select::make('parent_id')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdp-field bexia-hdp-parent-field bexia-hdp-select-field',
+                        ])
                         ->label('Departamento padre')
                         ->options(fn () => HrDepartment::query()
                             ->where('company_id', static::currentCompanyId())
@@ -54,6 +75,9 @@ class HrDepartmentResource extends Resource
                         ->nullable(),
 
                     Forms\Components\Select::make('manager_employee_id')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdp-field bexia-hdp-manager-field bexia-hdp-select-field',
+                        ])
                         ->label('Responsable')
                         ->options(fn () => Employee::query()
                             ->where('company_id', static::currentCompanyId())
@@ -65,10 +89,16 @@ class HrDepartmentResource extends Resource
                         ->nullable(),
 
                     Forms\Components\Textarea::make('description')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdp-field bexia-hdp-description-field bexia-hdp-wide-field',
+                        ])
                         ->label('Descripción')
                         ->columnSpanFull(),
 
                     Forms\Components\Toggle::make('is_active')
+                        ->extraAttributes([
+                            'class' => 'bexia-hdp-field bexia-hdp-active-field bexia-hdp-toggle-field',
+                        ])
                         ->label('Activo')
                         ->default(true),
                 ]),
@@ -79,12 +109,48 @@ class HrDepartmentResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Nombre')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('code')->label('Código')->searchable(),
-                Tables\Columns\TextColumn::make('parent.name')->label('Padre')->toggleable(),
-                Tables\Columns\TextColumn::make('manager.name')->label('Responsable')->toggleable(),
-                Tables\Columns\IconColumn::make('is_active')->label('Activo')->boolean(),
-                Tables\Columns\TextColumn::make('updated_at')->label('Actualizado')->dateTime('d/m/Y H:i')->sortable()->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdp-header bexia-hdp-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdp-cell bexia-hdp-col-name bexia-hdp-col-wide',
+                    ])->label('Nombre')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdp-header bexia-hdp-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdp-cell bexia-hdp-col-code bexia-hdp-col-compact',
+                    ])->label('Código')->searchable(),
+                Tables\Columns\TextColumn::make('parent.name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdp-header bexia-hdp-col-parent',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdp-cell bexia-hdp-col-parent bexia-hdp-col-relation',
+                    ])->label('Padre')->toggleable(),
+                Tables\Columns\TextColumn::make('manager.name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdp-header bexia-hdp-col-manager',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdp-cell bexia-hdp-col-manager bexia-hdp-col-relation',
+                    ])->label('Responsable')->toggleable(),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdp-header bexia-hdp-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdp-cell bexia-hdp-col-active bexia-hdp-col-bool',
+                    ])->label('Activo')->boolean(),
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-hdp-header bexia-hdp-col-updated',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-hdp-cell bexia-hdp-col-updated bexia-hdp-col-date',
+                    ])->label('Actualizado')->dateTime('d/m/Y H:i')->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_active')->label('Activo'),
