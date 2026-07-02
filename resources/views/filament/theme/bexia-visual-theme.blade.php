@@ -12574,4 +12574,212 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_EMPLOYEE_DOCUMENT_RESOURCE_RESPONSIVE_V5_79_75C_END */
+
+/* BEXIA_PURCHASE_RECEIPT_RESOURCE_RESPONSIVE_V5_79_76C_START */
+/*
+ * PurchaseReceiptResource responsive refinements.
+ * Alcance visual solamente. No cambia logica de recepciones de compra,
+ * ordenes de compra, inventario, productos, cantidades, costos,
+ * proveedores, almacenes, PDF/panel, estados, permisos, empresa ni tenant.
+ */
+.bexia-prr-modal-field,
+.bexia-prr-filter-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-prr-modal-field textarea,
+.bexia-prr-long-field textarea,
+.bexia-prr-filter-field .fi-select-input,
+.bexia-prr-filter-field .choices,
+.bexia-prr-filter-field .choices__inner {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.bexia-prr-col-number,
+.bexia-prr-col-purchase-order,
+.bexia-prr-col-supplier,
+.bexia-prr-col-status,
+.bexia-prr-col-warehouse,
+.bexia-prr-col-location-detail,
+.bexia-prr-col-stock-movement,
+.bexia-prr-col-received-at,
+.bexia-prr-col-total,
+.bexia-prr-col-created-at {
+    vertical-align: top;
+}
+
+.bexia-prr-col-long-text,
+.bexia-prr-col-party,
+.bexia-prr-col-related,
+.bexia-prr-col-context {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bexia-prr-col-primary {
+    min-width: 8.5rem;
+    max-width: 12rem;
+    font-weight: 650;
+}
+
+.bexia-prr-col-reference,
+.bexia-prr-col-movement {
+    min-width: 7.25rem;
+    max-width: 11rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-prr-col-supplier {
+    min-width: 12rem;
+    max-width: 20rem;
+}
+
+.bexia-prr-col-warehouse,
+.bexia-prr-col-location-detail {
+    min-width: 9rem;
+    max-width: 14rem;
+}
+
+.bexia-prr-col-status,
+.bexia-prr-col-badge,
+.bexia-prr-col-state {
+    min-width: 6rem;
+    max-width: 9rem;
+    white-space: normal;
+}
+
+.bexia-prr-col-date,
+.bexia-prr-col-timeline {
+    min-width: 8rem;
+    max-width: 10rem;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.bexia-prr-col-money,
+.bexia-prr-col-number-value {
+    min-width: 7rem;
+    max-width: 9rem;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1024px) {
+    .bexia-prr-col-supplier {
+        max-width: 16rem;
+    }
+
+    .bexia-prr-col-warehouse,
+    .bexia-prr-col-location-detail {
+        max-width: 12rem;
+    }
+
+    .bexia-prr-col-reference,
+    .bexia-prr-col-movement {
+        max-width: 9.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .bexia-prr-col-number,
+    .bexia-prr-col-purchase-order,
+    .bexia-prr-col-supplier,
+    .bexia-prr-col-status,
+    .bexia-prr-col-warehouse,
+    .bexia-prr-col-location-detail,
+    .bexia-prr-col-stock-movement,
+    .bexia-prr-col-received-at,
+    .bexia-prr-col-total,
+    .bexia-prr-col-created-at {
+        font-size: 0.76rem;
+    }
+
+    .bexia-prr-col-primary {
+        min-width: 7.25rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-prr-col-reference,
+    .bexia-prr-col-movement {
+        min-width: 6.25rem;
+        max-width: 8rem;
+    }
+
+    .bexia-prr-col-supplier {
+        min-width: 8.75rem;
+        max-width: 12rem;
+    }
+
+    .bexia-prr-col-warehouse,
+    .bexia-prr-col-location-detail {
+        min-width: 7.25rem;
+        max-width: 10rem;
+    }
+
+    .bexia-prr-col-status,
+    .bexia-prr-col-badge,
+    .bexia-prr-col-state {
+        min-width: 4.75rem;
+        max-width: 7rem;
+    }
+
+    .bexia-prr-col-date,
+    .bexia-prr-col-timeline {
+        min-width: 6.5rem;
+        max-width: 8rem;
+    }
+
+    .bexia-prr-col-money,
+    .bexia-prr-col-number-value {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-prr-modal-field textarea {
+        min-height: 7rem;
+        font-size: 0.82rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-prr-col-primary {
+        min-width: 6.5rem;
+        max-width: 8rem;
+    }
+
+    .bexia-prr-col-reference,
+    .bexia-prr-col-movement {
+        min-width: 5.5rem;
+        max-width: 7rem;
+    }
+
+    .bexia-prr-col-supplier {
+        min-width: 7.5rem;
+        max-width: 10rem;
+    }
+
+    .bexia-prr-col-warehouse,
+    .bexia-prr-col-location-detail {
+        min-width: 6.5rem;
+        max-width: 8.5rem;
+    }
+
+    .bexia-prr-col-date,
+    .bexia-prr-col-timeline {
+        min-width: 5.75rem;
+        max-width: 7rem;
+    }
+
+    .bexia-prr-col-money,
+    .bexia-prr-col-number-value {
+        min-width: 5.25rem;
+        max-width: 6.5rem;
+    }
+}
+/* BEXIA_PURCHASE_RECEIPT_RESOURCE_RESPONSIVE_V5_79_76C_END */
 </style>

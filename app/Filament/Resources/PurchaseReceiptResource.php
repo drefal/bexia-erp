@@ -75,17 +75,27 @@ public static function canCreate(): bool
             );
     }
 
+    /*
+     * BEXIA_PURCHASE_RECEIPT_RESOURCE_RESPONSIVE_V5_79_76C
+     * Visual-only responsive marker.
+     */
+
+
     public static function table(Table $table): Table
     {
         return $table
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('number')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-number bexia-prr-col-primary bexia-prr-col-reference bexia-prr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-number bexia-prr-col-primary bexia-prr-col-reference bexia-prr-col-context'])
                     ->label('Recepción')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('purchase_order_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-purchase-order bexia-prr-col-reference bexia-prr-col-related bexia-prr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-purchase-order bexia-prr-col-reference bexia-prr-col-related bexia-prr-col-context'])
                     ->label('Orden de compra')
                     ->state(fn (PurchaseReceipt $record): string => static::orderNumber($record))
                     ->searchable(query: function (Builder $query, string $search): Builder {
@@ -102,11 +112,15 @@ public static function canCreate(): bool
                     }),
 
                 Tables\Columns\TextColumn::make('supplier')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-supplier bexia-prr-col-party bexia-prr-col-long-text bexia-prr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-supplier bexia-prr-col-party bexia-prr-col-long-text bexia-prr-col-context'])
                     ->label('Proveedor')
                     ->state(fn (PurchaseReceipt $record): string => static::supplierName($record))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-status bexia-prr-col-badge bexia-prr-col-state bexia-prr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-status bexia-prr-col-badge bexia-prr-col-state bexia-prr-col-context'])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
@@ -124,16 +138,22 @@ public static function canCreate(): bool
                     }),
 
                 Tables\Columns\TextColumn::make('warehouse_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-warehouse bexia-prr-col-location bexia-prr-col-related bexia-prr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-warehouse bexia-prr-col-location bexia-prr-col-related bexia-prr-col-context'])
                     ->label('Almacén')
                     ->state(fn (PurchaseReceipt $record): string => static::warehouseLabel($record))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('location_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-location-detail bexia-prr-col-location bexia-prr-col-related bexia-prr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-location-detail bexia-prr-col-location bexia-prr-col-related bexia-prr-col-context'])
                     ->label('Ubicación')
                     ->state(fn (PurchaseReceipt $record): string => static::locationLabel($record))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('stock_movement_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-stock-movement bexia-prr-col-movement bexia-prr-col-reference bexia-prr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-stock-movement bexia-prr-col-movement bexia-prr-col-reference bexia-prr-col-context'])
                     ->label('Movimiento')
                     ->formatStateUsing(fn ($state): string => $state ? ('#' . $state) : 'Pendiente')
                     ->badge()
@@ -141,18 +161,24 @@ public static function canCreate(): bool
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('received_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-received-at bexia-prr-col-date bexia-prr-col-context bexia-prr-col-timeline'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-received-at bexia-prr-col-date bexia-prr-col-context bexia-prr-col-timeline'])
                     ->label('Recibida')
                     ->dateTime('d/m/Y H:i')
                     ->placeholder('Pendiente')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('total_with_tax')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-total bexia-prr-col-money bexia-prr-col-number-value bexia-prr-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-total bexia-prr-col-money bexia-prr-col-number-value bexia-prr-col-context'])
                     ->label('Total')
                     ->money('MXN')
                     ->sortable()
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes(['class' => 'bexia-prr-col-created-at bexia-prr-col-date bexia-prr-col-context bexia-prr-col-timeline'])
+                    ->extraCellAttributes(['class' => 'bexia-prr-col-created-at bexia-prr-col-date bexia-prr-col-context bexia-prr-col-timeline'])
                     ->label('Creada')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
@@ -160,6 +186,7 @@ public static function canCreate(): bool
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
+                    ->extraAttributes(['class' => 'bexia-prr-filter-status bexia-prr-filter-field bexia-prr-filter-state'])
                     ->label('Estado')
                     ->options([
                         'draft' => 'Borrador',
@@ -189,6 +216,7 @@ public static function canCreate(): bool
                     ->visible(fn (PurchaseReceipt $record): bool => (string) $record->status === 'done' && ! empty($record->stock_movement_id))
                     ->form([
                         \Filament\Forms\Components\Textarea::make('reason')
+                            ->extraAttributes(['class' => 'bexia-prr-modal-field bexia-prr-modal-reason-field bexia-prr-long-field'])
                             ->label('Motivo de la devolución')
                             ->required()
                             ->maxLength(500),
