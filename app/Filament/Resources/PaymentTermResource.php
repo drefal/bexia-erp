@@ -14,6 +14,11 @@ use Illuminate\Database\Eloquent\Builder;
 
 class PaymentTermResource extends Resource
 {
+    /**
+     * BEXIA_PAYMENT_TERM_RESOURCE_RESPONSIVE_V5_79_94C
+     *
+     * Visual-only responsive classes for PaymentTermResource.
+     */
 
 protected static ?string $model = PaymentTerm::class;
 
@@ -85,13 +90,22 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
     public static function form(Form $form): Form
     {
         return $form
+            ->extraAttributes([
+                'class' => 'bexia-ptr-form bexia-ptr-form-main bexia-ptr-shell',
+            ])
             ->schema([
                 Forms\Components\Hidden::make('company_id')
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Término de pago')
+                    ->extraAttributes([
+                        'class' => 'bexia-ptr-section bexia-ptr-section-main',
+                    ])
                     ->schema([
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes([
+                                'class' => 'bexia-ptr-field bexia-ptr-code-field bexia-ptr-compact-field',
+                            ])
                             ->label('Código')
                             ->required()
                             ->maxLength(50)
@@ -99,6 +113,9 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->columnSpan(3),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes([
+                                'class' => 'bexia-ptr-field bexia-ptr-name-field bexia-ptr-wide-field',
+                            ])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(150)
@@ -106,6 +123,9 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->columnSpan(5),
 
                         Forms\Components\TextInput::make('days')
+                            ->extraAttributes([
+                                'class' => 'bexia-ptr-field bexia-ptr-days-field bexia-ptr-amount-field bexia-ptr-compact-field',
+                            ])
                             ->label('Días')
                             ->numeric()
                             ->default(0)
@@ -114,11 +134,17 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->columnSpan(2),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes([
+                                'class' => 'bexia-ptr-field bexia-ptr-active-field bexia-ptr-toggle-field',
+                            ])
                             ->label('Activo')
                             ->default(true)
                             ->columnSpan(2),
 
                         Forms\Components\Textarea::make('description')
+                            ->extraAttributes([
+                                'class' => 'bexia-ptr-field bexia-ptr-description-field bexia-ptr-wide-field bexia-ptr-textarea-field',
+                            ])
                             ->label('Descripción')
                             ->rows(3)
                             ->columnSpanFull(),
@@ -132,20 +158,44 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ptr-header bexia-ptr-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ptr-cell bexia-ptr-col-code bexia-ptr-col-compact',
+                    ])
                     ->label('Código')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ptr-header bexia-ptr-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ptr-cell bexia-ptr-col-name bexia-ptr-col-wide',
+                    ])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('days')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ptr-header bexia-ptr-col-days',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ptr-cell bexia-ptr-col-days bexia-ptr-col-amount bexia-ptr-col-compact',
+                    ])
                     ->label('Días')
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ptr-header bexia-ptr-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ptr-cell bexia-ptr-col-active bexia-ptr-col-bool',
+                    ])
                     ->label('Activo')
                     ->boolean()
                     ->sortable(),

@@ -15493,4 +15493,143 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_HR_DOCUMENT_TYPE_RESOURCE_RESPONSIVE_V5_79_93C_END */
+
+/* BEXIA_PAYMENT_TERM_RESOURCE_RESPONSIVE_V5_79_94C_START */
+.bexia-ptr-form,
+.bexia-ptr-shell {
+    min-width: 0;
+}
+
+.bexia-ptr-form .fi-fo-component-ctn,
+.bexia-ptr-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-ptr-section .fi-section-header-description,
+.bexia-ptr-field .fi-fo-field-wrp-label,
+.bexia-ptr-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-ptr-field .fi-input-wrp,
+.bexia-ptr-field .fi-select-input,
+.bexia-ptr-field textarea,
+.bexia-ptr-field input {
+    min-width: 0;
+}
+
+.bexia-ptr-wide-field .fi-fo-field-wrp,
+.bexia-ptr-name-field .fi-input-wrp,
+.bexia-ptr-description-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-ptr-compact-field .fi-input-wrp,
+.bexia-ptr-code-field .fi-input-wrp,
+.bexia-ptr-days-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-ptr-textarea-field textarea {
+    width: 100%;
+}
+
+.bexia-ptr-toggle-field .fi-fo-field-wrp,
+.bexia-ptr-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-ptr-header,
+.bexia-ptr-cell {
+    white-space: normal;
+}
+
+.bexia-ptr-col-name {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-ptr-col-code,
+.bexia-ptr-col-compact {
+    min-width: 6.5rem;
+    max-width: 9rem;
+}
+
+.bexia-ptr-col-days,
+.bexia-ptr-col-amount {
+    min-width: 5.5rem;
+    max-width: 7.5rem;
+}
+
+.bexia-ptr-col-bool,
+.bexia-ptr-col-active {
+    min-width: 4.75rem;
+    max-width: 6rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-ptr-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-ptr-wide-field,
+    .bexia-ptr-name-field,
+    .bexia-ptr-description-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-ptr-col-name {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-ptr-col-code,
+    .bexia-ptr-col-compact,
+    .bexia-ptr-col-days,
+    .bexia-ptr-col-amount {
+        min-width: 5.5rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-ptr-col-bool,
+    .bexia-ptr-col-active {
+        min-width: 4.25rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-ptr-section .fi-section-header,
+    .bexia-ptr-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-ptr-compact-field .fi-input-wrp,
+    .bexia-ptr-code-field .fi-input-wrp,
+    .bexia-ptr-days-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-ptr-textarea-field textarea {
+        min-width: 100%;
+    }
+
+    .bexia-ptr-col-name {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-ptr-col-code,
+    .bexia-ptr-col-compact,
+    .bexia-ptr-col-days,
+    .bexia-ptr-col-amount,
+    .bexia-ptr-col-bool,
+    .bexia-ptr-col-active {
+        min-width: 4rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_PAYMENT_TERM_RESOURCE_RESPONSIVE_V5_79_94C_END */
 </style>
