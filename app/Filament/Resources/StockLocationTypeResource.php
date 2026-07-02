@@ -14,6 +14,11 @@ use Illuminate\Database\Eloquent\Builder;
 
 class StockLocationTypeResource extends Resource
 {
+    /**
+     * BEXIA_STOCK_LOCATION_TYPE_RESOURCE_RESPONSIVE_V5_79_96C
+     *
+     * Visual-only responsive classes for StockLocationTypeResource.
+     */
     protected static ?string $model = StockLocationType::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-tag';
@@ -74,13 +79,22 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
     public static function form(Form $form): Form
     {
         return $form
+            ->extraAttributes([
+                'class' => 'bexia-slt-form bexia-slt-form-main bexia-slt-shell',
+            ])
             ->schema([
                 Forms\Components\Hidden::make('company_id')
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Tipo de ubicación')
+                    ->extraAttributes([
+                        'class' => 'bexia-slt-section bexia-slt-section-main',
+                    ])
                     ->schema([
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes([
+                                'class' => 'bexia-slt-field bexia-slt-code-field bexia-slt-compact-field',
+                            ])
                             ->label('Código')
                             ->required()
                             ->maxLength(50)
@@ -88,23 +102,35 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->columnSpan(3),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes([
+                                'class' => 'bexia-slt-field bexia-slt-name-field bexia-slt-wide-field',
+                            ])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(150)
                             ->columnSpan(5),
 
                         Forms\Components\Toggle::make('is_internal')
+                            ->extraAttributes([
+                                'class' => 'bexia-slt-field bexia-slt-internal-field bexia-slt-toggle-field',
+                            ])
                             ->label('Cuenta como stock interno')
                             ->helperText('Solo ubicaciones internas suman existencia disponible.')
                             ->default(false)
                             ->columnSpan(2),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes([
+                                'class' => 'bexia-slt-field bexia-slt-active-field bexia-slt-toggle-field',
+                            ])
                             ->label('Activo')
                             ->default(true)
                             ->columnSpan(2),
 
                         Forms\Components\Textarea::make('description')
+                            ->extraAttributes([
+                                'class' => 'bexia-slt-field bexia-slt-description-field bexia-slt-textarea-field bexia-slt-wide-field',
+                            ])
                             ->label('Descripción')
                             ->rows(3)
                             ->columnSpanFull(),
@@ -118,21 +144,45 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-slt-header bexia-slt-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-slt-cell bexia-slt-col-code bexia-slt-col-compact',
+                    ])
                     ->label('Código')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-slt-header bexia-slt-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-slt-cell bexia-slt-col-name bexia-slt-col-wide',
+                    ])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_internal')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-slt-header bexia-slt-col-internal',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-slt-cell bexia-slt-col-internal bexia-slt-col-bool',
+                    ])
                     ->label('Stock interno')
                     ->boolean()
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-slt-header bexia-slt-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-slt-cell bexia-slt-col-active bexia-slt-col-bool',
+                    ])
                     ->label('Activo')
                     ->boolean()
                     ->sortable(),
