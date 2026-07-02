@@ -15,6 +15,11 @@ use Filament\Tables\Table;
 
 class PayrollEmployerRegistrationResource extends Resource
 {
+    /**
+     * BEXIA_PAYROLL_EMPLOYER_REGISTRATION_RESOURCE_RESPONSIVE_V5_79_95C
+     *
+     * Visual-only responsive classes for PayrollEmployerRegistrationResource.
+     */
     use UsesTenantCompany;
 
     protected static ?string $model = PayrollEmployerRegistration::class;
@@ -28,28 +33,50 @@ class PayrollEmployerRegistrationResource extends Resource
 
     public static function form(Form $form): Form
     {
-        return $form->schema([
+        return $form
+            ->extraAttributes([
+                'class' => 'bexia-perg-form bexia-perg-form-main bexia-perg-shell',
+            ])
+            ->schema([
             Forms\Components\Section::make('Registro patronal')
+                ->extraAttributes([
+                    'class' => 'bexia-perg-section bexia-perg-section-main',
+                ])
                 ->columns(2)
                 ->schema([
                     Forms\Components\TextInput::make('name')
+                        ->extraAttributes([
+                            'class' => 'bexia-perg-field bexia-perg-name-field bexia-perg-wide-field',
+                        ])
                         ->label('Nombre')
                         ->required()
                         ->maxLength(255),
 
                     Forms\Components\TextInput::make('registration_number')
+                        ->extraAttributes([
+                            'class' => 'bexia-perg-field bexia-perg-registration-field bexia-perg-wide-field',
+                        ])
                         ->label('Registro patronal')
                         ->maxLength(80),
 
                     Forms\Components\TextInput::make('risk_class')
+                        ->extraAttributes([
+                            'class' => 'bexia-perg-field bexia-perg-risk-field bexia-perg-compact-field',
+                        ])
                         ->label('Clase de riesgo')
                         ->maxLength(80),
 
                     Forms\Components\TextInput::make('state')
+                        ->extraAttributes([
+                            'class' => 'bexia-perg-field bexia-perg-state-field bexia-perg-compact-field',
+                        ])
                         ->label('Estado')
                         ->maxLength(80),
 
                     Forms\Components\Toggle::make('is_active')
+                        ->extraAttributes([
+                            'class' => 'bexia-perg-field bexia-perg-active-field bexia-perg-toggle-field',
+                        ])
                         ->label('Activo')
                         ->default(true),
                 ]),
@@ -60,11 +87,46 @@ class PayrollEmployerRegistrationResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')->label('Nombre')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('registration_number')->label('Registro')->searchable(),
-                Tables\Columns\TextColumn::make('risk_class')->label('Riesgo')->toggleable(),
-                Tables\Columns\TextColumn::make('state')->label('Estado')->toggleable(),
-                Tables\Columns\IconColumn::make('is_active')->label('Activo')->boolean(),
+                Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-perg-header bexia-perg-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-perg-cell bexia-perg-col-name bexia-perg-col-wide',
+                    ])
+                    ->label('Nombre')->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('registration_number')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-perg-header bexia-perg-col-registration',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-perg-cell bexia-perg-col-registration bexia-perg-col-wide',
+                    ])
+                    ->label('Registro')->searchable(),
+                Tables\Columns\TextColumn::make('risk_class')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-perg-header bexia-perg-col-risk',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-perg-cell bexia-perg-col-risk bexia-perg-col-compact',
+                    ])
+                    ->label('Riesgo')->toggleable(),
+                Tables\Columns\TextColumn::make('state')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-perg-header bexia-perg-col-state',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-perg-cell bexia-perg-col-state bexia-perg-col-compact',
+                    ])
+                    ->label('Estado')->toggleable(),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-perg-header bexia-perg-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-perg-cell bexia-perg-col-active bexia-perg-col-bool',
+                    ])
+                    ->label('Activo')->boolean(),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_active')->label('Activo'),
