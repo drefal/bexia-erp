@@ -14,6 +14,11 @@ use Illuminate\Database\Eloquent\Builder;
 
 class WarehouseResource extends Resource
 {
+    /**
+     * BEXIA_WAREHOUSE_RESOURCE_RESPONSIVE_V5_79_103C
+     *
+     * Visual-only responsive classes for WarehouseResource.
+     */
     protected static ?string $model = Warehouse::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-building-storefront';
@@ -76,8 +81,14 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->default(fn (): ?int => static::currentCompanyId()),
 
                 Forms\Components\Section::make('Almacén')
+                    ->extraAttributes([
+                        'class' => 'bexia-whse-section bexia-whse-main-section',
+                    ])
                     ->schema([
                         Forms\Components\TextInput::make('code')
+                            ->extraAttributes([
+                                'class' => 'bexia-whse-field bexia-whse-code-field bexia-whse-compact-field',
+                            ])
                             ->label('Código')
                             ->required()
                             ->maxLength(50)
@@ -85,17 +96,26 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->columnSpan(3),
 
                         Forms\Components\TextInput::make('name')
+                            ->extraAttributes([
+                                'class' => 'bexia-whse-field bexia-whse-name-field bexia-whse-main-field',
+                            ])
                             ->label('Nombre')
                             ->required()
                             ->maxLength(150)
                             ->columnSpan(5),
 
                         Forms\Components\Toggle::make('is_active')
+                            ->extraAttributes([
+                                'class' => 'bexia-whse-field bexia-whse-active-field bexia-whse-bool-field',
+                            ])
                             ->label('Activo')
                             ->default(true)
                             ->columnSpan(2),
 
                         Forms\Components\Textarea::make('description')
+                            ->extraAttributes([
+                                'class' => 'bexia-whse-field bexia-whse-description-field bexia-whse-wide-field bexia-whse-textarea-field',
+                            ])
                             ->dehydrated(false) // V5.61.2j: warehouses no tiene columna description.
                             ->label('Descripción')
                             ->rows(3)
@@ -110,21 +130,45 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('code')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-whse-header bexia-whse-col-code',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-whse-cell bexia-whse-col-code bexia-whse-col-compact',
+                    ])
                     ->label('Código')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-whse-header bexia-whse-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-whse-cell bexia-whse-col-name bexia-whse-col-main',
+                    ])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('locations_count')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-whse-header bexia-whse-col-locations',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-whse-cell bexia-whse-col-locations bexia-whse-col-count',
+                    ])
                     ->label('Ubicaciones')
                     ->counts('locations')
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('is_active')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-whse-header bexia-whse-col-active',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-whse-cell bexia-whse-col-active bexia-whse-col-bool',
+                    ])
                     ->label('Activo')
                     ->boolean()
                     ->sortable(),
