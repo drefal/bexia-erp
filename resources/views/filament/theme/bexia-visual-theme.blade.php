@@ -15070,4 +15070,158 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_HR_JOB_POSITION_RESOURCE_RESPONSIVE_V5_79_90C_END */
+
+/* BEXIA_AI_INSIGHT_USER_ACCESS_RESOURCE_RESPONSIVE_V5_79_91C_START */
+.bexia-aiu-form,
+.bexia-aiu-shell {
+    min-width: 0;
+}
+
+.bexia-aiu-form .fi-fo-component-ctn,
+.bexia-aiu-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-aiu-section .fi-section-header-description,
+.bexia-aiu-field .fi-fo-field-wrp-label,
+.bexia-aiu-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-aiu-field .fi-input-wrp,
+.bexia-aiu-field .fi-select-input,
+.bexia-aiu-field textarea,
+.bexia-aiu-field input {
+    min-width: 0;
+}
+
+.bexia-aiu-wide-field .fi-fo-field-wrp,
+.bexia-aiu-user-field .fi-input-wrp,
+.bexia-aiu-notes-field .fi-fo-field-wrp {
+    width: 100%;
+}
+
+.bexia-aiu-select-field .fi-input-wrp,
+.bexia-aiu-user-field .fi-input-wrp,
+.bexia-aiu-access-level-field .fi-input-wrp {
+    min-width: 0;
+}
+
+.bexia-aiu-toggle-field .fi-fo-field-wrp,
+.bexia-aiu-enabled-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-aiu-header,
+.bexia-aiu-cell {
+    white-space: normal;
+}
+
+.bexia-aiu-col-id,
+.bexia-aiu-col-compact {
+    min-width: 4.5rem;
+    max-width: 6rem;
+}
+
+.bexia-aiu-col-user {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-aiu-col-email {
+    min-width: 13rem;
+    max-width: 18rem;
+}
+
+.bexia-aiu-col-bool,
+.bexia-aiu-col-enabled {
+    min-width: 4.75rem;
+    max-width: 6rem;
+    text-align: center;
+}
+
+.bexia-aiu-col-badge,
+.bexia-aiu-col-access-level {
+    min-width: 7rem;
+    max-width: 9.5rem;
+}
+
+.bexia-aiu-col-date,
+.bexia-aiu-col-updated {
+    min-width: 7.5rem;
+    max-width: 9.5rem;
+}
+
+.bexia-aiu-col-relation,
+.bexia-aiu-col-updated-by {
+    min-width: 9rem;
+    max-width: 13rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-aiu-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-aiu-wide-field,
+    .bexia-aiu-user-field,
+    .bexia-aiu-notes-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-aiu-col-user,
+    .bexia-aiu-col-email,
+    .bexia-aiu-col-updated-by {
+        min-width: 8.5rem;
+        max-width: 12rem;
+    }
+
+    .bexia-aiu-col-badge,
+    .bexia-aiu-col-access-level,
+    .bexia-aiu-col-date,
+    .bexia-aiu-col-updated {
+        min-width: 6.5rem;
+        max-width: 8rem;
+    }
+
+    .bexia-aiu-col-id,
+    .bexia-aiu-col-compact,
+    .bexia-aiu-col-bool,
+    .bexia-aiu-col-enabled {
+        min-width: 4.25rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-aiu-section .fi-section-header,
+    .bexia-aiu-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-aiu-select-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-aiu-col-user,
+    .bexia-aiu-col-email,
+    .bexia-aiu-col-updated-by {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-aiu-col-id,
+    .bexia-aiu-col-compact,
+    .bexia-aiu-col-badge,
+    .bexia-aiu-col-access-level,
+    .bexia-aiu-col-date,
+    .bexia-aiu-col-updated,
+    .bexia-aiu-col-bool,
+    .bexia-aiu-col-enabled {
+        min-width: 4rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_AI_INSIGHT_USER_ACCESS_RESOURCE_RESPONSIVE_V5_79_91C_END */
 </style>
