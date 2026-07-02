@@ -72,13 +72,21 @@ public static function getEloquentQuery(): Builder
             );
     }
 
+    /*
+     * BEXIA_POS_STAFF_ASSIGNMENT_RESOURCE_RESPONSIVE_V5_79_73C
+     * Visual-only responsive marker.
+     */
+
+
     public static function form(Form $form): Form
     {
         return $form->schema([
             Forms\Components\Section::make('Asignación')
+                ->extraAttributes(['class' => 'bexia-psa-section bexia-psa-section-assignment'])
                 ->columns(3)
                 ->schema([
                     Forms\Components\Select::make('company_id')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-field-company bexia-psa-select-field'])
                         ->label('Empresa')
                         ->options(fn () => static::optionsFromTable('companies', ['name']))
                         ->default(fn () => static::currentCompanyId())
@@ -86,6 +94,7 @@ public static function getEloquentQuery(): Builder
                         ->preload(),
 
                     Forms\Components\Select::make('pos_point_id')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-field-pos-point bexia-psa-select-field bexia-psa-primary-field'])
                         ->label('Caja / Punto de venta')
                         ->options(fn () => static::optionsFromTable('pos_points', ['name', 'code']))
                         ->required()
@@ -93,6 +102,7 @@ public static function getEloquentQuery(): Builder
                         ->preload(),
 
                     Forms\Components\Select::make('employee_id')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-field-employee bexia-psa-select-field bexia-psa-primary-field'])
                         ->label('Empleado')
                         ->options(fn () => static::employeeOptions())
                         ->required()
@@ -100,6 +110,7 @@ public static function getEloquentQuery(): Builder
                         ->preload(),
 
                     Forms\Components\Select::make('role')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-field-role bexia-psa-select-field'])
                         ->label('Rol en caja')
                         ->options([
                             'seller' => 'Vendedor: genera ticket sin cobrar',
@@ -110,34 +121,42 @@ public static function getEloquentQuery(): Builder
                         ->required(),
 
                     Forms\Components\Toggle::make('is_active')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-toggle-field bexia-psa-toggle-active'])
                         ->label('Activo')
                         ->default(true),
                 ]),
 
             Forms\Components\Section::make('Permisos')
+                ->extraAttributes(['class' => 'bexia-psa-section bexia-psa-section-permissions'])
                 ->columns(3)
                 ->schema([
                     Forms\Components\Toggle::make('can_create_ticket')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-toggle-field bexia-psa-toggle-ticket'])
                         ->label('Puede generar ticket')
                         ->default(true),
 
                     Forms\Components\Toggle::make('can_charge')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-toggle-field bexia-psa-toggle-charge'])
                         ->label('Puede cobrar')
                         ->default(true),
 
                     Forms\Components\Toggle::make('can_discount')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-toggle-field bexia-psa-toggle-discount'])
                         ->label('Puede aplicar descuentos')
                         ->default(true),
 
                     Forms\Components\Toggle::make('can_cancel')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-toggle-field bexia-psa-toggle-cancel'])
                         ->label('Puede cancelar')
                         ->default(true),
 
                     Forms\Components\Toggle::make('can_open_cash_drawer')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-toggle-field bexia-psa-toggle-cash-drawer'])
                         ->label('Puede abrir cajón')
                         ->default(false),
 
                     Forms\Components\TextInput::make('max_discount_percent')
+                        ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-field-max-discount bexia-psa-numeric-field'])
                         ->label('Descuento máximo %')
                         ->numeric()
                         ->default(0),
@@ -151,16 +170,22 @@ public static function getEloquentQuery(): Builder
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('pos_point_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-psa-col-pos-point bexia-psa-col-primary bexia-psa-col-long-text bexia-psa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-psa-col-pos-point bexia-psa-col-primary bexia-psa-col-long-text bexia-psa-col-context'])
                     ->label('Caja / PDV')
                     ->state(fn ($record) => static::labelFromTable('pos_points', $record->pos_point_id, ['name', 'code']))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('employee_id')
+                    ->extraHeaderAttributes(['class' => 'bexia-psa-col-employee bexia-psa-col-primary bexia-psa-col-long-text bexia-psa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-psa-col-employee bexia-psa-col-primary bexia-psa-col-long-text bexia-psa-col-context'])
                     ->label('Empleado')
                     ->state(fn ($record) => static::labelFromTable('employees', $record->employee_id, ['name', 'employee_number']))
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('role')
+                    ->extraHeaderAttributes(['class' => 'bexia-psa-col-role bexia-psa-col-badge bexia-psa-col-context'])
+                    ->extraCellAttributes(['class' => 'bexia-psa-col-role bexia-psa-col-badge bexia-psa-col-context'])
                     ->label('Rol')
                     ->badge()
                     ->formatStateUsing(fn ($state) => match ((string) $state) {
@@ -176,9 +201,15 @@ public static function getEloquentQuery(): Builder
                         default => 'gray',
                     }),
 
-                Tables\Columns\IconColumn::make('can_create_ticket')->label('Ticket')->boolean(),
-                Tables\Columns\IconColumn::make('can_charge')->label('Cobro')->boolean(),
-                Tables\Columns\IconColumn::make('is_active')->label('Activo')->boolean(),
+                Tables\Columns\IconColumn::make('can_create_ticket')->label('Ticket')->boolean()
+                    ->extraHeaderAttributes(['class' => 'bexia-psa-col-ticket bexia-psa-col-permission bexia-psa-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-psa-col-ticket bexia-psa-col-permission bexia-psa-col-icon']),
+                Tables\Columns\IconColumn::make('can_charge')->label('Cobro')->boolean()
+                    ->extraHeaderAttributes(['class' => 'bexia-psa-col-charge bexia-psa-col-permission bexia-psa-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-psa-col-charge bexia-psa-col-permission bexia-psa-col-icon']),
+                Tables\Columns\IconColumn::make('is_active')->label('Activo')->boolean()
+                    ->extraHeaderAttributes(['class' => 'bexia-psa-col-active bexia-psa-col-status bexia-psa-col-icon'])
+                    ->extraCellAttributes(['class' => 'bexia-psa-col-active bexia-psa-col-status bexia-psa-col-icon']),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('Editar'),
