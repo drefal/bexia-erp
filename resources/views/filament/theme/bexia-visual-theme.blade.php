@@ -15632,4 +15632,135 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PAYMENT_TERM_RESOURCE_RESPONSIVE_V5_79_94C_END */
+
+/* BEXIA_PAYROLL_EMPLOYER_REGISTRATION_RESOURCE_RESPONSIVE_V5_79_95C_START */
+.bexia-perg-form,
+.bexia-perg-shell {
+    min-width: 0;
+}
+
+.bexia-perg-form .fi-fo-component-ctn,
+.bexia-perg-section .fi-section-content {
+    min-width: 0;
+}
+
+.bexia-perg-section .fi-section-header-description,
+.bexia-perg-field .fi-fo-field-wrp-label,
+.bexia-perg-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-perg-field .fi-input-wrp,
+.bexia-perg-field .fi-select-input,
+.bexia-perg-field textarea,
+.bexia-perg-field input {
+    min-width: 0;
+}
+
+.bexia-perg-wide-field .fi-fo-field-wrp,
+.bexia-perg-name-field .fi-input-wrp,
+.bexia-perg-registration-field .fi-input-wrp {
+    width: 100%;
+}
+
+.bexia-perg-compact-field .fi-input-wrp,
+.bexia-perg-risk-field .fi-input-wrp,
+.bexia-perg-state-field .fi-input-wrp {
+    max-width: 10rem;
+}
+
+.bexia-perg-toggle-field .fi-fo-field-wrp,
+.bexia-perg-active-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-perg-header,
+.bexia-perg-cell {
+    white-space: normal;
+}
+
+.bexia-perg-col-name {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-perg-col-registration {
+    min-width: 9rem;
+    max-width: 12rem;
+}
+
+.bexia-perg-col-risk,
+.bexia-perg-col-state,
+.bexia-perg-col-compact {
+    min-width: 6rem;
+    max-width: 8.5rem;
+}
+
+.bexia-perg-col-bool,
+.bexia-perg-col-active {
+    min-width: 4.75rem;
+    max-width: 6rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-perg-section .fi-section-content {
+        overflow-x: auto;
+    }
+
+    .bexia-perg-wide-field,
+    .bexia-perg-name-field,
+    .bexia-perg-registration-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-perg-col-name,
+    .bexia-perg-col-registration {
+        min-width: 8.5rem;
+        max-width: 11.5rem;
+    }
+
+    .bexia-perg-col-risk,
+    .bexia-perg-col-state,
+    .bexia-perg-col-compact {
+        min-width: 5.5rem;
+        max-width: 7.5rem;
+    }
+
+    .bexia-perg-col-bool,
+    .bexia-perg-col-active {
+        min-width: 4.25rem;
+        max-width: 5.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-perg-section .fi-section-header,
+    .bexia-perg-section .fi-section-content {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .bexia-perg-compact-field .fi-input-wrp,
+    .bexia-perg-risk-field .fi-input-wrp,
+    .bexia-perg-state-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-perg-col-name,
+    .bexia-perg-col-registration {
+        min-width: 8rem;
+        max-width: 10.5rem;
+    }
+
+    .bexia-perg-col-risk,
+    .bexia-perg-col-state,
+    .bexia-perg-col-compact,
+    .bexia-perg-col-bool,
+    .bexia-perg-col-active {
+        min-width: 4rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_PAYROLL_EMPLOYER_REGISTRATION_RESOURCE_RESPONSIVE_V5_79_95C_END */
 </style>
