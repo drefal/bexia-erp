@@ -16,6 +16,11 @@ use Throwable;
 
 class AccountingPostingAuditResource extends Resource
 {
+    /**
+     * BEXIA_ACCOUNTING_POSTING_AUDIT_RESOURCE_RESPONSIVE_V5_79_107C
+     *
+     * Visual-only responsive classes for AccountingPostingAuditResource.
+     */
     protected static ?string $model = AccountingPostingAudit::class;
 
     protected static bool $isScopedToTenant = false;
@@ -149,14 +154,32 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-id',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-id bexia-apau-col-number bexia-apau-col-compact',
+                    ])
                     ->label('ID')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-company',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-company bexia-apau-col-number bexia-apau-col-compact',
+                    ])
                     ->label('Empresa')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('event')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-event',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-event bexia-apau-col-main bexia-apau-col-badge',
+                    ])
                     ->label('Evento')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::eventLabel($state))
@@ -165,6 +188,12 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-status',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-status bexia-apau-col-badge bexia-apau-col-compact',
+                    ])
                     ->label('Estatus')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::statusLabel($state))
@@ -172,6 +201,12 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('source_type')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-source-type',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-source-type bexia-apau-col-main bexia-apau-col-badge',
+                    ])
                     ->label('Origen')
                     ->badge()
                     ->formatStateUsing(fn ($state) => self::sourceLabel($state))
@@ -180,19 +215,43 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('source_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-source-id',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-source-id bexia-apau-col-number bexia-apau-col-compact',
+                    ])
                     ->label('ID origen')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('accounting_entry_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-accounting-entry',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-accounting-entry bexia-apau-col-number bexia-apau-col-compact',
+                    ])
                     ->label('Asiento')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('message')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-message',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-message bexia-apau-col-wide',
+                    ])
                     ->label('Mensaje')
                     ->limit(80)
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('created_at')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-apau-header bexia-apau-col-created-at',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-apau-cell bexia-apau-col-created-at bexia-apau-col-date bexia-apau-col-compact',
+                    ])
                     ->label('Fecha')
                     ->dateTime()
                     ->sortable(),
