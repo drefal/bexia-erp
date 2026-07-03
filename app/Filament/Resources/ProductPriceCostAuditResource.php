@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Schema;
 
 class ProductPriceCostAuditResource extends Resource
 {
+    /**
+     * BEXIA_PRODUCT_PRICE_COST_AUDIT_RESOURCE_RESPONSIVE_V5_79_110C
+     *
+     * Visual-only responsive classes for ProductPriceCostAuditResource.
+     */
     protected static ?string $model = ProductPriceCostAudit::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-clock';
@@ -75,11 +80,23 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('changed_at')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ppca-header bexia-ppca-col-changed-at',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ppca-cell bexia-ppca-col-changed-at bexia-ppca-col-date bexia-ppca-col-compact',
+                    ])
                     ->label('Fecha')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_display')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ppca-header bexia-ppca-col-product',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ppca-cell bexia-ppca-col-product bexia-ppca-col-main bexia-ppca-col-wide',
+                    ])
                     ->label('Producto')
                     ->state(fn (ProductPriceCostAudit $record): string => trim(
                         ($record->product_reference ? $record->product_reference . ' - ' : '') .
@@ -94,19 +111,43 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
                     }),
 
                 Tables\Columns\TextColumn::make('field_label')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ppca-header bexia-ppca-col-field',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ppca-cell bexia-ppca-col-field bexia-ppca-col-context bexia-ppca-col-compact',
+                    ])
                     ->label('Campo')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('old_value')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ppca-header bexia-ppca-col-old-value',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ppca-cell bexia-ppca-col-old-value bexia-ppca-col-value bexia-ppca-col-compact',
+                    ])
                     ->label('Antes')
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('new_value')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ppca-header bexia-ppca-col-new-value',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ppca-cell bexia-ppca-col-new-value bexia-ppca-col-value bexia-ppca-col-compact',
+                    ])
                     ->label('Nuevo')
                     ->placeholder('—'),
 
                 Tables\Columns\TextColumn::make('user_display')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ppca-header bexia-ppca-col-user',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ppca-cell bexia-ppca-col-user bexia-ppca-col-context bexia-ppca-col-compact',
+                    ])
                     ->label('Usuario')
                     ->state(fn (ProductPriceCostAudit $record): string => static::userLabel($record->user_id))
                     ->searchable(query: function (Builder $query, string $search): Builder {
@@ -120,6 +161,12 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
                     }),
 
                 Tables\Columns\TextColumn::make('source')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ppca-header bexia-ppca-col-source',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ppca-cell bexia-ppca-col-source bexia-ppca-col-badge bexia-ppca-col-compact',
+                    ])
                     ->label('Origen')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
@@ -131,6 +178,12 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
                     }),
 
                 Tables\Columns\TextColumn::make('notes')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-ppca-header bexia-ppca-col-notes',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-ppca-cell bexia-ppca-col-notes bexia-ppca-col-main bexia-ppca-col-wide',
+                    ])
                     ->label('Motivo')
                     ->placeholder('—')
                     ->toggleable(),

@@ -17612,4 +17612,116 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_STOCK_QUANT_RESOURCE_RESPONSIVE_V5_79_109C_END */
+
+/* BEXIA_PRODUCT_PRICE_COST_AUDIT_RESOURCE_RESPONSIVE_V5_79_110C_START */
+.bexia-ppca-table,
+.bexia-ppca-shell {
+    min-width: 0;
+}
+
+.bexia-ppca-header,
+.bexia-ppca-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-ppca-cell {
+    vertical-align: top;
+}
+
+.bexia-ppca-col-changed-at,
+.bexia-ppca-col-date,
+.bexia-ppca-col-compact {
+    min-width: 7rem;
+    max-width: 9rem;
+}
+
+.bexia-ppca-col-product,
+.bexia-ppca-col-main,
+.bexia-ppca-col-wide {
+    min-width: 13rem;
+    max-width: 21rem;
+}
+
+.bexia-ppca-col-field,
+.bexia-ppca-col-user,
+.bexia-ppca-col-context {
+    min-width: 8rem;
+    max-width: 12rem;
+}
+
+.bexia-ppca-col-old-value,
+.bexia-ppca-col-new-value,
+.bexia-ppca-col-value {
+    min-width: 7rem;
+    max-width: 10rem;
+}
+
+.bexia-ppca-col-source,
+.bexia-ppca-col-badge {
+    min-width: 6rem;
+    max-width: 8rem;
+}
+
+.bexia-ppca-col-notes {
+    min-width: 10rem;
+    max-width: 18rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-ppca-col-product,
+    .bexia-ppca-col-main,
+    .bexia-ppca-col-wide,
+    .bexia-ppca-col-notes {
+        min-width: 9rem;
+        max-width: 14rem;
+    }
+
+    .bexia-ppca-col-field,
+    .bexia-ppca-col-user,
+    .bexia-ppca-col-context,
+    .bexia-ppca-col-old-value,
+    .bexia-ppca-col-new-value,
+    .bexia-ppca-col-value,
+    .bexia-ppca-col-changed-at,
+    .bexia-ppca-col-date,
+    .bexia-ppca-col-source,
+    .bexia-ppca-col-badge,
+    .bexia-ppca-col-compact {
+        min-width: 5rem;
+        max-width: 7rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-ppca-header,
+    .bexia-ppca-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-ppca-col-product,
+    .bexia-ppca-col-main,
+    .bexia-ppca-col-wide,
+    .bexia-ppca-col-notes {
+        min-width: 7rem;
+        max-width: 9rem;
+    }
+
+    .bexia-ppca-col-field,
+    .bexia-ppca-col-user,
+    .bexia-ppca-col-context,
+    .bexia-ppca-col-old-value,
+    .bexia-ppca-col-new-value,
+    .bexia-ppca-col-value,
+    .bexia-ppca-col-changed-at,
+    .bexia-ppca-col-date,
+    .bexia-ppca-col-source,
+    .bexia-ppca-col-badge,
+    .bexia-ppca-col-compact {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_PRODUCT_PRICE_COST_AUDIT_RESOURCE_RESPONSIVE_V5_79_110C_END */
 </style>
