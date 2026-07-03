@@ -17,6 +17,11 @@ use Spatie\Permission\PermissionRegistrar;
 
 class UserAccessResource extends Resource
 {
+    /**
+     * BEXIA_USER_ACCESS_RESOURCE_RESPONSIVE_V5_79_111C
+     *
+     * Visual-only responsive classes for UserAccessResource.
+     */
     protected static ?int $navigationSort = 30;
     protected static ?string $model = User::class;
     protected static bool $isScopedToTenant = false;
@@ -115,14 +120,23 @@ public static function canViewAny(): bool
     {
         return $form->schema([
             Forms\Components\TextInput::make('name')
+                ->extraAttributes([
+                    'class' => 'bexia-uacc-field bexia-uacc-name-field bexia-uacc-compact-field',
+                ])
                 ->label('Nombre')
                 ->disabled(),
 
             Forms\Components\TextInput::make('email')
+                ->extraAttributes([
+                    'class' => 'bexia-uacc-field bexia-uacc-email-field bexia-uacc-compact-field',
+                ])
                 ->label('Correo')
                 ->disabled(),
 
             Forms\Components\CheckboxList::make('roles')
+                ->extraAttributes([
+                    'class' => 'bexia-uacc-field bexia-uacc-roles-field bexia-uacc-wide-field',
+                ])
                 ->label('Roles')
                 ->options(function () {
                     $tenantId = Filament::getTenant()?->getKey();
@@ -163,16 +177,34 @@ public static function canViewAny(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-uacc-header bexia-uacc-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-uacc-cell bexia-uacc-col-name bexia-uacc-col-main',
+                    ])
                     ->label('Nombre')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('email')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-uacc-header bexia-uacc-col-email',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-uacc-cell bexia-uacc-col-email bexia-uacc-col-context',
+                    ])
                     ->label('Correo')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('roles_actuales')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-uacc-header bexia-uacc-col-roles',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-uacc-cell bexia-uacc-col-roles bexia-uacc-col-main',
+                    ])
                     ->label('Roles')
                     ->getStateUsing(function ($record) {
                         $tenantId = Filament::getTenant()?->getKey();

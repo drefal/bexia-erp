@@ -17724,4 +17724,115 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_PRODUCT_PRICE_COST_AUDIT_RESOURCE_RESPONSIVE_V5_79_110C_END */
+
+/* BEXIA_USER_ACCESS_RESOURCE_RESPONSIVE_V5_79_111C_START */
+.bexia-uacc-field,
+.bexia-uacc-table,
+.bexia-uacc-shell {
+    min-width: 0;
+}
+
+.bexia-uacc-field .fi-fo-field-wrp-label,
+.bexia-uacc-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-uacc-field .fi-input-wrp,
+.bexia-uacc-field input,
+.bexia-uacc-field select {
+    min-width: 0;
+}
+
+.bexia-uacc-name-field .fi-input-wrp,
+.bexia-uacc-email-field .fi-input-wrp,
+.bexia-uacc-compact-field .fi-input-wrp {
+    max-width: 20rem;
+}
+
+.bexia-uacc-roles-field .fi-fo-field-wrp,
+.bexia-uacc-wide-field .fi-fo-field-wrp {
+    min-width: 0;
+    width: 100%;
+}
+
+.bexia-uacc-roles-field .fi-checkbox-list,
+.bexia-uacc-roles-field .fi-fo-checkbox-list {
+    min-width: 0;
+}
+
+.bexia-uacc-header,
+.bexia-uacc-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-uacc-cell {
+    vertical-align: top;
+}
+
+.bexia-uacc-col-name,
+.bexia-uacc-col-email,
+.bexia-uacc-col-context {
+    min-width: 8rem;
+    max-width: 12rem;
+}
+
+.bexia-uacc-col-roles,
+.bexia-uacc-col-main {
+    min-width: 11rem;
+    max-width: 18rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-uacc-roles-field,
+    .bexia-uacc-wide-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-uacc-col-roles,
+    .bexia-uacc-col-main {
+        min-width: 9rem;
+        max-width: 13rem;
+    }
+
+    .bexia-uacc-col-name,
+    .bexia-uacc-col-email,
+    .bexia-uacc-col-context {
+        min-width: 6.5rem;
+        max-width: 9rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-uacc-name-field .fi-input-wrp,
+    .bexia-uacc-email-field .fi-input-wrp,
+    .bexia-uacc-compact-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-uacc-roles-field .fi-checkbox-list,
+    .bexia-uacc-roles-field .fi-fo-checkbox-list {
+        column-gap: 0.75rem;
+    }
+
+    .bexia-uacc-header,
+    .bexia-uacc-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-uacc-col-roles,
+    .bexia-uacc-col-main {
+        min-width: 7rem;
+        max-width: 9rem;
+    }
+
+    .bexia-uacc-col-name,
+    .bexia-uacc-col-email,
+    .bexia-uacc-col-context {
+        min-width: 5.25rem;
+        max-width: 7.25rem;
+    }
+}
+/* BEXIA_USER_ACCESS_RESOURCE_RESPONSIVE_V5_79_111C_END */
 </style>
