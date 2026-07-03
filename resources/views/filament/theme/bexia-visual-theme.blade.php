@@ -17376,4 +17376,133 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_ACCOUNTING_POSTING_AUDIT_RESOURCE_RESPONSIVE_V5_79_107C_END */
+
+/* BEXIA_ROL_BORRADOR_RESOURCE_RESPONSIVE_V5_79_108C_START */
+.bexia-rolb-field,
+.bexia-rolb-table,
+.bexia-rolb-shell {
+    min-width: 0;
+}
+
+.bexia-rolb-field .fi-fo-field-wrp-label,
+.bexia-rolb-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-rolb-field .fi-input-wrp,
+.bexia-rolb-field input,
+.bexia-rolb-field select {
+    min-width: 0;
+}
+
+.bexia-rolb-name-field .fi-input-wrp,
+.bexia-rolb-company-field .fi-input-wrp,
+.bexia-rolb-compact-field .fi-input-wrp {
+    max-width: 18rem;
+}
+
+.bexia-rolb-permissions-field .fi-fo-field-wrp,
+.bexia-rolb-wide-field .fi-fo-field-wrp {
+    min-width: 0;
+    width: 100%;
+}
+
+.bexia-rolb-permissions-field .fi-checkbox-list,
+.bexia-rolb-permissions-field .fi-fo-checkbox-list {
+    min-width: 0;
+}
+
+.bexia-rolb-header,
+.bexia-rolb-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-rolb-cell {
+    vertical-align: top;
+}
+
+.bexia-rolb-col-name,
+.bexia-rolb-col-main {
+    min-width: 9rem;
+    max-width: 14rem;
+}
+
+.bexia-rolb-col-company,
+.bexia-rolb-col-compact {
+    min-width: 7rem;
+    max-width: 10rem;
+}
+
+.bexia-rolb-col-permissions-count,
+.bexia-rolb-col-number {
+    min-width: 5.25rem;
+    max-width: 7rem;
+    text-align: right;
+}
+
+.bexia-rolb-col-updated-at,
+.bexia-rolb-col-date {
+    min-width: 7rem;
+    max-width: 9rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-rolb-permissions-field,
+    .bexia-rolb-wide-field {
+        grid-column: 1 / -1;
+    }
+
+    .bexia-rolb-col-name,
+    .bexia-rolb-col-main {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-rolb-col-company,
+    .bexia-rolb-col-compact,
+    .bexia-rolb-col-permissions-count,
+    .bexia-rolb-col-number,
+    .bexia-rolb-col-updated-at,
+    .bexia-rolb-col-date {
+        min-width: 5rem;
+        max-width: 7.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-rolb-name-field .fi-input-wrp,
+    .bexia-rolb-company-field .fi-input-wrp,
+    .bexia-rolb-compact-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-rolb-permissions-field .fi-checkbox-list,
+    .bexia-rolb-permissions-field .fi-fo-checkbox-list {
+        column-gap: 0.75rem;
+    }
+
+    .bexia-rolb-header,
+    .bexia-rolb-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-rolb-col-name,
+    .bexia-rolb-col-main {
+        min-width: 5.75rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-rolb-col-company,
+    .bexia-rolb-col-compact,
+    .bexia-rolb-col-permissions-count,
+    .bexia-rolb-col-number,
+    .bexia-rolb-col-updated-at,
+    .bexia-rolb-col-date {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_ROL_BORRADOR_RESOURCE_RESPONSIVE_V5_79_108C_END */
 </style>
