@@ -13,6 +13,11 @@ use Illuminate\Support\Facades\Schema;
 
 class PosSessionResource extends Resource
 {
+    /**
+     * BEXIA_POS_SESSION_RESOURCE_RESPONSIVE_V5_79_113C
+     *
+     * Visual-only responsive classes for PosSessionResource.
+     */
     protected static ?string $model = PosSession::class;
 
     protected static ?string $navigationGroup = 'Punto de Venta';
@@ -124,11 +129,23 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             ->defaultSort('id', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('number')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pssn-header bexia-pssn-col-number',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pssn-cell bexia-pssn-col-number bexia-pssn-col-main',
+                    ])
                     ->label('Sesión')
                     ->searchable()
                     ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pssn-header bexia-pssn-col-status',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pssn-cell bexia-pssn-col-status bexia-pssn-col-badge',
+                    ])
                     ->label('Estado')
                     ->badge()
                     ->formatStateUsing(fn ($state): string => match ((string) $state) {
@@ -145,22 +162,46 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     }),
 
                 Tables\Columns\TextColumn::make('opened_at')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pssn-header bexia-pssn-col-opened-at',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pssn-cell bexia-pssn-col-opened-at bexia-pssn-col-date',
+                    ])
                     ->label('Apertura')
                     ->dateTime('Y-m-d H:i')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('closed_at')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pssn-header bexia-pssn-col-closed-at',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pssn-cell bexia-pssn-col-closed-at bexia-pssn-col-date',
+                    ])
                     ->label('Cierre')
                     ->dateTime('Y-m-d H:i')
                     ->placeholder('Aún abierta')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('opening_amount')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pssn-header bexia-pssn-col-opening-amount',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pssn-cell bexia-pssn-col-opening-amount bexia-pssn-col-money',
+                    ])
                     ->label('Fondo inicial')
                     ->money('MXN')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('closing_amount')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-pssn-header bexia-pssn-col-closing-amount',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-pssn-cell bexia-pssn-col-closing-amount bexia-pssn-col-money',
+                    ])
                     ->label('Fondo cierre')
                     ->money('MXN')
                     ->sortable(),
