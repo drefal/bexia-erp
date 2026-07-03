@@ -17931,4 +17931,110 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_ORGANIZATION_RESOURCE_RESPONSIVE_V5_79_112C_END */
+
+/* BEXIA_POS_SESSION_RESOURCE_RESPONSIVE_V5_79_113C_START */
+.bexia-pssn-table,
+.bexia-pssn-shell {
+    min-width: 0;
+}
+
+.bexia-pssn-header,
+.bexia-pssn-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-pssn-cell {
+    vertical-align: top;
+}
+
+.bexia-pssn-col-number,
+.bexia-pssn-col-main {
+    min-width: 8rem;
+    max-width: 12rem;
+}
+
+.bexia-pssn-col-status,
+.bexia-pssn-col-badge {
+    min-width: 6rem;
+    max-width: 8rem;
+}
+
+.bexia-pssn-col-opened-at,
+.bexia-pssn-col-closed-at,
+.bexia-pssn-col-date {
+    min-width: 7.75rem;
+    max-width: 10rem;
+}
+
+.bexia-pssn-col-opening-amount,
+.bexia-pssn-col-closing-amount,
+.bexia-pssn-col-money {
+    min-width: 7rem;
+    max-width: 9rem;
+    text-align: right;
+}
+
+@media (max-width: 1024px) {
+    .bexia-pssn-col-number,
+    .bexia-pssn-col-main {
+        min-width: 6.75rem;
+        max-width: 9.25rem;
+    }
+
+    .bexia-pssn-col-status,
+    .bexia-pssn-col-badge {
+        min-width: 5.25rem;
+        max-width: 7rem;
+    }
+
+    .bexia-pssn-col-opened-at,
+    .bexia-pssn-col-closed-at,
+    .bexia-pssn-col-date {
+        min-width: 6.25rem;
+        max-width: 8rem;
+    }
+
+    .bexia-pssn-col-opening-amount,
+    .bexia-pssn-col-closing-amount,
+    .bexia-pssn-col-money {
+        min-width: 5.75rem;
+        max-width: 7.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-pssn-header,
+    .bexia-pssn-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-pssn-col-number,
+    .bexia-pssn-col-main {
+        min-width: 5.25rem;
+        max-width: 7rem;
+    }
+
+    .bexia-pssn-col-status,
+    .bexia-pssn-col-badge {
+        min-width: 4.75rem;
+        max-width: 6rem;
+    }
+
+    .bexia-pssn-col-opened-at,
+    .bexia-pssn-col-closed-at,
+    .bexia-pssn-col-date {
+        min-width: 5.5rem;
+        max-width: 7rem;
+    }
+
+    .bexia-pssn-col-opening-amount,
+    .bexia-pssn-col-closing-amount,
+    .bexia-pssn-col-money {
+        min-width: 5rem;
+        max-width: 6.5rem;
+    }
+}
+/* BEXIA_POS_SESSION_RESOURCE_RESPONSIVE_V5_79_113C_END */
 </style>
