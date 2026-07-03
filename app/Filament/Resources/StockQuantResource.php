@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Schema;
 
 class StockQuantResource extends Resource
 {
+    /**
+     * BEXIA_STOCK_QUANT_RESOURCE_RESPONSIVE_V5_79_109C
+     *
+     * Visual-only responsive classes for StockQuantResource.
+     */
     protected static ?string $model = StockQuant::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-cube-transparent';
@@ -80,18 +85,36 @@ class StockQuantResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('warehouse.name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stqu-header bexia-stqu-col-warehouse',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stqu-cell bexia-stqu-col-warehouse bexia-stqu-col-context',
+                    ])
                     ->label('Almacén')
                     ->placeholder('—')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('location.name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stqu-header bexia-stqu-col-location',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stqu-cell bexia-stqu-col-location bexia-stqu-col-context',
+                    ])
                     ->label('Ubicación')
                     ->placeholder('—')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_label')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stqu-header bexia-stqu-col-product',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stqu-cell bexia-stqu-col-product bexia-stqu-col-main bexia-stqu-col-wide',
+                    ])
                     ->label('Producto')
                     ->state(fn (StockQuant $record): string => static::productLabel($record->product_id))
                     ->searchable(false)
@@ -99,24 +122,48 @@ class StockQuantResource extends Resource
                     ->wrap(),
 
                 Tables\Columns\TextColumn::make('variant_label')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stqu-header bexia-stqu-col-variant',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stqu-cell bexia-stqu-col-variant bexia-stqu-col-wide',
+                    ])
                     ->label('Variante')
                     ->state(fn (StockQuant $record): string => static::variantLabel($record->product_variant_id))
                     ->placeholder('—')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('quantity')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stqu-header bexia-stqu-col-quantity',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stqu-cell bexia-stqu-col-quantity bexia-stqu-col-number bexia-stqu-col-compact',
+                    ])
                     ->label('Cantidad física')
                     ->alignRight()
                     ->formatStateUsing(fn ($state): string => number_format((float) $state, 2))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('reserved_quantity')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stqu-header bexia-stqu-col-reserved',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stqu-cell bexia-stqu-col-reserved bexia-stqu-col-number bexia-stqu-col-compact',
+                    ])
                     ->label('Reservado')
                     ->alignRight()
                     ->formatStateUsing(fn ($state): string => number_format((float) $state, 2))
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('available_quantity')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stqu-header bexia-stqu-col-available',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stqu-cell bexia-stqu-col-available bexia-stqu-col-number bexia-stqu-col-compact',
+                    ])
                     ->label('Disponible')
                     ->alignRight()
                     ->state(fn (StockQuant $record): float => $record->available_quantity)
@@ -124,6 +171,12 @@ class StockQuantResource extends Resource
                     ->sortable(false),
 
                 Tables\Columns\TextColumn::make('average_cost')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-stqu-header bexia-stqu-col-average-cost',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-stqu-cell bexia-stqu-col-average-cost bexia-stqu-col-number bexia-stqu-col-compact',
+                    ])
                     ->label('Costo prom.')
                     ->alignRight()
                     ->formatStateUsing(fn ($state): string => $state === null ? '—' : '$ ' . number_format((float) $state, 2))
