@@ -13,6 +13,11 @@ use Illuminate\Support\Str;
 
 class OrganizationResource extends Resource
 {
+    /**
+     * BEXIA_ORGANIZATION_RESOURCE_RESPONSIVE_V5_79_112C
+     *
+     * Visual-only responsive classes for OrganizationResource.
+     */
     protected static ?string $model = Organization::class;
     protected static ?string $navigationIcon = 'heroicon-o-building-library';
     protected static ?string $navigationGroup = 'Configuración Bexia';
@@ -79,6 +84,9 @@ public static function getNavigationLabel(): string
     {
         return $form->schema([
             Forms\Components\TextInput::make('name')
+                ->extraAttributes([
+                    'class' => 'bexia-orgn-field bexia-orgn-name-field bexia-orgn-compact-field',
+                ])
                 ->label('Nombre')
                 ->required()
                 ->live(onBlur: true)
@@ -88,9 +96,15 @@ public static function getNavigationLabel(): string
                     }
                 }),
             Forms\Components\TextInput::make('slug')
+                ->extraAttributes([
+                    'class' => 'bexia-orgn-field bexia-orgn-slug-field bexia-orgn-compact-field',
+                ])
                 ->label('Slug')
                 ->required(),
             Forms\Components\Toggle::make('active')
+                ->extraAttributes([
+                    'class' => 'bexia-orgn-field bexia-orgn-active-field bexia-orgn-boolean-field',
+                ])
                 ->label('Activo')
                 ->default(true),
         ])->columns(2);
@@ -99,9 +113,30 @@ public static function getNavigationLabel(): string
     public static function table(Table $table): Table
     {
         return $table->columns([
-            Tables\Columns\TextColumn::make('name')->label('Nombre')->sortable()->searchable(),
-            Tables\Columns\TextColumn::make('slug')->label('Slug')->sortable()->searchable(),
-            Tables\Columns\IconColumn::make('active')->label('Activo')->boolean(),
+            Tables\Columns\TextColumn::make('name')
+                ->extraHeaderAttributes([
+                    'class' => 'bexia-orgn-header bexia-orgn-col-name',
+                ])
+                ->extraCellAttributes([
+                    'class' => 'bexia-orgn-cell bexia-orgn-col-name bexia-orgn-col-main',
+                ])
+                ->label('Nombre')->sortable()->searchable(),
+            Tables\Columns\TextColumn::make('slug')
+                ->extraHeaderAttributes([
+                    'class' => 'bexia-orgn-header bexia-orgn-col-slug',
+                ])
+                ->extraCellAttributes([
+                    'class' => 'bexia-orgn-cell bexia-orgn-col-slug bexia-orgn-col-main',
+                ])
+                ->label('Slug')->sortable()->searchable(),
+            Tables\Columns\IconColumn::make('active')
+                ->extraHeaderAttributes([
+                    'class' => 'bexia-orgn-header bexia-orgn-col-active',
+                ])
+                ->extraCellAttributes([
+                    'class' => 'bexia-orgn-cell bexia-orgn-col-active bexia-orgn-col-bool',
+                ])
+                ->label('Activo')->boolean(),
         ]);
     }
 
