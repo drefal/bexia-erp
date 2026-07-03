@@ -17835,4 +17835,100 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_USER_ACCESS_RESOURCE_RESPONSIVE_V5_79_111C_END */
+
+/* BEXIA_ORGANIZATION_RESOURCE_RESPONSIVE_V5_79_112C_START */
+.bexia-orgn-field,
+.bexia-orgn-table,
+.bexia-orgn-shell {
+    min-width: 0;
+}
+
+.bexia-orgn-field .fi-fo-field-wrp-label,
+.bexia-orgn-field .fi-fo-field-wrp-helper-text {
+    overflow-wrap: anywhere;
+}
+
+.bexia-orgn-field .fi-input-wrp,
+.bexia-orgn-field input,
+.bexia-orgn-field select {
+    min-width: 0;
+}
+
+.bexia-orgn-name-field .fi-input-wrp,
+.bexia-orgn-slug-field .fi-input-wrp,
+.bexia-orgn-compact-field .fi-input-wrp {
+    max-width: 18rem;
+}
+
+.bexia-orgn-active-field .fi-fo-field-wrp,
+.bexia-orgn-boolean-field .fi-fo-field-wrp {
+    min-width: 0;
+}
+
+.bexia-orgn-header,
+.bexia-orgn-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-orgn-cell {
+    vertical-align: top;
+}
+
+.bexia-orgn-col-name,
+.bexia-orgn-col-slug,
+.bexia-orgn-col-main {
+    min-width: 8rem;
+    max-width: 13rem;
+}
+
+.bexia-orgn-col-active,
+.bexia-orgn-col-bool {
+    min-width: 5rem;
+    max-width: 7rem;
+    text-align: center;
+}
+
+@media (max-width: 1024px) {
+    .bexia-orgn-col-name,
+    .bexia-orgn-col-slug,
+    .bexia-orgn-col-main {
+        min-width: 6.75rem;
+        max-width: 9.5rem;
+    }
+
+    .bexia-orgn-col-active,
+    .bexia-orgn-col-bool {
+        min-width: 4.75rem;
+        max-width: 6.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-orgn-name-field .fi-input-wrp,
+    .bexia-orgn-slug-field .fi-input-wrp,
+    .bexia-orgn-compact-field .fi-input-wrp {
+        max-width: 100%;
+    }
+
+    .bexia-orgn-header,
+    .bexia-orgn-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-orgn-col-name,
+    .bexia-orgn-col-slug,
+    .bexia-orgn-col-main {
+        min-width: 5.25rem;
+        max-width: 7.25rem;
+    }
+
+    .bexia-orgn-col-active,
+    .bexia-orgn-col-bool {
+        min-width: 4.25rem;
+        max-width: 5.5rem;
+    }
+}
+/* BEXIA_ORGANIZATION_RESOURCE_RESPONSIVE_V5_79_112C_END */
 </style>
