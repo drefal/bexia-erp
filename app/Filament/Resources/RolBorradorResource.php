@@ -17,6 +17,11 @@ use Spatie\Permission\Models\Role;
 
 class RolBorradorResource extends Resource
 {
+    /**
+     * BEXIA_ROL_BORRADOR_RESOURCE_RESPONSIVE_V5_79_108C
+     *
+     * Visual-only responsive classes for RolBorradorResource.
+     */
     protected static ?string $model = Role::class;
 
     protected static bool $isScopedToTenant = false;
@@ -115,11 +120,17 @@ public static function canViewAny(): bool
 
         return $form->schema([
             Forms\Components\TextInput::make('name')
+                ->extraAttributes([
+                    'class' => 'bexia-rolb-field bexia-rolb-name-field bexia-rolb-main-field',
+                ])
                 ->label('Nombre del rol')
                 ->required()
                 ->maxLength(255),
 
             Forms\Components\Select::make('company_id')
+                ->extraAttributes([
+                    'class' => 'bexia-rolb-field bexia-rolb-company-field bexia-rolb-compact-field',
+                ])
                 ->label('Empresa')
                 ->options(function () use ($tenantId) {
                     return Company::query()
@@ -135,6 +146,9 @@ public static function canViewAny(): bool
                 ->native(false),
 
             Forms\Components\CheckboxList::make('permission_ids')
+                ->extraAttributes([
+                    'class' => 'bexia-rolb-field bexia-rolb-permissions-field bexia-rolb-wide-field',
+                ])
                 ->label('Permisos')
                 ->options(function () {
                     $labels = [
@@ -182,20 +196,44 @@ public static function canViewAny(): bool
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-rolb-header bexia-rolb-col-name',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-rolb-cell bexia-rolb-col-name bexia-rolb-col-main',
+                    ])
                     ->label('Rol')
                     ->sortable()
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('company_id')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-rolb-header bexia-rolb-col-company',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-rolb-cell bexia-rolb-col-company bexia-rolb-col-compact',
+                    ])
                     ->label('Empresa')
                     ->formatStateUsing(fn ($state) => Company::find($state)?->name ?? '—')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('permissions_count')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-rolb-header bexia-rolb-col-permissions-count',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-rolb-cell bexia-rolb-col-permissions-count bexia-rolb-col-number bexia-rolb-col-compact',
+                    ])
                     ->label('# Permisos')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('updated_at')
+                    ->extraHeaderAttributes([
+                        'class' => 'bexia-rolb-header bexia-rolb-col-updated-at',
+                    ])
+                    ->extraCellAttributes([
+                        'class' => 'bexia-rolb-cell bexia-rolb-col-updated-at bexia-rolb-col-date bexia-rolb-col-compact',
+                    ])
                     ->label('Actualizado')
                     ->since()
                     ->sortable(),
