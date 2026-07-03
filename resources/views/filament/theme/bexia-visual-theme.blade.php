@@ -17260,4 +17260,120 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_SAT_CFDI_CANCELLATION_REASON_RESOURCE_RESPONSIVE_V5_79_106C_END */
+
+/* BEXIA_ACCOUNTING_POSTING_AUDIT_RESOURCE_RESPONSIVE_V5_79_107C_START */
+.bexia-apau-table,
+.bexia-apau-shell {
+    min-width: 0;
+}
+
+.bexia-apau-header,
+.bexia-apau-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-apau-cell {
+    vertical-align: top;
+}
+
+.bexia-apau-col-id,
+.bexia-apau-col-company,
+.bexia-apau-col-source-id,
+.bexia-apau-col-accounting-entry,
+.bexia-apau-col-number,
+.bexia-apau-col-compact {
+    min-width: 4.75rem;
+    max-width: 6.75rem;
+}
+
+.bexia-apau-col-event,
+.bexia-apau-col-source-type,
+.bexia-apau-col-main {
+    min-width: 9rem;
+    max-width: 13rem;
+}
+
+.bexia-apau-col-status,
+.bexia-apau-col-badge {
+    min-width: 6.5rem;
+    max-width: 9rem;
+}
+
+.bexia-apau-col-message,
+.bexia-apau-col-wide {
+    min-width: 13rem;
+    max-width: 22rem;
+}
+
+.bexia-apau-col-created-at,
+.bexia-apau-col-date {
+    min-width: 8rem;
+    max-width: 10rem;
+}
+
+@media (max-width: 1024px) {
+    .bexia-apau-col-message,
+    .bexia-apau-col-wide {
+        min-width: 10rem;
+        max-width: 15rem;
+    }
+
+    .bexia-apau-col-event,
+    .bexia-apau-col-source-type,
+    .bexia-apau-col-main {
+        min-width: 7rem;
+        max-width: 10rem;
+    }
+
+    .bexia-apau-col-id,
+    .bexia-apau-col-company,
+    .bexia-apau-col-source-id,
+    .bexia-apau-col-accounting-entry,
+    .bexia-apau-col-number,
+    .bexia-apau-col-compact,
+    .bexia-apau-col-status,
+    .bexia-apau-col-badge,
+    .bexia-apau-col-created-at,
+    .bexia-apau-col-date {
+        min-width: 4.5rem;
+        max-width: 6.5rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-apau-header,
+    .bexia-apau-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-apau-col-message,
+    .bexia-apau-col-wide {
+        min-width: 7rem;
+        max-width: 10rem;
+    }
+
+    .bexia-apau-col-event,
+    .bexia-apau-col-source-type,
+    .bexia-apau-col-main {
+        min-width: 5.75rem;
+        max-width: 7.75rem;
+    }
+
+    .bexia-apau-col-id,
+    .bexia-apau-col-company,
+    .bexia-apau-col-source-id,
+    .bexia-apau-col-accounting-entry,
+    .bexia-apau-col-number,
+    .bexia-apau-col-compact,
+    .bexia-apau-col-status,
+    .bexia-apau-col-badge,
+    .bexia-apau-col-created-at,
+    .bexia-apau-col-date {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_ACCOUNTING_POSTING_AUDIT_RESOURCE_RESPONSIVE_V5_79_107C_END */
 </style>
