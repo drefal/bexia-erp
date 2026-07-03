@@ -17505,4 +17505,111 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_ROL_BORRADOR_RESOURCE_RESPONSIVE_V5_79_108C_END */
+
+/* BEXIA_STOCK_QUANT_RESOURCE_RESPONSIVE_V5_79_109C_START */
+.bexia-stqu-table,
+.bexia-stqu-shell {
+    min-width: 0;
+}
+
+.bexia-stqu-header,
+.bexia-stqu-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bexia-stqu-cell {
+    vertical-align: top;
+}
+
+.bexia-stqu-col-warehouse,
+.bexia-stqu-col-location,
+.bexia-stqu-col-context {
+    min-width: 7rem;
+    max-width: 10rem;
+}
+
+.bexia-stqu-col-product,
+.bexia-stqu-col-main,
+.bexia-stqu-col-wide {
+    min-width: 13rem;
+    max-width: 20rem;
+}
+
+.bexia-stqu-col-variant {
+    min-width: 10rem;
+    max-width: 15rem;
+}
+
+.bexia-stqu-col-quantity,
+.bexia-stqu-col-reserved,
+.bexia-stqu-col-available,
+.bexia-stqu-col-average-cost,
+.bexia-stqu-col-number,
+.bexia-stqu-col-compact {
+    min-width: 6rem;
+    max-width: 8rem;
+    text-align: right;
+}
+
+@media (max-width: 1024px) {
+    .bexia-stqu-col-product,
+    .bexia-stqu-col-main,
+    .bexia-stqu-col-wide {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
+    .bexia-stqu-col-variant {
+        min-width: 8rem;
+        max-width: 11rem;
+    }
+
+    .bexia-stqu-col-warehouse,
+    .bexia-stqu-col-location,
+    .bexia-stqu-col-context,
+    .bexia-stqu-col-quantity,
+    .bexia-stqu-col-reserved,
+    .bexia-stqu-col-available,
+    .bexia-stqu-col-average-cost,
+    .bexia-stqu-col-number,
+    .bexia-stqu-col-compact {
+        min-width: 5rem;
+        max-width: 7rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .bexia-stqu-header,
+    .bexia-stqu-cell {
+        font-size: 0.8rem;
+        line-height: 1.25;
+    }
+
+    .bexia-stqu-col-product,
+    .bexia-stqu-col-main,
+    .bexia-stqu-col-wide {
+        min-width: 7rem;
+        max-width: 9rem;
+    }
+
+    .bexia-stqu-col-variant {
+        min-width: 6rem;
+        max-width: 8rem;
+    }
+
+    .bexia-stqu-col-warehouse,
+    .bexia-stqu-col-location,
+    .bexia-stqu-col-context,
+    .bexia-stqu-col-quantity,
+    .bexia-stqu-col-reserved,
+    .bexia-stqu-col-available,
+    .bexia-stqu-col-average-cost,
+    .bexia-stqu-col-number,
+    .bexia-stqu-col-compact {
+        min-width: 4.25rem;
+        max-width: 5.75rem;
+    }
+}
+/* BEXIA_STOCK_QUANT_RESOURCE_RESPONSIVE_V5_79_109C_END */
 </style>
