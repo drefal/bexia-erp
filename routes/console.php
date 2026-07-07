@@ -383,3 +383,4 @@ Artisan::command('bexia:accounting-post-invoice {invoice_id}', function ($invoic
     }
 )->purpose('Sincroniza roles base desde una empresa plantilla hacia todas las empresas de un grupo');
 
+
