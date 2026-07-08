@@ -1113,6 +1113,14 @@ abort_if(! $sessionRow, 404);
             });
         }
 
+        // BEXIA_V5820E2A1_REAL_PRODUCTS_FILTER_ZERO_PRICE_QUERY
+        // El POS solo debe cargar productos con precio base valido.
+        // No se modifica el catalogo ni available_in_pos.
+        if (Schema::hasColumn('products', 'sale_price')) {
+            $query->whereNotNull('sale_price')
+                ->where('sale_price', '>', 0);
+        }
+
         $allowed = $this->jsonArray($pos->allowed_category_ids ?? null, []);
 
         if (! empty($pos->restrict_categories) && $allowed && Schema::hasColumn('products', 'product_category_id')) {
@@ -1134,6 +1142,12 @@ abort_if(! $sessionRow, 404);
             $stock = $this->stockForProduct($row, $pos);
 
             $price = $this->productPrice($row);
+
+            // BEXIA_V5820E2A1_REAL_PRODUCTS_SKIP_ZERO_PRICE
+            // Doble candado para no renderizar productos sin precio valido.
+            if ($price <= 0) {
+                continue;
+            }
 
             $products[] = [
                 'id' => (int) $row->id,
@@ -2518,6 +2532,14 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
 
             $qty = (float) ($item['qty'] ?? 0);
             $unitPrice = (float) ($item['price'] ?? 0);
+
+            // BEXIA_V5820E2A1_STORE_ORDER_BLOCK_ZERO_PRICE
+            if ($unitPrice <= 0) {
+                $productLabel = (string) ($item['name'] ?? $item['product_name'] ?? 'Producto');
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ["No se puede vender {$productLabel} porque no tiene precio valido en el POS."],
+                ]);
+            }
             $taxRate = (float) ($item['tax_rate'] ?? 0.16);
 
             if ($taxRate > 1) {
@@ -5116,7 +5138,8 @@ return response()->json([
                     $taxRate = 0;
                 }
 
-                if ($qty <= 0 || $price < 0) {
+                // BEXIA_V5820E2A1_PAY_ORDER_BLOCK_ZERO_PRICE
+                if ($qty <= 0 || $price <= 0) {
                     continue;
                 }
 
@@ -7129,6 +7152,15 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             }
         }
 
+        // BEXIA_V5820E2A1_REFRESH_PRODUCTS_AVAILABLE_IN_POS
+        // Mantener consistencia con la carga inicial del POS.
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'available_in_pos')) {
+            $productsQuery->where(function ($query): void {
+                $query->where('p.available_in_pos', true)
+                    ->orWhereNull('p.available_in_pos');
+            });
+        }
+
         if ($productIds->isNotEmpty()) {
             $productsQuery->whereIn('p.id', $productIds);
         }
@@ -7333,6 +7365,14 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
                 'available_quantity' => $available,
             ];
         })->values();
+
+        // BEXIA_V5820E2A1_REFRESH_PRODUCTS_FILTER_ZERO_EFFECTIVE_PRICE
+        // Filtra por precio efectivo ya calculado, incluyendo lista de precios si aplica.
+        $payload = $payload
+            ->filter(function (array $item): bool {
+                return (float) ($item['price'] ?? $item['public_price'] ?? $item['price_without_tax'] ?? 0) > 0;
+            })
+            ->values();
 
         return response()->json([
             'ok' => true,
