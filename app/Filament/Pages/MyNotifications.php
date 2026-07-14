@@ -30,6 +30,9 @@ class MyNotifications extends Page
 
     public static function getNavigationBadge(): ?string
     {
+        // BEXIA_V582_PERF7A_NAV_BADGE_DISABLED: evita conteos caros en cada carga del panel.
+        return null;
+
         $count = class_exists(BexiaUserNotification::class)
             ? BexiaUserNotification::unreadCountForUser()
             : 0;

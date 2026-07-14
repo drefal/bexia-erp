@@ -2478,10 +2478,10 @@ variants_inner_table')
         return $table
             // BEXIA_V5727N29C_EAGER_LOAD_PRODUCT_LIST
             ->modifyQueryUsing(fn ($query) => $query
-                ->with(['category', 'unit'])
-                ->withExists([
-                    'images as has_active_images' => fn ($imageQuery) => $imageQuery->where('is_active', true),
-                ]))
+                ->with(['category', 'unit']))
+            ->deferLoading()
+            ->defaultPaginationPageOption(25)
+            ->paginationPageOptions([10, 25, 50])
             ->columns([
                 Tables\Columns\TextColumn::make('internal_reference')
                     ->label('Referencia interna')
@@ -2539,7 +2539,7 @@ variants_inner_table')
                         'warning' => 'warning',
                         default => 'gray',
                     })
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('product_list_stock')
                     ->label('Stock')
@@ -2547,14 +2547,14 @@ variants_inner_table')
                     ->alignEnd()
                     ->badge()
                     ->color('gray')
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('variant_status')
                     ->label('Variantes')
                     ->getStateUsing(fn (Product $record): string => static::productVariantStatusLabel($record))
                     ->badge()
                     ->color(fn (Product $record): string => static::productVariantStatusColor($record))
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
 
                 Tables\Columns\TextColumn::make('sale_price')
@@ -2572,7 +2572,7 @@ variants_inner_table')
                     ->label('Imagen')
                     ->boolean()
                     ->getStateUsing(fn (Product $record): bool => filled($record->image_path) || (bool) ($record->has_active_images ?? false))
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('sku')
                     ->label('SKU / Código de barras')

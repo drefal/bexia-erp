@@ -50,6 +50,9 @@ class TreasuryCashTransferRequestResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
+        // BEXIA_V582_PERF7A_NAV_BADGE_DISABLED: evita conteos caros en cada carga del panel.
+        return null;
+
         $companyId = static::currentCompanyId();
 
         $query = static::getModel()::query()

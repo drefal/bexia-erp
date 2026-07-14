@@ -25,6 +25,19 @@ class AppServiceProvider extends ServiceProvider
     {
 
         Gate::before(function ($user, string $ability): ?bool {
+            // BEXIA_V582_PERF7G_SYSTEM_ADMIN_FIRST
+            if ((bool) ($user->is_system_admin ?? false) || (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin())) {
+                return true;
+            }
+
+            // BEXIA_V582_PERF7E_PERMISSION_REQUEST_CACHE
+            $bexiaCachedPermission = \App\Support\Security\BexiaPermissionRequestCache::allows($user, $ability);
+
+            if ($bexiaCachedPermission !== null) {
+                return $bexiaCachedPermission;
+            }
+
+
             return method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()
                 ? true
                 : null;

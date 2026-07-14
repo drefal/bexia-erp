@@ -12,12 +12,7 @@ class BexiaMenuRuntime
 {
     public static function tablesReady(): bool
     {
-        try {
-            return Schema::hasTable('bexia_menu_groups')
-                && Schema::hasTable('bexia_menu_items');
-        } catch (Throwable) {
-            return false;
-        }
+        return self::bexiaPerf7iTablesReady();
     }
 
     public static function groupLabel(string $key, string $fallback): string
@@ -51,83 +46,22 @@ class BexiaMenuRuntime
 
     public static function itemLabel(string $key, string $fallback): string
     {
-        if (! static::tablesReady()) {
-            return $fallback;
-        }
-
-        try {
-            $label = BexiaMenuItem::query()
-                ->where('key', $key)
-                ->value('label');
-
-            return filled($label) ? (string) $label : $fallback;
-        } catch (Throwable) {
-            return $fallback;
-        }
+        return self::bexiaPerf7iItemLabel(...func_get_args());
     }
 
     public static function itemSort(string $key, int $fallback): int
     {
-        if (! static::tablesReady()) {
-            return $fallback;
-        }
-
-        try {
-            $sort = BexiaMenuItem::query()
-                ->where('key', $key)
-                ->value('sort');
-
-            return is_numeric($sort) ? (int) $sort : $fallback;
-        } catch (Throwable) {
-            return $fallback;
-        }
+        return self::bexiaPerf7iItemSort(...func_get_args());
     }
 
     public static function itemVisible(string $key, bool $fallback = true): bool
     {
-        if (! static::tablesReady()) {
-            return $fallback;
-        }
-
-        try {
-            $item = BexiaMenuItem::query()
-                ->where('key', $key)
-                ->first();
-
-            if (! $item) {
-                return $fallback;
-            }
-
-            return (bool) $item->is_visible;
-        } catch (Throwable) {
-            return $fallback;
-        }
+        return self::bexiaPerf7iItemVisible(...func_get_args());
     }
 
     public static function itemGroupLabel(string $itemKey, string $fallbackGroupKey, string $fallbackGroupLabel): string
     {
-        if (! static::tablesReady()) {
-            return $fallbackGroupLabel;
-        }
-
-        try {
-            $item = BexiaMenuItem::query()
-                ->with('group')
-                ->where('key', $itemKey)
-                ->first();
-
-            if ($item && $item->group) {
-                $label = $item->group->default_label ?: $item->group->label;
-
-                if (filled($label)) {
-                    return (string) $label;
-                }
-            }
-
-            return static::groupLabel($fallbackGroupKey, $fallbackGroupLabel);
-        } catch (Throwable) {
-            return $fallbackGroupLabel;
-        }
+        return self::bexiaPerf7iItemGroupLabel(...func_get_args());
     }
 
     public static function navigationGroups(array $fallbackGroups): array
@@ -170,40 +104,7 @@ class BexiaMenuRuntime
 
     public static function shouldRegister(string $key, mixed $fallback = true): bool
     {
-        try {
-            if (! \Illuminate\Support\Facades\Schema::hasTable('bexia_menu_items')
-                || ! \Illuminate\Support\Facades\Schema::hasTable('bexia_menu_groups')) {
-                return static::evaluateFallback($fallback);
-            }
-
-            $item = \Illuminate\Support\Facades\DB::table('bexia_menu_items as i')
-                ->join('bexia_menu_groups as g', 'g.id', '=', 'i.group_id')
-                ->where('i.key', $key)
-                ->select([
-                    'i.is_visible as item_visible',
-                    'i.permission_name',
-                    'g.is_visible as group_visible',
-                ])
-                ->first();
-
-            if (! $item) {
-                return static::evaluateFallback($fallback);
-            }
-
-            if (! (bool) $item->group_visible || ! (bool) $item->item_visible) {
-                return false;
-            }
-
-            $permissionName = trim((string) ($item->permission_name ?? ''));
-
-            if ($permissionName === '') {
-                return true;
-            }
-
-            return static::userCanSeePermission($permissionName);
-        } catch (\Throwable) {
-            return static::evaluateFallback($fallback);
-        }
+        return self::bexiaPerf7iShouldRegister(...func_get_args());
     }
 
 
@@ -226,79 +127,35 @@ class BexiaMenuRuntime
 
     protected static function userCanSeePermission(string $permissionName): bool
     {
+        // BEXIA_V582_PERF7E_MENU_PERMISSION_CACHE
         try {
+            // BEXIA_V582_PERF7G_MENU_SYSTEM_ADMIN_FIRST
             $user = auth()->user();
 
             if (! $user) {
                 return false;
             }
 
-            if ((bool) ($user->is_system_admin ?? false)) {
+            if ((bool) ($user->is_system_admin ?? false) || (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin())) {
                 return true;
             }
 
-            $companyId = static::currentCompanyId();
+            $permissionName = trim((string) $permissionName);
 
-            $modelTypes = array_values(array_unique([
-                get_class($user),
-                \App\Models\User::class,
-            ]));
-
-            $query = \Illuminate\Support\Facades\DB::table('model_has_roles as mhr')
-                ->join('roles as r', 'r.id', '=', 'mhr.role_id')
-                ->join('role_has_permissions as rhp', 'rhp.role_id', '=', 'r.id')
-                ->join('permissions as p', 'p.id', '=', 'rhp.permission_id')
-                ->whereIn('mhr.model_type', $modelTypes)
-                ->where('mhr.model_id', $user->getKey())
-                ->where('p.name', $permissionName)
-                ->where('p.guard_name', 'web');
-
-            if ($companyId !== null && \Illuminate\Support\Facades\Schema::hasColumn('model_has_roles', 'company_id')) {
-                $query->where(function ($subQuery) use ($companyId): void {
-                    $subQuery->where('mhr.company_id', $companyId)
-                        ->orWhereNull('mhr.company_id');
-                });
-            }
-
-            if ($companyId !== null && \Illuminate\Support\Facades\Schema::hasColumn('roles', 'company_id')) {
-                $query->where(function ($subQuery) use ($companyId): void {
-                    $subQuery->where('r.company_id', $companyId)
-                        ->orWhereNull('r.company_id');
-                });
-            }
-
-            if ($query->exists()) {
+            if ($permissionName === '') {
                 return true;
             }
 
-            if (\Illuminate\Support\Facades\Schema::hasTable('model_has_permissions')) {
-                $directQuery = \Illuminate\Support\Facades\DB::table('model_has_permissions as mhp')
-                    ->join('permissions as p', 'p.id', '=', 'mhp.permission_id')
-                    ->whereIn('mhp.model_type', $modelTypes)
-                    ->where('mhp.model_id', $user->getKey())
-                    ->where('p.name', $permissionName)
-                    ->where('p.guard_name', 'web');
+            $cached = \App\Support\Security\BexiaPermissionRequestCache::allows(auth()->user(), $permissionName);
 
-                if ($companyId !== null && \Illuminate\Support\Facades\Schema::hasColumn('model_has_permissions', 'company_id')) {
-                    $directQuery->where(function ($subQuery) use ($companyId): void {
-                        $subQuery->where('mhp.company_id', $companyId)
-                            ->orWhereNull('mhp.company_id');
-                    });
-                }
-
-                if ($directQuery->exists()) {
-                    return true;
-                }
+            if ($cached !== null) {
+                return $cached;
             }
-
-            if ($companyId === null && method_exists($user, 'can')) {
-                return (bool) $user->can($permissionName);
-            }
-
-            return false;
-        } catch (\Throwable) {
-            return false;
+        } catch (\Throwable $e) {
+            report($e);
         }
+
+        return false;
     }
 
     protected static function currentCompanyId(): ?int
@@ -343,5 +200,257 @@ class BexiaMenuRuntime
 
         return null;
     }
+
+
+
+    // BEXIA_V582_PERF7I_MENU_RUNTIME_REQUEST_CACHE_START
+    private static ?bool $bexiaPerf7iTablesReady = null;
+
+    /** @var array<string, array<string, mixed>>|null */
+    private static ?array $bexiaPerf7iItemsByKey = null;
+
+    private static function bexiaPerf7iTablesReady(): bool
+    {
+        if (self::$bexiaPerf7iTablesReady !== null) {
+            return self::$bexiaPerf7iTablesReady;
+        }
+
+        try {
+            if (class_exists(\App\Support\Security\BexiaPermissionRequestCache::class)) {
+                self::$bexiaPerf7iTablesReady =
+                    \App\Support\Security\BexiaPermissionRequestCache::tableExists('bexia_menu_groups')
+                    && \App\Support\Security\BexiaPermissionRequestCache::tableExists('bexia_menu_items');
+
+                return self::$bexiaPerf7iTablesReady;
+            }
+
+            self::$bexiaPerf7iTablesReady =
+                \Illuminate\Support\Facades\Schema::hasTable('bexia_menu_groups')
+                && \Illuminate\Support\Facades\Schema::hasTable('bexia_menu_items');
+
+            return self::$bexiaPerf7iTablesReady;
+        } catch (\Throwable) {
+            return self::$bexiaPerf7iTablesReady = false;
+        }
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private static function bexiaPerf7iItemsByKey(): array
+    {
+        if (self::$bexiaPerf7iItemsByKey !== null) {
+            return self::$bexiaPerf7iItemsByKey;
+        }
+
+        self::$bexiaPerf7iItemsByKey = [];
+
+        if (! self::bexiaPerf7iTablesReady()) {
+            return self::$bexiaPerf7iItemsByKey;
+        }
+
+        try {
+            $cacheClass = \App\Support\Security\BexiaPermissionRequestCache::class;
+
+            $itemHasLabel = class_exists($cacheClass)
+                ? $cacheClass::columnExists('bexia_menu_items', 'label')
+                : \Illuminate\Support\Facades\Schema::hasColumn('bexia_menu_items', 'label');
+
+            $itemHasSort = class_exists($cacheClass)
+                ? $cacheClass::columnExists('bexia_menu_items', 'sort')
+                : \Illuminate\Support\Facades\Schema::hasColumn('bexia_menu_items', 'sort');
+
+            $itemHasVisible = class_exists($cacheClass)
+                ? $cacheClass::columnExists('bexia_menu_items', 'is_visible')
+                : \Illuminate\Support\Facades\Schema::hasColumn('bexia_menu_items', 'is_visible');
+
+            $itemHasPermission = class_exists($cacheClass)
+                ? $cacheClass::columnExists('bexia_menu_items', 'permission_name')
+                : \Illuminate\Support\Facades\Schema::hasColumn('bexia_menu_items', 'permission_name');
+
+            $groupHasLabel = class_exists($cacheClass)
+                ? $cacheClass::columnExists('bexia_menu_groups', 'label')
+                : \Illuminate\Support\Facades\Schema::hasColumn('bexia_menu_groups', 'label');
+
+            $groupHasName = class_exists($cacheClass)
+                ? $cacheClass::columnExists('bexia_menu_groups', 'name')
+                : \Illuminate\Support\Facades\Schema::hasColumn('bexia_menu_groups', 'name');
+
+            $groupHasVisible = class_exists($cacheClass)
+                ? $cacheClass::columnExists('bexia_menu_groups', 'is_visible')
+                : \Illuminate\Support\Facades\Schema::hasColumn('bexia_menu_groups', 'is_visible');
+
+            $select = [
+                'i.key as item_key',
+            ];
+
+            $select[] = $itemHasLabel
+                ? \Illuminate\Support\Facades\DB::raw('i.label as item_label')
+                : \Illuminate\Support\Facades\DB::raw('NULL as item_label');
+
+            $select[] = $itemHasSort
+                ? \Illuminate\Support\Facades\DB::raw('i.sort as item_sort')
+                : \Illuminate\Support\Facades\DB::raw('NULL as item_sort');
+
+            $select[] = $itemHasVisible
+                ? \Illuminate\Support\Facades\DB::raw('i.is_visible as item_visible')
+                : \Illuminate\Support\Facades\DB::raw('true as item_visible');
+
+            $select[] = $itemHasPermission
+                ? \Illuminate\Support\Facades\DB::raw('i.permission_name as permission_name')
+                : \Illuminate\Support\Facades\DB::raw('NULL as permission_name');
+
+            if ($groupHasLabel) {
+                $select[] = \Illuminate\Support\Facades\DB::raw('g.label as group_label');
+            } elseif ($groupHasName) {
+                $select[] = \Illuminate\Support\Facades\DB::raw('g.name as group_label');
+            } else {
+                $select[] = \Illuminate\Support\Facades\DB::raw('NULL as group_label');
+            }
+
+            $select[] = $groupHasVisible
+                ? \Illuminate\Support\Facades\DB::raw('g.is_visible as group_visible')
+                : \Illuminate\Support\Facades\DB::raw('true as group_visible');
+
+            $rows = \Illuminate\Support\Facades\DB::table('bexia_menu_items as i')
+                ->leftJoin('bexia_menu_groups as g', 'g.id', '=', 'i.group_id')
+                ->select($select)
+                ->get();
+
+            foreach ($rows as $row) {
+                $key = trim((string) ($row->item_key ?? ''));
+
+                if ($key === '') {
+                    continue;
+                }
+
+                self::$bexiaPerf7iItemsByKey[$key] = [
+                    'key' => $key,
+                    'label' => $row->item_label ?? null,
+                    'sort' => $row->item_sort ?? null,
+                    'item_visible' => (bool) ($row->item_visible ?? true),
+                    'group_label' => $row->group_label ?? null,
+                    'group_visible' => (bool) ($row->group_visible ?? true),
+                    'permission_name' => $row->permission_name ?? null,
+                ];
+            }
+        } catch (\Throwable $e) {
+            report($e);
+            self::$bexiaPerf7iItemsByKey = [];
+        }
+
+        return self::$bexiaPerf7iItemsByKey;
+    }
+
+    private static function bexiaPerf7iMenuRow(mixed $key): ?array
+    {
+        $key = trim((string) $key);
+
+        if ($key === '') {
+            return null;
+        }
+
+        $items = self::bexiaPerf7iItemsByKey();
+
+        return $items[$key] ?? null;
+    }
+
+    private static function bexiaPerf7iFallbackLabel(mixed $key): string
+    {
+        $text = trim((string) $key);
+
+        if ($text === '') {
+            return '';
+        }
+
+        $text = str_replace(['.', '_', '-'], ' ', $text);
+        $text = preg_replace('/\s+/', ' ', $text) ?: $text;
+
+        return mb_convert_case($text, MB_CASE_TITLE, 'UTF-8');
+    }
+
+    private static function bexiaPerf7iItemLabel(mixed $key, mixed $fallback = null): string
+    {
+        $row = self::bexiaPerf7iMenuRow($key);
+        $label = trim((string) ($row['label'] ?? ''));
+
+        if ($label !== '') {
+            return $label;
+        }
+
+        if (is_string($fallback) && trim($fallback) !== '') {
+            return $fallback;
+        }
+
+        return self::bexiaPerf7iFallbackLabel($key);
+    }
+
+    private static function bexiaPerf7iItemSort(mixed $key, mixed $fallback = null): int
+    {
+        $row = self::bexiaPerf7iMenuRow($key);
+
+        if ($row && is_numeric($row['sort'] ?? null)) {
+            return (int) $row['sort'];
+        }
+
+        return is_numeric($fallback) ? (int) $fallback : 0;
+    }
+
+    private static function bexiaPerf7iItemVisible(mixed $key, mixed $default = true): bool
+    {
+        $row = self::bexiaPerf7iMenuRow($key);
+
+        if (! $row) {
+            return (bool) $default;
+        }
+
+        return (bool) ($row['item_visible'] ?? true) && (bool) ($row['group_visible'] ?? true);
+    }
+
+    private static function bexiaPerf7iItemGroupLabel(mixed $key, mixed $fallback = null): string
+    {
+        $row = self::bexiaPerf7iMenuRow($key);
+        $label = trim((string) ($row['group_label'] ?? ''));
+
+        if ($label !== '') {
+            return $label;
+        }
+
+        return is_string($fallback) ? $fallback : '';
+    }
+
+    private static function bexiaPerf7iShouldRegister(mixed $key, mixed ...$args): bool
+    {
+        $row = self::bexiaPerf7iMenuRow($key);
+
+        if (! $row) {
+            return true;
+        }
+
+        if (! ((bool) ($row['item_visible'] ?? true) && (bool) ($row['group_visible'] ?? true))) {
+            return false;
+        }
+
+        $permissionName = trim((string) ($row['permission_name'] ?? ''));
+
+        if ($permissionName === '') {
+            return true;
+        }
+
+        try {
+            $cached = \App\Support\Security\BexiaPermissionRequestCache::allows(auth()->user(), $permissionName);
+
+            if ($cached !== null) {
+                return $cached;
+            }
+
+            return (bool) (auth()->user()?->can($permissionName) ?? false);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return false;
+        }
+    }
+    // BEXIA_V582_PERF7I_MENU_RUNTIME_REQUEST_CACHE_END
 
 }
