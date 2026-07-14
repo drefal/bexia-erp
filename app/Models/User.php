@@ -69,7 +69,36 @@ class User extends Authenticatable implements FilamentUser, HasTenants, HasAvata
 
     public function isGroupAdmin(): bool
     {
-        return $this->adminCompanyGroups()->exists();
+        // BEXIA_V582_PERF7I_GROUP_ADMIN_REQUEST_CACHE
+        static $bexiaPerf7iGroupAdminCache = [];
+
+        $args = func_get_args();
+        $userId = (int) $this->getKey();
+        $cacheKey = $userId . '|' . md5(serialize($args));
+
+        if (array_key_exists($cacheKey, $bexiaPerf7iGroupAdminCache)) {
+            return $bexiaPerf7iGroupAdminCache[$cacheKey];
+        }
+
+        try {
+            if ((bool) ($this->is_system_admin ?? false) || (method_exists($this, 'isSystemAdmin') && $this->isSystemAdmin())) {
+                return $bexiaPerf7iGroupAdminCache[$cacheKey] = true;
+            }
+
+            $query = $this->companyGroups();
+
+            if (isset($args[0]) && is_numeric($args[0])) {
+                $query->where('company_groups.id', (int) $args[0]);
+            }
+
+            return $bexiaPerf7iGroupAdminCache[$cacheKey] = (bool) $query
+                ->wherePivot('is_group_admin', true)
+                ->exists();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $bexiaPerf7iGroupAdminCache[$cacheKey] = false;
+        }
     }
 
     public function manageableCompanyGroupIds(): array

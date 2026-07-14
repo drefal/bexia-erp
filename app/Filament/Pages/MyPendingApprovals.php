@@ -61,6 +61,9 @@ public static function canAccess(): bool
 
     public static function getNavigationBadge(): ?string
     {
+        // BEXIA_V582_PERF7A_NAV_BADGE_DISABLED: evita conteos caros en cada carga del panel.
+        return null;
+
 if (! static::canUseApprovalsPage()) {
     return null;
 }
