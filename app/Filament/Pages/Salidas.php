@@ -201,6 +201,13 @@ private function applyCatalogOptionsToField(
         'bodega envio',
     ])) {
         $field['options'] = $shippingOptions;
+
+        // BEXIA_V5_82_8A3_SALIDAS_NATIVE_CATALOG_SELECTS
+        // El formulario se monta dinámicamente; el select nativo evita
+        // que Choices/Alpine deje el catálogo sin desplegar en este flujo.
+        $field['native'] = true;
+        $field['searchable'] = false;
+
         return $field;
     }
 
@@ -212,6 +219,11 @@ private function applyCatalogOptionsToField(
         'bodega recepcion',
     ])) {
         $field['options'] = $receivingOptions;
+
+        // BEXIA_V5_82_8A3_SALIDAS_NATIVE_CATALOG_SELECTS
+        $field['native'] = true;
+        $field['searchable'] = false;
+
         return $field;
     }
 
@@ -220,6 +232,11 @@ private function applyCatalogOptionsToField(
         'project',
     ])) {
         $field['options'] = $projectOptions;
+
+        // BEXIA_V5_82_8A3_SALIDAS_NATIVE_CATALOG_SELECTS
+        $field['native'] = true;
+        $field['searchable'] = false;
+
         return $field;
     }
 
