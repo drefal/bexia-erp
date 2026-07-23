@@ -211,6 +211,65 @@
 </style>
 
 
+{{-- BEXIA_V5828B5G_FAVORITE_CARD_STYLE --}}
+<style id="bexia-v5828b5g-favorite-card-style">
+    /*
+     * Los favoritos aparecen primero visualmente incluso si algún
+     * script posterior reorganiza las tarjetas.
+     */
+    .products > .product[data-product-is-favorite="1"] {
+        order: -1000;
+        border: 2px solid #f59e0b;
+        background:
+            linear-gradient(
+                145deg,
+                #fff7ed 0%,
+                #fffbeb 58%,
+                #ffffff 100%
+            );
+        box-shadow:
+            0 10px 24px rgba(245, 158, 11, .20);
+    }
+
+    .products > .product[data-product-is-favorite="1"]::before {
+        content: "⭐ FAVORITO";
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        z-index: 3;
+        padding: 3px 6px;
+        border: 1px solid #f59e0b;
+        border-radius: 999px;
+        background: #fef3c7;
+        color: #92400e;
+        font-size: 8px;
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: .25px;
+        box-shadow: 0 3px 8px rgba(146, 64, 14, .16);
+    }
+
+    .products > .product[data-product-is-favorite="1"] .pimg {
+        margin-top: 17px;
+        background: #fffdf7;
+    }
+
+    .products > .product[data-product-is-favorite="1"] .pname {
+        color: #78350f;
+    }
+
+    .products > .product[data-product-is-favorite="1"] .price {
+        color: #b45309;
+    }
+
+    .products > .product[data-product-is-favorite="1"]:hover {
+        border-color: #d97706;
+        box-shadow:
+            0 14px 30px rgba(217, 119, 6, .25);
+        transform: translateY(-1px);
+    }
+</style>
+
 </head>
 <body>
 @php
@@ -282,12 +341,12 @@
     <div class="shell">
         <main class="main">
             <div class="categories">
-                <a class="cat" href="{{ request()->fullUrlWithQuery(['pos_category' => 'favorites']) }}" style="background:#b91c1c; text-decoration:none;">
+                <a class="cat" data-v5828b5e-category="favorites" href="{{ request()->fullUrlWithQuery(['pos_category' => 'favorites']) }}" style="background:#b91c1c; text-decoration:none;">
                     <div class="icon">⭐</div>
                     Favoritos
                 </a>
 
-                <a class="cat" href="{{ request()->fullUrlWithQuery(['pos_category' => 'top_sellers']) }}" style="background:#0f172a; text-decoration:none;">
+                <a class="cat" data-v5828b5e-category="top_sellers" href="{{ request()->fullUrlWithQuery(['pos_category' => 'top_sellers']) }}" style="background:#0f172a; text-decoration:none;">
                     <div class="icon">🏆</div>
                     Más Vendido
                 </a>
@@ -305,7 +364,12 @@
                             : request()->fullUrlWithQuery(['pos_category' => $v5451CatId]);
                     @endphp
 
-                    <a class="cat" href="{{ $v5451CatHref }}" style="background:{{ $cat['color'] }}; text-decoration:none;">
+                    <a
+                        class="cat"
+                        data-v5828b5e-category="{{ in_array($v5451CatNameNormalized, ['todas', 'todos', 'todo', 'all'], true) ? 'all' : (string) $v5451CatId }}"
+                        href="{{ $v5451CatHref }}"
+                        style="background:{{ $cat['color'] }}; text-decoration:none;"
+                    >
                         <div class="icon">{{ $cat['icon'] }}</div>
                         {{ $cat['name'] }}
                     </a>
@@ -488,6 +552,24 @@
 
 
     /*
+     * BEXIA_V5828B5G_FAVORITES_FIRST
+     *
+     * En la vista Todas, los favoritos se envian primero desde
+     * Blade. El resto conserva su orden original.
+     */
+    if ($v5515cIsAllCategories ?? false) {
+        $v5336Products = $v5336Products
+            ->sortByDesc(function ($product): int {
+                return (bool) data_get(
+                    $product,
+                    'is_pos_favorite',
+                    false
+                ) ? 1 : 0;
+            })
+            ->values();
+    }
+
+    /*
      * BEXIA_V5527A_POS_PRODUCT_IMAGE_URL_HELPER
      */
     $v5527aProductImageUrl = function ($product): ?string {
@@ -553,7 +635,7 @@
                     No hay productos disponibles para este PDV. Revisa que los productos estén activos, puedan venderse y estén disponibles para PDV.
                 </div>
             @else
-                <div class="products">
+                <div id="v5828b5i-main-products-grid" class="products">
 @foreach($v5336Products as $product)
 
                         @php
@@ -630,6 +712,8 @@
                         <div
                             class="product {{ $product['can_sell'] ? '' : 'disabled' }}"
                             data-product-id="{{ $product['id'] ?? '' }}"
+                            data-product-category-id="{{ (int) ($product['category_id'] ?? 0) }}"
+                            data-product-is-favorite="{{ $v5451IsFavorite ? '1' : '0' }}"
                             data-product-name="{{ e($product['name'] ?? '') }}"
                             data-product-reference="{{ e($productReference ?? '') }}"
                             data-product-barcode="{{ e($v5490bProductBarcode) }}"
@@ -761,6 +845,8 @@
                             <div
                                 class="product v5515e-hidden-search-product {{ $product['can_sell'] ? '' : 'disabled' }}"
                                 data-product-id="{{ $product['id'] ?? '' }}"
+                            data-product-category-id="{{ (int) ($product['category_id'] ?? 0) }}"
+                            data-product-is-favorite="{{ $v5451IsFavorite ? '1' : '0' }}"
                                 data-product-name="{{ e($product['name'] ?? '') }}"
                                 data-product-reference="{{ e($productReference ?? '') }}"
                                 data-product-barcode="{{ e($v5490bProductBarcode) }}"
@@ -10861,6 +10947,904 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
+{{-- BEXIA_V5828B5C_CATEGORY_LOADING --}}
+<style id="bexia-v5828b5a-category-loading-style">
+    #bexia-v5828b5a-category-loading {
+        position: fixed;
+        inset: 0;
+        z-index: 30000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 23, 42, .60);
+        backdrop-filter: blur(2px);
+    }
+
+    #bexia-v5828b5a-category-loading.is-visible {
+        display: flex;
+    }
+
+    .bexia-v5828b5a-category-card {
+        min-width: 260px;
+        max-width: 90vw;
+        padding: 24px;
+        border-radius: 22px;
+        background: #ffffff;
+        color: #0f172a;
+        text-align: center;
+        box-shadow: 0 25px 80px rgba(15, 23, 42, .35);
+    }
+
+    .bexia-v5828b5a-category-spinner {
+        width: 40px;
+        height: 40px;
+        margin: 0 auto 14px;
+        border: 4px solid #dbeafe;
+        border-top-color: #2563eb;
+        border-radius: 999px;
+        animation: bexia-v5828b5a-category-spin .8s linear infinite;
+    }
+
+    @keyframes bexia-v5828b5a-category-spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+<div
+    id="bexia-v5828b5a-category-loading"
+    aria-hidden="true"
+    aria-live="polite"
+>
+    <div class="bexia-v5828b5a-category-card">
+        <div class="bexia-v5828b5a-category-spinner"></div>
+        <div style="font-size:18px;font-weight:950;">
+            Cargando productos
+        </div>
+        <div style="margin-top:6px;color:#64748b;font-weight:700;">
+            Actualizando categoria y existencias...
+        </div>
+    </div>
+</div>
+
+<script id="bexia-v5828b5a-category-loading-script">
+document.addEventListener('DOMContentLoaded', function () {
+    const overlay = document.getElementById(
+        'bexia-v5828b5a-category-loading'
+    );
+
+    function hideOverlay() {
+        if (!overlay) return;
+
+        overlay.classList.remove('is-visible');
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    document.querySelectorAll('.categories a.cat').forEach(function (link) {
+        link.addEventListener('click', function (event) {
+            if (
+                event.button !== 0
+                || event.ctrlKey
+                || event.metaKey
+                || event.shiftKey
+                || event.altKey
+            ) {
+                return;
+            }
+
+            if (!overlay) return;
+
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+        });
+    });
+
+    window.addEventListener('pageshow', hideOverlay);
+});
+</script>
+
+{{-- BEXIA_V5828B5E_LOCAL_CATEGORY_FILTER --}}
+{{-- BEXIA_V5828B5F_OVERLAY_IDS_ALIGNED --}}
+<style id="bexia-v5828b5e-local-category-style">
+    .categories a.cat.v5828b5e-active {
+        outline: 4px solid rgba(15, 23, 42, .22);
+        outline-offset: 2px;
+        transform: translateY(-1px);
+    }
+
+    #v5828b5e-category-status {
+        margin-top: 8px;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 850;
+    }
+</style>
+
+<script id="bexia-v5828b5e-local-category-script">
+document.addEventListener('DOMContentLoaded', function () {
+    'use strict';
+
+    const grid = document.getElementById(
+        'v5828b5i-main-products-grid'
+    );
+
+    if (!grid) {
+        return;
+    }
+
+    const cards = Array.from(
+        grid.children
+    ).filter(function (element) {
+        return element.matches(
+            '.product[data-product-id]'
+        );
+    });
+
+    const links = Array.from(
+        document.querySelectorAll(
+            '.categories a.cat[data-v5828b5e-category]'
+        )
+    );
+
+    if (cards.length === 0 || links.length === 0) {
+        return;
+    }
+
+    const urlCategory = new URL(
+        window.location.href
+    ).searchParams.get('pos_category');
+
+    /*
+     * El filtrado local se habilita cuando la pagina contiene
+     * el catalogo completo: carga inicial Todas.
+     *
+     * Mas vendido conserva recarga porque su calculo viene
+     * del servidor.
+     */
+    const localCatalogAvailable =
+        !urlCategory
+        || urlCategory === ''
+        || urlCategory === 'all'
+        || urlCategory === 'todos'
+        || urlCategory === '0';
+
+    cards.forEach(function (card, index) {
+        card.dataset.v5828b5eOriginalIndex =
+            String(index);
+    });
+
+    function favoriteValue(card) {
+        return card.dataset.productIsFavorite === '1'
+            ? 1
+            : 0;
+    }
+
+    function sortFavoritesFirst() {
+        const sorted = cards.slice().sort(
+            function (left, right) {
+                const favoriteDifference =
+                    favoriteValue(right)
+                    - favoriteValue(left);
+
+                if (favoriteDifference !== 0) {
+                    return favoriteDifference;
+                }
+
+                return Number(
+                    left.dataset.v5828b5eOriginalIndex || 0
+                ) - Number(
+                    right.dataset.v5828b5eOriginalIndex || 0
+                );
+            }
+        );
+
+        sorted.forEach(function (card) {
+            grid.appendChild(card);
+        });
+    }
+
+    function statusElement() {
+        let status = document.getElementById(
+            'v5828b5e-category-status'
+        );
+
+        if (!status) {
+            status = document.createElement('div');
+            status.id = 'v5828b5e-category-status';
+
+            const search = document.querySelector('.search');
+
+            if (search && search.parentNode) {
+                search.insertAdjacentElement(
+                    'afterend',
+                    status
+                );
+            }
+        }
+
+        return status;
+    }
+
+    function labelForCategory(key) {
+        const link = links.find(function (candidate) {
+            return String(
+                candidate.dataset.v5828b5eCategory || ''
+            ) === String(key);
+        });
+
+        return link
+            ? String(link.textContent || '')
+                .replace(/\s+/g, ' ')
+                .trim()
+            : 'Categoria';
+    }
+
+    function setActiveCategory(key) {
+        links.forEach(function (link) {
+            const active =
+                String(
+                    link.dataset.v5828b5eCategory || ''
+                ) === String(key);
+
+            link.classList.toggle(
+                'v5828b5e-active',
+                active
+            );
+        });
+    }
+
+    function hideServerOverlay() {
+        const overlay = document.getElementById(
+            'bexia-v5828b5a-category-loading'
+        );
+
+        if (overlay) {
+            overlay.classList.remove('is-visible');
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function applyCategory(key) {
+        let visible = 0;
+
+        cards.forEach(function (card) {
+            const cardCategory = String(
+                card.dataset.productCategoryId || '0'
+            );
+
+            const isFavorite =
+                card.dataset.productIsFavorite === '1';
+
+            let show = false;
+
+            if (key === 'all') {
+                show = true;
+            } else if (key === 'favorites') {
+                show = isFavorite;
+            } else if (/^\d+$/.test(String(key))) {
+                show = cardCategory === String(key);
+            }
+
+            card.style.display = show ? '' : 'none';
+
+            if (show) {
+                visible++;
+            }
+        });
+
+        setActiveCategory(key);
+        hideServerOverlay();
+
+        const status = statusElement();
+
+        if (status) {
+            status.textContent =
+                labelForCategory(key)
+                + ': '
+                + visible
+                + ' producto'
+                + (visible === 1 ? '' : 's');
+        }
+    }
+
+    if (localCatalogAvailable) {
+        sortFavoritesFirst();
+        setActiveCategory('all');
+
+        const status = statusElement();
+
+        if (status) {
+            const favoriteCount = cards.filter(
+                function (card) {
+                    return favoriteValue(card) === 1;
+                }
+            ).length;
+
+            status.textContent =
+                'Todas: '
+                + cards.length
+                + ' productos'
+                + (
+                    favoriteCount > 0
+                        ? ' · '
+                            + favoriteCount
+                            + ' favoritos primero'
+                        : ''
+                );
+        }
+    }
+
+    /*
+     * Captura el clic antes del listener anterior que muestra
+     * el overlay y deja navegar. Las categorias locales no
+     * realizan ninguna solicitud al servidor.
+     */
+    document.addEventListener(
+        'click',
+        function (event) {
+            const link = event.target.closest(
+                '.categories a.cat'
+                + '[data-v5828b5e-category]'
+            );
+
+            if (!link || !localCatalogAvailable) {
+                return;
+            }
+
+            const key = String(
+                link.dataset.v5828b5eCategory || ''
+            );
+
+            if (key === 'top_sellers') {
+                return;
+            }
+
+            if (
+                key !== 'all'
+                && key !== 'favorites'
+                && !/^\d+$/.test(key)
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (
+                typeof event.stopImmediatePropagation
+                === 'function'
+            ) {
+                event.stopImmediatePropagation();
+            }
+
+            const searchInput = document.getElementById(
+                'v5490b-product-search'
+            );
+
+            if (searchInput) {
+                searchInput.value = '';
+            }
+
+            const searchCounter = document.getElementById(
+                'v5490b-search-counter'
+            );
+
+            if (searchCounter) {
+                searchCounter.textContent = '';
+            }
+
+            applyCategory(key);
+        },
+        true
+    );
+
+    /*
+     * La busqueda existente es global. Al empezar a escribir,
+     * la categoria activa se presenta como Todas.
+     */
+    const searchInput = document.getElementById(
+        'v5490b-product-search'
+    );
+
+    if (searchInput && localCatalogAvailable) {
+        searchInput.addEventListener(
+            'input',
+            function () {
+                if (String(searchInput.value || '').trim()) {
+                    setActiveCategory('all');
+                }
+            }
+        );
+    }
+});
+</script>
+
+{{-- BEXIA_V5828B5I_FIXED_FAVORITES_SECTION --}}
+{{-- BEXIA_V5828B5K_RUNTIME --}}
+@php
+    /*
+     * B5K:
+     * La lista se limita a los productos que ya recibió esta vista.
+     * La consulta es exclusivamente de lectura.
+     */
+    $v5828b5kCatalogProductIds = collect($products ?? [])
+        ->pluck('id')
+        ->map(fn ($id): int => (int) $id)
+        ->filter(fn ($id): bool => $id > 0)
+        ->unique()
+        ->values();
+
+    $v5828b5kFavoriteIdsFromDatabase = collect();
+
+    try {
+        if (
+            $v5828b5kCatalogProductIds->isNotEmpty()
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'products'
+            )
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'products',
+                'is_pos_favorite'
+            )
+        ) {
+            $v5828b5kFavoriteIdsFromDatabase =
+                \Illuminate\Support\Facades\DB::table('products')
+                    ->whereIn(
+                        'id',
+                        $v5828b5kCatalogProductIds->all()
+                    )
+                    ->where('is_pos_favorite', true)
+                    ->pluck('id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->filter(fn ($id): bool => $id > 0)
+                    ->unique()
+                    ->values();
+        }
+    } catch (\Throwable $e) {
+        $v5828b5kFavoriteIdsFromDatabase = collect();
+    }
+
+    /*
+     * Respaldo: si la consulta no devuelve registros, usar la
+     * bandera que ya llegó en el payload del controlador.
+     */
+    $v5828b5kFavoriteIdsFromPayload = collect($products ?? [])
+        ->filter(
+            fn ($product): bool =>
+                (bool) data_get(
+                    $product,
+                    'is_pos_favorite',
+                    false
+                )
+        )
+        ->pluck('id')
+        ->map(fn ($id): int => (int) $id)
+        ->filter(fn ($id): bool => $id > 0)
+        ->unique()
+        ->values();
+
+    $v5828b5iFavoriteProductIds =
+        $v5828b5kFavoriteIdsFromDatabase->isNotEmpty()
+            ? $v5828b5kFavoriteIdsFromDatabase
+                ->map(fn ($id): string => (string) $id)
+                ->values()
+                ->all()
+            : $v5828b5kFavoriteIdsFromPayload
+                ->map(fn ($id): string => (string) $id)
+                ->values()
+                ->all();
+@endphp
+
+<style id="v5828b5i-fixed-favorites-style">
+    #v5828b5i-favorites-section {
+        margin-top: 12px;
+        margin-bottom: 14px;
+        padding: 12px;
+        border: 2px solid #f59e0b;
+        border-radius: 17px;
+        background:
+            linear-gradient(
+                135deg,
+                #fffbeb 0%,
+                #fff7ed 55%,
+                #ffffff 100%
+            );
+        box-shadow:
+            0 10px 26px rgba(245, 158, 11, .14);
+    }
+
+    #v5828b5i-favorites-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 9px;
+    }
+
+    #v5828b5i-favorites-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: #92400e;
+        font-size: 15px;
+        font-weight: 950;
+    }
+
+    #v5828b5i-favorites-count {
+        border: 1px solid #f59e0b;
+        border-radius: 999px;
+        padding: 3px 8px;
+        background: #fef3c7;
+        color: #92400e;
+        font-size: 10px;
+        font-weight: 950;
+    }
+
+    #v5828b5i-favorites-grid {
+        margin-top: 0;
+        grid-template-columns:
+            repeat(auto-fill, minmax(118px, 150px));
+        justify-content: start;
+    }
+
+    #v5828b5i-favorites-grid > .product {
+        order: initial !important;
+        border: 2px solid #f59e0b !important;
+        background:
+            linear-gradient(
+                145deg,
+                #fff7ed 0%,
+                #fffbeb 65%,
+                #ffffff 100%
+            ) !important;
+        box-shadow:
+            0 9px 22px rgba(217, 119, 6, .20) !important;
+    }
+
+    #v5828b5i-favorites-grid > .product::before {
+        content: "⭐ FAVORITO";
+    }
+
+    #v5828b5i-favorites-grid > .product .pname {
+        color: #78350f !important;
+    }
+
+    #v5828b5i-favorites-grid > .product .price {
+        color: #b45309 !important;
+    }
+
+    #v5828b5i-main-label {
+        margin-top: 12px;
+        margin-bottom: -3px;
+        color: #475569;
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .45px;
+    }
+
+    @media (max-width: 720px) {
+        #v5828b5i-favorites-grid {
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+        }
+    }
+</style>
+
+<script id="v5828b5i-fixed-favorites-script">
+(function () {
+    'use strict';
+
+    /*
+     * BEXIA_V5828B5K_RUNTIME
+     *
+     * Funciona tanto durante carga HTML normal como cuando la
+     * pantalla ya terminó de cargar.
+     */
+    if (window.__BEXIA_V5828B5K_BOOTSTRAPPED) {
+        if (
+            typeof window.BEXIA_POS_INSTALL_FIXED_FAVORITES
+            === 'function'
+        ) {
+            window.setTimeout(
+                window.BEXIA_POS_INSTALL_FIXED_FAVORITES,
+                0
+            );
+        }
+
+        return;
+    }
+
+    window.__BEXIA_V5828B5K_BOOTSTRAPPED = true;
+
+    const favoriteIds = @json(
+        $v5828b5iFavoriteProductIds
+    ).map(String);
+
+    function ensureSection(mainGrid) {
+        let section = document.getElementById(
+            'v5828b5i-favorites-section'
+        );
+
+        if (!section) {
+            section = document.createElement('section');
+            section.id = 'v5828b5i-favorites-section';
+
+            const header = document.createElement('div');
+            header.id = 'v5828b5i-favorites-header';
+
+            const title = document.createElement('div');
+            title.id = 'v5828b5i-favorites-title';
+            title.textContent = '⭐ Productos favoritos';
+
+            const count = document.createElement('div');
+            count.id = 'v5828b5i-favorites-count';
+
+            header.appendChild(title);
+            header.appendChild(count);
+
+            const favoritesGrid =
+                document.createElement('div');
+
+            favoritesGrid.id =
+                'v5828b5i-favorites-grid';
+
+            favoritesGrid.className = 'products';
+
+            section.appendChild(header);
+            section.appendChild(favoritesGrid);
+
+            mainGrid.parentNode.insertBefore(
+                section,
+                mainGrid
+            );
+        }
+
+        let mainLabel = document.getElementById(
+            'v5828b5i-main-label'
+        );
+
+        if (!mainLabel) {
+            mainLabel = document.createElement('div');
+            mainLabel.id = 'v5828b5i-main-label';
+            mainLabel.textContent = 'Todos los productos';
+
+            mainGrid.parentNode.insertBefore(
+                mainLabel,
+                mainGrid
+            );
+        }
+
+        return {
+            section,
+            favoritesGrid: document.getElementById(
+                'v5828b5i-favorites-grid'
+            ),
+            count: document.getElementById(
+                'v5828b5i-favorites-count'
+            ),
+        };
+    }
+
+    function cardSelector(productId) {
+        const safeId = (
+            window.CSS
+            && typeof window.CSS.escape === 'function'
+        )
+            ? window.CSS.escape(String(productId))
+            : String(productId).replace(
+                /["\\]/g,
+                '\\$&'
+            );
+
+        return (
+            '.product[data-product-id="'
+            + safeId
+            + '"]'
+        );
+    }
+
+    function findCard(productId, mainGrid, favoritesGrid) {
+        const selector = cardSelector(productId);
+
+        return (
+            mainGrid.querySelector(selector)
+            || document
+                .getElementById(
+                    'v5515e-global-search-products'
+                )
+                ?.querySelector(selector)
+            || favoritesGrid.querySelector(selector)
+            || document.querySelector(selector)
+            || null
+        );
+    }
+
+    function selectedCategoryKey() {
+        const params = new URL(
+            window.location.href
+        ).searchParams;
+
+        return String(
+            params.get('pos_category') || 'all'
+        );
+    }
+
+    function categoryShowsFavorites(key) {
+        const normalized = String(key || 'all');
+
+        return (
+            normalized === 'all'
+            || normalized === 'todos'
+            || normalized === '0'
+            || normalized === 'favorites'
+            || normalized === ''
+        );
+    }
+
+    function installFavorites() {
+        const mainGrid = document.getElementById(
+            'v5828b5i-main-products-grid'
+        );
+
+        if (!mainGrid || favoriteIds.length === 0) {
+            window.BEXIA_V5828B5K_RUNTIME_STATE = {
+                favoriteIds,
+                installed: 0,
+                mainGridFound: Boolean(mainGrid),
+                reason: favoriteIds.length === 0
+                    ? 'no_favorite_ids'
+                    : 'main_grid_missing',
+                readyState: document.readyState,
+            };
+
+            return 0;
+        }
+
+        const refs = ensureSection(mainGrid);
+
+        if (!refs.favoritesGrid) {
+            return 0;
+        }
+
+        let installed = 0;
+
+        favoriteIds.forEach(function (productId) {
+            const card = findCard(
+                productId,
+                mainGrid,
+                refs.favoritesGrid
+            );
+
+            if (!card) {
+                return;
+            }
+
+            card.dataset.productIsFavorite = '1';
+
+            card.classList.remove(
+                'v5515e-hidden-search-product'
+            );
+
+            card.style.removeProperty('display');
+
+            if (card.parentElement !== refs.favoritesGrid) {
+                refs.favoritesGrid.appendChild(card);
+            }
+
+            installed++;
+        });
+
+        if (refs.count) {
+            refs.count.textContent =
+                installed
+                + ' favorito'
+                + (installed === 1 ? '' : 's');
+        }
+
+        refs.section.hidden = (
+            installed === 0
+            || !categoryShowsFavorites(
+                selectedCategoryKey()
+            )
+        );
+
+        refs.section.dataset.favoriteCardsMoved =
+            String(installed);
+
+        refs.section.dataset.runtimeVersion =
+            'V5.82.8b5k2';
+
+        window.BEXIA_V5828B5K_RUNTIME_STATE = {
+            favoriteIds,
+            installed,
+            mainGridFound: true,
+            sectionFound: true,
+            readyState: document.readyState,
+            executedAt: new Date().toISOString(),
+        };
+
+        console.info(
+            'BEXIA V5.82.8b5k2 favoritos instalados:',
+            window.BEXIA_V5828B5K_RUNTIME_STATE
+        );
+
+        return installed;
+    }
+
+    window.BEXIA_POS_INSTALL_FIXED_FAVORITES =
+        installFavorites;
+
+    function scheduleInstall() {
+        [0, 60, 250, 900].forEach(function (delay) {
+            window.setTimeout(
+                installFavorites,
+                delay
+            );
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener(
+            'DOMContentLoaded',
+            scheduleInstall,
+            { once: true }
+        );
+    } else {
+        scheduleInstall();
+    }
+
+    window.addEventListener(
+        'pageshow',
+        scheduleInstall
+    );
+
+    document.addEventListener(
+        'bexia:pos-products-refreshed',
+        scheduleInstall
+    );
+
+    document.addEventListener(
+        'click',
+        function (event) {
+            const link = event.target.closest(
+                '.categories a.cat'
+                + '[data-v5828b5e-category]'
+            );
+
+            if (!link) {
+                return;
+            }
+
+            const key = String(
+                link.dataset.v5828b5eCategory || ''
+            );
+
+            window.requestAnimationFrame(function () {
+                const section = document.getElementById(
+                    'v5828b5i-favorites-section'
+                );
+
+                if (section) {
+                    section.hidden =
+                        !categoryShowsFavorites(key);
+                }
+
+                if (categoryShowsFavorites(key)) {
+                    installFavorites();
+                }
+            });
+        },
+        true
+    );
+
+    /*
+     * Primera ejecución inmediata, incluso si DOMContentLoaded
+     * ya ocurrió antes de evaluar este script.
+     */
+    installFavorites();
+})();
+</script>
+
 </body>
 </html>
 
@@ -10914,7 +11898,9 @@ document.addEventListener('click', function (event) {
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('v5490b-product-search');
     const clearButton = document.getElementById('v5490b-clear-search');
-    const visibleGrid = document.querySelector('.products');
+    const visibleGrid = document.getElementById(
+        'v5828b5i-main-products-grid'
+    );
     const hiddenPool = document.getElementById('v5515e-global-search-products');
 
     if (!searchInput || !visibleGrid || !hiddenPool) {
