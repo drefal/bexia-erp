@@ -237,18 +237,44 @@ public static function canViewAny(): bool
                     Forms\Components\Select::make('default_warehouse_id')
                         ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-wh'])
                         ->label('Almacén predeterminado')
-                        ->searchable()
-                        ->preload()
-                        ->options(fn (): array => static::warehouseOptions())
-                        ->reactive(),
+                        // BEXIA_V5_82_8A6D_NATIVE_DEFAULT_SELECTS
+                        // Evita Choices/Alpine en este formulario.
+                        ->native()
+                        // BEXIA_V5_82_8A6C_GROUP_DEFAULT_PREFERENCES
+                        ->options(
+                            fn (): array =>
+                                static::groupDefaultWarehouseOptions()
+                        )
+                        ->live()
+                        ->afterStateUpdated(
+                            function (Forms\Set $set): void {
+                                $set('default_location_id', null);
+                            }
+                        ),
 
                     Forms\Components\Select::make('default_location_id')
                         ->extraAttributes(['class' => 'bexia-usr-field bexia-usr-field-loc'])
                         ->label('Ubicación predeterminada')
-                        ->searchable()
-                        ->preload()
-                        ->options(fn (): array => static::locationOptions())
-                        ->helperText('No se borra al cambiar almacén. Al guardar se valida que pertenezca al almacén seleccionado.'),
+                        // BEXIA_V5_82_8A6D_NATIVE_DEFAULT_SELECTS
+                        ->native()
+                        ->options(
+                            fn (Forms\Get $get): array =>
+                                static::groupDefaultLocationOptions(
+                                    (int) (
+                                        $get('default_warehouse_id') ?? 0
+                                    )
+                                )
+                        )
+                        ->disabled(
+                            fn (Forms\Get $get): bool =>
+                                blank($get('default_warehouse_id'))
+                        )
+                        ->placeholder(
+                            'Selecciona primero un almacén'
+                        )
+                        ->helperText(
+                            'Solo se muestran ubicaciones activas del almacén seleccionado.'
+                        ),
                 ])
                 ->columns(2),
 
@@ -789,30 +815,240 @@ public static function canViewAny(): bool
     }
 
 
-    public static function normalizeOperationalDefaults(array $data): array
-    {
-        $warehouseId = (int) ($data['default_warehouse_id'] ?? 0);
-        $locationId = (int) ($data['default_location_id'] ?? 0);
 
-        if ($warehouseId <= 0 && $locationId <= 0) {
+    /**
+     * @return array<int, int>
+     */
+    private static function groupDefaultCompanyIds(
+        ?int $tenantCompanyId = null
+    ): array {
+        $tenantCompanyId = $tenantCompanyId
+            ?: (int) (
+                \Filament\Facades\Filament::getTenant()?->getKey()
+                ?? 0
+            );
+
+        if ($tenantCompanyId <= 0) {
+            return [];
+        }
+
+        $tenantCompany = \App\Models\Company::query()
+            ->select([
+                'id',
+                'company_group_id',
+            ])
+            ->find($tenantCompanyId);
+
+        if (! $tenantCompany) {
+            return [];
+        }
+
+        $groupId = (int) (
+            $tenantCompany->company_group_id ?? 0
+        );
+
+        $query = \App\Models\Company::query()
+            ->where('active', true);
+
+        if ($groupId > 0) {
+            $query->where('company_group_id', $groupId);
+        } else {
+            $query->whereKey($tenantCompanyId);
+        }
+
+        return $query
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function groupDefaultWarehouseOptions(
+        ?int $tenantCompanyId = null
+    ): array {
+        $companyIds = static::groupDefaultCompanyIds(
+            $tenantCompanyId
+        );
+
+        if ($companyIds === []) {
+            return [];
+        }
+
+        return \Illuminate\Support\Facades\DB::table(
+            'warehouses'
+        )
+            ->join(
+                'companies',
+                'companies.id',
+                '=',
+                'warehouses.company_id'
+            )
+            ->whereIn(
+                'warehouses.company_id',
+                $companyIds
+            )
+            ->where('warehouses.is_active', true)
+            ->where('companies.active', true)
+            ->orderBy('companies.name')
+            ->orderBy('warehouses.name')
+            ->orderBy('warehouses.id')
+            ->get([
+                'warehouses.id',
+                'warehouses.code',
+                'warehouses.name AS warehouse_name',
+                'companies.name AS company_name',
+            ])
+            ->mapWithKeys(function ($warehouse): array {
+                $label =
+                    trim((string) $warehouse->company_name) .
+                    ' — ' .
+                    trim((string) $warehouse->warehouse_name);
+
+                if (filled($warehouse->code)) {
+                    $label .=
+                        ' [' .
+                        trim((string) $warehouse->code) .
+                        ']';
+                }
+
+                return [
+                    (string) $warehouse->id => $label,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function groupDefaultLocationOptions(
+        int $warehouseId,
+        ?int $tenantCompanyId = null
+    ): array {
+        if ($warehouseId <= 0) {
+            return [];
+        }
+
+        $companyIds = static::groupDefaultCompanyIds(
+            $tenantCompanyId
+        );
+
+        if ($companyIds === []) {
+            return [];
+        }
+
+        $warehouse = \Illuminate\Support\Facades\DB::table(
+            'warehouses'
+        )
+            ->where('id', $warehouseId)
+            ->whereIn('company_id', $companyIds)
+            ->where('is_active', true)
+            ->first([
+                'id',
+                'company_id',
+            ]);
+
+        if (! $warehouse) {
+            return [];
+        }
+
+        return \Illuminate\Support\Facades\DB::table(
+            'stock_locations'
+        )
+            ->where('warehouse_id', $warehouseId)
+            ->where(
+                'company_id',
+                (int) $warehouse->company_id
+            )
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get([
+                'id',
+                'code',
+                'name',
+            ])
+            ->mapWithKeys(function ($location): array {
+                $label = trim((string) $location->name);
+
+                if (filled($location->code)) {
+                    $label .=
+                        ' [' .
+                        trim((string) $location->code) .
+                        ']';
+                }
+
+                return [
+                    (string) $location->id => $label,
+                ];
+            })
+            ->all();
+    }
+
+    public static function normalizeOperationalDefaults(array $data): array {
+        $warehouseId = (int) (
+            $data['default_warehouse_id'] ?? 0
+        );
+
+        $locationId = (int) (
+            $data['default_location_id'] ?? 0
+        );
+
+        if ($locationId > 0 && $warehouseId <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'default_warehouse_id' =>
+                    'Selecciona un almacén predeterminado antes de guardar una ubicación predeterminada.',
+            ]);
+        }
+
+        if ($warehouseId <= 0) {
             return $data;
         }
 
-        if ($warehouseId <= 0 && $locationId > 0) {
+        $companyIds = static::groupDefaultCompanyIds();
+
+        $warehouse = \Illuminate\Support\Facades\DB::table(
+            'warehouses'
+        )
+            ->where('id', $warehouseId)
+            ->whereIn('company_id', $companyIds)
+            ->where('is_active', true)
+            ->first([
+                'id',
+                'company_id',
+            ]);
+
+        if (! $warehouse) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'default_warehouse_id' => 'Selecciona un almacén predeterminado antes de guardar una ubicación predeterminada.',
+                'default_warehouse_id' =>
+                    'El almacén predeterminado no pertenece al grupo empresarial actual o no está activo.',
             ]);
         }
 
-        if ($warehouseId > 0 && ! array_key_exists($warehouseId, static::warehouseOptions())) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'default_warehouse_id' => 'El almacén predeterminado no pertenece a la empresa actual o no está activo.',
-            ]);
+        if ($locationId <= 0) {
+            return $data;
         }
 
-        if ($locationId > 0 && ! array_key_exists($locationId, static::locationOptions($warehouseId))) {
+        $locationExists = \Illuminate\Support\Facades\DB::table(
+            'stock_locations'
+        )
+            ->where('id', $locationId)
+            ->where('warehouse_id', $warehouseId)
+            ->where(
+                'company_id',
+                (int) $warehouse->company_id
+            )
+            ->where('is_active', true)
+            ->exists();
+
+        if (! $locationExists) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'default_location_id' => 'La ubicación predeterminada debe pertenecer al almacén seleccionado y a la empresa actual.',
+                'default_location_id' =>
+                    'La ubicación predeterminada debe pertenecer al almacén seleccionado y estar activa.',
             ]);
         }
 

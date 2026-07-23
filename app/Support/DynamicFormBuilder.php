@@ -157,7 +157,11 @@ class DynamicFormBuilder
             'select' => Forms\Components\Select::make($name)
                 ->label($label)
                 ->options(self::normalizeSelectOptions($f['options'] ?? []))
-                ->searchable()
+                // BEXIA_V5_82_8A3_DYNAMIC_SELECT_FLAGS
+                // Conserva el comportamiento anterior por defecto, pero
+                // permite que un formulario indique select nativo/no buscable.
+                ->native((bool) ($f['native'] ?? false))
+                ->searchable((bool) ($f['searchable'] ?? true))
                 ->required($required),
 
             /**
