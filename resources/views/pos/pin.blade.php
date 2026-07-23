@@ -38,7 +38,7 @@
                 <div class="error">{{ session('error') }}</div>
             @endif
 
-            <form method="POST" action="{{ url('/pos/' . $pos->id . '/cashiers/' . $staffKeyForPin . '/login') }}">
+            <form id="bexia-pos-pin-form" method="POST" action="{{ url('/pos/' . $pos->id . '/cashiers/' . $staffKeyForPin . '/login') }}">
                 @csrf
                 <input type="password" name="pin" inputmode="numeric" autofocus placeholder="••••">
                 <button type="submit">Entrar al PDV</button>
@@ -333,9 +333,203 @@ document.addEventListener('DOMContentLoaded', function () {
 
         confirmed = true;
         closeModal();
-        pendingForm.submit();
+
+        const v5828b5eFormToSubmit = pendingForm;
+
+        if (
+            typeof window.BEXIA_POS_SHOW_PIN_LOADING
+            === 'function'
+        ) {
+            window.BEXIA_POS_SHOW_PIN_LOADING(
+                'Abriendo sesion'
+            );
+        }
+
+        /*
+         * BEXIA_V5828B5E_DELAY_NATIVE_SUBMIT
+         *
+         * pendingForm.submit() no dispara el evento submit.
+         * Esperamos un frame y unos milisegundos para que el
+         * navegador alcance a dibujar el overlay.
+         */
+        window.requestAnimationFrame(function () {
+            window.setTimeout(function () {
+                v5828b5eFormToSubmit.submit();
+            }, 90);
+        });
     });
 });
+</script>
+
+{{-- BEXIA_V5828B5C_PIN_LOADING --}}
+<style id="bexia-v5828b5a-pin-loading-style">
+    #bexia-v5828b5a-pin-loading {
+        position: fixed;
+        inset: 0;
+        z-index: 30000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(15, 23, 42, .72);
+        backdrop-filter: blur(3px);
+    }
+
+    #bexia-v5828b5a-pin-loading.is-visible {
+        display: flex;
+    }
+
+    .bexia-v5828b5a-loading-card {
+        width: min(390px, 92vw);
+        padding: 30px 24px;
+        border-radius: 24px;
+        background: #ffffff;
+        box-shadow: 0 28px 90px rgba(15, 23, 42, .35);
+        text-align: center;
+    }
+
+    .bexia-v5828b5a-spinner {
+        width: 46px;
+        height: 46px;
+        margin: 0 auto 18px;
+        border: 5px solid #dbeafe;
+        border-top-color: #2563eb;
+        border-radius: 999px;
+        animation: bexia-v5828b5a-spin .8s linear infinite;
+    }
+
+    @keyframes bexia-v5828b5a-spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+<div
+    id="bexia-v5828b5a-pin-loading"
+    aria-hidden="true"
+    aria-live="polite"
+>
+    <div class="bexia-v5828b5a-loading-card">
+        <div class="bexia-v5828b5a-spinner"></div>
+        <div
+            id="bexia-v5828b5a-pin-loading-title"
+            style="font-size:20px;font-weight:950;color:#0f172a;"
+        >
+            Validando cajero
+        </div>
+        <div style="margin-top:8px;color:#64748b;font-weight:700;">
+            Preparando productos, existencias y configuracion del PDV...
+        </div>
+    </div>
+</div>
+
+<script id="bexia-v5828b5a-pin-loading-script">
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('bexia-pos-pin-form');
+    const overlay = document.getElementById(
+        'bexia-v5828b5a-pin-loading'
+    );
+    const title = document.getElementById(
+        'bexia-v5828b5a-pin-loading-title'
+    );
+    const submitButton = form
+        ? form.querySelector('button[type="submit"]')
+        : null;
+
+    function showLoading(message) {
+        if (!overlay) return;
+
+        if (title && message) {
+            title.textContent = message;
+        }
+
+        overlay.classList.add('is-visible');
+        overlay.setAttribute('aria-hidden', 'false');
+
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.textContent = 'Cargando PDV...';
+        }
+    }
+
+    function hideLoading() {
+        if (!overlay) return;
+
+        overlay.classList.remove('is-visible');
+        overlay.setAttribute('aria-hidden', 'true');
+
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Entrar al PDV';
+        }
+    }
+
+    if (form) {
+        form.addEventListener('submit', function (event) {
+            window.setTimeout(function () {
+                // El flujo de fondo inicial cancela temporalmente el submit.
+                // Solo mostramos el overlay cuando el formulario realmente
+                // continuara hacia el servidor.
+                if (!event.defaultPrevented) {
+                    showLoading('Validando cajero');
+                }
+            }, 0);
+        });
+    }
+
+    const openingConfirm = document.getElementById(
+        'v5487b-opening-confirm'
+    );
+
+    if (openingConfirm) {
+        openingConfirm.addEventListener('click', function () {
+            window.setTimeout(function () {
+                showLoading('Abriendo sesion');
+            }, 40);
+        });
+    }
+
+    window.addEventListener('pageshow', hideLoading);
+});
+</script>
+
+{{-- BEXIA_V5828B5E_PIN_LOADING_BRIDGE --}}
+{{-- BEXIA_V5828B5F_OVERLAY_IDS_ALIGNED --}}
+<script id="bexia-v5828b5e-pin-loading-bridge">
+(function () {
+    'use strict';
+
+    window.BEXIA_POS_SHOW_PIN_LOADING = function (message) {
+        const overlay = document.getElementById(
+            'bexia-v5828b5a-pin-loading'
+        );
+
+        const title = document.getElementById(
+            'bexia-v5828b5a-pin-loading-title'
+        );
+
+        const form = document.getElementById(
+            'bexia-pos-pin-form'
+        );
+
+        const button = form
+            ? form.querySelector('button[type="submit"]')
+            : null;
+
+        if (title && message) {
+            title.textContent = message;
+        }
+
+        if (overlay) {
+            overlay.classList.add('is-visible');
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Cargando PDV...';
+        }
+    };
+})();
 </script>
 
 </body>

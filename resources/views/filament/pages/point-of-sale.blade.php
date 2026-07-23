@@ -450,9 +450,10 @@
                 Ejecuta el instalador de datos de prueba incluido en V5.31.1 o crea un PDV manualmente.
             </div>
         @else
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:18px;">
+            {{-- BEXIA_V5828B2_POS_CARDS_GLOBAL --}}
+            <div class="bexia-pos-point-grid" data-bexia-version="V5.82.8b2" style="display:flex; flex-wrap:wrap; gap:18px; align-items:stretch; justify-content:flex-start; width:100%;">
                 @foreach($posPoints as $pos)
-                    <div style="background:#fff; border:1px solid #dbe3ef; border-radius:20px; padding:20px; box-shadow:0 10px 26px rgba(15,23,42,.05);">
+                    <div class="bexia-pos-point-card" style="flex:0 1 360px; width:100%; max-width:360px; min-width:0; background:#fff; border:1px solid #dbe3ef; border-radius:20px; padding:20px; box-shadow:0 10px 26px rgba(15,23,42,.05); overflow-wrap:anywhere;">
                         <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
                             <div>
                                 <div style="font-size:13px; font-weight:800; color:#2563eb;">{{ $pos->code ?: ('PDV-' . $pos->id) }}</div>
@@ -529,7 +530,8 @@
                         </div>
                     </div>
                 @endforeach
-            </div>
+                </div>
         @endif
     </div>
+
 </x-filament-panels::page>

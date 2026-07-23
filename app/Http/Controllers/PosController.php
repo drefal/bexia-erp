@@ -1090,7 +1090,9 @@ abort_if(! $sessionRow, 404);
         }
 
         $limit = (int) ($pos->loaded_products_limit ?? 500);
-        $limit = max(20, min($limit, 1000));
+        // BEXIA_V5828B5C_CATALOG_LIMIT
+        // Permite considerar el catalogo completo de empresas medianas.
+        $limit = max(20, min($limit, 5000));
 
         $query = DB::table('products');
 
@@ -1131,15 +1133,288 @@ abort_if(! $sessionRow, 404);
             // No filtra por la inicial; solo se usa como categoría seleccionada visualmente en versiones posteriores.
         }
 
+        // BEXIA_V5828B5C_STOCK_CANDIDATES_BEFORE_LIMIT
+        // El limite debe aplicarse después de reducir el catálogo a productos
+        // relacionados con existencia, series o venta permitida sin stock.
+        $v5828b5cCandidateIds = collect();
+
+        $v5828b5cCompanyId = (int) ($pos->company_id ?? 0);
+        $v5828b5cWarehouseId = (int) ($pos->warehouse_id ?? 0);
+        $v5828b5cLocationId =
+            (int) ($this->configuredStockLocationId($pos) ?? 0);
+
+        $v5828b5cCurrentWarehouseScope =
+            (string) ($pos->stock_scope ?? 'current_warehouse')
+                === 'current_warehouse';
+
+        if (
+            Schema::hasTable('stock_quants')
+            && Schema::hasColumn('stock_quants', 'product_id')
+        ) {
+            $v5828b5cStockQuery = DB::table('stock_quants')
+                ->whereNotNull('product_id');
+
+            if (
+                Schema::hasColumn('stock_quants', 'quantity')
+            ) {
+                $v5828b5cStockQuery->where('quantity', '>', 0);
+            }
+
+            if (
+                $v5828b5cCompanyId > 0
+                && Schema::hasColumn('stock_quants', 'company_id')
+            ) {
+                $v5828b5cStockQuery->where(
+                    'company_id',
+                    $v5828b5cCompanyId
+                );
+            }
+
+            if (
+                $v5828b5cCurrentWarehouseScope
+                && $v5828b5cWarehouseId > 0
+                && Schema::hasColumn('stock_quants', 'warehouse_id')
+            ) {
+                $v5828b5cStockQuery->where(
+                    'warehouse_id',
+                    $v5828b5cWarehouseId
+                );
+            }
+
+            if (
+                $v5828b5cCurrentWarehouseScope
+                && $v5828b5cLocationId > 0
+                && Schema::hasColumn('stock_quants', 'location_id')
+            ) {
+                $v5828b5cStockQuery->where(
+                    'location_id',
+                    $v5828b5cLocationId
+                );
+            }
+
+            $v5828b5cHasQuantVariant =
+                Schema::hasColumn(
+                    'stock_quants',
+                    'product_variant_id'
+                );
+
+            $v5828b5cQuantColumns = ['product_id'];
+
+            if ($v5828b5cHasQuantVariant) {
+                $v5828b5cQuantColumns[] = 'product_variant_id';
+            }
+
+            $v5828b5cQuantIds = $v5828b5cStockQuery
+                ->get($v5828b5cQuantColumns)
+                ->map(function ($row) use (
+                    $v5828b5cHasQuantVariant
+                ): int {
+                    $variantId = $v5828b5cHasQuantVariant
+                        ? (int) ($row->product_variant_id ?? 0)
+                        : 0;
+
+                    return $variantId > 0
+                        ? $variantId
+                        : (int) ($row->product_id ?? 0);
+                });
+
+            $v5828b5cCandidateIds =
+                $v5828b5cCandidateIds->merge(
+                    $v5828b5cQuantIds
+                );
+        }
+
+        if (
+            Schema::hasTable('stock_serial_numbers')
+            && Schema::hasColumn(
+                'stock_serial_numbers',
+                'product_id'
+            )
+        ) {
+            $v5828b5cSerialQuery =
+                DB::table('stock_serial_numbers')
+                    ->whereNotNull('product_id');
+
+            if (
+                Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'status'
+                )
+            ) {
+                $v5828b5cSerialQuery->where(
+                    'status',
+                    'available'
+                );
+            }
+
+            if (
+                $v5828b5cCompanyId > 0
+                && Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'company_id'
+                )
+            ) {
+                $v5828b5cSerialQuery->where(
+                    'company_id',
+                    $v5828b5cCompanyId
+                );
+            }
+
+            if (
+                $v5828b5cCurrentWarehouseScope
+                && $v5828b5cWarehouseId > 0
+                && Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'current_warehouse_id'
+                )
+            ) {
+                $v5828b5cSerialQuery->where(
+                    'current_warehouse_id',
+                    $v5828b5cWarehouseId
+                );
+            }
+
+            if (
+                $v5828b5cCurrentWarehouseScope
+                && $v5828b5cLocationId > 0
+                && Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'current_location_id'
+                )
+            ) {
+                $v5828b5cSerialQuery->where(
+                    'current_location_id',
+                    $v5828b5cLocationId
+                );
+            }
+
+            $v5828b5cHasSerialVariant =
+                Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'product_variant_id'
+                );
+
+            $v5828b5cSerialColumns = ['product_id'];
+
+            if ($v5828b5cHasSerialVariant) {
+                $v5828b5cSerialColumns[] =
+                    'product_variant_id';
+            }
+
+            $v5828b5cSerialIds = $v5828b5cSerialQuery
+                ->get($v5828b5cSerialColumns)
+                ->map(function ($row) use (
+                    $v5828b5cHasSerialVariant
+                ): int {
+                    $variantId = $v5828b5cHasSerialVariant
+                        ? (int) (
+                            $row->product_variant_id ?? 0
+                        )
+                        : 0;
+
+                    return $variantId > 0
+                        ? $variantId
+                        : (int) ($row->product_id ?? 0);
+                });
+
+            $v5828b5cCandidateIds =
+                $v5828b5cCandidateIds->merge(
+                    $v5828b5cSerialIds
+                );
+        }
+
+        $v5828b5cCandidateIds = $v5828b5cCandidateIds
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+
+        $v5828b5cProductColumns =
+            Schema::getColumnListing('products');
+
+        $query->where(function ($candidateQuery) use (
+            $v5828b5cCandidateIds,
+            $v5828b5cProductColumns
+        ): void {
+            if ($v5828b5cCandidateIds->isNotEmpty()) {
+                $candidateQuery->whereIn(
+                    'id',
+                    $v5828b5cCandidateIds->all()
+                );
+            } else {
+                $candidateQuery->whereRaw('1 = 0');
+            }
+
+            if (
+                in_array(
+                    'product_type',
+                    $v5828b5cProductColumns,
+                    true
+                )
+            ) {
+                $candidateQuery->orWhere(
+                    'product_type',
+                    'service'
+                );
+            }
+
+            if (
+                in_array(
+                    'allow_out_of_stock_sales',
+                    $v5828b5cProductColumns,
+                    true
+                )
+            ) {
+                $candidateQuery->orWhere(
+                    'allow_out_of_stock_sales',
+                    true
+                );
+            }
+        });
+
         $rows = $query
             ->orderBy('name')
             ->limit($limit)
             ->get();
 
+        // BEXIA_V5828B5C_BULK_POS_STOCK
+        // Evita ejecutar una consulta de existencia por cada producto.
+        $v5828b5BulkStock = $this->v5828b5BulkStockForProducts(
+            $rows,
+            $pos
+        );
+
         $products = [];
 
         foreach ($rows as $row) {
-            $stock = $this->stockForProduct($row, $pos);
+            $stock = $v5828b5BulkStock->get((int) $row->id);
+
+            // Fallback defensivo para estructuras especiales no contempladas.
+            if ($stock === null) {
+                $stock = $this->stockForProduct($row, $pos);
+            }
+
+            $v5828b5ProductType =
+                (string) ($row->product_type ?? 'stockable');
+
+            $v5828b5IsService =
+                $v5828b5ProductType === 'service';
+
+            $v5828b5ProductAllowsOutOfStock =
+                (bool) ($row->allow_out_of_stock_sales ?? false);
+
+            // BEXIA_V5828B5C_FILTER_STOCK_BEFORE_RENDER
+            // La vista ya descartaba estas filas. Ahora se eliminan antes de
+            // generar cientos de tarjetas y HTML innecesario.
+            if (
+                ! (bool) ($pos->allow_out_of_stock_sales ?? false)
+                && ! $v5828b5IsService
+                && ! $v5828b5ProductAllowsOutOfStock
+                && (float) $stock
+                    <= (float) ($pos->deny_sale_below_qty ?? 0)
+            ) {
+                continue;
+            }
 
             $price = $this->productPrice($row);
 
@@ -1222,6 +1497,338 @@ abort_if(! $sessionRow, 404);
         }
 
         return $products;
+    }
+
+    /**
+     * BEXIA_V5828B5C_BULK_POS_STOCK
+     *
+     * Calcula en bloque la existencia disponible para la carga inicial del PDV.
+     * Conserva soporte para:
+     * - productos simples;
+     * - variantes guardadas en products;
+     * - productos con numeros de serie;
+     * - servicios;
+     * - empresa, almacen y ubicacion configurados.
+     */
+    protected function v5828b5BulkStockForProducts(
+        $rows,
+        object $pos
+    ): \Illuminate\Support\Collection {
+        $rows = collect($rows)->values();
+        $result = collect();
+
+        if ($rows->isEmpty()) {
+            return $result;
+        }
+
+        $companyId = (int) ($pos->company_id ?? 0);
+        $warehouseId = (int) ($pos->warehouse_id ?? 0);
+        $locationId = (int) $this->configuredStockLocationId($pos);
+
+        $pairs = $rows
+            ->map(function ($row): array {
+                $parentId = ! empty($row->parent_product_id)
+                    ? (int) $row->parent_product_id
+                    : 0;
+
+                return [
+                    'row_id' => (int) $row->id,
+                    'product_id' =>
+                        $parentId > 0 ? $parentId : (int) $row->id,
+                    'variant_id' =>
+                        $parentId > 0 ? (int) $row->id : 0,
+                ];
+            })
+            ->filter(
+                fn (array $pair): bool =>
+                    $pair['row_id'] > 0
+                    && $pair['product_id'] > 0
+            )
+            ->values();
+
+        $productIds = $pairs
+            ->pluck('product_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $stockByKey = collect();
+
+        if (
+            $productIds->isNotEmpty()
+            && Schema::hasTable('stock_quants')
+            && Schema::hasColumn('stock_quants', 'product_id')
+        ) {
+            $stockQuery = DB::table('stock_quants')
+                ->whereIn('product_id', $productIds);
+
+            if (
+                $companyId > 0
+                && Schema::hasColumn('stock_quants', 'company_id')
+            ) {
+                $stockQuery->where('company_id', $companyId);
+            }
+
+            if (
+                $warehouseId > 0
+                && Schema::hasColumn('stock_quants', 'warehouse_id')
+            ) {
+                $stockQuery->where('warehouse_id', $warehouseId);
+            }
+
+            if (
+                $locationId > 0
+                && Schema::hasColumn('stock_quants', 'location_id')
+            ) {
+                $stockQuery->where('location_id', $locationId);
+            }
+
+            $quantityExpression =
+                Schema::hasColumn('stock_quants', 'quantity')
+                    ? 'SUM(quantity)'
+                    : '0';
+
+            $reservedExpression =
+                Schema::hasColumn('stock_quants', 'reserved_quantity')
+                    ? 'SUM(reserved_quantity)'
+                    : '0';
+
+            $hasVariantColumn =
+                Schema::hasColumn(
+                    'stock_quants',
+                    'product_variant_id'
+                );
+
+            $variantSelect = $hasVariantColumn
+                ? 'product_variant_id'
+                : 'NULL as product_variant_id';
+
+            $stockQuery->selectRaw(
+                "product_id,
+                 {$variantSelect},
+                 {$quantityExpression} as quantity,
+                 {$reservedExpression} as reserved_quantity"
+            );
+
+            $stockQuery->groupBy('product_id');
+
+            if ($hasVariantColumn) {
+                $stockQuery->groupBy('product_variant_id');
+            }
+
+            $stockByKey = $stockQuery
+                ->get()
+                ->keyBy(function ($row): string {
+                    return ((int) $row->product_id)
+                        . ':'
+                        . ((int) ($row->product_variant_id ?? 0));
+                });
+        }
+
+        $parentIds = $rows
+            ->pluck('parent_product_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $parentTracking = collect();
+
+        if (
+            $parentIds->isNotEmpty()
+            && Schema::hasTable('products')
+        ) {
+            $columns = Schema::getColumnListing('products');
+
+            $select = ['id'];
+
+            foreach (['tracking', 'advanced_tracking_mode'] as $column) {
+                if (in_array($column, $columns, true)) {
+                    $select[] = $column;
+                }
+            }
+
+            $parentTracking = DB::table('products')
+                ->whereIn('id', $parentIds)
+                ->get($select)
+                ->keyBy('id');
+        }
+
+        $serialByKey = collect();
+
+        if (
+            Schema::hasTable('stock_serial_numbers')
+            && Schema::hasColumn(
+                'stock_serial_numbers',
+                'product_id'
+            )
+        ) {
+            $serialQuery = DB::table('stock_serial_numbers')
+                ->whereIn('product_id', $productIds);
+
+            if (
+                Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'status'
+                )
+            ) {
+                $serialQuery->where('status', 'available');
+            }
+
+            if (
+                $companyId > 0
+                && Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'company_id'
+                )
+            ) {
+                $serialQuery->where('company_id', $companyId);
+            }
+
+            if (
+                $warehouseId > 0
+                && Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'current_warehouse_id'
+                )
+            ) {
+                $serialQuery->where(
+                    'current_warehouse_id',
+                    $warehouseId
+                );
+            }
+
+            if (
+                $locationId > 0
+                && Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'current_location_id'
+                )
+            ) {
+                $serialQuery->where(
+                    'current_location_id',
+                    $locationId
+                );
+            }
+
+            $hasSerialVariant =
+                Schema::hasColumn(
+                    'stock_serial_numbers',
+                    'product_variant_id'
+                );
+
+            $variantSelect = $hasSerialVariant
+                ? 'product_variant_id'
+                : 'NULL as product_variant_id';
+
+            $serialQuery->selectRaw(
+                "product_id,
+                 {$variantSelect},
+                 COUNT(*) as available_serials"
+            );
+
+            $serialQuery->groupBy('product_id');
+
+            if ($hasSerialVariant) {
+                $serialQuery->groupBy('product_variant_id');
+            }
+
+            $serialByKey = $serialQuery
+                ->get()
+                ->keyBy(function ($row): string {
+                    return ((int) $row->product_id)
+                        . ':'
+                        . ((int) ($row->product_variant_id ?? 0));
+                });
+        }
+
+        foreach ($rows as $row) {
+            $rowId = (int) ($row->id ?? 0);
+
+            if ($rowId <= 0) {
+                continue;
+            }
+
+            $productType =
+                (string) ($row->product_type ?? 'stockable');
+
+            if ($productType === 'service') {
+                $result->put($rowId, 999999.0);
+                continue;
+            }
+
+            $parentId = ! empty($row->parent_product_id)
+                ? (int) $row->parent_product_id
+                : 0;
+
+            $productId = $parentId > 0
+                ? $parentId
+                : $rowId;
+
+            $variantId = $parentId > 0
+                ? $rowId
+                : 0;
+
+            $key = $productId . ':' . $variantId;
+
+            $trackingValues = [
+                (string) ($row->tracking ?? ''),
+                (string) ($row->advanced_tracking_mode ?? ''),
+            ];
+
+            if ($parentId > 0) {
+                $parent = $parentTracking->get($parentId);
+
+                if ($parent) {
+                    $trackingValues[] =
+                        (string) ($parent->tracking ?? '');
+
+                    $trackingValues[] =
+                        (string) (
+                            $parent->advanced_tracking_mode ?? ''
+                        );
+                }
+            }
+
+            $usesSerial = collect($trackingValues)
+                ->map(
+                    fn ($value) =>
+                        mb_strtolower(trim((string) $value))
+                )
+                ->contains(function ($value): bool {
+                    return $value !== ''
+                        && (
+                            str_contains($value, 'serial')
+                            || str_contains($value, 'serie')
+                        );
+                });
+
+            if ($usesSerial && $serialByKey->has($key)) {
+                $result->put(
+                    $rowId,
+                    (float) (
+                        $serialByKey
+                            ->get($key)
+                            ->available_serials ?? 0
+                    )
+                );
+
+                continue;
+            }
+
+            $stock = $stockByKey->get($key);
+
+            $quantity = (float) ($stock->quantity ?? 0);
+            $reserved = (float) ($stock->reserved_quantity ?? 0);
+
+            $result->put(
+                $rowId,
+                round($quantity - $reserved, 4)
+            );
+        }
+
+        return $result;
     }
 
     protected function productDisplayName(object $product): string
