@@ -20,17 +20,26 @@ class PosTicketResource extends Resource
 
     protected static ?string $navigationGroup = 'Punto de Venta';
 
-    protected static ?string $navigationLabel = 'Tickets PDV';
+    protected static ?string $navigationLabel = 'Movimientos PDV';
 
-    protected static ?string $modelLabel = 'ticket PDV';
+    protected static ?string $modelLabel = 'Movimiento PDV';
 
-    protected static ?string $pluralModelLabel = 'tickets PDV';
+    protected static ?string $pluralModelLabel = 'Movimientos PDV';
 
     protected static ?string $navigationIcon = 'heroicon-o-receipt-percent';
 
     protected static ?int $navigationSort = 20;
 
     protected static bool $isScopedToTenant = false;
+
+
+    // BEXIA_V582_P3_XLSM_A8B_MOVIMIENTOS_PDV
+    protected static function isHistoricalMovement(PosOrder $record): bool
+    {
+        return (bool) ($record->is_legacy ?? false)
+            || filled($record->migration_batch_id ?? null)
+            || strtoupper(trim((string) ($record->source_system ?? ''))) === 'PAPELON_XLSM';
+    }
 
 public static function canCreate(): bool
     {
@@ -62,10 +71,8 @@ public static function canCreate(): bool
 
     public static function shouldRegisterNavigation(): bool
     {
-        return \App\Support\Navigation\BexiaMenuRuntime::shouldRegister(
-            'resources.posticketresource',
-            fn (): bool => static::bexiaBaseShouldRegisterNavigation(),
-        );
+        // V5.82.P3-XLSM-A7: mostrar Movimientos PDV segun permisos del recurso.
+        return static::canViewAny();
     }
 
     protected static function bexiaBaseShouldRegisterNavigation(): bool
@@ -101,6 +108,15 @@ public static function canCreate(): bool
             ->defaultSort('id', 'desc')
             ->recordUrl(fn ($record): string => static::getUrl('view', ['record' => $record]))
             ->columns([
+
+                // BEXIA_V582_P3_XLSM_A8B_ORIGIN_COLUMN
+                Tables\Columns\TextColumn::make('movement_origin')
+                    ->label('Origen')
+                    ->state(fn (PosOrder $record): string => static::isHistoricalMovement($record) ? 'HISTÓRICO' : 'ACTUAL')
+                    ->badge()
+                    ->color(fn (string $state): string => $state === 'HISTÓRICO' ? 'warning' : 'gray')
+                    ->icon(fn (string $state): string => $state === 'HISTÓRICO' ? 'heroicon-o-archive-box' : 'heroicon-o-bolt')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('number')
                     ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-number bexia-pos-ticket-col-primary'])
                     ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-number bexia-pos-ticket-col-primary'])
@@ -130,8 +146,8 @@ public static function canCreate(): bool
                     ->label('Inventario')
                     ->badge()
                     ->state(fn ($record): string => static::inventoryStatus($record))
-                    ->formatStateUsing(fn ($state): string => static::inventoryStatusLabel((string) $state))
-                    ->color(fn ($state): string => match ((string) $state) {
+                    ->formatStateUsing(fn ($state, PosOrder $record): string => static::isHistoricalMovement($record) ? 'No aplica' : static::inventoryStatusLabel((string) $state))
+                    ->color(fn ($state, PosOrder $record): string => static::isHistoricalMovement($record) ? 'gray' : match ((string) $state) {
                         'delivered' => 'success',
                         'no_stockable_products' => 'gray',
                         'pending_configuration', 'pending_no_quant', 'pending_insufficient_stock', 'pending_error' => 'warning',
@@ -149,8 +165,8 @@ public static function canCreate(): bool
                     ->label('Estado fiscal')
                     ->badge()
                     ->state(fn ($record): string => static::fiscalStatus($record))
-                    ->formatStateUsing(fn ($state): string => static::fiscalStatusLabel((string) $state))
-                    ->color(fn ($state): string => static::fiscalStatusColor((string) $state))
+                    ->formatStateUsing(fn ($state, PosOrder $record): string => static::isHistoricalMovement($record) ? 'No aplica' : static::fiscalStatusLabel((string) $state))
+                    ->color(fn ($state, PosOrder $record): string => static::isHistoricalMovement($record) ? 'gray' : static::fiscalStatusColor((string) $state))
                     ->description(fn ($record): ?string => static::fiscalStatusDescription($record))
                     ->toggleable(),
 
@@ -237,6 +253,86 @@ public static function canCreate(): bool
                     ->toggleable(),
             ])
             ->filters([
+
+                // BEXIA_V582_P3_XLSM_A8B_FILTERS
+                Tables\Filters\SelectFilter::make('movement_origin')
+                    ->label('Origen')
+                    ->options([
+                        'historical' => 'Histórico',
+                        'current' => 'Operación actual',
+                    ])
+                    ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder {
+                        $value = $data['value'] ?? null;
+                        if ($value === 'historical') {
+                            return $query->where(function ($inner): void {
+                                $inner->where('is_legacy', true)
+                                    ->orWhereNotNull('migration_batch_id')
+                                    ->orWhere('source_system', 'PAPELON_XLSM');
+                            });
+                        }
+                        if ($value === 'current') {
+                            return $query->where(function ($inner): void {
+                                $inner->whereNull('is_legacy')->orWhere('is_legacy', false);
+                            })->whereNull('migration_batch_id')
+                              ->where(function ($inner): void {
+                                  $inner->whereNull('source_system')->orWhere('source_system', '<>', 'PAPELON_XLSM');
+                              });
+                        }
+                        return $query;
+                    }),
+
+                Tables\Filters\Filter::make('movement_date')
+                    ->label('Fecha')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('from')->label('Desde'),
+                        \Filament\Forms\Components\DatePicker::make('until')->label('Hasta'),
+                    ])
+                    ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder {
+                        return $query
+                            ->when($data['from'] ?? null, fn ($inner, $date) => $inner->whereDate('ordered_at', '>=', $date))
+                            ->when($data['until'] ?? null, fn ($inner, $date) => $inner->whereDate('ordered_at', '<=', $date));
+                    }),
+
+                Tables\Filters\SelectFilter::make('movement_payment')
+                    ->label('Forma de pago')
+                    ->options([
+                        'cash' => 'Efectivo',
+                        'card' => 'Tarjeta / CLIP',
+                    ])
+                    ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder {
+                        $value = $data['value'] ?? null;
+                        if (! in_array($value, ['cash', 'card'], true)) {
+                            return $query;
+                        }
+                        $qualifiedOrderId = $query->getModel()->qualifyColumn('id');
+                        return $query->whereIn($qualifiedOrderId, function ($payments) use ($value): void {
+                            $payments->select('pos_order_id')->from('pos_order_payments');
+                            if ($value === 'cash') {
+                                $payments->whereRaw("lower(coalesce(payment_label, '')) like '%efectivo%'");
+                            } else {
+                                $payments->where(function ($inner): void {
+                                    $inner->whereRaw("lower(coalesce(payment_label, '')) like '%tarjeta%'")
+                                        ->orWhereRaw("upper(coalesce(metadata::jsonb->>'processor', '')) = 'CLIP'");
+                                });
+                            }
+                        });
+                    }),
+
+                Tables\Filters\SelectFilter::make('movement_pos_point')
+                    ->label('Punto de venta')
+                    ->options(function (): array {
+                        $tenantId = (int) (filament()->getTenant()?->getKey() ?? 0);
+                        return \Illuminate\Support\Facades\DB::table('pos_points')
+                            ->when($tenantId > 0, fn ($query) => $query->where('company_id', $tenantId))
+                            ->orderBy('name')
+                            ->pluck('name', 'id')
+                            ->mapWithKeys(fn ($name, $id): array => [(string) $id => (string) $name])
+                            ->all();
+                    })
+                    ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder {
+                        $value = $data['value'] ?? null;
+                        return $value ? $query->where('pos_point_id', (int) $value) : $query;
+                    }),
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Estado')
                     ->options([

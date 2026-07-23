@@ -11,6 +11,7 @@ class ListPosTickets extends ListRecords
 
     public function getTitle(): string
     {
-        return 'Tickets PDV';
+        // BEXIA_V582_P3_XLSM_A8B_LIST_TITLE
+        return 'Movimientos PDV';
     }
 }
