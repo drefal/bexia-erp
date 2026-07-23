@@ -32,9 +32,9 @@ class PosTicketResource extends Resource
 
     protected static bool $isScopedToTenant = false;
 
-
     // BEXIA_V582_P3_XLSM_A8B_MOVIMIENTOS_PDV
-    protected static function isHistoricalMovement(PosOrder $record): bool
+    // BEXIA_V582_P3_XLSM_A13_HISTORICAL_GUARD
+    public static function isHistoricalMovement(object $record): bool
     {
         return (bool) ($record->is_legacy ?? false)
             || filled($record->migration_batch_id ?? null)
@@ -763,6 +763,11 @@ public static function canCreate(): bool
 
     public static function v5506bCreateTotalRefund(object $record, string $reason): int
     {
+        // BEXIA_V582_P3_XLSM_A13_TOTAL_REFUND
+        if (static::isHistoricalMovement($record)) {
+            throw new \RuntimeException('Los movimientos historicos son de consulta y no permiten devoluciones.');
+        }
+
         // V5.51.5A - Audit intento devolución total.
         static::v5515aWritePosAuditLog('pos.refund.total.attempt', [
             'pos_order_id' => (int) ($record->id ?? 0),
@@ -996,6 +1001,11 @@ return (int) $refundId;
 
     public static function v5509bCreatePartialRefund(object $record, string $reason, array $quantities): int
     {
+        // BEXIA_V582_P3_XLSM_A13_PARTIAL_REFUND
+        if (static::isHistoricalMovement($record)) {
+            throw new \RuntimeException('Los movimientos historicos son de consulta y no permiten devoluciones.');
+        }
+
         // V5.51.5A - Audit intento devolución parcial.
         static::v5515aWritePosAuditLog('pos.refund.partial.attempt', [
             'pos_order_id' => (int) ($record->id ?? 0),
@@ -1331,6 +1341,11 @@ return (int) $refundId;
 
     public static function v5506gShouldShowInventoryReturn(object $record): bool
     {
+        // BEXIA_V582_P3_XLSM_A13_SHOW_INVENTORY
+        if (static::isHistoricalMovement($record)) {
+            return false;
+        }
+
         if (! static::v5506gCanPostRefundInventory()) {
             return false;
         }
@@ -1548,6 +1563,11 @@ return (int) $refundId;
 
     public static function v5506gPostRefundInventory(object $record): int
     {
+        // BEXIA_V582_P3_XLSM_A13_POST_INVENTORY
+        if (static::isHistoricalMovement($record)) {
+            throw new \RuntimeException('Los movimientos historicos no generan devoluciones ni entradas de inventario.');
+        }
+
         foreach ([
             'pos_order_refunds',
             'pos_order_refund_lines',
@@ -1869,6 +1889,11 @@ return (int) $refundId;
 
     public static function invoicePortalUrl(object $record): string
     {
+        // BEXIA_V582_P3_XLSM_A13_PORTAL_URL
+        if (static::isHistoricalMovement($record)) {
+            return '#';
+        }
+
         return url('/facturar') . '?' . http_build_query(['ticket' => $record->number]);
     }
 
@@ -1932,6 +1957,11 @@ return (int) $refundId;
 
     public static function fiscalStatus(object $record): string
     {
+        // BEXIA_V582_P3_XLSM_A13_FISCAL_STATUS
+        if (static::isHistoricalMovement($record)) {
+            return 'historical_not_applicable';
+        }
+
         $metadata = static::metadataArray($record);
         $status = (string) ($record->status ?? '');
 
@@ -2001,6 +2031,11 @@ return (int) $refundId;
 
     public static function fiscalStatusLabel(string $status): string
     {
+        // BEXIA_V582_P3_XLSM_A13_FISCAL_LABEL
+        if ($status === 'historical_not_applicable') {
+            return 'No aplica';
+        }
+
         return match ($status) {
             'not_invoiced' => 'Sin facturar',
             'billing_requested' => 'Solicitada',
@@ -2020,6 +2055,11 @@ return (int) $refundId;
 
     public static function fiscalStatusColor(string $status): string
     {
+        // BEXIA_V582_P3_XLSM_A13_FISCAL_COLOR
+        if ($status === 'historical_not_applicable') {
+            return 'gray';
+        }
+
         return match ($status) {
             'not_invoiced', 'billing_requested' => 'warning',
             'individual_draft', 'global_draft' => 'info',
@@ -2034,6 +2074,11 @@ return (int) $refundId;
 
     public static function fiscalStatusDescription(object $record): ?string
     {
+        // BEXIA_V582_P3_XLSM_A13_FISCAL_DESCRIPTION
+        if (static::isHistoricalMovement($record)) {
+            return 'Movimiento historico de solo consulta; no participa en facturacion.';
+        }
+
         $status = static::fiscalStatus($record);
 
         if (in_array($status, ['individual_draft', 'individual_stamped', 'individual_error', 'individual_cancelled'], true)) {
@@ -2057,6 +2102,11 @@ return (int) $refundId;
 
     public static function canCreateIndividualInvoiceFromTicket(object $record): bool
     {
+        // BEXIA_V582_P3_XLSM_A13_INDIVIDUAL_INVOICE
+        if (static::isHistoricalMovement($record)) {
+            return false;
+        }
+
         $status = static::fiscalStatus($record);
 
         return $status === 'not_invoiced'
@@ -2093,6 +2143,11 @@ return (int) $refundId;
 
     public static function canRefundTicket(object $record): bool
     {
+        // BEXIA_V582_P3_XLSM_A13_CAN_REFUND
+        if (static::isHistoricalMovement($record)) {
+            return false;
+        }
+
         if ((string) ($record->status ?? '') !== 'paid') {
             return false;
         }

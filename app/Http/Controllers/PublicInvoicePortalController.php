@@ -200,6 +200,11 @@ class PublicInvoicePortalController extends Controller
             return $this->error('No encontramos un ticket con ese folio.');
         }
 
+        // BEXIA_V582_P3_XLSM_A13_PORTAL_LOOKUP
+        if ($this->isHistoricalMovement($order)) {
+            return $this->error('Este movimiento es historico y no esta disponible para facturacion.');
+        }
+
         $orderTotal = round((float) ($order->total ?? 0), 2);
         $givenTotal = round($totalInput, 2);
 
@@ -293,6 +298,11 @@ class PublicInvoicePortalController extends Controller
 
             if (! $order) {
                 throw new \RuntimeException('No se encontró el ticket.');
+            }
+
+            // BEXIA_V582_P3_XLSM_A13_PORTAL_TRANSACTION
+            if ($this->isHistoricalMovement($order)) {
+                throw new \RuntimeException('Este movimiento es historico y no puede facturarse.');
             }
 
             if (! PosTicketResource::canCreateIndividualInvoiceFromTicket($order)) {
@@ -1070,6 +1080,11 @@ class PublicInvoicePortalController extends Controller
                 throw new \RuntimeException('No se encontró el ticket.');
             }
 
+            // BEXIA_V582_P3_XLSM_A13_PORTAL_TRANSACTION
+            if ($this->isHistoricalMovement($order)) {
+                throw new \RuntimeException('Este movimiento es historico y no puede facturarse.');
+            }
+
             $invoice = DB::table('invoices')
                 ->where('id', $invoiceId)
                 ->lockForUpdate()
@@ -1197,6 +1212,15 @@ class PublicInvoicePortalController extends Controller
         DB::table('invoices')
             ->where('id', $invoiceId)
             ->update($updates);
+    }
+
+
+    // BEXIA_V582_P3_XLSM_A13_PORTAL_HELPER
+    private function isHistoricalMovement(object $order): bool
+    {
+        return (bool) ($order->is_legacy ?? false)
+            || filled($order->migration_batch_id ?? null)
+            || strtoupper(trim((string) ($order->source_system ?? ''))) === 'PAPELON_XLSM';
     }
 
 }
