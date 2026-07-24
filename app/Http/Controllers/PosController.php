@@ -536,6 +536,37 @@ abort_if(! $sessionRow, 404);
             $ids = $ids->merge($legacy);
         }
 
+        // BEXIA_V582_P3_XLSM_A34B6_UNIFIED_AUTH_SOURCES
+        // Compatibilidad con la relación directa usuario-PDV.
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('pos_point_user')
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'pos_point_user',
+                'user_id'
+            )
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'pos_point_user',
+                'pos_point_id'
+            )
+        ) {
+            $pointUserQuery = \Illuminate\Support\Facades\DB::table(
+                'pos_point_user'
+            )->where('user_id', $user->id);
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn(
+                    'pos_point_user',
+                    'is_active'
+                )
+            ) {
+                $pointUserQuery->where('is_active', true);
+            }
+
+            $ids = $ids->merge(
+                $pointUserQuery->pluck('pos_point_id')
+            );
+        }
+
         return $ids
             ->filter()
             ->unique()
@@ -615,27 +646,12 @@ abort_if(! $sessionRow, 404);
 
     protected function authorizePos(object $pos): void
     {
-        $user = auth()->user();
+        // BEXIA_V582_P3_XLSM_A34B6_UNIFIED_AUTHORIZE_POS
+        // No volver a exigir exclusivamente pos_point_user. La autorización
+        // efectiva acepta Personal de cajas, Cajeros PDV y usuario-PDV.
+        abort_unless(auth()->check(), 403);
 
-        abort_unless($user, 403);
-
-        $isAdmin = (
-            (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin())
-            || (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin())
-        );
-
-        if ($isAdmin) {
-            return;
-        }
-
-        if (Schema::hasTable('pos_point_user')) {
-            $allowed = DB::table('pos_point_user')
-                ->where('pos_point_id', $pos->id)
-                ->where('user_id', $user->id)
-                ->exists();
-
-            abort_unless($allowed, 403);
-        }
+        $this->abortIfCannotAccessPos($pos);
     }
 
 
