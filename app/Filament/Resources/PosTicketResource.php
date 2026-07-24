@@ -105,7 +105,8 @@ public static function canCreate(): bool
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultSort('id', 'desc')
+            // BEXIA_V582_P3_XLSM_A23_DEFAULT_SORT_BY_DATE
+            ->defaultSort('ordered_at', 'desc')
             ->recordUrl(fn ($record): string => static::getUrl('view', ['record' => $record]))
             ->columns([
 
