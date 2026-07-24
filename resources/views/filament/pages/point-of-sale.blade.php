@@ -1,112 +1,5 @@
 
-@php
-    $v5327cUser = auth()->user();
 
-    $v5327cCanManageAllPos = false;
-
-    if ($v5327cUser) {
-        foreach (['isSystemAdmin', 'isGroupAdmin', 'isCompanyAdmin', 'isAdmin'] as $method) {
-            if (method_exists($v5327cUser, $method) && $v5327cUser->{$method}()) {
-                $v5327cCanManageAllPos = true;
-            }
-        }
-
-        foreach (['role', 'type', 'role_name'] as $attribute) {
-            $value = strtolower((string) ($v5327cUser->{$attribute} ?? ''));
-
-            if (in_array($value, [
-                'super_admin',
-                'system_admin',
-                'admin',
-                'administrator',
-                'company_admin',
-                'group_admin',
-                'admin_empresa',
-                'admin_grupo',
-                'super administrador',
-                'administrador',
-            ], true)) {
-                $v5327cCanManageAllPos = true;
-            }
-        }
-
-        try {
-            if (! $v5327cCanManageAllPos && method_exists($v5327cUser, 'roles')) {
-                $roles = $v5327cUser->roles()->pluck('name')->map(fn ($name) => strtolower((string) $name))->all();
-
-                foreach ($roles as $role) {
-                    if (in_array($role, [
-                        'super_admin',
-                        'system_admin',
-                        'admin',
-                        'administrator',
-                        'company_admin',
-                        'group_admin',
-                        'admin_empresa',
-                        'admin_grupo',
-                        'super administrador',
-                        'administrador',
-                    ], true)) {
-                        $v5327cCanManageAllPos = true;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            //
-        }
-    }
-
-    $v5327cAssignedPosPointIdsForCurrentUser = collect();
-
-    if (! $v5327cCanManageAllPos && $v5327cUser) {
-        if (
-            \Illuminate\Support\Facades\Schema::hasTable('employees')
-            && \Illuminate\Support\Facades\Schema::hasTable('pos_point_employee')
-            && \Illuminate\Support\Facades\Schema::hasColumn('employees', 'user_id')
-        ) {
-            $employeeQuery = \Illuminate\Support\Facades\DB::table('employees')
-                ->where('user_id', $v5327cUser->id);
-
-            if (\Illuminate\Support\Facades\Schema::hasColumn('employees', 'pos_active')) {
-                $employeeQuery->where('pos_active', true);
-            }
-
-            $employeeIds = $employeeQuery->pluck('id')->values()->all();
-
-            if ($employeeIds) {
-                $v5327cAssignedPosPointIdsForCurrentUser = $v5327cAssignedPosPointIdsForCurrentUser->merge(
-                    \Illuminate\Support\Facades\DB::table('pos_point_employee')
-                        ->whereIn('employee_id', $employeeIds)
-                        ->where('is_active', true)
-                        ->pluck('pos_point_id')
-                );
-            }
-        }
-
-        $v5327cAssignedPosPointIdsForCurrentUser = $v5327cAssignedPosPointIdsForCurrentUser
-            ->filter()
-            ->unique()
-            ->values();
-
-        if (isset($posPoints)) {
-            $posPoints = collect($posPoints)
-                ->whereIn('id', $v5327cAssignedPosPointIdsForCurrentUser->all())
-                ->values();
-        }
-
-        if (isset($points)) {
-            $points = collect($points)
-                ->whereIn('id', $v5327cAssignedPosPointIdsForCurrentUser->all())
-                ->values();
-        }
-
-        if (isset($pdvs)) {
-            $pdvs = collect($pdvs)
-                ->whereIn('id', $v5327cAssignedPosPointIdsForCurrentUser->all())
-                ->values();
-        }
-    }
-@endphp
 
 
 @php
@@ -185,9 +78,26 @@
         }
     }
 
+    // BEXIA_V582_P3_XLSM_A30A_UNIFIED_POS_ASSIGNMENTS
+    // Unica lista efectiva: relacion usuario-PDV, empleado-PDV y cajero legacy.
     $v5327bAssignedIds = collect();
 
     if (! $v5327bCanManageAllPos && $v5327bUser) {
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('pos_point_user')
+            && \Illuminate\Support\Facades\Schema::hasColumn('pos_point_user', 'user_id')
+            && \Illuminate\Support\Facades\Schema::hasColumn('pos_point_user', 'pos_point_id')
+        ) {
+            $pointUserQuery = \Illuminate\Support\Facades\DB::table('pos_point_user')
+                ->where('user_id', $v5327bUser->id);
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('pos_point_user', 'is_active')) {
+                $pointUserQuery->where('is_active', true);
+            }
+
+            $v5327bAssignedIds = $v5327bAssignedIds->merge($pointUserQuery->pluck('pos_point_id'));
+        }
+
         if (
             \Illuminate\Support\Facades\Schema::hasTable('employees')
             && \Illuminate\Support\Facades\Schema::hasTable('pos_point_employee')
@@ -226,7 +136,12 @@
             $v5327bAssignedIds = $v5327bAssignedIds->merge($legacyQuery->pluck('pos_point_id'));
         }
 
-        $v5327bAssignedIds = $v5327bAssignedIds->filter()->unique()->values();
+        // BEXIA_V582_P3_XLSM_A30A_FILTER_ONCE
+        $v5327bAssignedIds = $v5327bAssignedIds
+            ->filter(fn ($id): bool => is_numeric($id) && (int) $id > 0)
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
 
         if (isset($posPoints)) {
             $posPoints = collect($posPoints)->whereIn('id', $v5327bAssignedIds->all())->values();
