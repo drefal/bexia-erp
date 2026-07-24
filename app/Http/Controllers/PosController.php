@@ -916,6 +916,16 @@ abort_if(! $sessionRow, 404);
             ->where('pos_point_id', (int) $pos->id)
             ->where('status', 'open');
 
+        // BEXIA_V582_P3_XLSM_A34B8_SESSION_COMPANY_SCOPE
+        // No reutilizar una sesión abierta de otra empresa aunque coincidan
+        // el PDV y el empleado.
+        if (
+            ! empty($pos->company_id)
+            && Schema::hasColumn('pos_sessions', 'company_id')
+        ) {
+            $query->where('company_id', (int) $pos->company_id);
+        }
+
         if ($employeeId && Schema::hasColumn('pos_sessions', 'employee_id')) {
             $query->where('employee_id', $employeeId);
         } elseif ($legacyCashierId) {
