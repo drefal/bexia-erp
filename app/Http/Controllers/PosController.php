@@ -159,8 +159,13 @@ abort_if(! $sessionRow, 404);
 
     protected function staffForPos(object $pos)
     {
+        // BEXIA_V582_P3_XLSM_A31B_MERGE_STAFF_SOURCES
+        // Combinar asignaciones modernas y cajeros legacy; no regresar antes
+        // de consultar ambas fuentes.
+        $staff = collect();
+
         if (Schema::hasTable('pos_point_employee') && Schema::hasTable('employees')) {
-            $rows = DB::table('pos_point_employee as pe')
+            $employeeRows = DB::table('pos_point_employee as pe')
                 ->join('employees as e', 'e.id', '=', 'pe.employee_id')
                 ->where('pe.pos_point_id', $pos->id)
                 ->where('pe.is_active', true)
@@ -171,6 +176,7 @@ abort_if(! $sessionRow, 404);
                 ->selectRaw("
                     pe.id as assignment_id,
                     pe.employee_id,
+                    e.user_id,
                     pe.role,
                     pe.can_create_ticket,
                     pe.can_charge,
@@ -186,13 +192,25 @@ abort_if(! $sessionRow, 404);
                 ")
                 ->get();
 
-            if ($rows->isNotEmpty()) {
-                return $rows;
-            }
+            $staff = $staff->concat($employeeRows);
         }
 
         if (Schema::hasTable('pos_cashiers')) {
-            return DB::table('pos_cashiers')
+            $employeeUserIds = $staff
+                ->pluck('user_id')
+                ->filter(fn ($id): bool => is_numeric($id) && (int) $id > 0)
+                ->map(fn ($id): int => (int) $id)
+                ->unique()
+                ->all();
+
+            $employeeNames = $staff
+                ->pluck('name')
+                ->filter()
+                ->map(fn ($name): string => mb_strtolower(trim((string) $name)))
+                ->unique()
+                ->all();
+
+            $legacyRows = DB::table('pos_cashiers')
                 ->where('pos_point_id', $pos->id)
                 ->where('is_active', true)
                 ->orderBy('name')
@@ -205,10 +223,23 @@ abort_if(! $sessionRow, 404);
                     $row->pos_pin_hash = $row->pin_hash ?? null;
                     $row->legacy_cashier_id = $row->id;
                     return $row;
+                })
+                ->reject(function ($row) use ($employeeUserIds, $employeeNames): bool {
+                    if (! empty($row->user_id) && in_array((int) $row->user_id, $employeeUserIds, true)) {
+                        return true;
+                    }
+
+                    $name = mb_strtolower(trim((string) ($row->name ?? '')));
+
+                    return $name !== '' && in_array($name, $employeeNames, true);
                 });
+
+            $staff = $staff->concat($legacyRows);
         }
 
-        return collect();
+        return $staff
+            ->sortBy(fn ($row): string => mb_strtolower((string) ($row->name ?? '')))
+            ->values();
     }
 
     protected function resolveStaff(object $pos, string $staffKey): ?object
