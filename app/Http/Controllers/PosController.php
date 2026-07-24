@@ -6147,6 +6147,42 @@ return response()->json([
 
 
     
+
+    /**
+     * BEXIA_V582_P3_XLSM_A33A2_OPERATIONAL_ORDER_SCOPE
+     *
+     * Excluye movimientos historicos/legacy de consultas operativas de caja.
+     * Los historicos siguen disponibles en Movimientos PDV, pero no participan
+     * en cortes, cierres, efectivo esperado ni reportes de la sesion actual.
+     */
+    protected function v582p3ApplyOperationalPosOrderScope($query, string $alias = '')
+    {
+        $prefix = $alias !== '' ? ($alias . '.') : '';
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'is_legacy')) {
+            $query->where(function ($q) use ($prefix) {
+                $q->whereNull($prefix . 'is_legacy')
+                    ->orWhere($prefix . 'is_legacy', false);
+            });
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'migration_batch_id')) {
+            $query->whereNull($prefix . 'migration_batch_id');
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'source_system')) {
+            $query->where(function ($q) use ($prefix) {
+                $q->whereNull($prefix . 'source_system')
+                    ->orWhereRaw(
+                        "UPPER(TRIM(COALESCE({$prefix}source_system, ''))) <> ?",
+                        ['PAPELON_XLSM']
+                    );
+            });
+        }
+
+        return $query;
+    }
+
 protected function v5484BuildCloseSessionSummary(int $sessionId): array
     {
         abort_unless(\Illuminate\Support\Facades\Schema::hasTable('pos_sessions'), 500, 'No existe tabla pos_sessions.');
@@ -6172,6 +6208,8 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             $ordersBase->where('company_id', $companyId);
         }
 
+        $ordersBase = $this->v582p3ApplyOperationalPosOrderScope($ordersBase);
+
         $createdInSession = (clone $ordersBase)
             ->where('pos_session_id', $sessionId);
 
@@ -6196,6 +6234,8 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             if ($companyId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'company_id')) {
                 $paymentsQuery->where('o.company_id', $companyId);
             }
+
+            $paymentsQuery = $this->v582p3ApplyOperationalPosOrderScope($paymentsQuery, 'o');
 
             /*
              * Regla operativa:
@@ -6410,6 +6450,8 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             if ($companyId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'company_id')) {
                 $reservationQuery->where('o.company_id', $companyId);
             }
+
+            $reservationQuery = $this->v582p3ApplyOperationalPosOrderScope($reservationQuery, 'o');
 
             $activeReservations = (int) (clone $reservationQuery)->count();
             $activeReservedQty = round((float) (clone $reservationQuery)->sum('r.quantity'), 6);

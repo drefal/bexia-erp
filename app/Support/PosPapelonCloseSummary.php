@@ -39,6 +39,8 @@ class PosPapelonCloseSummary
             $paymentsQuery->where('o.company_id', $companyId);
         }
 
+        $paymentsQuery = $this->applyOperationalOrderScope($paymentsQuery, 'o');
+
         if (Schema::hasColumn('pos_order_payments', 'status')) {
             $paymentsQuery->where(function ($q) {
                 $q->whereNull('p.status')
@@ -199,6 +201,41 @@ class PosPapelonCloseSummary
             $orderIds->count(),
             $lines->count()
         );
+    }
+
+
+    /**
+     * BEXIA_V582_P3_XLSM_A33A2_PAPELON_OPERATIONAL_SCOPE
+     *
+     * Evita que el formato especial de cierre Papelon vuelva a sumar
+     * movimientos migrados de solo consulta.
+     */
+    protected function applyOperationalOrderScope($query, string $alias = 'o')
+    {
+        $prefix = $alias !== '' ? ($alias . '.') : '';
+
+        if (Schema::hasColumn('pos_orders', 'is_legacy')) {
+            $query->where(function ($q) use ($prefix) {
+                $q->whereNull($prefix . 'is_legacy')
+                    ->orWhere($prefix . 'is_legacy', false);
+            });
+        }
+
+        if (Schema::hasColumn('pos_orders', 'migration_batch_id')) {
+            $query->whereNull($prefix . 'migration_batch_id');
+        }
+
+        if (Schema::hasColumn('pos_orders', 'source_system')) {
+            $query->where(function ($q) use ($prefix) {
+                $q->whereNull($prefix . 'source_system')
+                    ->orWhereRaw(
+                        "UPPER(TRIM(COALESCE({$prefix}source_system, ''))) <> ?",
+                        ['PAPELON_XLSM']
+                    );
+            });
+        }
+
+        return $query;
     }
 
     protected function lineAmount(object $line): float
