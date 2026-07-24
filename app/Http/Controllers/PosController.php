@@ -129,6 +129,15 @@ abort_if(! $sessionRow, 404);
             'session' => $sessionRow,
             'pos' => $pos,
             'cashier' => $cashier,
+            // BEXIA_V582_P3_XLSM_A34C2_SWITCH_VIEW_DATA
+            'switchableStaff' => $this->staffForPos($pos),
+            'currentStaffKey' => ! empty($sessionRow->employee_id)
+                ? ('emp_' . (int) $sessionRow->employee_id)
+                : ('cashier_' . (int) ($sessionRow->pos_cashier_id ?? 0)),
+            'canSwitchCashier' =>
+                (bool) ($pos->multiple_cashiers_per_session ?? false)
+                && (int) ($sessionRow->company_id ?? 0)
+                    === (int) ($pos->company_id ?? 0),
             'staffPermissions' => $staffPermissions,
             'effectiveRoleLabel' => $this->roleLabel($staffPermissions['role'] ?? null),
             'warehouseName' => $warehouseName,
@@ -153,6 +162,245 @@ abort_if(! $sessionRow, 404);
             'ticketLogoUrl' => $this->ticketLogoUrl($pos),
             'invoiceQrUrl' => (string) ($pos->invoice_qr_url ?? ''),
             'showOrderReferenceOnTicket' => (bool) ($pos->show_order_reference_on_ticket ?? true),
+        ]);
+    }
+
+
+    /**
+     * BEXIA_V582_P3_XLSM_A34C2_SWITCH_CONTROLLER
+     *
+     * Cambia el empleado operativo de una sesión abierta sin cerrar la caja,
+     * alterar el fondo inicial, movimientos ni tickets ya creados.
+     */
+    public function switchCashier(
+        \Illuminate\Http\Request $request,
+        int $session
+    ) {
+        abort_unless(auth()->check(), 403);
+
+        $sessionRow = DB::table('pos_sessions')
+            ->where('id', $session)
+            ->first();
+
+        abort_if(! $sessionRow, 404, 'Sesión PDV no encontrada.');
+
+        $pos = $this->posPoint((int) $sessionRow->pos_point_id);
+        $this->authorizePos($pos);
+
+        if ((string) ($sessionRow->status ?? '') !== 'open') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'La sesión de caja ya no está abierta.',
+            ], 422);
+        }
+
+        if (
+            (int) ($sessionRow->company_id ?? 0)
+            !== (int) ($pos->company_id ?? 0)
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'La sesión no corresponde a la empresa del PDV. Abre una sesión nueva.',
+            ], 422);
+        }
+
+        if (! (bool) ($pos->multiple_cashiers_per_session ?? false)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Este PDV no permite cambiar de cajero dentro de la sesión.',
+            ], 422);
+        }
+
+        $payload = $request->validate([
+            'staff_key' => ['required', 'string', 'max:100'],
+            'pin' => ['required', 'string', 'min:1', 'max:64'],
+        ]);
+
+        $target = $this->resolveStaff(
+            $pos,
+            (string) $payload['staff_key']
+        );
+
+        if (! $target || empty($target->employee_id)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'El empleado seleccionado no está disponible en Personal de cajas.',
+            ], 422);
+        }
+
+        $targetEmployeeId = (int) $target->employee_id;
+        $currentEmployeeId = ! empty($sessionRow->employee_id)
+            ? (int) $sessionRow->employee_id
+            : null;
+
+        if ($currentEmployeeId === $targetEmployeeId) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Ese empleado ya es el cajero actual.',
+            ], 422);
+        }
+
+        $pin = trim((string) $payload['pin']);
+        $pinHash = $this->staffPinHash($target);
+
+        if (
+            ! $pinHash
+            || ! Hash::check($pin, (string) $pinHash)
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'NIP incorrecto para el empleado seleccionado.',
+            ], 422);
+        }
+
+        $beforeStaff = $this->sessionStaff($sessionRow);
+        $targetRole = trim((string) ($target->role ?? 'mixed'));
+        $targetRole = $targetRole !== '' ? $targetRole : 'mixed';
+        $changedAt = now();
+
+        $before = [
+            'session_id' => (int) $sessionRow->id,
+            'company_id' => (int) ($sessionRow->company_id ?? 0),
+            'pos_point_id' => (int) ($sessionRow->pos_point_id ?? 0),
+            'employee_id' => $currentEmployeeId,
+            'employee_name' => $beforeStaff->name ?? null,
+            'staff_role' => $sessionRow->staff_role ?? null,
+            'pos_cashier_id' => $sessionRow->pos_cashier_id ?? null,
+            'status' => $sessionRow->status ?? null,
+            'opening_amount' => $sessionRow->opening_amount ?? null,
+        ];
+
+        DB::transaction(function () use (
+            $session,
+            $sessionRow,
+            $pos,
+            $currentEmployeeId,
+            $targetEmployeeId,
+            $targetRole,
+            $target,
+            $changedAt,
+            $before
+        ): void {
+            $locked = DB::table('pos_sessions')
+                ->where('id', $session)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $locked) {
+                throw new \RuntimeException('La sesión ya no existe.');
+            }
+
+            if (
+                (string) ($locked->status ?? '') !== 'open'
+                || (int) ($locked->pos_point_id ?? 0)
+                    !== (int) $pos->id
+                || (int) ($locked->company_id ?? 0)
+                    !== (int) ($pos->company_id ?? 0)
+            ) {
+                throw new \RuntimeException(
+                    'La sesión cambió mientras se validaba el nuevo cajero.'
+                );
+            }
+
+            $lockedEmployeeId = ! empty($locked->employee_id)
+                ? (int) $locked->employee_id
+                : null;
+
+            if ($lockedEmployeeId !== $currentEmployeeId) {
+                throw new \RuntimeException(
+                    'Otro usuario ya cambió al cajero de esta sesión.'
+                );
+            }
+
+            $notePayload = [
+                'changed_at' => $changedAt->toIso8601String(),
+                'from_employee_id' => $before['employee_id'],
+                'from_employee_name' => $before['employee_name'],
+                'to_employee_id' => $targetEmployeeId,
+                'to_employee_name' => $target->name ?? null,
+                'actor_user_id' => auth()->id(),
+                'same_session' => true,
+                'opening_amount_preserved' => true,
+                'pos_cashier_id_preserved' => true,
+            ];
+
+            $noteLine = '[CAMBIO CAJERO PDV] '
+                . json_encode(
+                    $notePayload,
+                    JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES
+                );
+
+            $notes = trim((string) ($locked->notes ?? ''));
+
+            DB::table('pos_sessions')
+                ->where('id', $session)
+                ->update([
+                    'employee_id' => $targetEmployeeId,
+                    'staff_role' => $targetRole,
+                    'notes' => $notes !== ''
+                        ? ($notes . PHP_EOL . $noteLine)
+                        : $noteLine,
+                    'updated_at' => $changedAt,
+                ]);
+        });
+
+        $after = [
+            'session_id' => (int) $sessionRow->id,
+            'company_id' => (int) ($sessionRow->company_id ?? 0),
+            'pos_point_id' => (int) ($sessionRow->pos_point_id ?? 0),
+            'employee_id' => $targetEmployeeId,
+            'employee_name' => $target->name ?? null,
+            'staff_role' => $targetRole,
+            'pos_cashier_id' => $sessionRow->pos_cashier_id ?? null,
+            'status' => $sessionRow->status ?? null,
+            'opening_amount' => $sessionRow->opening_amount ?? null,
+        ];
+
+        try {
+            if (method_exists($this, 'v5515aWritePosAuditLog')) {
+                $this->v5515aWritePosAuditLog(
+                    'pos.cashier.switch',
+                    [
+                        'company_id' => $sessionRow->company_id ?? null,
+                        'user_id' => auth()->id(),
+                        'pos_session_id' => $session,
+                        'entity_type' => 'pos_session',
+                        'entity_id' => $session,
+                        'description' => 'Cambio de cajero dentro de la misma sesión PDV.',
+                        'before_data' => $before,
+                        'after_data' => $after,
+                        'metadata' => [
+                            'pos_point_id' => $pos->id,
+                            'same_session' => true,
+                            'session_id_preserved' => true,
+                            'opening_amount_preserved' => true,
+                            'pos_cashier_id_preserved' => true,
+                            'pin_logged' => false,
+                            'source' => 'a34c2_switch_cashier_same_session',
+                        ],
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning(
+                'No se pudo registrar auditoría del cambio de cajero PDV.',
+                [
+                    'pos_session_id' => $session,
+                    'target_employee_id' => $targetEmployeeId,
+                    'error' => $e->getMessage(),
+                ]
+            );
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Cajero cambiado correctamente.',
+            'session_id' => $session,
+            'employee_id' => $targetEmployeeId,
+            'employee_name' => $target->name ?? null,
+            'staff_role' => $targetRole,
+            'redirect_url' => '/pos/sessions/' . $session . '/screen',
         ]);
     }
 
