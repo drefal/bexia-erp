@@ -1,4 +1,10 @@
 <x-filament-panels::page>
+
+    @php
+        // BEXIA_V582_P3_XLSM_A13B_DETAIL_LABELS
+        $bexiaHistoricalMovement = \App\Filament\Resources\PosTicketResource::isHistoricalMovement($record ?? $this->record);
+    @endphp
+
     <div class="space-y-6">
         @php
             $status = (string) ($order->status ?? '');
@@ -58,9 +64,11 @@
 
                 <div>
                     <div class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Inventario</div>
-                    <div class="mt-0.5 font-bold">
+                    <div class="mt-0.5 font-bold">@if ($bexiaHistoricalMovement)
+                        No aplica
+                    @else
                         {{ \App\Filament\Resources\PosTicketResource::inventoryStatusLabel($inventoryStatus) }}
-                    </div>
+                    @endif</div>
                     @if(! empty($metadata['stock_movement_reference']))
                         <div class="mt-0.5 text-[11px] text-gray-500">
                             {{ $metadata['stock_movement_reference'] }}
@@ -70,9 +78,11 @@
 
                 <div>
                     <div class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Facturación</div>
-                    <div class="mt-0.5 font-bold">
+                    <div class="mt-0.5 font-bold">@if ($bexiaHistoricalMovement)
+                        No aplica
+                    @else
                         {{ \App\Filament\Resources\PosTicketResource::billingStatusLabel($billingStatus) }}
-                    </div>
+                    @endif</div>
                     @if(! empty($metadata['billing_requested_at']))
                         <div class="mt-0.5 text-[11px] text-gray-500">
                             {{ $metadata['billing_requested_at'] }}

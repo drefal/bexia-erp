@@ -10,6 +10,19 @@ class InternalInvoiceBuilder
 {
     public function createFromPosOrder(int $posOrderId, ?int $userId = null): int
     {
+        // BEXIA_V582_P3_XLSM_A13_INTERNAL_BUILDER
+        $historicalOrder = DB::table('pos_orders')->where('id', $posOrderId)->first();
+
+        if (! $historicalOrder) {
+            throw new RuntimeException("No existe pos_order {$posOrderId}.");
+        }
+
+        if ((bool) ($historicalOrder->is_legacy ?? false)
+            || filled($historicalOrder->migration_batch_id ?? null)
+            || strtoupper(trim((string) ($historicalOrder->source_system ?? ''))) === 'PAPELON_XLSM') {
+            throw new RuntimeException('Los movimientos historicos PDV no pueden convertirse en facturas.');
+        }
+
         $this->assertReady();
 
         $existing = DB::table('invoices')

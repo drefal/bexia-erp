@@ -19,7 +19,15 @@ class PosGlobalInvoiceService
         $query = DB::table('pos_orders as po')
             ->where('po.company_id', $companyId)
             ->where('po.status', 'paid')
-            ->whereRaw('COALESCE(po.total, 0) > 0');
+            ->whereRaw('COALESCE(po.total, 0) > 0')
+            // BEXIA_V582_P3_XLSM_A13_GLOBAL_CANDIDATES
+            ->where(function ($historical): void {
+                $historical->whereNull('po.is_legacy')->orWhere('po.is_legacy', false);
+            })
+            ->whereNull('po.migration_batch_id')
+            ->where(function ($historical): void {
+                $historical->whereNull('po.source_system')->orWhere('po.source_system', '<>', 'PAPELON_XLSM');
+            });
 
         $dateFrom = trim((string) ($filters['date_from'] ?? ''));
         $dateTo = trim((string) ($filters['date_to'] ?? ''));
@@ -540,6 +548,14 @@ class PosGlobalInvoiceService
             ->update($updates);
     }
 
+    // BEXIA_V582_P3_XLSM_A13_GLOBAL_HELPER
+    private function isHistoricalMovement(object $ticket): bool
+    {
+        return (bool) ($ticket->is_legacy ?? false)
+            || filled($ticket->migration_batch_id ?? null)
+            || strtoupper(trim((string) ($ticket->source_system ?? ''))) === 'PAPELON_XLSM';
+    }
+
     private function metadataArray($metadata): array
     {
         if (is_array($metadata)) {
@@ -783,6 +799,11 @@ class PosGlobalInvoiceService
 
         if (! $ticket) {
             return;
+        }
+
+        // BEXIA_V582_P3_XLSM_A13_GLOBAL_LINK
+        if ($this->isHistoricalMovement($ticket)) {
+            throw new \RuntimeException('Los movimientos historicos PDV no pueden incluirse en factura global.');
         }
 
         $metadata = json_decode((string) ($ticket->metadata ?? ''), true);
