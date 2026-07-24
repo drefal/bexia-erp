@@ -107,6 +107,8 @@ public static function canCreate(): bool
         return $table
             // BEXIA_V582_P3_XLSM_A23_DEFAULT_SORT_BY_DATE
             ->defaultSort('ordered_at', 'desc')
+            // BEXIA_V582_P3_XLSM_A26_DISABLE_PERSISTED_SORT
+            ->persistSortInSession(false)
             ->recordUrl(fn ($record): string => static::getUrl('view', ['record' => $record]))
             ->columns([
 
