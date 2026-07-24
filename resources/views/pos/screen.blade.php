@@ -270,6 +270,151 @@
     }
 </style>
 
+
+<style id="bexia-v582-p3-a34c2-switch-style">
+    /* BEXIA_V582_P3_XLSM_A34C2_SWITCH_UI */
+    .v582p3-a34c2-employee-value {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .v582p3-a34c2-switch-button {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #bfdbfe;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        font-size: 16px;
+        line-height: 1;
+        font-weight: 950;
+        cursor: pointer;
+    }
+
+    .v582p3-a34c2-switch-button:hover {
+        background: #dbeafe;
+    }
+
+    .v582p3-a34c2-switch-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 2147483200;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, .58);
+        backdrop-filter: blur(2px);
+    }
+
+    .v582p3-a34c2-switch-modal.is-open {
+        display: flex;
+    }
+
+    .v582p3-a34c2-switch-card {
+        width: min(460px, 100%);
+        border-radius: 22px;
+        background: #fff;
+        box-shadow: 0 28px 70px rgba(15, 23, 42, .30);
+        overflow: hidden;
+    }
+
+    .v582p3-a34c2-switch-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 18px 20px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .v582p3-a34c2-switch-body {
+        display: grid;
+        gap: 14px;
+        padding: 20px;
+    }
+
+    .v582p3-a34c2-switch-field {
+        display: grid;
+        gap: 6px;
+    }
+
+    .v582p3-a34c2-switch-field label {
+        font-size: 12px;
+        font-weight: 900;
+        color: #475569;
+    }
+
+    .v582p3-a34c2-switch-field select,
+    .v582p3-a34c2-switch-field input {
+        width: 100%;
+        min-height: 46px;
+        border: 1px solid #cbd5e1;
+        border-radius: 13px;
+        padding: 10px 12px;
+        background: #fff;
+        color: #0f172a;
+        font-size: 15px;
+    }
+
+    .v582p3-a34c2-switch-warning {
+        border: 1px solid #fed7aa;
+        border-radius: 13px;
+        padding: 10px 12px;
+        background: #fff7ed;
+        color: #9a3412;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .v582p3-a34c2-switch-error {
+        display: none;
+        border: 1px solid #fecaca;
+        border-radius: 13px;
+        padding: 10px 12px;
+        background: #fef2f2;
+        color: #b91c1c;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .v582p3-a34c2-switch-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 0 20px 20px;
+    }
+
+    .v582p3-a34c2-switch-actions button {
+        min-height: 42px;
+        border-radius: 13px;
+        padding: 10px 16px;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .v582p3-a34c2-switch-cancel {
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #334155;
+    }
+
+    .v582p3-a34c2-switch-confirm {
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: #fff;
+    }
+
+    .v582p3-a34c2-switch-confirm:disabled {
+        opacity: .55;
+        cursor: wait;
+    }
+</style>
+
 </head>
 <body>
 @php
@@ -333,10 +478,122 @@
 
         <div class="selectbox">
             <div class="label">Empleado</div>
-            <div class="value">{{ $cashier->name ?? 'Cajero' }}</div>
+            <div class="value v582p3-a34c2-employee-value">
+                <span>{{ $cashier->name ?? 'Cajero' }}</span>
+                @if(($canSwitchCashier ?? false) && count($switchableStaff ?? []) > 1)
+                    <button
+                        id="v582p3-a34c2-switch-button"
+                        class="v582p3-a34c2-switch-button"
+                        type="button"
+                        title="Cambiar cajero sin cerrar la sesión"
+                        aria-label="Cambiar cajero sin cerrar la sesión"
+                    >⇄</button>
+                @endif
+            </div>
             <div style="margin-top:3px;"><span class="role-pill">{{ $effectiveRoleLabel }}</span></div>
         </div>
     </div>
+
+    @if(($canSwitchCashier ?? false) && count($switchableStaff ?? []) > 1)
+        <div
+            id="v582p3-a34c2-switch-modal"
+            class="v582p3-a34c2-switch-modal"
+            aria-hidden="true"
+        >
+            <div
+                class="v582p3-a34c2-switch-card"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="v582p3-a34c2-switch-title"
+            >
+                <div class="v582p3-a34c2-switch-header">
+                    <div>
+                        <div
+                            id="v582p3-a34c2-switch-title"
+                            style="font-size:18px;font-weight:950;"
+                        >Cambiar cajero</div>
+                        <div style="margin-top:3px;font-size:12px;color:#64748b;">
+                            Sesión {{ $session->number ?? ('#' . $session->id) }}
+                        </div>
+                    </div>
+                    <button
+                        id="v582p3-a34c2-switch-close"
+                        type="button"
+                        aria-label="Cerrar"
+                        style="border:0;background:transparent;font-size:24px;cursor:pointer;"
+                    >×</button>
+                </div>
+
+                <form id="v582p3-a34c2-switch-form">
+                    <div class="v582p3-a34c2-switch-body">
+                        <div class="v582p3-a34c2-switch-warning">
+                            Guarda el ticket pendiente o vacía el carrito antes de cambiar.
+                            La sesión, fondo inicial, movimientos y tickets anteriores se conservan.
+                        </div>
+
+                        <div class="v582p3-a34c2-switch-field">
+                            <label for="v582p3-a34c2-switch-staff">Nuevo cajero</label>
+                            <select
+                                id="v582p3-a34c2-switch-staff"
+                                name="staff_key"
+                                required
+                            >
+                                <option value="">Selecciona un empleado</option>
+                                @foreach(($switchableStaff ?? collect()) as $staffRow)
+                                    @php
+                                        $v582p3A34c2StaffKey = ! empty($staffRow->employee_id)
+                                            ? ('emp_' . (int) $staffRow->employee_id)
+                                            : ('cashier_' . (int) ($staffRow->legacy_cashier_id ?? $staffRow->id ?? 0));
+                                        $v582p3A34c2IsCurrent = $v582p3A34c2StaffKey === ($currentStaffKey ?? '');
+                                    @endphp
+                                    <option
+                                        value="{{ $v582p3A34c2StaffKey }}"
+                                        @disabled($v582p3A34c2IsCurrent)
+                                    >
+                                        {{ $staffRow->name ?? 'Empleado' }}
+                                        @if($v582p3A34c2IsCurrent) (actual) @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="v582p3-a34c2-switch-field">
+                            <label for="v582p3-a34c2-switch-pin">
+                                NIP del nuevo cajero
+                            </label>
+                            <input
+                                id="v582p3-a34c2-switch-pin"
+                                name="pin"
+                                type="password"
+                                inputmode="numeric"
+                                autocomplete="off"
+                                maxlength="64"
+                                required
+                            >
+                        </div>
+
+                        <div
+                            id="v582p3-a34c2-switch-error"
+                            class="v582p3-a34c2-switch-error"
+                        ></div>
+                    </div>
+
+                    <div class="v582p3-a34c2-switch-actions">
+                        <button
+                            id="v582p3-a34c2-switch-cancel"
+                            class="v582p3-a34c2-switch-cancel"
+                            type="button"
+                        >Cancelar</button>
+                        <button
+                            id="v582p3-a34c2-switch-confirm"
+                            class="v582p3-a34c2-switch-confirm"
+                            type="submit"
+                        >Cambiar cajero</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
 
     <div class="shell">
         <main class="main">
@@ -11843,6 +12100,192 @@ document.addEventListener('DOMContentLoaded', function () {
      */
     installFavorites();
 })();
+</script>
+
+
+<script id="bexia-v582-p3-a34c2-switch-script">
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.BEXIA_POS_SWITCH_CASHIER_A34C2_READY) return;
+    window.BEXIA_POS_SWITCH_CASHIER_A34C2_READY = true;
+
+    const button = document.getElementById('v582p3-a34c2-switch-button');
+    const modal = document.getElementById('v582p3-a34c2-switch-modal');
+    const form = document.getElementById('v582p3-a34c2-switch-form');
+    const staff = document.getElementById('v582p3-a34c2-switch-staff');
+    const pin = document.getElementById('v582p3-a34c2-switch-pin');
+    const errorBox = document.getElementById('v582p3-a34c2-switch-error');
+    const closeButton = document.getElementById('v582p3-a34c2-switch-close');
+    const cancelButton = document.getElementById('v582p3-a34c2-switch-cancel');
+    const confirmButton = document.getElementById('v582p3-a34c2-switch-confirm');
+
+    if (!button || !modal || !form || !staff || !pin) return;
+
+    function currentCartItems() {
+        const api = window.BEXIA_POS_CART_API || null;
+        if (!api || typeof api.getItems !== 'function') return null;
+        const items = api.getItems();
+        return Array.isArray(items) ? items : [];
+    }
+
+    function showNotice(message) {
+        if (typeof window.showPosNotice === 'function') {
+            window.showPosNotice(message, 'warning');
+            return;
+        }
+
+        const notice = document.getElementById('v5356-pos-notice');
+        if (notice) {
+            notice.textContent = message;
+            notice.style.display = 'block';
+            return;
+        }
+
+        window.alert(message);
+    }
+
+    function setError(message) {
+        if (!errorBox) return;
+        errorBox.textContent = message || '';
+        errorBox.style.display = message ? 'block' : 'none';
+    }
+
+    function cartIsSafeToSwitch() {
+        const items = currentCartItems();
+
+        if (items === null) {
+            showNotice('Espera a que termine de cargar el carrito.');
+            return false;
+        }
+
+        if (
+            items.length > 0
+            || (
+                window.BEXIA_POS_LOADED_PENDING_ORDER
+                && window.BEXIA_POS_LOADED_PENDING_ORDER.id
+            )
+        ) {
+            showNotice(
+                'Guarda el ticket pendiente o vacía el carrito antes de cambiar de cajero.'
+            );
+            return false;
+        }
+
+        return true;
+    }
+
+    function openModal() {
+        if (!cartIsSafeToSwitch()) return;
+
+        setError('');
+        staff.value = '';
+        pin.value = '';
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        setTimeout(function () { staff.focus(); }, 40);
+    }
+
+    function closeModal() {
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
+        setError('');
+        pin.value = '';
+    }
+
+    button.addEventListener('click', openModal);
+    closeButton?.addEventListener('click', closeModal);
+    cancelButton?.addEventListener('click', closeModal);
+
+    modal.addEventListener('click', function (event) {
+        if (event.target === modal) closeModal();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+            closeModal();
+        }
+    });
+
+    form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        if (!cartIsSafeToSwitch()) return;
+
+        const staffKey = String(staff.value || '').trim();
+        const pinValue = String(pin.value || '').trim();
+
+        if (!staffKey) {
+            setError('Selecciona el nuevo cajero.');
+            staff.focus();
+            return;
+        }
+
+        if (!pinValue) {
+            setError('Captura el NIP del nuevo cajero.');
+            pin.focus();
+            return;
+        }
+
+        setError('');
+
+        if (confirmButton) {
+            confirmButton.disabled = true;
+            confirmButton.textContent = 'Validando...';
+        }
+
+        try {
+            const response = await fetch(
+                '/pos/sessions/{{ (int) $session->id }}/switch-cashier',
+                {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    },
+                    body: JSON.stringify({
+                        staff_key: staffKey,
+                        pin: pinValue,
+                    }),
+                }
+            );
+
+            const data = await response.json().catch(function () {
+                return {};
+            });
+
+            if (!response.ok || data.ok === false) {
+                throw new Error(
+                    data.message
+                    || data.errors?.pin?.[0]
+                    || data.errors?.staff_key?.[0]
+                    || 'No se pudo cambiar de cajero.'
+                );
+            }
+
+            pin.value = '';
+
+            if (confirmButton) {
+                confirmButton.textContent = 'Cajero cambiado';
+            }
+
+            window.location.assign(
+                data.redirect_url
+                || '/pos/sessions/{{ (int) $session->id }}/screen'
+            );
+        } catch (error) {
+            setError(error.message || 'No se pudo cambiar de cajero.');
+            pin.value = '';
+            pin.focus();
+
+            if (confirmButton) {
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Cambiar cajero';
+            }
+        }
+    });
+});
 </script>
 
 </body>

@@ -293,10 +293,121 @@
             $query->where('company_id', $companyId);
         }
 
-        if (! $isAdmin && Schema::hasTable('pos_point_user')) {
-            $allowedIds = DB::table('pos_point_user')
-                ->where('user_id', $userId)
-                ->pluck('pos_point_id')
+        if (! $isAdmin) {
+            // BEXIA_V582_P3_XLSM_A34B3_UNIFIED_POS_ACCESS
+            // La tarjeta del PDV debe usar las mismas fuentes efectivas que
+            // la apertura: usuario-PDV, empleado-PDV y cajero legacy.
+            $allowedIds = collect();
+
+            if (
+                Schema::hasTable('pos_point_user')
+                && Schema::hasColumn('pos_point_user', 'user_id')
+                && Schema::hasColumn('pos_point_user', 'pos_point_id')
+            ) {
+                $pointUserQuery = DB::table('pos_point_user')
+                    ->where('user_id', $userId);
+
+                if (Schema::hasColumn('pos_point_user', 'is_active')) {
+                    $pointUserQuery->where('is_active', true);
+                }
+
+                $allowedIds = $allowedIds->merge(
+                    $pointUserQuery->pluck('pos_point_id')
+                );
+            }
+
+            if (
+                Schema::hasTable('employees')
+                && Schema::hasTable('pos_point_employee')
+                && Schema::hasColumn('employees', 'user_id')
+                && Schema::hasColumn('pos_point_employee', 'employee_id')
+                && Schema::hasColumn('pos_point_employee', 'pos_point_id')
+            ) {
+                $employeeQuery = DB::table('employees')
+                    ->where('user_id', $userId);
+
+                if (Schema::hasColumn('employees', 'active')) {
+                    $employeeQuery->where('active', true);
+                }
+
+                if (Schema::hasColumn('employees', 'pos_active')) {
+                    $employeeQuery->where('pos_active', true);
+                }
+
+                if (
+                    $companyId > 0
+                    && Schema::hasColumn('employees', 'company_id')
+                ) {
+                    $employeeQuery->where('company_id', $companyId);
+                }
+
+                $employeeIds = $employeeQuery
+                    ->pluck('id')
+                    ->filter()
+                    ->values()
+                    ->all();
+
+                if ($employeeIds) {
+                    $assignmentQuery = DB::table('pos_point_employee')
+                        ->whereIn('employee_id', $employeeIds);
+
+                    if (
+                        Schema::hasColumn(
+                            'pos_point_employee',
+                            'is_active'
+                        )
+                    ) {
+                        $assignmentQuery->where('is_active', true);
+                    }
+
+                    if (
+                        $companyId > 0
+                        && Schema::hasColumn(
+                            'pos_point_employee',
+                            'company_id'
+                        )
+                    ) {
+                        $assignmentQuery->where('company_id', $companyId);
+                    }
+
+                    $allowedIds = $allowedIds->merge(
+                        $assignmentQuery->pluck('pos_point_id')
+                    );
+                }
+            }
+
+            if (
+                Schema::hasTable('pos_cashiers')
+                && Schema::hasColumn('pos_cashiers', 'user_id')
+                && Schema::hasColumn('pos_cashiers', 'pos_point_id')
+            ) {
+                $legacyQuery = DB::table('pos_cashiers')
+                    ->where('user_id', $userId);
+
+                if (Schema::hasColumn('pos_cashiers', 'is_active')) {
+                    $legacyQuery->where('is_active', true);
+                }
+
+                if (
+                    $companyId > 0
+                    && Schema::hasColumn('pos_cashiers', 'company_id')
+                ) {
+                    $legacyQuery->where('company_id', $companyId);
+                }
+
+                $allowedIds = $allowedIds->merge(
+                    $legacyQuery->pluck('pos_point_id')
+                );
+            }
+
+            $allowedIds = $allowedIds
+                ->filter(
+                    fn ($id): bool =>
+                        is_numeric($id) && (int) $id > 0
+                )
+                ->map(fn ($id): int => (int) $id)
+                ->unique()
+                ->values()
                 ->all();
 
             $query->whereIn('id', $allowedIds ?: [-1]);

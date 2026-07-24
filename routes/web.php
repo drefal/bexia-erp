@@ -274,6 +274,13 @@ Route::middleware(['web', 'auth'])->group(function () {
 
     Route::get('/pos/sessions/{session}/screen', [\App\Http\Controllers\PosController::class, 'screen'])
         ->name('pos.sessions.screen');
+
+
+    // BEXIA_V582_P3_XLSM_A34C2_SWITCH_ROUTE
+    Route::post(
+        '/pos/sessions/{session}/switch-cashier',
+        [\App\Http\Controllers\PosController::class, 'switchCashier']
+    )->name('pos.sessions.switch-cashier');
 Route::get('/pos/sessions/{session}/close-summary', [\App\Http\Controllers\PosController::class, 'closeSessionSummary'])->name('pos.sessions.close-summary');
 Route::get('/pos/sessions/{session}/close-ticket/print', [\App\Http\Controllers\PosController::class, 'printCloseSessionTicket'])->name('pos.sessions.close-ticket.print');
 Route::get('/pos/sessions/{session}/sales-report', [\App\Http\Controllers\PosController::class, 'sessionSalesReport'])->name('pos.sessions.sales-report');
