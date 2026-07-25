@@ -162,6 +162,109 @@
     .v5487b-primary { border:1px solid #2563eb; background:#2563eb; color:#fff; }
 </style>
 
+<style id="bexia-v582p3-a35f-opening-cash-compact">
+    /* BEXIA_V582P3_A35F_COMPACT_OPENING_CASH_MODAL */
+
+    #v5487b-opening-cash-modal {
+        padding: 14px;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-opening-card {
+        width: min(760px, 96vw);
+        max-height: 95vh;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-opening-header {
+        padding: 14px 20px 12px;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-opening-header h2 {
+        font-size: 19px;
+        line-height: 1.15;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-opening-header > div {
+        margin-top: 4px !important;
+        font-size: 11px !important;
+        line-height: 1.25;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-opening-body {
+        padding: 12px 20px;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-denom-row {
+        grid-template-columns: minmax(220px, 1fr) 78px 105px;
+        gap: 14px;
+        min-height: 38px;
+        margin-bottom: 5px;
+        font-size: 13px;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-denom-row strong {
+        font-size: 13px;
+        line-height: 1.2;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-denom-row input {
+        width: 100%;
+        height: 38px;
+        padding: 5px 8px;
+        border-radius: 10px;
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    #v5487b-opening-cash-modal [data-v5487b-opening-total] {
+        font-size: 13px;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-total-box {
+        margin-top: 8px;
+        padding: 9px 12px;
+        border-radius: 12px;
+        font-size: 13px;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-actions {
+        gap: 10px;
+        padding: 12px 20px 14px;
+    }
+
+    #v5487b-opening-cash-modal .v5487b-secondary,
+    #v5487b-opening-cash-modal .v5487b-primary {
+        padding: 9px 14px;
+        border-radius: 12px;
+        font-size: 13px;
+    }
+
+    @media (max-width: 700px) {
+        #v5487b-opening-cash-modal {
+            padding: 10px;
+        }
+
+        #v5487b-opening-cash-modal .v5487b-opening-card {
+            width: min(620px, 98vw);
+            max-height: 97vh;
+        }
+
+        #v5487b-opening-cash-modal .v5487b-opening-body {
+            padding: 11px 14px;
+        }
+
+        #v5487b-opening-cash-modal .v5487b-denom-row {
+            grid-template-columns: minmax(130px, 1fr) 70px 88px;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        #v5487b-opening-cash-modal .v5487b-denom-row strong,
+        #v5487b-opening-cash-modal [data-v5487b-opening-total] {
+            font-size: 12px;
+        }
+    }
+</style>
+
 <div id="v5487b-opening-cash-modal" class="v5487b-opening-backdrop" aria-hidden="true">
     <div class="v5487b-opening-card" role="dialog" aria-modal="true">
         <div class="v5487b-opening-header">
