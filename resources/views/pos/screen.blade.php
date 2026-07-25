@@ -966,12 +966,13 @@
                         @endphp
 
 
+                    <!-- BEXIA_V582P3_A35E2_PRODUCT_NAME_DATASET_ESCAPE -->
                         <div
                             class="product {{ $product['can_sell'] ? '' : 'disabled' }}"
                             data-product-id="{{ $product['id'] ?? '' }}"
                             data-product-category-id="{{ (int) ($product['category_id'] ?? 0) }}"
                             data-product-is-favorite="{{ $v5451IsFavorite ? '1' : '0' }}"
-                            data-product-name="{{ e($product['name'] ?? '') }}"
+                            data-product-name="{{ $product['name'] ?? '' }}"
                             data-product-reference="{{ e($productReference ?? '') }}"
                             data-product-barcode="{{ e($v5490bProductBarcode) }}"
                             data-product-sku="{{ e($v5490bProductSku) }}"
@@ -1104,7 +1105,7 @@
                                 data-product-id="{{ $product['id'] ?? '' }}"
                             data-product-category-id="{{ (int) ($product['category_id'] ?? 0) }}"
                             data-product-is-favorite="{{ $v5451IsFavorite ? '1' : '0' }}"
-                                data-product-name="{{ e($product['name'] ?? '') }}"
+                                data-product-name="{{ $product['name'] ?? '' }}"
                                 data-product-reference="{{ e($productReference ?? '') }}"
                                 data-product-barcode="{{ e($v5490bProductBarcode) }}"
                                 data-product-sku="{{ e($v5490bProductSku) }}"
@@ -2422,11 +2423,34 @@ document.addEventListener('DOMContentLoaded', function () {
         line-height:1;
     }
 
+    /* BEXIA_V582P3_A35B_QTY_KEYBOARD_CSS */
     .v5339-cart-qty {
-        min-width:24px;
+        width:64px;
+        min-width:64px;
+        max-width:76px;
+        box-sizing:border-box;
+        border:1px solid #cbd5e1;
+        border-radius:8px;
+        padding:5px 6px;
+        background:#fff;
+        color:#0f172a;
         text-align:center;
-        font-size:12px;
+        font-size:13px;
         font-weight:900;
+        line-height:1.2;
+        appearance:textfield;
+        -moz-appearance:textfield;
+    }
+
+    .v5339-cart-qty::selection {
+        background:#bfdbfe;
+        color:#0f172a;
+    }
+
+    .v5339-cart-qty:focus {
+        outline:2px solid #2563eb;
+        outline-offset:1px;
+        border-color:#2563eb;
     }
 
     .v5339-cart-line-total {
@@ -2650,6 +2674,61 @@ document.addEventListener('DOMContentLoaded', function () {
         renderMetaSummary();
     }
 
+    // BEXIA_V582P3_A35C_QTY_KEYBOARD_DOCUMENT_GUARD
+    // Protege el campo contra atajos y lectores de código que escuchen
+    // el teclado en document antes de que el valor pueda capturarse.
+    document.addEventListener('keydown', function (event) {
+        const target = event.target;
+
+        if (
+            !target
+            || !target.matches
+            || !target.matches('input[data-bexia-qty-keyboard="A35C"]')
+        ) {
+            return;
+        }
+
+        const allowedNavigation = [
+            'Backspace',
+            'Delete',
+            'ArrowLeft',
+            'ArrowRight',
+            'Home',
+            'End',
+            'Tab',
+        ];
+
+        const isDigit = /^[0-9]$/.test(String(event.key || ''));
+        const isShortcut = event.ctrlKey || event.metaKey;
+
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            target.dispatchEvent(new Event('change', { bubbles: false }));
+            target.blur();
+
+            return;
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            target.value = String(target.dataset.originalQty || '1');
+            target.blur();
+
+            return;
+        }
+
+        if (isDigit || isShortcut || allowedNavigation.includes(event.key)) {
+            event.stopImmediatePropagation();
+
+            return;
+        }
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }, true);
+
     function render() {
         Array.from(cartItems.querySelectorAll('.v5339-cart-line')).forEach(function (el) {
             el.remove();
@@ -2717,9 +2796,98 @@ document.addEventListener('DOMContentLoaded', function () {
             minus.textContent = '−';
             minus.addEventListener('click', function () { changeQty(key, -1); });
 
-            const qty = document.createElement('span');
-            qty.style.fontWeight = '950';
-            qty.textContent = String(item.qty);
+            // BEXIA_V582P3_A35C_QTY_KEYBOARD_RUNTIME
+            // Campo de texto numérico para evitar que el navegador lo presente
+            // solamente como control de flechas y facilitar captura masiva.
+            const qty = document.createElement('input');
+            qty.type = 'text';
+            qty.className = 'v5339-cart-qty';
+            qty.dataset.bexiaQtyKeyboard = 'A35C';
+            qty.dataset.cartKey = String(key);
+            qty.dataset.originalQty = String(item.qty);
+            qty.inputMode = 'numeric';
+            qty.pattern = '[0-9]*';
+            qty.autocomplete = 'off';
+            qty.spellcheck = false;
+            qty.readOnly = false;
+            qty.disabled = false;
+            qty.tabIndex = 0;
+            qty.value = String(item.qty);
+            qty.title = 'Escribe la cantidad y presiona Enter';
+            qty.setAttribute(
+                'aria-label',
+                'Cantidad de ' + String(item.name || item.product_name || 'producto')
+            );
+
+            qty.style.pointerEvents = 'auto';
+            qty.style.cursor = 'text';
+            qty.style.userSelect = 'text';
+            qty.style.webkitUserSelect = 'text';
+
+            qty.addEventListener('click', function (event) {
+                event.stopPropagation();
+            });
+
+            qty.addEventListener('focus', function () {
+                qty.dataset.originalQty = String(item.qty);
+                window.setTimeout(function () {
+                    qty.select();
+                }, 0);
+            });
+
+            qty.addEventListener('input', function () {
+                const sanitized = String(qty.value || '').replace(/[^0-9]/g, '');
+
+                if (qty.value !== sanitized) {
+                    qty.value = sanitized;
+                }
+            });
+
+            function applyTypedQuantity() {
+                const currentQty = Number(item.qty || 0);
+                const raw = String(qty.value || '').trim();
+                const requestedQty = Number(raw);
+
+                if (
+                    raw === ''
+                    || !Number.isFinite(requestedQty)
+                    || !Number.isInteger(requestedQty)
+                    || requestedQty < 1
+                ) {
+                    setWarning('Captura una cantidad entera mayor a cero.');
+                    qty.value = String(currentQty);
+
+                    return false;
+                }
+
+                if (requestedQty === currentQty) {
+                    qty.value = String(currentQty);
+
+                    return true;
+                }
+
+                if (
+                    Number(item.stock || 0) > 0
+                    && requestedQty > Number(item.stock || 0)
+                ) {
+                    setWarning(
+                        'No hay existencia suficiente para capturar '
+                        + requestedQty
+                        + ' unidades.'
+                    );
+                    qty.value = String(currentQty);
+
+                    return false;
+                }
+
+                changeQty(key, requestedQty - currentQty);
+
+                return true;
+            }
+
+            qty.addEventListener('change', function () {
+                applyTypedQuantity();
+            });
 
             const plus = document.createElement('button');
             plus.type = 'button';
@@ -9900,12 +10068,86 @@ document.addEventListener('DOMContentLoaded', function () {
                 throw new Error('No se pudo cerrar la sesión. Código HTTP: ' + response.status);
             }
 
-            if (response.redirected && response.url) {
-                window.location.href = response.url;
-                return;
+            // BEXIA_V582P3_A35G_CLOSE_PDV_WINDOW_AFTER_SESSION_CLOSE
+            // BEXIA_V582P3_A35G2_CLOSE_WITHOUT_OPENER
+            //
+            // El PDV puede abrirse con target="_blank" o mediante Filament.
+            // En esos casos la pestaña puede ser cerrable aunque window.opener
+            // sea null. Por eso el cierre ya no depende del opener.
+            const closeFallbackUrl = (
+                response.redirected
+                && response.url
+            )
+                ? response.url
+                : '/admin/{{ filament()->getTenant()?->getKey() ?? 3 }}/point-of-sale';
+
+            try {
+                if (window.opener && !window.opener.closed) {
+                    try {
+                        window.opener.postMessage(
+                            {
+                                type: 'bexia:pos-session-closed',
+                                sessionId: sid,
+                            },
+                            window.location.origin
+                        );
+                    } catch (postMessageError) {
+                        console.warn(
+                            'No se pudo notificar el cierre al opener.',
+                            postMessageError
+                        );
+                    }
+
+                    try {
+                        window.opener.location.reload();
+                    } catch (reloadError) {
+                        console.warn(
+                            'No se pudo actualizar la ventana principal.',
+                            reloadError
+                        );
+                    }
+                }
+            } catch (openerError) {
+                console.warn(
+                    'No fue posible comunicarse con la ventana administrativa.',
+                    openerError
+                );
             }
 
-            window.location.href = '/admin/{{ filament()->getTenant()?->getKey() ?? 3 }}/point-of-sale';
+            // Primer intento inmediato, exista o no window.opener.
+            try {
+                window.close();
+            } catch (firstCloseError) {
+                console.warn(
+                    'Primer intento de cierre bloqueado por el navegador.',
+                    firstCloseError
+                );
+            }
+
+            // Segundo intento antes de ejecutar la redirección de respaldo.
+            window.setTimeout(function () {
+                if (window.closed) {
+                    return;
+                }
+
+                try {
+                    window.close();
+                } catch (secondCloseError) {
+                    console.warn(
+                        'Segundo intento de cierre bloqueado por el navegador.',
+                        secondCloseError
+                    );
+                }
+            }, 180);
+
+            // Solo se utiliza cuando el navegador no permite cerrar la pestaña.
+            window.setTimeout(function () {
+                if (!window.closed) {
+                    window.location.replace(closeFallbackUrl);
+                }
+            }, 900);
+
+            return;
         } catch (error) {
             button.disabled = false;
             button.textContent = 'Confirmar cierre';
@@ -13832,5 +14074,215 @@ document.addEventListener('DOMContentLoaded', function () {
     // Captura antes que otros listeners para que refreshProductData ya sepa que fue cambio manual.
     document.addEventListener('change', markManualPriceListChange, true);
     document.addEventListener('input', markManualPriceListChange, true);
+})();
+</script>
+
+
+<script>
+// BEXIA_V582P3_A35D1_PAYMENT_AMOUNT_EXACT_SELECT
+(function () {
+    'use strict';
+
+    if (window.__bexiaV582P3A35D1PaymentAmountExactSelect) {
+        return;
+    }
+
+    window.__bexiaV582P3A35D1PaymentAmountExactSelect = true;
+
+    const modalSelector = '#v5335-payment-modal';
+
+    const amountSelector = [
+        'input[data-v5481i-amount="1"]',
+        'input[data-v5448-payment-amount="1"]',
+        'input[data-v5418-amount]'
+    ].join(', ');
+
+    function modal() {
+        return document.querySelector(modalSelector);
+    }
+
+    function modalIsOpen() {
+        const box = modal();
+
+        return !!(
+            box
+            && box.classList.contains('is-open')
+            && box.getAttribute('aria-hidden') !== 'true'
+        );
+    }
+
+    function visibleAmountInputs() {
+        const box = modal();
+
+        if (!box) {
+            return [];
+        }
+
+        return Array.from(
+            box.querySelectorAll(amountSelector)
+        ).filter(function (input) {
+            return !input.disabled
+                && !input.readOnly
+                && input.offsetParent !== null;
+        });
+    }
+
+    function selectWholeValue(input) {
+        if (!input || !document.documentElement.contains(input)) {
+            return false;
+        }
+
+        try {
+            input.focus({ preventScroll: true });
+        } catch (error) {
+            input.focus();
+        }
+
+        const length = String(input.value || '').length;
+
+        window.requestAnimationFrame(function () {
+            try {
+                input.select();
+            } catch (error) {
+                // Continuar con setSelectionRange cuando esté disponible.
+            }
+
+            try {
+                if (typeof input.setSelectionRange === 'function') {
+                    input.setSelectionRange(0, length);
+                }
+            } catch (error) {
+                // Algunos navegadores restringen esto en type=number.
+            }
+        });
+
+        return true;
+    }
+
+    function selectFirstAmount() {
+        if (!modalIsOpen()) {
+            return false;
+        }
+
+        const inputs = visibleAmountInputs();
+
+        return selectWholeValue(inputs[0] || null);
+    }
+
+    function selectLastAmount() {
+        if (!modalIsOpen()) {
+            return false;
+        }
+
+        const inputs = visibleAmountInputs();
+
+        return selectWholeValue(
+            inputs.length ? inputs[inputs.length - 1] : null
+        );
+    }
+
+    function scheduleSelection(mode) {
+        [0, 60, 140, 260, 420].forEach(function (delay) {
+            window.setTimeout(function () {
+                if (mode === 'last') {
+                    selectLastAmount();
+                } else {
+                    selectFirstAmount();
+                }
+            }, delay);
+        });
+    }
+
+    document.addEventListener('click', function (event) {
+        const target = event.target;
+
+        if (!target || !target.closest) {
+            return;
+        }
+
+        const amountInput = target.closest(amountSelector);
+
+        if (amountInput && amountInput.closest(modalSelector)) {
+            window.setTimeout(function () {
+                selectWholeValue(amountInput);
+            }, 0);
+
+            return;
+        }
+
+        if (target.closest('#v5349-charge-ticket')) {
+            scheduleSelection('first');
+            return;
+        }
+
+        const button = target.closest(modalSelector + ' button');
+
+        const text = button
+            ? String(button.textContent || '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase()
+            : '';
+
+        if (text.includes('agregar otro método de pago')) {
+            scheduleSelection('last');
+        }
+    }, true);
+
+    document.addEventListener('focusin', function (event) {
+        const target = event.target;
+
+        if (
+            target
+            && target.matches
+            && target.matches(amountSelector)
+            && target.closest(modalSelector)
+        ) {
+            window.setTimeout(function () {
+                selectWholeValue(target);
+            }, 0);
+        }
+    }, true);
+
+    const paymentModal = modal();
+
+    if (paymentModal) {
+        let mutationTimer = null;
+
+        const observer = new MutationObserver(function (mutations) {
+            const opened = mutations.some(function (mutation) {
+                return mutation.type === 'attributes'
+                    && mutation.attributeName === 'class'
+                    && modalIsOpen();
+            });
+
+            const rowsChanged = mutations.some(function (mutation) {
+                return mutation.type === 'childList'
+                    && mutation.addedNodes
+                    && mutation.addedNodes.length > 0;
+            });
+
+            if (!opened && !rowsChanged) {
+                return;
+            }
+
+            window.clearTimeout(mutationTimer);
+
+            mutationTimer = window.setTimeout(function () {
+                if (opened) {
+                    selectFirstAmount();
+                } else if (rowsChanged) {
+                    selectLastAmount();
+                }
+            }, 40);
+        });
+
+        observer.observe(paymentModal, {
+            attributes: true,
+            attributeFilter: ['class', 'aria-hidden'],
+            childList: true,
+            subtree: true
+        });
+    }
 })();
 </script>
