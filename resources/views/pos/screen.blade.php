@@ -14080,14 +14080,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script>
 // BEXIA_V582P3_A35D1_PAYMENT_AMOUNT_EXACT_SELECT
+// BEXIA_V582P3_A35D2_PAYMENT_AMOUNT_SELECT_ONCE
 (function () {
     'use strict';
 
-    if (window.__bexiaV582P3A35D1PaymentAmountExactSelect) {
+    if (window.__bexiaV582P3A35D2PaymentAmountSelectOnce) {
         return;
     }
 
-    window.__bexiaV582P3A35D1PaymentAmountExactSelect = true;
+    window.__bexiaV582P3A35D2PaymentAmountSelectOnce = true;
 
     const modalSelector = '#v5335-payment-modal';
 
@@ -14096,6 +14097,8 @@ document.addEventListener('DOMContentLoaded', function () {
         'input[data-v5448-payment-amount="1"]',
         'input[data-v5418-amount]'
     ].join(', ');
+
+    let selectionToken = 0;
 
     function modal() {
         return document.querySelector(modalSelector);
@@ -14127,8 +14130,35 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function selectWholeValue(input) {
-        if (!input || !document.documentElement.contains(input)) {
+    function cancelPendingSelection() {
+        selectionToken += 1;
+    }
+
+    function amountInputFromEvent(event) {
+        const target = event && event.target
+            ? event.target
+            : null;
+
+        if (!target || typeof target.closest !== 'function') {
+            return null;
+        }
+
+        const input = target.closest(amountSelector);
+
+        if (!input || !input.closest(modalSelector)) {
+            return null;
+        }
+
+        return input;
+    }
+
+    function selectWholeValueOnce(input, token) {
+        if (
+            token !== selectionToken
+            || !input
+            || !document.documentElement.contains(input)
+            || !modalIsOpen()
+        ) {
             return false;
         }
 
@@ -14138,13 +14168,21 @@ document.addEventListener('DOMContentLoaded', function () {
             input.focus();
         }
 
-        const length = String(input.value || '').length;
-
         window.requestAnimationFrame(function () {
+            if (
+                token !== selectionToken
+                || !document.documentElement.contains(input)
+                || !modalIsOpen()
+            ) {
+                return;
+            }
+
+            const length = String(input.value || '').length;
+
             try {
                 input.select();
             } catch (error) {
-                // Continuar con setSelectionRange cuando esté disponible.
+                // setSelectionRange será el respaldo.
             }
 
             try {
@@ -14152,70 +14190,89 @@ document.addEventListener('DOMContentLoaded', function () {
                     input.setSelectionRange(0, length);
                 }
             } catch (error) {
-                // Algunos navegadores restringen esto en type=number.
+                // Algunos navegadores lo restringen en type=number.
             }
         });
 
         return true;
     }
 
-    function selectFirstAmount() {
-        if (!modalIsOpen()) {
-            return false;
-        }
+    function waitAndSelect(mode, previousCount) {
+        const token = ++selectionToken;
+        let attempt = 0;
+        const maximumAttempts = 30;
 
-        const inputs = visibleAmountInputs();
+        function run() {
+            if (token !== selectionToken) {
+                return;
+            }
 
-        return selectWholeValue(inputs[0] || null);
-    }
+            const inputs = modalIsOpen()
+                ? visibleAmountInputs()
+                : [];
 
-    function selectLastAmount() {
-        if (!modalIsOpen()) {
-            return false;
-        }
+            let target = null;
 
-        const inputs = visibleAmountInputs();
-
-        return selectWholeValue(
-            inputs.length ? inputs[inputs.length - 1] : null
-        );
-    }
-
-    function scheduleSelection(mode) {
-        [0, 60, 140, 260, 420].forEach(function (delay) {
-            window.setTimeout(function () {
-                if (mode === 'last') {
-                    selectLastAmount();
-                } else {
-                    selectFirstAmount();
+            if (mode === 'new-last') {
+                if (inputs.length > previousCount) {
+                    target = inputs[inputs.length - 1] || null;
                 }
-            }, delay);
-        });
+            } else if (inputs.length > 0) {
+                target = inputs[0] || null;
+            }
+
+            if (target) {
+                selectWholeValueOnce(target, token);
+                return;
+            }
+
+            attempt += 1;
+
+            if (attempt < maximumAttempts) {
+                window.setTimeout(run, 40);
+            }
+        }
+
+        window.setTimeout(run, 0);
     }
+
+    function cancelFromUserEvent(event) {
+        if (amountInputFromEvent(event)) {
+            cancelPendingSelection();
+        }
+    }
+
+    [
+        'pointerdown',
+        'mousedown',
+        'touchstart',
+        'keydown',
+        'beforeinput',
+        'input',
+        'paste'
+    ].forEach(function (eventName) {
+        document.addEventListener(
+            eventName,
+            cancelFromUserEvent,
+            true
+        );
+    });
 
     document.addEventListener('click', function (event) {
         const target = event.target;
 
-        if (!target || !target.closest) {
-            return;
-        }
-
-        const amountInput = target.closest(amountSelector);
-
-        if (amountInput && amountInput.closest(modalSelector)) {
-            window.setTimeout(function () {
-                selectWholeValue(amountInput);
-            }, 0);
-
+        if (!target || typeof target.closest !== 'function') {
             return;
         }
 
         if (target.closest('#v5349-charge-ticket')) {
-            scheduleSelection('first');
+            waitAndSelect('first', 0);
             return;
         }
 
-        const button = target.closest(modalSelector + ' button');
+        const button = target.closest(
+            modalSelector + ' button'
+        );
 
         const text = button
             ? String(button.textContent || '')
@@ -14225,64 +14282,25 @@ document.addEventListener('DOMContentLoaded', function () {
             : '';
 
         if (text.includes('agregar otro método de pago')) {
-            scheduleSelection('last');
-        }
-    }, true);
+            const previousCount = visibleAmountInputs().length;
 
-    document.addEventListener('focusin', function (event) {
-        const target = event.target;
+            waitAndSelect('new-last', previousCount);
+            return;
+        }
 
         if (
-            target
-            && target.matches
-            && target.matches(amountSelector)
-            && target.closest(modalSelector)
+            text === 'cerrar'
+            || text === 'cancelar'
+            || text.includes('cancelar cobro')
         ) {
-            window.setTimeout(function () {
-                selectWholeValue(target);
-            }, 0);
+            cancelPendingSelection();
         }
     }, true);
 
-    const paymentModal = modal();
-
-    if (paymentModal) {
-        let mutationTimer = null;
-
-        const observer = new MutationObserver(function (mutations) {
-            const opened = mutations.some(function (mutation) {
-                return mutation.type === 'attributes'
-                    && mutation.attributeName === 'class'
-                    && modalIsOpen();
-            });
-
-            const rowsChanged = mutations.some(function (mutation) {
-                return mutation.type === 'childList'
-                    && mutation.addedNodes
-                    && mutation.addedNodes.length > 0;
-            });
-
-            if (!opened && !rowsChanged) {
-                return;
-            }
-
-            window.clearTimeout(mutationTimer);
-
-            mutationTimer = window.setTimeout(function () {
-                if (opened) {
-                    selectFirstAmount();
-                } else if (rowsChanged) {
-                    selectLastAmount();
-                }
-            }, 40);
-        });
-
-        observer.observe(paymentModal, {
-            attributes: true,
-            attributeFilter: ['class', 'aria-hidden'],
-            childList: true,
-            subtree: true
-        });
-    }
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            cancelPendingSelection();
+        }
+    }, true);
 })();
 </script>
