@@ -1732,6 +1732,12 @@ abort_if(! $sessionRow, 404);
             $products[] = [
                 'id' => (int) $row->id,
                 'name' => $this->productDisplayName($row),
+                // BEXIA_V582P4B_POS_SEARCH_RAW_IDENTIFIERS
+                // No colapsar SKU, barcode y referencia en un solo valor.
+                // El buscador del PDV debe poder encontrar cualquiera.
+                'internal_reference' => (string) ($row->internal_reference ?? ''),
+                'sku' => (string) ($row->sku ?? ''),
+                'barcode' => (string) ($row->barcode ?? ''),
                 'code' => (string) ($row->barcode ?: ($row->sku ?: ($row->internal_reference ?: ''))),
                 'price' => $price,
                 'stock' => $stock,
@@ -8749,7 +8755,8 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             }
         }
 
-        foreach (['sku', 'code', 'barcode'] as $column) {
+        // BEXIA_V582P4B_REFRESH_SELECT_IDENTIFIERS
+        foreach (['sku', 'code', 'barcode', 'internal_reference'] as $column) {
             if (in_array($column, $productColumns, true)) {
                 $select[] = "p.$column";
             }
@@ -8928,7 +8935,11 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             return [
                 'id' => (int) $product->id,
                 'name' => (string) $name,
-                'sku' => (string) ($product->sku ?? $product->code ?? $product->barcode ?? ''),
+                // BEXIA_V582P4B_REFRESH_PAYLOAD_IDENTIFIERS
+                'internal_reference' => (string) ($product->internal_reference ?? ''),
+                'sku' => (string) ($product->sku ?? ''),
+                'barcode' => (string) ($product->barcode ?? ''),
+                'code' => (string) ($product->code ?? ''),
                 'price' => $price,
                 'public_price' => $price,
                 'price_list_id' => $selectedPriceListId,

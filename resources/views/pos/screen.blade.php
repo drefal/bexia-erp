@@ -10547,6 +10547,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 const cardsChanged = updateVisibleCards(products);
                 const cartChanged = updateCart(products);
 
+                // BEXIA_V582P4B_REFRESH_APPLY_SEARCH_METADATA
+                if (typeof window.BEXIA_POS_APPLY_SEARCH_METADATA === 'function') {
+                    window.BEXIA_POS_APPLY_SEARCH_METADATA(products);
+                }
+
                 return {
                     cardsChanged: cardsChanged,
                     cartChanged: cartChanged
@@ -14336,5 +14341,82 @@ document.addEventListener('DOMContentLoaded', function () {
             cancelPendingSelection();
         }
     }, true);
+})();
+</script>
+
+
+<script id="v582p4b-pos-search-metadata-refresh">
+/* BEXIA_V582P4B_POS_SEARCH_METADATA_REFRESH */
+(function () {
+    'use strict';
+
+    if (window.BEXIA_POS_SEARCH_METADATA_V582P4B_READY) {
+        return;
+    }
+
+    window.BEXIA_POS_SEARCH_METADATA_V582P4B_READY = true;
+
+    function clean(value) {
+        return String(value ?? '').trim();
+    }
+
+    function identifier(item, key) {
+        return clean(
+            item
+            && Object.prototype.hasOwnProperty.call(item, key)
+                ? item[key]
+                : ''
+        );
+    }
+
+    window.BEXIA_POS_APPLY_SEARCH_METADATA = function (products) {
+        let changed = 0;
+
+        (Array.isArray(products) ? products : []).forEach(
+            function (item) {
+                const id = clean(item && item.id);
+
+                if (!id) {
+                    return;
+                }
+
+                const name = identifier(item, 'name');
+                const reference = identifier(
+                    item,
+                    'internal_reference'
+                );
+                const sku = identifier(item, 'sku');
+                const barcode = identifier(item, 'barcode');
+                const code = identifier(item, 'code');
+
+                const search = [
+                    name,
+                    reference,
+                    sku,
+                    barcode,
+                    code
+                ]
+                    .filter(Boolean)
+                    .join(' ');
+
+                document.querySelectorAll(
+                    '.product[data-product-id="' + id + '"]'
+                ).forEach(function (card) {
+                    if (name) {
+                        card.dataset.productName = name;
+                    }
+
+                    card.dataset.productReference = reference;
+                    card.dataset.productSku = sku;
+                    card.dataset.productBarcode = barcode;
+                    card.dataset.productCode = code || reference;
+                    card.dataset.productSearch = search;
+                    changed += 1;
+                });
+            }
+        );
+
+        return changed;
+    };
 })();
 </script>
