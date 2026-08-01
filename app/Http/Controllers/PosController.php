@@ -3735,6 +3735,298 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
         ]);
     }
 
+    /**
+     * BEXIA_V5829E_UPDATE_LOADED_PENDING_ORDER
+     *
+     * Guarda el carrito sobre el mismo ticket pendiente sin crear un folio nuevo.
+     */
+    public function updatePendingOrder(\Illuminate\Http\Request $request, int $order)
+    {
+        if (! auth()->check()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Tu sesión expiró. Vuelve a iniciar sesión.',
+            ], 401);
+        }
+
+        if (
+            ! $this->v5504aCanPendingTicket('pos.pending_tickets.create')
+            && ! $this->v5504aCanPendingTicket('pos.pending_tickets.load')
+        ) {
+            return $this->v5504aPendingTicketForbiddenJson(
+                'No tienes permiso para actualizar tickets pendientes.'
+            );
+        }
+
+        foreach (['pos_orders', 'pos_order_lines'] as $table) {
+            if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => "No existe la tabla {$table}.",
+                ], 500);
+            }
+        }
+
+        $items = collect($request->input('items', []))
+            ->filter(fn ($item) => is_array($item))
+            ->values();
+
+        if ($items->isEmpty()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'El ticket debe conservar al menos un producto.',
+            ], 422);
+        }
+
+        $discountInput = $request->input('discount', null);
+
+        if ($this->v5517cHasDiscountInput($discountInput) && ! $this->v5517cCanApplyPosDiscount()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No tienes permiso para aplicar descuentos.',
+            ], 403);
+        }
+
+        $requestedSessionId = (int) $request->input(
+            'pos_session_id',
+            $request->input('session_id', 0)
+        );
+
+        $result = \Illuminate\Support\Facades\DB::transaction(function () use (
+            $request,
+            $order,
+            $requestedSessionId
+        ) {
+            $orderRow = \Illuminate\Support\Facades\DB::table('pos_orders')
+                ->where('id', $order)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $orderRow) {
+                return [
+                    'ok' => false,
+                    'status' => 404,
+                    'message' => 'No se encontró el ticket pendiente.',
+                ];
+            }
+
+            if ((string) ($orderRow->status ?? '') !== 'pending_payment') {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Este ticket ya no está pendiente y no puede actualizarse.',
+                ];
+            }
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'is_legacy')
+                && (bool) ($orderRow->is_legacy ?? false)
+            ) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' => 'Los tickets históricos no se pueden modificar desde el PDV.',
+                ];
+            }
+
+            if ($requestedSessionId > 0 && \Illuminate\Support\Facades\Schema::hasTable('pos_sessions')) {
+                $sessionRow = \Illuminate\Support\Facades\DB::table('pos_sessions')
+                    ->where('id', $requestedSessionId)
+                    ->first();
+
+                if (! $sessionRow || (string) ($sessionRow->status ?? '') !== 'open') {
+                    return [
+                        'ok' => false,
+                        'status' => 422,
+                        'message' => 'La sesión actual del PDV no está abierta.',
+                    ];
+                }
+
+                if (
+                    ! empty($orderRow->pos_point_id)
+                    && ! empty($sessionRow->pos_point_id)
+                    && (int) $orderRow->pos_point_id !== (int) $sessionRow->pos_point_id
+                ) {
+                    return [
+                        'ok' => false,
+                        'status' => 422,
+                        'message' => 'El ticket pertenece a otro punto de venta.',
+                    ];
+                }
+
+                if (
+                    ! empty($orderRow->company_id)
+                    && ! empty($sessionRow->company_id)
+                    && (int) $orderRow->company_id !== (int) $sessionRow->company_id
+                ) {
+                    return [
+                        'ok' => false,
+                        'status' => 422,
+                        'message' => 'El ticket pertenece a otra empresa.',
+                    ];
+                }
+            }
+
+            $beforeLineCount = \Illuminate\Support\Facades\DB::table('pos_order_lines')
+                ->where('pos_order_id', $orderRow->id)
+                ->count();
+            $beforeTotal = round((float) ($orderRow->total ?? 0), 4);
+
+            $newTotal = $this->v5481jApplyPendingPaymentAdjustments($orderRow, $request);
+
+            $metadata = [];
+
+            if (! empty($orderRow->metadata)) {
+                $decoded = json_decode((string) $orderRow->metadata, true);
+                $metadata = is_array($decoded) ? $decoded : [];
+            }
+
+            $orderNote = trim((string) $request->input('order_note', ''));
+
+            if ($orderNote !== '') {
+                $metadata['order_note'] = $orderNote;
+            } else {
+                unset($metadata['order_note']);
+            }
+
+            $metadata['pending_saved_at'] = now()->toDateTimeString();
+            $metadata['pending_saved_by_user_id'] = auth()->id();
+            $metadata['pending_saved_source'] = 'v5829e_same_pending_ticket';
+
+            $updates = [
+                'metadata' => json_encode(
+                    $metadata,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                ),
+                'updated_at' => now(),
+            ];
+
+            if ($request->has('customer_id') && \Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'customer_id')) {
+                $customerId = $request->input('customer_id');
+                $customerId = is_numeric($customerId) && (int) $customerId > 0
+                    ? (int) $customerId
+                    : null;
+
+                if ($customerId && \Illuminate\Support\Facades\Schema::hasTable('contacts')) {
+                    $customerQuery = \Illuminate\Support\Facades\DB::table('contacts')
+                        ->where('id', $customerId);
+
+                    if (
+                        ! empty($orderRow->company_id)
+                        && \Illuminate\Support\Facades\Schema::hasColumn('contacts', 'company_id')
+                    ) {
+                        $customerQuery->where('company_id', (int) $orderRow->company_id);
+                    }
+
+                    if (! $customerQuery->exists()) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'customer_id' => ['El cliente no corresponde a la empresa del ticket.'],
+                        ]);
+                    }
+                }
+
+                $updates['customer_id'] = $customerId;
+            }
+
+            $priceListId = $request->input(
+                'price_list_id',
+                $request->input('selected_price_list_id', null)
+            );
+            $priceListId = is_numeric($priceListId) && (int) $priceListId > 0
+                ? (int) $priceListId
+                : null;
+
+            $priceListName = trim((string) $request->input(
+                'price_list_name',
+                $request->input('selected_price_list_name', '')
+            ));
+
+            if ($priceListId) {
+                $metadata['price_list_id'] = $priceListId;
+                $metadata['selected_price_list_id'] = $priceListId;
+            }
+
+            if ($priceListName !== '') {
+                $metadata['price_list_name'] = $priceListName;
+                $metadata['selected_price_list_name'] = $priceListName;
+            }
+
+            $updates['metadata'] = json_encode(
+                $metadata,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'price_list_id')) {
+                $updates['price_list_id'] = $priceListId;
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'price_list_name')) {
+                $updates['price_list_name'] = $priceListName !== '' ? $priceListName : null;
+            }
+
+            \Illuminate\Support\Facades\DB::table('pos_orders')
+                ->where('id', $orderRow->id)
+                ->update($updates);
+
+            $fresh = \Illuminate\Support\Facades\DB::table('pos_orders')
+                ->where('id', $orderRow->id)
+                ->first();
+            $afterLineCount = \Illuminate\Support\Facades\DB::table('pos_order_lines')
+                ->where('pos_order_id', $orderRow->id)
+                ->count();
+
+            $this->v5515aWritePosAuditLog('pos.ticket.pending_updated', [
+                'company_id' => $orderRow->company_id ?? null,
+                'pos_session_id' => $orderRow->pos_session_id ?? null,
+                'pos_order_id' => $orderRow->id,
+                'entity_type' => 'pos_order',
+                'entity_id' => $orderRow->id,
+                'description' => 'Ticket pendiente actualizado sobre el mismo folio.',
+                'before_data' => [
+                    'line_count' => $beforeLineCount,
+                    'total' => $beforeTotal,
+                ],
+                'after_data' => [
+                    'line_count' => $afterLineCount,
+                    'total' => round((float) $newTotal, 4),
+                ],
+                'metadata' => [
+                    'source' => 'v5829e_update_loaded_pending_order',
+                    'requested_session_id' => $requestedSessionId ?: null,
+                ],
+            ]);
+
+            return [
+                'ok' => true,
+                'status' => 200,
+                'order' => $fresh,
+                'line_count' => $afterLineCount,
+                'total' => round((float) $newTotal, 4),
+            ];
+        });
+
+        if (! ($result['ok'] ?? false)) {
+            return response()->json([
+                'ok' => false,
+                'message' => $result['message'] ?? 'No se pudo actualizar el ticket pendiente.',
+            ], $result['status'] ?? 500);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Ticket pendiente actualizado correctamente.',
+            'order_id' => (int) $result['order']->id,
+            'number' => (string) $result['order']->number,
+            'status' => (string) $result['order']->status,
+            'total' => $result['total'],
+            'line_count' => $result['line_count'],
+            'print_url' => route('pos.orders.pending-ticket.print', [
+                'order' => $result['order']->id,
+                'initial' => 1,
+            ]),
+        ]);
+    }
+
     public function showOrder(\Illuminate\Http\Request $request, int $order)
     {
         // V5.50.4A - permiso para ver detalle de tickets pendientes.
@@ -5973,6 +6265,329 @@ return response()->json([
     }
 
 
+    /**
+     * BEXIA_V5829C_SYNC_PENDING_LINES
+     *
+     * Sincroniza las lineas actuales del carrito con el mismo ticket pendiente.
+     * Se ejecuta dentro de la transaccion de payOrder antes de registrar pagos.
+     * No crea otro ticket y conserva serie/lote cuando vienen bloqueados del pendiente.
+     */
+    protected function v5829cSyncPendingOrderLines(
+        object $orderRow,
+        \Illuminate\Support\Collection $items
+    ): void {
+        $orderId = (int) ($orderRow->id ?? 0);
+
+        if (
+            $orderId <= 0
+            || (string) ($orderRow->status ?? '') !== 'pending_payment'
+            || ! \Illuminate\Support\Facades\Schema::hasTable('pos_order_lines')
+        ) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'items' => ['El ticket ya no esta disponible para actualizar sus productos.'],
+            ]);
+        }
+
+        $lineColumns = \Illuminate\Support\Facades\Schema::getColumnListing('pos_order_lines');
+        $companyId = (int) ($orderRow->company_id ?? 0);
+        $normalizedLines = [];
+        $seenSerialIds = [];
+        $grossSubtotal = 0.0;
+        $grossTax = 0.0;
+        $grossTotal = 0.0;
+
+        foreach ($items as $index => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $productId = isset($item['product_id']) && is_numeric($item['product_id'])
+                ? (int) $item['product_id']
+                : 0;
+            $variantId = 0;
+            $serialId = 0;
+            $lotId = 0;
+
+            foreach (['product_variant_id', 'variant_id'] as $key) {
+                if (isset($item[$key]) && is_numeric($item[$key]) && (int) $item[$key] > 0) {
+                    $variantId = (int) $item[$key];
+                    break;
+                }
+            }
+
+            foreach (['stock_serial_number_id', 'serial_number_id'] as $key) {
+                if (isset($item[$key]) && is_numeric($item[$key]) && (int) $item[$key] > 0) {
+                    $serialId = (int) $item[$key];
+                    break;
+                }
+            }
+
+            foreach (['stock_lot_id', 'lot_id'] as $key) {
+                if (isset($item[$key]) && is_numeric($item[$key]) && (int) $item[$key] > 0) {
+                    $lotId = (int) $item[$key];
+                    break;
+                }
+            }
+
+            if ($serialId > 0 && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')) {
+                if (in_array($serialId, $seenSerialIds, true)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['El numero de serie seleccionado esta repetido en el carrito.'],
+                    ]);
+                }
+
+                $serial = \Illuminate\Support\Facades\DB::table('stock_serial_numbers')
+                    ->where('id', $serialId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $serial) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['No se encontro uno de los numeros de serie del ticket.'],
+                    ]);
+                }
+
+                if ($companyId > 0 && ! empty($serial->company_id) && (int) $serial->company_id !== $companyId) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['Un numero de serie no corresponde a la empresa del ticket.'],
+                    ]);
+                }
+
+                $productId = (int) ($serial->product_id ?? $productId);
+                $variantId = ! empty($serial->product_variant_id)
+                    ? (int) $serial->product_variant_id
+                    : $variantId;
+                $seenSerialIds[] = $serialId;
+            }
+
+            if ($lotId > 0 && \Illuminate\Support\Facades\Schema::hasTable('stock_lots')) {
+                $lot = \Illuminate\Support\Facades\DB::table('stock_lots')
+                    ->where('id', $lotId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lot) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['No se encontro uno de los lotes del ticket.'],
+                    ]);
+                }
+
+                if ($companyId > 0 && ! empty($lot->company_id) && (int) $lot->company_id !== $companyId) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['Un lote no corresponde a la empresa del ticket.'],
+                    ]);
+                }
+
+                $productId = (int) ($lot->product_id ?? $productId);
+                $variantId = ! empty($lot->product_variant_id)
+                    ? (int) $lot->product_variant_id
+                    : $variantId;
+            }
+
+            if (
+                $variantId <= 0
+                && $productId > 0
+                && \Illuminate\Support\Facades\Schema::hasTable('products')
+                && \Illuminate\Support\Facades\Schema::hasColumn('products', 'parent_product_id')
+            ) {
+                $candidate = \Illuminate\Support\Facades\DB::table('products')
+                    ->where('id', $productId)
+                    ->first();
+
+                if ($candidate && ! empty($candidate->parent_product_id)) {
+                    $variantId = $productId;
+                    $productId = (int) $candidate->parent_product_id;
+                }
+            }
+
+            $productLookupId = $variantId > 0 ? $variantId : $productId;
+            $product = null;
+
+            if ($productLookupId > 0 && \Illuminate\Support\Facades\Schema::hasTable('products')) {
+                $product = \Illuminate\Support\Facades\DB::table('products')
+                    ->where('id', $productLookupId)
+                    ->first();
+            }
+
+            if (! $product || $productId <= 0) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ['Uno de los productos del carrito ya no existe.'],
+                ]);
+            }
+
+            if (
+                $companyId > 0
+                && property_exists($product, 'company_id')
+                && ! empty($product->company_id)
+                && (int) $product->company_id !== $companyId
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ['Uno de los productos no corresponde a la empresa del ticket.'],
+                ]);
+            }
+
+            $qty = round((float) ($item['qty'] ?? $item['quantity'] ?? 0), 6);
+            $unitPrice = round((float) ($item['price'] ?? $item['unit_price'] ?? 0), 6);
+            $taxRate = (float) ($item['tax_rate'] ?? 0.16);
+
+            if ($taxRate > 1) {
+                $taxRate /= 100;
+            }
+
+            $taxRate = max(0, $taxRate);
+
+            if ($qty <= 0) {
+                continue;
+            }
+
+            if ($unitPrice <= 0) {
+                $label = trim((string) ($item['name'] ?? $item['product_name'] ?? 'Producto'));
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ["No se puede vender {$label} porque no tiene precio valido en el PDV."],
+                ]);
+            }
+
+            if ($serialId > 0 && abs($qty - 1.0) > 0.000001) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ['Los productos con numero de serie deben conservar cantidad 1 por linea.'],
+                ]);
+            }
+
+            $lineTotal = round($qty * $unitPrice, 4);
+            $lineSubtotal = $taxRate > 0
+                ? round($lineTotal / (1 + $taxRate), 4)
+                : $lineTotal;
+            $lineTax = round($lineTotal - $lineSubtotal, 4);
+
+            $grossSubtotal += $lineSubtotal;
+            $grossTax += $lineTax;
+            $grossTotal += $lineTotal;
+
+            $name = trim((string) ($item['name'] ?? $item['product_name'] ?? $product->name ?? 'Producto'));
+            $reference = trim((string) ($item['reference'] ?? $item['product_reference'] ?? ''));
+
+            if ($reference === '') {
+                foreach (['sku', 'internal_reference', 'default_code', 'barcode'] as $column) {
+                    if (isset($product->{$column}) && trim((string) $product->{$column}) !== '') {
+                        $reference = trim((string) $product->{$column});
+                        break;
+                    }
+                }
+            }
+
+            $line = [
+                'pos_order_id' => $orderId,
+                'product_id' => $productId,
+                'product_variant_id' => $variantId > 0 ? $variantId : null,
+                'stock_serial_number_id' => $serialId > 0 ? $serialId : null,
+                'stock_lot_id' => $lotId > 0 ? $lotId : null,
+                'lot_tracking_metadata' => $lotId > 0
+                    ? json_encode([
+                        'stock_lot_id' => $lotId,
+                        'source_type' => 'pos_order',
+                        'source_line_type' => 'pos_order_line',
+                        'selected_from' => 'pending_ticket_restore',
+                        'updated_at' => now()->toDateTimeString(),
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    : null,
+                'product_name' => $name !== '' ? $name : 'Producto',
+                'product_reference' => $reference !== '' ? $reference : null,
+                'quantity' => $qty,
+                'unit_price' => $unitPrice,
+                'tax_rate' => $taxRate,
+                'subtotal' => $lineSubtotal,
+                'tax_total' => $lineTax,
+                'total' => $lineTotal,
+                'metadata' => json_encode([
+                    'source' => 'pos_pending_cart_sync',
+                    'raw' => $item,
+                    'synced_at' => now()->toDateTimeString(),
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+
+            $normalizedLines[] = array_intersect_key($line, array_flip($lineColumns));
+        }
+
+        if (empty($normalizedLines)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'items' => ['El ticket debe conservar al menos un producto valido.'],
+            ]);
+        }
+
+        $beforeLines = \Illuminate\Support\Facades\DB::table('pos_order_lines')
+            ->where('pos_order_id', $orderId)
+            ->get();
+        $beforeCount = $beforeLines->count();
+        $beforeTotal = round((float) $beforeLines->sum('total'), 4);
+
+        // Liberacion y nueva reserva ocurren en la misma transaccion del cobro.
+        // Si cualquier validacion falla, Laravel revierte lineas y reservas juntas.
+        $reservationService = app(\App\Support\PosStockReservationService::class);
+        $releaseResult = $reservationService->releaseOrder($orderId, 'pending_cart_resync');
+
+        \Illuminate\Support\Facades\DB::table('pos_order_lines')
+            ->where('pos_order_id', $orderId)
+            ->delete();
+
+        foreach ($normalizedLines as $line) {
+            \Illuminate\Support\Facades\DB::table('pos_order_lines')->insert($line);
+        }
+
+        $reserveResult = $reservationService->reserveOrder($orderId, auth()->id());
+
+        $metadata = [];
+        if (! empty($orderRow->metadata)) {
+            $decoded = json_decode((string) $orderRow->metadata, true);
+            $metadata = is_array($decoded) ? $decoded : [];
+        }
+
+        $metadata['pending_cart_sync'] = [
+            'synced_at' => now()->toDateTimeString(),
+            'synced_by_user_id' => auth()->id(),
+            'line_count' => count($normalizedLines),
+            'gross_subtotal' => round($grossSubtotal, 4),
+            'gross_tax' => round($grossTax, 4),
+            'gross_total' => round($grossTotal, 4),
+            'released_reservations' => (int) ($releaseResult['released_lines'] ?? 0),
+            'reserved_lines' => (int) ($reserveResult['reserved_lines'] ?? 0),
+        ];
+
+        $encodedMetadata = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        \Illuminate\Support\Facades\DB::table('pos_orders')
+            ->where('id', $orderId)
+            ->update([
+                'metadata' => $encodedMetadata,
+                'updated_at' => now(),
+            ]);
+        $orderRow->metadata = $encodedMetadata;
+
+        if (method_exists($this, 'v5515aWritePosAuditLog')) {
+            $this->v5515aWritePosAuditLog('pos.ticket.pending_lines_synced', [
+                'company_id' => $orderRow->company_id ?? null,
+                'pos_session_id' => $orderRow->pos_session_id ?? null,
+                'pos_order_id' => $orderId,
+                'entity_type' => 'pos_order',
+                'entity_id' => $orderId,
+                'description' => 'Lineas de ticket pendiente sincronizadas desde el carrito antes del cobro.',
+                'before_data' => [
+                    'line_count' => $beforeCount,
+                    'gross_total' => $beforeTotal,
+                ],
+                'after_data' => [
+                    'line_count' => count($normalizedLines),
+                    'gross_total' => round($grossTotal, 4),
+                ],
+                'metadata' => [
+                    'source' => 'v5829c_pending_cart_sync',
+                    'release_result' => $releaseResult,
+                    'reserve_result' => $reserveResult,
+                ],
+            ]);
+        }
+    }
+
     protected function v5481jApplyPendingPaymentAdjustments(object $orderRow, \Illuminate\Http\Request $request): float
     {
         $orderId = (int) ($orderRow->id ?? 0);
@@ -6024,6 +6639,11 @@ return response()->json([
         $items = collect($request->input('items', []))
             ->filter(fn ($item) => is_array($item))
             ->values();
+
+        // BEXIA_V5829C_PERSIST_CURRENT_CART_BEFORE_PAYMENT
+        if ($items->isNotEmpty()) {
+            $this->v5829cSyncPendingOrderLines($orderRow, $items);
+        }
 
         /*
          * Si no llegó descuento ni total, dejamos el ticket como estaba.

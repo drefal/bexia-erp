@@ -300,6 +300,7 @@ Route::get('/pos/orders/{order}/receipt/print', [\App\Http\Controllers\PosContro
     ->name('pos.orders.receipt.print');
 
 Route::post('/pos/sessions/{session}/orders', [\App\Http\Controllers\PosController::class, 'storeOrder'])->name('pos.sessions.orders.store');
+Route::post('/pos/orders/{order}/pending-update', [\App\Http\Controllers\PosController::class, 'updatePendingOrder'])->name('pos.orders.pending.update');
 Route::post('/pos/orders/{order}/pay', [\App\Http\Controllers\PosController::class, 'payOrder'])->name('pos.orders.pay');
 Route::get('/pos/orders/{order}', [\App\Http\Controllers\PosController::class, 'showOrder'])->name('pos.orders.show');
 Route::post('/pos/orders/{order}/cancel-pending', [\App\Http\Controllers\PosController::class, 'cancelPendingOrder'])->name('pos.orders.pending.cancel');

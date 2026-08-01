@@ -2996,7 +2996,9 @@ document.addEventListener('DOMContentLoaded', function () {
             cart.set(key, { ...product, qty: 1 });
         }
 
-        window.BEXIA_POS_LOADED_PENDING_ORDER = null;
+        // BEXIA_V5829C_KEEP_PENDING_ORDER_ON_CART_CHANGE
+        // Agregar o incrementar productos no convierte el carrito en una venta nueva.
+        // La identidad del ticket pendiente solo se limpia al vaciar o finalizar el carrito.
         render();
     }
 
@@ -3093,6 +3095,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     || ''
                 );
 
+                // BEXIA_V5829C_PRESERVE_PENDING_LOT_IN_CART
+                const lotId = Number(item.stock_lot_id || item.lot_id || 0) || null;
+                const lotNumber = String(item.lot_number || item.stock_lot_number || '');
+
                 return {
                     product_id: finalProductId || item.id,
                     product_variant_id: finalVariantId,
@@ -3101,6 +3107,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     serial_number_id: serialId,
                     serial_number: serialNumber,
                     serial_locked_from_pending: Boolean(item.serial_locked_from_pending),
+                    stock_lot_id: lotId,
+                    lot_id: lotId,
+                    lot_number: lotNumber,
+                    // BEXIA_V5829C_GETITEMS_LOT_FIELDS
                     // BEXIA_V5545I3_GETITEMS_SERIAL_FROM_GLOBAL
                     name: item.name,
                     reference: item.reference,
@@ -3166,6 +3176,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 const pendingVariantId = Number(item.product_variant_id || item.variant_id || 0) || null;
                 const pendingSerialId = Number(item.stock_serial_number_id || item.serial_number_id || 0) || null;
                 const pendingSerialNumber = String(item.serial_number || item.serial_label || item.line_serial_number || '');
+                const pendingLotId = Number(item.stock_lot_id || item.lot_id || 0) || null;
+                const pendingLotNumber = String(item.lot_number || item.stock_lot_number || '');
 
                 const product = {
                     id: pendingVariantId || pendingProductId || item.id || '',
@@ -3177,6 +3189,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     serial_number_id: pendingSerialId,
                     serial_number: pendingSerialNumber,
                     serial_locked_from_pending: Boolean(pendingSerialId),
+                    stock_lot_id: pendingLotId,
+                    lot_id: pendingLotId,
+                    lot_number: pendingLotNumber,
+                    lot_locked_from_pending: Boolean(pendingLotId),
+                    // BEXIA_V5829C_LOAD_PENDING_LOT_FIELDS
                     pending_price_locked_until_price_list_change: true,
                     original_pending_price: Number.isFinite(price) ? price : 0,
                     original_pending_tax_rate: Number(item.tax_rate || 0.16),
@@ -5546,13 +5563,9 @@ async function createPendingTicket() {
             return;
         }
 
-        if (window.BEXIA_POS_LOADED_PENDING_ORDER && window.BEXIA_POS_LOADED_PENDING_ORDER.number) {
-            notice(
-                'Este carrito ya viene del ticket pendiente ' + window.BEXIA_POS_LOADED_PENDING_ORDER.number + '. Vacía el carrito para crear un ticket pendiente nuevo.',
-                'warning'
-            );
-            return;
-        }
+        // BEXIA_V5829E_SAVE_OVER_LOADED_PENDING_BASE
+        const loadedPendingOrder = window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+        const isUpdatingPending = Boolean(loadedPendingOrder && loadedPendingOrder.id);
 
         const payload = {
             items: items,
@@ -5565,7 +5578,9 @@ async function createPendingTicket() {
             payment_form_id: null,
             status: 'pending_payment',
             order_note: api.getNote ? api.getNote() : '',
-            discount: api.getDiscount ? api.getDiscount() : null
+            discount: api.getDiscount ? api.getDiscount() : null,
+            total: api.getTotal ? api.getTotal() : null,
+            pos_session_id: Number(id)
         };
 
         const button = document.getElementById('v5349-create-pending-ticket');
@@ -5599,11 +5614,15 @@ async function createPendingTicket() {
 
         if (button) {
             button.disabled = true;
-            button.textContent = 'Creando ticket...';
+            button.textContent = isUpdatingPending ? 'Guardando cambios...' : 'Creando ticket...';
         }
 
         try {
-            const data = await jsonFetch('/pos/sessions/' + id + '/orders', {
+            const pendingEndpoint = isUpdatingPending
+                ? '/pos/orders/' + loadedPendingOrder.id + '/pending-update'
+                : '/pos/sessions/' + id + '/orders';
+
+            const data = await jsonFetch(pendingEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -5622,7 +5641,10 @@ async function createPendingTicket() {
                 api.clear();
             }
 
-            notice('Ticket pendiente creado: ' + number, 'info');
+            notice(
+                (isUpdatingPending ? 'Ticket pendiente actualizado: ' : 'Ticket pendiente creado: ') + number,
+                'info'
+            );
 
             if (printUrl) {
                 if (printWindow && !printWindow.closed) {
@@ -7555,13 +7577,9 @@ async function createPendingTicket() {
             return;
         }
 
-        if (window.BEXIA_POS_LOADED_PENDING_ORDER && window.BEXIA_POS_LOADED_PENDING_ORDER.number) {
-            notice(
-                'Este carrito ya viene del ticket pendiente ' + window.BEXIA_POS_LOADED_PENDING_ORDER.number + '. No se puede crear otro ticket pendiente.',
-                'warning'
-            );
-            return;
-        }
+        // BEXIA_V5829E_SAVE_OVER_LOADED_PENDING_CAPTURE
+        var loadedPendingOrder = window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+        var isUpdatingPending = Boolean(loadedPendingOrder && loadedPendingOrder.id);
 
         var api = window.BEXIA_POS_CART_API || null;
         var items = [];
@@ -7607,7 +7625,7 @@ async function createPendingTicket() {
 
         if (button) {
             button.disabled = true;
-            button.innerHTML = 'Creando ticket...';
+            button.innerHTML = isUpdatingPending ? 'Guardando cambios...' : 'Creando ticket...';
         }
 
         try {
@@ -7627,10 +7645,16 @@ async function createPendingTicket() {
                 payment_form_id: null,
                 status: 'pending_payment',
                 order_note: api && typeof api.getNote === 'function' ? api.getNote() : '',
-                discount: api && typeof api.getDiscount === 'function' ? api.getDiscount() : null
+                discount: api && typeof api.getDiscount === 'function' ? api.getDiscount() : null,
+                total: api && typeof api.getTotal === 'function' ? api.getTotal() : null,
+                pos_session_id: Number(sid)
             };
 
-            var response = await fetch('/pos/sessions/' + sid + '/orders', {
+            var pendingEndpoint = isUpdatingPending
+                ? '/pos/orders/' + encodeURIComponent(loadedPendingOrder.id) + '/pending-update'
+                : '/pos/sessions/' + encodeURIComponent(sid) + '/orders';
+
+            var response = await fetch(pendingEndpoint, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -7662,7 +7686,10 @@ async function createPendingTicket() {
                 api.clear();
             }
 
-            notice('Ticket pendiente creado: ' + number, 'info');
+            notice(
+                (isUpdatingPending ? 'Ticket pendiente actualizado: ' : 'Ticket pendiente creado: ') + number,
+                'info'
+            );
 
             if (printUrl) {
                 if (printWindow && !printWindow.closed) {
@@ -8694,6 +8721,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 ? currentApi.getItems()
                 : [];
 
+            // BEXIA_V5829C_PAYLOAD_CURRENT_CART_ITEMS
+            // El pago del ticket pendiente envia sus lineas actuales, total y descuento.
             const data = await getJson('/pos/orders/' + order.id + '/pay', {
                 method: 'POST',
                 headers: {
@@ -11234,13 +11263,9 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        if (window.BEXIA_POS_LOADED_PENDING_ORDER && window.BEXIA_POS_LOADED_PENDING_ORDER.number) {
-            notify(
-                'Este carrito ya viene del ticket pendiente ' + window.BEXIA_POS_LOADED_PENDING_ORDER.number + '. No se puede crear otro ticket pendiente.',
-                'warning'
-            );
-            return;
-        }
+        // BEXIA_V5829E_SAVE_OVER_LOADED_PENDING_ROBUST
+        var loadedPendingOrder = window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+        var isUpdatingPending = Boolean(loadedPendingOrder && loadedPendingOrder.id);
 
         var api = getCartApi();
         var items = getItems();
@@ -11257,7 +11282,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (button) {
             button.disabled = true;
-            button.innerHTML = 'Creando ticket...';
+            button.innerHTML = isUpdatingPending ? 'Guardando cambios...' : 'Creando ticket...';
         }
 
         try {
@@ -11272,10 +11297,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 payment_form_id: null,
                 status: 'pending_payment',
                 order_note: api && typeof api.getNote === 'function' ? api.getNote() : '',
-                discount: api && typeof api.getDiscount === 'function' ? api.getDiscount() : null
+                discount: api && typeof api.getDiscount === 'function' ? api.getDiscount() : null,
+                total: api && typeof api.getTotal === 'function' ? api.getTotal() : null,
+                pos_session_id: Number(sid)
             };
 
-            var response = await fetch('/pos/sessions/' + encodeURIComponent(sid) + '/orders', {
+            var pendingEndpoint = isUpdatingPending
+                ? '/pos/orders/' + encodeURIComponent(loadedPendingOrder.id) + '/pending-update'
+                : '/pos/sessions/' + encodeURIComponent(sid) + '/orders';
+
+            var response = await fetch(pendingEndpoint, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -11303,7 +11334,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             clearCartSafe();
 
-            notify('Ticket pendiente creado: ' + number, 'info');
+            notify(
+                (isUpdatingPending ? 'Ticket pendiente actualizado: ' : 'Ticket pendiente creado: ') + number,
+                'info'
+            );
 
             if (printUrl) {
                 if (printWindow && !printWindow.closed) {
