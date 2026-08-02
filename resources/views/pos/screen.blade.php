@@ -5391,6 +5391,10 @@ document.addEventListener('DOMContentLoaded', function () {
 <script id="v5356-ticket-logo-data">
 window.BEXIA_POS_TICKET_LOGO_URL = @json($v5356TicketLogoUrl);
 window.BEXIA_POS_TICKET_LOGO_RAW = @json($v5356TicketLogoRaw);
+
+/* BEXIA_V582P6A_PENDING_TICKET_PRINT_SETTING */
+window.BEXIA_POS_PRINT_PENDING_TICKET_ON_CREATE =
+    @json((bool) ($pos->print_pending_ticket_on_create ?? true));
 </script>
 
 <script id="v5349-pdv-flow-script">
@@ -5586,9 +5590,14 @@ async function createPendingTicket() {
         const button = document.getElementById('v5349-create-pending-ticket');
         const originalText = button ? button.textContent : '';
 
+        /* BEXIA_V582P6A_PENDING_TICKET_CONDITIONAL_POPUP */
+        const shouldPrintPendingTicket =
+            window.BEXIA_POS_PRINT_PENDING_TICKET_ON_CREATE !== false;
+
         let printWindow = null;
 
-        try {
+        if (shouldPrintPendingTicket) {
+            try {
             printWindow = window.open('', '_blank', 'width=420,height=720');
 
             if (printWindow) {
@@ -5606,8 +5615,9 @@ async function createPendingTicket() {
                 );
                 printWindow.document.close();
             }
-        } catch (error) {
-            printWindow = null;
+            } catch (error) {
+                printWindow = null;
+            }
         }
 
         creatingPendingTicket = true;
@@ -5646,7 +5656,8 @@ async function createPendingTicket() {
                 'info'
             );
 
-            if (printUrl) {
+            // BEXIA_V582P6A_PENDING_TICKET_PRINT_DECISION
+            if (shouldPrintPendingTicket && printUrl) {
                 if (printWindow && !printWindow.closed) {
                     printWindow.location.href = printUrl;
                 } else {
@@ -12638,6 +12649,951 @@ document.addEventListener('DOMContentLoaded', function () {
             });
 
         return changedCards;
+    };
+})();
+</script>
+
+
+
+<script id="v582p6e-pending-print-window-guard-v2">
+/*
+ * BEXIA_V582P6E_PENDING_PRINT_GUARD_V2
+ *
+ * Detecta la creación de tickets pendientes por eventos,
+ * texto del control, llamada al endpoint o stack JavaScript.
+ * Solo actúa cuando la configuración del PDV está apagada.
+ */
+(function () {
+    'use strict';
+
+    if (
+        window.BEXIA_POS_PENDING_PRINT_GUARD_V2_INSTALLED
+    ) {
+        return;
+    }
+
+    window.BEXIA_POS_PENDING_PRINT_GUARD_V2_INSTALLED =
+        true;
+
+    window.BEXIA_POS_PRINT_PENDING_TICKET_SOURCE =
+        'p6e_pending_print_guard_v2';
+
+    const nativeOpen =
+        window.BEXIA_POS_NATIVE_WINDOW_OPEN
+        || window.BEXIA_POS_ORIGINAL_WINDOW_OPEN
+        || window.open.bind(window);
+
+    window.BEXIA_POS_NATIVE_WINDOW_OPEN = nativeOpen;
+
+    const nativeFetch =
+        window.BEXIA_POS_PENDING_PRINT_NATIVE_FETCH
+        || window.fetch.bind(window);
+
+    window.BEXIA_POS_PENDING_PRINT_NATIVE_FETCH =
+        nativeFetch;
+
+    let pendingContextUntil = 0;
+
+    const state = {
+        installed: true,
+        triggerCount: 0,
+        blockedCount: 0,
+        lastTrigger: null,
+        lastBlockedUrl: null,
+        lastBlockedAt: null,
+        lastStack: null
+    };
+
+    window.BEXIA_POS_PENDING_PRINT_GUARD_STATE = state;
+
+    function settingIsDisabled() {
+        return (
+            window
+                .BEXIA_POS_PRINT_PENDING_TICKET_ON_CREATE
+            === false
+        );
+    }
+
+    function normalize(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function armPendingContext(reason) {
+        if (!settingIsDisabled()) {
+            pendingContextUntil = 0;
+            return;
+        }
+
+        pendingContextUntil = Date.now() + 45000;
+        state.triggerCount += 1;
+        state.lastTrigger = String(reason || 'unknown');
+
+        console.info(
+            'BEXIA: contexto de ticket pendiente '
+            + 'detectado:',
+            state.lastTrigger
+        );
+    }
+
+    function controlDescription(target) {
+        if (
+            !target
+            || typeof target.closest !== 'function'
+        ) {
+            return null;
+        }
+
+        const control = target.closest(
+            'button, a, [role="button"], '
+            + 'input[type="button"], '
+            + 'input[type="submit"]'
+        );
+
+        if (!control) {
+            return null;
+        }
+
+        const id = normalize(control.id);
+        const text = normalize(
+            control.innerText
+            || control.textContent
+            || control.value
+            || control.getAttribute('aria-label')
+            || control.getAttribute('title')
+        );
+
+        const action = normalize(
+            control.getAttribute('data-action')
+            || control.getAttribute('data-testid')
+            || control.getAttribute('name')
+        );
+
+        const combined = [
+            id,
+            text,
+            action
+        ].join(' ');
+
+        if (
+            combined.includes('pending')
+            || combined.includes('pendiente')
+            || combined.includes('ticket pendiente')
+        ) {
+            return combined;
+        }
+
+        return null;
+    }
+
+    function detectControlEvent(event) {
+        const description = controlDescription(
+            event.target
+        );
+
+        if (description) {
+            armPendingContext(
+                event.type + ':' + description
+            );
+        }
+    }
+
+    [
+        'pointerdown',
+        'mousedown',
+        'touchstart',
+        'click'
+    ].forEach(function (eventName) {
+        document.addEventListener(
+            eventName,
+            detectControlEvent,
+            true
+        );
+    });
+
+    document.addEventListener(
+        'keydown',
+        function (event) {
+            if (
+                event.key !== 'Enter'
+                && event.key !== ' '
+            ) {
+                return;
+            }
+
+            const description = controlDescription(
+                document.activeElement
+            );
+
+            if (description) {
+                armPendingContext(
+                    'keydown:' + description
+                );
+            }
+        },
+        true
+    );
+
+    window.fetch = function (input, options) {
+        const url = normalize(
+            typeof input === 'string'
+                ? input
+                : (
+                    input
+                    && typeof input.url === 'string'
+                        ? input.url
+                        : ''
+                )
+        );
+
+        const method = normalize(
+            options
+            && options.method
+                ? options.method
+                : 'get'
+        );
+
+        const isPendingSave =
+            method === 'post'
+            && (
+                /\/pos\/sessions\/\d+\/orders/.test(url)
+                || /\/pos\/orders\/\d+\/pending-update/.test(
+                    url
+                )
+            );
+
+        if (isPendingSave) {
+            armPendingContext(
+                'fetch:' + method + ':' + url
+            );
+        }
+
+        return nativeFetch(input, options);
+    };
+
+    function createBlockedWindow() {
+        const blockedLocation = {};
+
+        Object.defineProperty(
+            blockedLocation,
+            'href',
+            {
+                configurable: true,
+                enumerable: true,
+                get: function () {
+                    return '';
+                },
+                set: function () {
+                    return true;
+                }
+            }
+        );
+
+        return {
+            closed: false,
+            location: blockedLocation,
+            document: {
+                open: function () {},
+                write: function () {},
+                close: function () {}
+            },
+            close: function () {
+                this.closed = true;
+            },
+            focus: function () {}
+        };
+    }
+
+    function activeControlLooksPending() {
+        return Boolean(
+            controlDescription(
+                document.activeElement
+            )
+        );
+    }
+
+    function stackLooksPending(stack) {
+        const normalizedStack = normalize(stack);
+
+        return (
+            normalizedStack.includes(
+                'creatependingticket'
+            )
+            || normalizedStack.includes(
+                'pendingticket'
+            )
+            || normalizedStack.includes(
+                'pending-ticket'
+            )
+            || normalizedStack.includes(
+                'pending'
+            )
+        );
+    }
+
+    window.open = function (url, target, features) {
+        const normalizedUrl = normalize(url);
+        const stack = String(
+            new Error('BEXIA_PENDING_PRINT_TRACE').stack
+            || ''
+        );
+
+        const pendingPrintUrl =
+            normalizedUrl.includes(
+                '/pending-ticket/print'
+            );
+
+        const blankWindow =
+            normalizedUrl === ''
+            || normalizedUrl === 'about:blank';
+
+        const pendingContextActive =
+            Date.now() <= pendingContextUntil;
+
+        const pendingOrigin =
+            pendingContextActive
+            || activeControlLooksPending()
+            || stackLooksPending(stack);
+
+        const shouldBlock =
+            settingIsDisabled()
+            && (
+                pendingPrintUrl
+                || (
+                    blankWindow
+                    && pendingOrigin
+                )
+            );
+
+        if (shouldBlock) {
+            pendingContextUntil = 0;
+
+            state.blockedCount += 1;
+            state.lastBlockedUrl =
+                normalizedUrl || '(blank)';
+            state.lastBlockedAt =
+                new Date().toISOString();
+            state.lastStack = stack;
+
+            console.info(
+                'BEXIA: impresión automática del '
+                + 'ticket pendiente bloqueada.',
+                {
+                    url: state.lastBlockedUrl,
+                    trigger: state.lastTrigger,
+                    blockedCount: state.blockedCount
+                }
+            );
+
+            return createBlockedWindow();
+        }
+
+        return nativeOpen(url, target, features);
+    };
+})();
+</script>
+
+<style id="v582p6f-pending-created-modal-style">
+/* BEXIA_V582P6F_PENDING_CREATE_SINGLE_FLIGHT_MODAL */
+.v582p6f-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, .38);
+    backdrop-filter: blur(2px);
+}
+
+.v582p6f-modal.is-open {
+    display: flex;
+}
+
+.v582p6f-card {
+    width: min(390px, 100%);
+    border: 1px solid #dbeafe;
+    border-radius: 22px;
+    padding: 26px 24px 22px;
+    background: #ffffff;
+    text-align: center;
+    box-shadow: 0 25px 65px rgba(15, 23, 42, .28);
+}
+
+.v582p6f-icon {
+    width: 62px;
+    height: 62px;
+    margin: 0 auto 14px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: 34px;
+    font-weight: 950;
+}
+
+.v582p6f-title {
+    margin: 0;
+    color: #0f172a;
+    font-size: 21px;
+    font-weight: 950;
+}
+
+.v582p6f-message {
+    margin: 9px 0 0;
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.45;
+    font-weight: 700;
+}
+
+.v582p6f-folio {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 7px 11px;
+    border-radius: 10px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 13px;
+    font-weight: 950;
+}
+
+.v582p6f-close {
+    width: 100%;
+    margin-top: 18px;
+    border: 0;
+    border-radius: 13px;
+    padding: 12px 16px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 900;
+    cursor: pointer;
+}
+</style>
+
+<div
+    id="v582p6f-pending-created-modal"
+    class="v582p6f-modal"
+    aria-hidden="true"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="v582p6f-pending-created-title"
+>
+    <div class="v582p6f-card">
+        <div
+            class="v582p6f-icon"
+            aria-hidden="true"
+        >
+            ✓
+        </div>
+
+        <h2
+            id="v582p6f-pending-created-title"
+            class="v582p6f-title"
+        >
+            Ticket pendiente generado
+        </h2>
+
+        <p
+            id="v582p6f-pending-created-message"
+            class="v582p6f-message"
+        >
+            El ticket se guardó correctamente.
+        </p>
+
+        <div
+            id="v582p6f-pending-created-folio"
+            class="v582p6f-folio"
+            hidden
+        ></div>
+
+        <button
+            type="button"
+            id="v582p6f-pending-created-close"
+            class="v582p6f-close"
+        >
+            Aceptar
+        </button>
+    </div>
+</div>
+
+<script id="v582p6f-pending-create-single-flight">
+/*
+ * BEXIA_V582P6F_PENDING_CREATE_SINGLE_FLIGHT_MODAL
+ *
+ * Evita solicitudes repetidas al crear o actualizar un
+ * ticket pendiente y muestra un modal corto de confirmación.
+ */
+(function () {
+    'use strict';
+
+    if (
+        window
+            .BEXIA_POS_PENDING_CREATE_SINGLE_FLIGHT_INSTALLED
+    ) {
+        return;
+    }
+
+    window
+        .BEXIA_POS_PENDING_CREATE_SINGLE_FLIGHT_INSTALLED =
+        true;
+
+    const nativeFetch =
+        window.fetch.bind(window);
+
+    const state = {
+        installed: true,
+        inFlight: false,
+        requestCount: 0,
+        blockedClicks: 0,
+        blockedRequests: 0,
+        lastRequestKey: null,
+        lastOrderId: null,
+        lastNumber: null,
+        lastMode: null,
+        lastSuccessAt: null,
+        lockUntil: 0
+    };
+
+    window.BEXIA_POS_PENDING_CREATE_STATE = state;
+
+    let modalTimer = null;
+
+    function modal() {
+        return document.getElementById(
+            'v582p6f-pending-created-modal'
+        );
+    }
+
+    function openModal(options) {
+        const root = modal();
+
+        if (!root) {
+            return;
+        }
+
+        const title = document.getElementById(
+            'v582p6f-pending-created-title'
+        );
+
+        const message = document.getElementById(
+            'v582p6f-pending-created-message'
+        );
+
+        const folio = document.getElementById(
+            'v582p6f-pending-created-folio'
+        );
+
+        const values = options || {};
+
+        if (title) {
+            title.textContent =
+                values.title
+                || 'Ticket pendiente generado';
+        }
+
+        if (message) {
+            message.textContent =
+                values.message
+                || 'El ticket se guardó correctamente.';
+        }
+
+        if (folio) {
+            const number = String(
+                values.number || ''
+            ).trim();
+
+            folio.textContent = number;
+
+            folio.hidden = number === '';
+        }
+
+        root.classList.add('is-open');
+        root.setAttribute('aria-hidden', 'false');
+
+        window.clearTimeout(modalTimer);
+
+        modalTimer = window.setTimeout(
+            closeModal,
+            Number(values.timeout || 2600)
+        );
+    }
+
+    function closeModal() {
+        const root = modal();
+
+        if (!root) {
+            return;
+        }
+
+        root.classList.remove('is-open');
+        root.setAttribute('aria-hidden', 'true');
+    }
+
+    window.BEXIA_POS_SHOW_PENDING_CREATED_MODAL =
+        openModal;
+
+    document
+        .getElementById(
+            'v582p6f-pending-created-close'
+        )
+        ?.addEventListener(
+            'click',
+            closeModal
+        );
+
+    modal()?.addEventListener(
+        'click',
+        function (event) {
+            if (event.target === modal()) {
+                closeModal();
+            }
+        }
+    );
+
+    function createButton(target) {
+        if (
+            !target
+            || typeof target.closest !== 'function'
+        ) {
+            return null;
+        }
+
+        return target.closest(
+            '#v5349-create-pending-ticket'
+        );
+    }
+
+    function isTemporarilyLocked() {
+        return (
+            state.inFlight
+            || Date.now() < state.lockUntil
+        );
+    }
+
+    function showBlockedMessage() {
+        if (state.inFlight) {
+            openModal({
+                title: 'Generando ticket',
+                message:
+                    'Espera un momento. '
+                    + 'El ticket ya se está guardando.',
+                timeout: 1800
+            });
+
+            return;
+        }
+
+        openModal({
+            title: 'Ticket ya generado',
+            message:
+                'El ticket pendiente ya fue creado.',
+            number: state.lastNumber,
+            timeout: 2200
+        });
+    }
+
+    document.addEventListener(
+        'click',
+        function (event) {
+            if (!createButton(event.target)) {
+                return;
+            }
+
+            if (!isTemporarilyLocked()) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
+            state.blockedClicks += 1;
+
+            showBlockedMessage();
+
+            console.info(
+                'BEXIA: clic repetido para crear '
+                + 'ticket pendiente bloqueado.',
+                {
+                    blockedClicks:
+                        state.blockedClicks,
+                    lastNumber:
+                        state.lastNumber
+                }
+            );
+        },
+        true
+    );
+
+    document.addEventListener(
+        'keydown',
+        function (event) {
+            if (
+                event.key !== 'Enter'
+                && event.key !== ' '
+            ) {
+                return;
+            }
+
+            if (
+                !createButton(
+                    document.activeElement
+                )
+            ) {
+                return;
+            }
+
+            if (!isTemporarilyLocked()) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
+            state.blockedClicks += 1;
+
+            showBlockedMessage();
+        },
+        true
+    );
+
+    function requestUrl(input) {
+        if (typeof input === 'string') {
+            return input;
+        }
+
+        if (
+            input
+            && typeof input.url === 'string'
+        ) {
+            return input.url;
+        }
+
+        return '';
+    }
+
+    function requestMethod(input, options) {
+        if (
+            options
+            && options.method
+        ) {
+            return String(
+                options.method
+            ).toUpperCase();
+        }
+
+        if (
+            input
+            && typeof input.method === 'string'
+        ) {
+            return String(
+                input.method
+            ).toUpperCase();
+        }
+
+        return 'GET';
+    }
+
+    function requestBody(input, options) {
+        if (
+            options
+            && typeof options.body === 'string'
+        ) {
+            return options.body;
+        }
+
+        return '';
+    }
+
+    function isPendingSave(url, method) {
+        if (method !== 'POST') {
+            return false;
+        }
+
+        return (
+            /\/pos\/sessions\/\d+\/orders(?:\?|$)/.test(
+                url
+            )
+            || /\/pos\/orders\/\d+\/pending-update(?:\?|$)/.test(
+                url
+            )
+        );
+    }
+
+    function duplicateResponse() {
+        return new Response(
+            JSON.stringify({
+                ok: false,
+                duplicate_prevented: true,
+                order_id: state.lastOrderId,
+                number: state.lastNumber,
+                message:
+                    state.inFlight
+                        ? 'El ticket ya se está generando.'
+                        : 'El ticket pendiente ya fue generado.'
+            }),
+            {
+                status: 409,
+                headers: {
+                    'Content-Type':
+                        'application/json'
+                }
+            }
+        );
+    }
+
+    window.fetch = function (input, options) {
+        const url = requestUrl(input);
+        const method = requestMethod(
+            input,
+            options
+        );
+
+        if (!isPendingSave(url, method)) {
+            return nativeFetch(input, options);
+        }
+
+        const body = requestBody(
+            input,
+            options
+        );
+
+        const key = [
+            method,
+            url,
+            body
+        ].join('|');
+
+        const duplicateByFlight =
+            state.inFlight;
+
+        const duplicateByCooldown =
+            Date.now() < state.lockUntil
+            && state.lastRequestKey === key;
+
+        if (
+            duplicateByFlight
+            || duplicateByCooldown
+        ) {
+            state.blockedRequests += 1;
+
+            showBlockedMessage();
+
+            console.info(
+                'BEXIA: solicitud repetida de '
+                + 'ticket pendiente bloqueada.',
+                {
+                    blockedRequests:
+                        state.blockedRequests,
+                    inFlight:
+                        state.inFlight,
+                    lastNumber:
+                        state.lastNumber
+                }
+            );
+
+            return Promise.resolve(
+                duplicateResponse()
+            );
+        }
+
+        state.inFlight = true;
+        state.requestCount += 1;
+        state.lastRequestKey = key;
+        state.lastMode =
+            url.includes('/pending-update')
+                ? 'update'
+                : 'create';
+
+        const request = nativeFetch(
+            input,
+            options
+        );
+
+        return request
+            .then(async function (response) {
+                let data = {};
+
+                try {
+                    data = await response
+                        .clone()
+                        .json();
+                } catch (error) {
+                    data = {};
+                }
+
+                if (
+                    response.ok
+                    && data.ok !== false
+                ) {
+                    state.lastOrderId =
+                        data.order_id
+                        || data.id
+                        || (
+                            data.order
+                            && data.order.id
+                        )
+                        || null;
+
+                    state.lastNumber =
+                        data.number
+                        || (
+                            data.order
+                            && data.order.number
+                        )
+                        || '';
+
+                    state.lastSuccessAt =
+                        new Date().toISOString();
+
+                    state.lockUntil =
+                        Date.now() + 7000;
+
+                    openModal({
+                        title:
+                            state.lastMode === 'update'
+                                ? 'Ticket pendiente actualizado'
+                                : 'Ticket pendiente generado',
+                        message:
+                            state.lastMode === 'update'
+                                ? 'Los cambios se guardaron correctamente.'
+                                : 'El ticket se guardó correctamente.',
+                        number:
+                            state.lastNumber,
+                        timeout: 3000
+                    });
+
+                    console.info(
+                        'BEXIA: ticket pendiente '
+                        + 'confirmado por single-flight.',
+                        {
+                            orderId:
+                                state.lastOrderId,
+                            number:
+                                state.lastNumber,
+                            requestCount:
+                                state.requestCount
+                        }
+                    );
+                }
+
+                return response;
+            })
+            .catch(function (error) {
+                state.lockUntil = 0;
+                throw error;
+            })
+            .finally(function () {
+                state.inFlight = false;
+            });
     };
 })();
 </script>

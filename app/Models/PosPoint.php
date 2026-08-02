@@ -35,6 +35,8 @@ class PosPoint extends Model
         'promotions_enabled' => 'boolean',
         'custom_receipt_header_footer' => 'boolean',
         'auto_print_receipt' => 'boolean',
+        // BEXIA_V582P6A_PENDING_TICKET_PRINT_CAST
+        'print_pending_ticket_on_create' => 'boolean',
         'skip_receipt_preview' => 'boolean',
         'use_qr_on_receipt' => 'boolean',
         'payment_method_names' => 'array',
