@@ -399,6 +399,12 @@ Forms\Components\TextInput::make('name')
                                         Forms\Components\Toggle::make('auto_print_receipt')
                                             ->label('Impresión automática del recibo'),
 
+                                        // BEXIA_V582P6A_PENDING_TICKET_PRINT_TOGGLE
+                                        Forms\Components\Toggle::make('print_pending_ticket_on_create')
+                                            ->label('Imprimir automáticamente ticket pendiente')
+                                            ->helperText('Al apagarlo, el ticket pendiente se guarda sin abrir la ventana de impresión. El cambio aplica al volver a cargar el PDV.')
+                                            ->default(true),
+
                                         Forms\Components\Toggle::make('skip_receipt_preview')
                                             ->label('Saltar vista previa')
                                             ->default(true),
