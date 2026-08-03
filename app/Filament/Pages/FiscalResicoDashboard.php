@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\FiscalSat\FiscalSatAccess;
 use App\Support\FiscalSat\ResicoTaxCalculator;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
@@ -28,6 +29,8 @@ class FiscalResicoDashboard extends Page
 
     public function mount(): void
     {
+        abort_unless(static::canAccess(), 403);
+
         $companyId = $this->companyId();
 
         if (! $companyId) {
@@ -72,11 +75,14 @@ class FiscalResicoDashboard extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->check();
+        return FiscalSatAccess::canAny([
+            'fiscal_sat.menu.view',
+            'fiscal_sat.tax_summary.view',
+        ]);
     }
 
     public static function shouldRegisterNavigation(): bool
     {
-        return auth()->check();
+        return static::canAccess();
     }
 }
