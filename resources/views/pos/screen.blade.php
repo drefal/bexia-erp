@@ -5399,6 +5399,14 @@ window.BEXIA_POS_PRINT_PENDING_TICKET_ON_CREATE =
 
 <script id="v5349-pdv-flow-script">
 document.addEventListener('DOMContentLoaded', function () {
+    /*
+     * BEXIA_V582P6Q_V5349_LEGACY_DUPLICATE_DISABLED
+     *
+     * Bloque histórico mantenido sin ejecución.
+     * El controlador vigente es v5399.
+     */
+    return;
+
     const csrf = @json(csrf_token());
     let creatingPendingTicket = false;
 
@@ -5607,11 +5615,8 @@ async function createPendingTicket() {
                     '<html><head><meta charset="utf-8"><title>Preparando ticket</title></head>' +
                     '<body style="font-family:Arial;text-align:center;padding:30px;">' +
                     '<strong>Preparando ticket pendiente...</strong><br><span>Espere un momento.</span>' +
-                    '
-
-
-
-</body></html>'
+                    /* BEXIA_V582P6Q_V5349_HTML_FIXED */
+                    '</body></html>'
                 );
                 printWindow.document.close();
             }
@@ -5966,8 +5971,8 @@ async function createPendingTicket() {
                             payments: payments,
                         }),
                     });
-                    }
 
+                    /* BEXIA_V582P6Q_V5349_PAY_TRY_FIXED_1 */
                     if (api && typeof api.getItems === 'function') {
                         const v5481e5PaidItems = api.getItems();
 
@@ -6640,8 +6645,8 @@ async function createPendingTicket() {
                         payments: payments,
                     }),
                 });
-                }
 
+                /* BEXIA_V582P6Q_V5349_PAY_TRY_FIXED_2 */
                 if (window.BEXIA_POS_CART_API && typeof window.BEXIA_POS_CART_API.getItems === 'function') {
                     const v5481e5PaidItems = window.BEXIA_POS_CART_API.getItems();
 
@@ -7454,6 +7459,88 @@ async function createPendingTicket() {
 (function () {
     var csrfToken = @json(csrf_token());
 
+    /*
+     * BEXIA_V582P6O_ACTIVE_CSRF_RESOLVER
+     *
+     * Usa solamente valores CSRF de tipo string.
+     * No expone el token en consola o reportes.
+     */
+    function v582p6oResolveCsrfToken() {
+        var meta = document.querySelector(
+            'meta[name="csrf-token"]'
+        );
+
+        var input = document.querySelector(
+            'input[name="_token"]'
+        );
+
+        var candidates = [
+            {
+                source: 'meta',
+                value:
+                    meta
+                    && typeof meta.content === 'string'
+                        ? meta.content
+                        : ''
+            },
+            {
+                source: 'hidden_input',
+                value:
+                    input
+                    && typeof input.value === 'string'
+                        ? input.value
+                        : ''
+            },
+            {
+                source: 'v5399_local',
+                value:
+                    typeof csrfToken === 'string'
+                        ? csrfToken
+                        : ''
+            },
+            {
+                source: 'window.csrfToken_string',
+                value:
+                    typeof window.csrfToken === 'string'
+                        ? window.csrfToken
+                        : ''
+            },
+            {
+                source: 'window.csrf_string',
+                value:
+                    typeof window.csrf === 'string'
+                        ? window.csrf
+                        : ''
+            }
+        ];
+
+        for (
+            var index = 0;
+            index < candidates.length;
+            index += 1
+        ) {
+            var candidate = candidates[index];
+
+            var value = String(
+                candidate.value || ''
+            ).trim();
+
+            if (value.length >= 20) {
+                return {
+                    value: value,
+                    source: candidate.source,
+                    length: value.length
+                };
+            }
+        }
+
+        return {
+            value: '',
+            source: 'missing',
+            length: 0
+        };
+    }
+
     function sessionId() {
         var match = window.location.pathname.match(/\/pos\/sessions\/(\d+)\/screen/);
         return match ? match[1] : null;
@@ -7544,8 +7631,7 @@ async function createPendingTicket() {
             '<html><head><meta charset="utf-8"><title>Preparando ticket</title></head>' +
             '<body style="font-family:Arial;text-align:center;padding:30px;">' +
             '<strong>Preparando ticket pendiente...</strong><br><span>Espere un momento.</span>' +
-            '
-</body></html>'
+            '</body></html>'
         );
         win.document.close();
 
@@ -7580,7 +7666,355 @@ async function createPendingTicket() {
         return null;
     }
 
+
+    /*
+     * BEXIA_V582P6M_ACTIVE_PENDING_HANDLER
+     *
+     * Single-flight y modal instalados dentro del
+     * controlador v5399 que realmente captura el botón.
+     * No reemplaza window.fetch y no interviene en ventas.
+     */
+    var v582p6mPendingState = {
+        installed: true,
+        activeHandler:
+            'v5399-create-pending-initial-print-script',
+        scope: 'v5399_createPendingTicket_only',
+        inFlight: false,
+        requestCount: 0,
+        blockedClicks: 0,
+        lastOrderId: null,
+        lastNumber: null,
+        lastMode: null,
+        lastSuccessAt: null,
+        lockUntil: 0,
+        modalShowCount: 0,
+        lastModalAt: null,
+        lastModalConnected: false,
+        lastModalDisplay: null,
+        normalSaleFetchWrapped: false,
+        csrfSource: null,
+        csrfLength: 0,
+        csrfResolved: false
+    };
+
+    window.BEXIA_POS_PENDING_CREATE_STATE =
+        v582p6mPendingState;
+
+    window.BEXIA_POS_PENDING_CREATE_SCOPE =
+        'v5399_createPendingTicket_only';
+
+    window.BEXIA_POS_PENDING_CREATE_ACTIVE_HANDLER =
+        'v5399-create-pending-initial-print-script';
+
+    window
+        .BEXIA_POS_PENDING_CREATE_SINGLE_FLIGHT_INSTALLED =
+        true;
+
+    var v582p6mModalTimer = null;
+
+    function v582p6mCloseModal() {
+        var root = document.getElementById(
+            'v582p6m-pending-created-modal'
+        );
+
+        if (!root) {
+            return;
+        }
+
+        root.style.setProperty(
+            'display',
+            'none',
+            'important'
+        );
+
+        root.setAttribute('aria-hidden', 'true');
+    }
+
+    function v582p6mEnsureModal() {
+        var root = document.getElementById(
+            'v582p6m-pending-created-modal'
+        );
+
+        if (root) {
+            return root;
+        }
+
+        root = document.createElement('div');
+        root.id = 'v582p6m-pending-created-modal';
+        root.setAttribute('role', 'dialog');
+        root.setAttribute('aria-modal', 'true');
+        root.setAttribute('aria-hidden', 'true');
+
+        root.style.cssText = [
+            'position:fixed',
+            'inset:0',
+            'display:none',
+            'align-items:center',
+            'justify-content:center',
+            'padding:20px',
+            'background:rgba(15,23,42,.42)',
+            'backdrop-filter:blur(2px)',
+            'z-index:2147483647',
+            'pointer-events:auto'
+        ].join(';');
+
+        var card = document.createElement('div');
+
+        card.style.cssText = [
+            'width:min(390px,100%)',
+            'border:1px solid #dbeafe',
+            'border-radius:22px',
+            'padding:26px 24px 22px',
+            'background:#ffffff',
+            'text-align:center',
+            'box-shadow:0 25px 65px rgba(15,23,42,.28)'
+        ].join(';');
+
+        var icon = document.createElement('div');
+        icon.textContent = '✓';
+
+        icon.style.cssText = [
+            'width:62px',
+            'height:62px',
+            'margin:0 auto 14px',
+            'border-radius:999px',
+            'display:flex',
+            'align-items:center',
+            'justify-content:center',
+            'background:#dcfce7',
+            'color:#15803d',
+            'font-size:34px',
+            'font-weight:950'
+        ].join(';');
+
+        var title = document.createElement('h2');
+        title.id = 'v582p6m-pending-title';
+
+        title.style.cssText = [
+            'margin:0',
+            'color:#0f172a',
+            'font-size:21px',
+            'font-weight:950'
+        ].join(';');
+
+        var message = document.createElement('p');
+        message.id = 'v582p6m-pending-message';
+
+        message.style.cssText = [
+            'margin:9px 0 0',
+            'color:#475569',
+            'font-size:14px',
+            'line-height:1.45',
+            'font-weight:700'
+        ].join(';');
+
+        var number = document.createElement('div');
+        number.id = 'v582p6m-pending-number';
+
+        number.style.cssText = [
+            'display:none',
+            'margin-top:12px',
+            'padding:7px 11px',
+            'border-radius:10px',
+            'background:#eff6ff',
+            'color:#1d4ed8',
+            'font-size:13px',
+            'font-weight:950'
+        ].join(';');
+
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.textContent = 'Aceptar';
+
+        close.style.cssText = [
+            'width:100%',
+            'margin-top:18px',
+            'border:0',
+            'border-radius:13px',
+            'padding:12px 16px',
+            'background:#2563eb',
+            'color:#ffffff',
+            'font-size:14px',
+            'font-weight:900',
+            'cursor:pointer'
+        ].join(';');
+
+        close.addEventListener(
+            'click',
+            v582p6mCloseModal
+        );
+
+        card.appendChild(icon);
+        card.appendChild(title);
+        card.appendChild(message);
+        card.appendChild(number);
+        card.appendChild(close);
+
+        root.appendChild(card);
+
+        root.addEventListener(
+            'click',
+            function (event) {
+                if (event.target === root) {
+                    v582p6mCloseModal();
+                }
+            }
+        );
+
+        (
+            document.body
+            || document.documentElement
+        ).appendChild(root);
+
+        return root;
+    }
+
+    function v582p6mShowModal(options) {
+        var values = options || {};
+        var root = v582p6mEnsureModal();
+
+        var title = root.querySelector(
+            '#v582p6m-pending-title'
+        );
+
+        var message = root.querySelector(
+            '#v582p6m-pending-message'
+        );
+
+        var number = root.querySelector(
+            '#v582p6m-pending-number'
+        );
+
+        if (title) {
+            title.textContent =
+                values.title
+                || 'Ticket pendiente generado';
+        }
+
+        if (message) {
+            message.textContent =
+                values.message
+                || 'El ticket se guardó correctamente.';
+        }
+
+        if (number) {
+            var numberValue = String(
+                values.number || ''
+            ).trim();
+
+            number.textContent = numberValue;
+
+            number.style.display =
+                numberValue
+                    ? 'inline-block'
+                    : 'none';
+        }
+
+        root.hidden = false;
+
+        root.style.setProperty(
+            'display',
+            'flex',
+            'important'
+        );
+
+        root.style.setProperty(
+            'visibility',
+            'visible',
+            'important'
+        );
+
+        root.style.setProperty(
+            'opacity',
+            '1',
+            'important'
+        );
+
+        root.style.setProperty(
+            'z-index',
+            '2147483647',
+            'important'
+        );
+
+        root.setAttribute('aria-hidden', 'false');
+
+        v582p6mPendingState.modalShowCount += 1;
+
+        v582p6mPendingState.lastModalAt =
+            new Date().toISOString();
+
+        v582p6mPendingState.lastModalConnected =
+            root.isConnected;
+
+        v582p6mPendingState.lastModalDisplay =
+            window.getComputedStyle(root).display;
+
+        console.info(
+            'BEXIA: modal pendiente P6M visible.',
+            {
+                activeHandler:
+                    v582p6mPendingState.activeHandler,
+                modalShowCount:
+                    v582p6mPendingState.modalShowCount,
+                connected:
+                    v582p6mPendingState
+                        .lastModalConnected,
+                display:
+                    v582p6mPendingState
+                        .lastModalDisplay,
+                number:
+                    values.number || null
+            }
+        );
+
+        window.clearTimeout(v582p6mModalTimer);
+
+        v582p6mModalTimer = window.setTimeout(
+            v582p6mCloseModal,
+            Number(values.timeout || 3500)
+        );
+    }
+
+    window.BEXIA_POS_SHOW_PENDING_CREATED_MODAL =
+        v582p6mShowModal;
+
     async function createPendingTicket(button) {
+        if (
+            v582p6mPendingState.inFlight
+            || Date.now()
+                < v582p6mPendingState.lockUntil
+        ) {
+            v582p6mPendingState.blockedClicks += 1;
+
+            v582p6mShowModal({
+                title:
+                    v582p6mPendingState.inFlight
+                        ? 'Generando ticket'
+                        : 'Ticket ya generado',
+                message:
+                    v582p6mPendingState.inFlight
+                        ? 'El ticket ya se está guardando.'
+                        : 'El ticket pendiente ya fue creado.',
+                number:
+                    v582p6mPendingState.lastNumber,
+                timeout: 2400
+            });
+
+            console.info(
+                'BEXIA: clic repetido bloqueado por P6M.',
+                {
+                    blockedClicks:
+                        v582p6mPendingState.blockedClicks,
+                    inFlight:
+                        v582p6mPendingState.inFlight,
+                    activeHandler:
+                        v582p6mPendingState.activeHandler
+                }
+            );
+
+            return;
+        }
+
         var sid = sessionId();
 
         if (!sid) {
@@ -7608,9 +8042,22 @@ async function createPendingTicket() {
 
         button = button || document.getElementById('v5349-create-pending-ticket');
 
+        var shouldPrintPendingTicket =
+            window
+                .BEXIA_POS_PRINT_PENDING_TICKET_ON_CREATE
+            !== false;
+
+        v582p6mPendingState.inFlight = true;
+        v582p6mPendingState.requestCount += 1;
+        v582p6mPendingState.lastMode =
+            isUpdatingPending
+                ? 'update'
+                : 'create';
+
         var printWindow = null;
 
-        try {
+        if (shouldPrintPendingTicket) {
+            try {
             if (typeof openPreparingWindow === 'function') {
                 printWindow = openPreparingWindow();
             } else {
@@ -7628,8 +8075,9 @@ async function createPendingTicket() {
                     printWindow.document.close();
                 }
             }
-        } catch (error) {
-            printWindow = null;
+            } catch (error) {
+                printWindow = null;
+            }
         }
 
         var originalHtml = button ? button.innerHTML : '';
@@ -7640,10 +8088,36 @@ async function createPendingTicket() {
         }
 
         try {
-            var csrf = window.csrfToken
-                || window.csrf
-                || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-                || '';
+            var csrfInfo =
+                v582p6oResolveCsrfToken();
+
+            var csrf = csrfInfo.value;
+
+            v582p6mPendingState.csrfSource =
+                csrfInfo.source;
+
+            v582p6mPendingState.csrfLength =
+                csrfInfo.length;
+
+            v582p6mPendingState.csrfResolved =
+                Boolean(csrf);
+
+            console.info(
+                'BEXIA: token CSRF resuelto para '
+                + 'ticket pendiente.',
+                {
+                    source: csrfInfo.source,
+                    length: csrfInfo.length,
+                    resolved: Boolean(csrf)
+                }
+            );
+
+            if (!csrf) {
+                throw new Error(
+                    'No se encontró un token CSRF válido. '
+                    + 'Recarga el PDV e intenta nuevamente.'
+                );
+            }
 
             var payload = {
                 items: items,
@@ -7689,6 +8163,18 @@ async function createPendingTicket() {
             var number = data.number || (data.order && data.order.number) || 'folio generado';
             var printUrl = data.print_url || (orderId ? '/pos/orders/' + orderId + '/pending-ticket/print?initial=1' : '');
 
+            v582p6mPendingState.lastOrderId =
+                orderId;
+
+            v582p6mPendingState.lastNumber =
+                number;
+
+            v582p6mPendingState.lastSuccessAt =
+                new Date().toISOString();
+
+            v582p6mPendingState.lockUntil =
+                Date.now() + 4000;
+
             window.BEXIA_POS_LOADED_PENDING_ORDER = null;
 
             if (typeof clearCartWithoutConfirm === 'function') {
@@ -7702,17 +8188,46 @@ async function createPendingTicket() {
                 'info'
             );
 
-            if (printUrl) {
+            if (shouldPrintPendingTicket && printUrl) {
                 if (printWindow && !printWindow.closed) {
                     printWindow.location.href = printUrl;
                     printWindow.focus();
                 } else {
-                    window.open(printUrl, '_blank', 'width=420,height=720');
+                    window.open(
+                        printUrl,
+                        '_blank',
+                        'width=420,height=720'
+                    );
                 }
             } else if (printWindow && !printWindow.closed) {
                 printWindow.close();
             }
+
+            /*
+             * BEXIA_V582P6M_MODAL_AFTER_ACTIVE_CART_CLEAR
+             */
+            window.requestAnimationFrame(
+                function () {
+                    window.requestAnimationFrame(
+                        function () {
+                            v582p6mShowModal({
+                                title:
+                                    isUpdatingPending
+                                        ? 'Ticket pendiente actualizado'
+                                        : 'Ticket pendiente generado',
+                                message:
+                                    isUpdatingPending
+                                        ? 'Los cambios se guardaron correctamente.'
+                                        : 'El ticket se guardó correctamente.',
+                                number: number,
+                                timeout: 3500
+                            });
+                        }
+                    );
+                }
+            );
         } catch (error) {
+            v582p6mPendingState.lockUntil = 0;
             console.error(error);
 
             if (printWindow && !printWindow.closed) {
@@ -7721,6 +8236,8 @@ async function createPendingTicket() {
 
             notice(error.message || 'No se pudo crear el ticket pendiente.', 'error');
         } finally {
+            v582p6mPendingState.inFlight = false;
+
             if (button) {
                 button.disabled = false;
                 button.innerHTML = originalHtml;
@@ -12676,7 +13193,7 @@ document.addEventListener('DOMContentLoaded', function () {
         true;
 
     window.BEXIA_POS_PRINT_PENDING_TICKET_SOURCE =
-        'p6e_pending_print_guard_v2';
+        'p6k_pending_print_guard_no_fetch';
 
     const nativeOpen =
         window.BEXIA_POS_NATIVE_WINDOW_OPEN
@@ -12685,13 +13202,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.BEXIA_POS_NATIVE_WINDOW_OPEN = nativeOpen;
 
-    const nativeFetch =
-        window.BEXIA_POS_PENDING_PRINT_NATIVE_FETCH
-        || window.fetch.bind(window);
-
-    window.BEXIA_POS_PENDING_PRINT_NATIVE_FETCH =
-        nativeFetch;
-
+    /* BEXIA_V582P6K_PENDING_PRINT_GUARD_NO_FETCH */
     let pendingContextUntil = 0;
 
     const state = {
@@ -12836,42 +13347,7 @@ document.addEventListener('DOMContentLoaded', function () {
         true
     );
 
-    window.fetch = function (input, options) {
-        const url = normalize(
-            typeof input === 'string'
-                ? input
-                : (
-                    input
-                    && typeof input.url === 'string'
-                        ? input.url
-                        : ''
-                )
-        );
-
-        const method = normalize(
-            options
-            && options.method
-                ? options.method
-                : 'get'
-        );
-
-        const isPendingSave =
-            method === 'post'
-            && (
-                /\/pos\/sessions\/\d+\/orders/.test(url)
-                || /\/pos\/orders\/\d+\/pending-update/.test(
-                    url
-                )
-            );
-
-        if (isPendingSave) {
-            armPendingContext(
-                'fetch:' + method + ':' + url
-            );
-        }
-
-        return nativeFetch(input, options);
-    };
+    // P6K: no interceptar solicitudes de ventas.
 
     function createBlockedWindow() {
         const blockedLocation = {};
@@ -12995,608 +13471,9 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 </script>
 
-<style id="v582p6f-pending-created-modal-style">
-/* BEXIA_V582P6F_PENDING_CREATE_SINGLE_FLIGHT_MODAL */
-.v582p6f-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    background: rgba(15, 23, 42, .38);
-    backdrop-filter: blur(2px);
-}
 
-.v582p6f-modal.is-open {
-    display: flex;
-}
 
-.v582p6f-card {
-    width: min(390px, 100%);
-    border: 1px solid #dbeafe;
-    border-radius: 22px;
-    padding: 26px 24px 22px;
-    background: #ffffff;
-    text-align: center;
-    box-shadow: 0 25px 65px rgba(15, 23, 42, .28);
-}
 
-.v582p6f-icon {
-    width: 62px;
-    height: 62px;
-    margin: 0 auto 14px;
-    border-radius: 999px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #dcfce7;
-    color: #15803d;
-    font-size: 34px;
-    font-weight: 950;
-}
-
-.v582p6f-title {
-    margin: 0;
-    color: #0f172a;
-    font-size: 21px;
-    font-weight: 950;
-}
-
-.v582p6f-message {
-    margin: 9px 0 0;
-    color: #475569;
-    font-size: 14px;
-    line-height: 1.45;
-    font-weight: 700;
-}
-
-.v582p6f-folio {
-    display: inline-block;
-    margin-top: 12px;
-    padding: 7px 11px;
-    border-radius: 10px;
-    background: #eff6ff;
-    color: #1d4ed8;
-    font-size: 13px;
-    font-weight: 950;
-}
-
-.v582p6f-close {
-    width: 100%;
-    margin-top: 18px;
-    border: 0;
-    border-radius: 13px;
-    padding: 12px 16px;
-    background: #2563eb;
-    color: #ffffff;
-    font-size: 14px;
-    font-weight: 900;
-    cursor: pointer;
-}
-</style>
-
-<div
-    id="v582p6f-pending-created-modal"
-    class="v582p6f-modal"
-    aria-hidden="true"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="v582p6f-pending-created-title"
->
-    <div class="v582p6f-card">
-        <div
-            class="v582p6f-icon"
-            aria-hidden="true"
-        >
-            ✓
-        </div>
-
-        <h2
-            id="v582p6f-pending-created-title"
-            class="v582p6f-title"
-        >
-            Ticket pendiente generado
-        </h2>
-
-        <p
-            id="v582p6f-pending-created-message"
-            class="v582p6f-message"
-        >
-            El ticket se guardó correctamente.
-        </p>
-
-        <div
-            id="v582p6f-pending-created-folio"
-            class="v582p6f-folio"
-            hidden
-        ></div>
-
-        <button
-            type="button"
-            id="v582p6f-pending-created-close"
-            class="v582p6f-close"
-        >
-            Aceptar
-        </button>
-    </div>
-</div>
-
-<script id="v582p6f-pending-create-single-flight">
-/*
- * BEXIA_V582P6F_PENDING_CREATE_SINGLE_FLIGHT_MODAL
- *
- * Evita solicitudes repetidas al crear o actualizar un
- * ticket pendiente y muestra un modal corto de confirmación.
- */
-(function () {
-    'use strict';
-
-    if (
-        window
-            .BEXIA_POS_PENDING_CREATE_SINGLE_FLIGHT_INSTALLED
-    ) {
-        return;
-    }
-
-    window
-        .BEXIA_POS_PENDING_CREATE_SINGLE_FLIGHT_INSTALLED =
-        true;
-
-    const nativeFetch =
-        window.fetch.bind(window);
-
-    const state = {
-        installed: true,
-        inFlight: false,
-        requestCount: 0,
-        blockedClicks: 0,
-        blockedRequests: 0,
-        lastRequestKey: null,
-        lastOrderId: null,
-        lastNumber: null,
-        lastMode: null,
-        lastSuccessAt: null,
-        lockUntil: 0
-    };
-
-    window.BEXIA_POS_PENDING_CREATE_STATE = state;
-
-    let modalTimer = null;
-
-    function modal() {
-        return document.getElementById(
-            'v582p6f-pending-created-modal'
-        );
-    }
-
-    function openModal(options) {
-        const root = modal();
-
-        if (!root) {
-            return;
-        }
-
-        const title = document.getElementById(
-            'v582p6f-pending-created-title'
-        );
-
-        const message = document.getElementById(
-            'v582p6f-pending-created-message'
-        );
-
-        const folio = document.getElementById(
-            'v582p6f-pending-created-folio'
-        );
-
-        const values = options || {};
-
-        if (title) {
-            title.textContent =
-                values.title
-                || 'Ticket pendiente generado';
-        }
-
-        if (message) {
-            message.textContent =
-                values.message
-                || 'El ticket se guardó correctamente.';
-        }
-
-        if (folio) {
-            const number = String(
-                values.number || ''
-            ).trim();
-
-            folio.textContent = number;
-
-            folio.hidden = number === '';
-        }
-
-        root.classList.add('is-open');
-        root.setAttribute('aria-hidden', 'false');
-
-        window.clearTimeout(modalTimer);
-
-        modalTimer = window.setTimeout(
-            closeModal,
-            Number(values.timeout || 2600)
-        );
-    }
-
-    function closeModal() {
-        const root = modal();
-
-        if (!root) {
-            return;
-        }
-
-        root.classList.remove('is-open');
-        root.setAttribute('aria-hidden', 'true');
-    }
-
-    window.BEXIA_POS_SHOW_PENDING_CREATED_MODAL =
-        openModal;
-
-    document
-        .getElementById(
-            'v582p6f-pending-created-close'
-        )
-        ?.addEventListener(
-            'click',
-            closeModal
-        );
-
-    modal()?.addEventListener(
-        'click',
-        function (event) {
-            if (event.target === modal()) {
-                closeModal();
-            }
-        }
-    );
-
-    function createButton(target) {
-        if (
-            !target
-            || typeof target.closest !== 'function'
-        ) {
-            return null;
-        }
-
-        return target.closest(
-            '#v5349-create-pending-ticket'
-        );
-    }
-
-    function isTemporarilyLocked() {
-        return (
-            state.inFlight
-            || Date.now() < state.lockUntil
-        );
-    }
-
-    function showBlockedMessage() {
-        if (state.inFlight) {
-            openModal({
-                title: 'Generando ticket',
-                message:
-                    'Espera un momento. '
-                    + 'El ticket ya se está guardando.',
-                timeout: 1800
-            });
-
-            return;
-        }
-
-        openModal({
-            title: 'Ticket ya generado',
-            message:
-                'El ticket pendiente ya fue creado.',
-            number: state.lastNumber,
-            timeout: 2200
-        });
-    }
-
-    document.addEventListener(
-        'click',
-        function (event) {
-            if (!createButton(event.target)) {
-                return;
-            }
-
-            if (!isTemporarilyLocked()) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-
-            state.blockedClicks += 1;
-
-            showBlockedMessage();
-
-            console.info(
-                'BEXIA: clic repetido para crear '
-                + 'ticket pendiente bloqueado.',
-                {
-                    blockedClicks:
-                        state.blockedClicks,
-                    lastNumber:
-                        state.lastNumber
-                }
-            );
-        },
-        true
-    );
-
-    document.addEventListener(
-        'keydown',
-        function (event) {
-            if (
-                event.key !== 'Enter'
-                && event.key !== ' '
-            ) {
-                return;
-            }
-
-            if (
-                !createButton(
-                    document.activeElement
-                )
-            ) {
-                return;
-            }
-
-            if (!isTemporarilyLocked()) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-
-            state.blockedClicks += 1;
-
-            showBlockedMessage();
-        },
-        true
-    );
-
-    function requestUrl(input) {
-        if (typeof input === 'string') {
-            return input;
-        }
-
-        if (
-            input
-            && typeof input.url === 'string'
-        ) {
-            return input.url;
-        }
-
-        return '';
-    }
-
-    function requestMethod(input, options) {
-        if (
-            options
-            && options.method
-        ) {
-            return String(
-                options.method
-            ).toUpperCase();
-        }
-
-        if (
-            input
-            && typeof input.method === 'string'
-        ) {
-            return String(
-                input.method
-            ).toUpperCase();
-        }
-
-        return 'GET';
-    }
-
-    function requestBody(input, options) {
-        if (
-            options
-            && typeof options.body === 'string'
-        ) {
-            return options.body;
-        }
-
-        return '';
-    }
-
-    function isPendingSave(url, method) {
-        if (method !== 'POST') {
-            return false;
-        }
-
-        return (
-            /\/pos\/sessions\/\d+\/orders(?:\?|$)/.test(
-                url
-            )
-            || /\/pos\/orders\/\d+\/pending-update(?:\?|$)/.test(
-                url
-            )
-        );
-    }
-
-    function duplicateResponse() {
-        return new Response(
-            JSON.stringify({
-                ok: false,
-                duplicate_prevented: true,
-                order_id: state.lastOrderId,
-                number: state.lastNumber,
-                message:
-                    state.inFlight
-                        ? 'El ticket ya se está generando.'
-                        : 'El ticket pendiente ya fue generado.'
-            }),
-            {
-                status: 409,
-                headers: {
-                    'Content-Type':
-                        'application/json'
-                }
-            }
-        );
-    }
-
-    window.fetch = function (input, options) {
-        const url = requestUrl(input);
-        const method = requestMethod(
-            input,
-            options
-        );
-
-        if (!isPendingSave(url, method)) {
-            return nativeFetch(input, options);
-        }
-
-        const body = requestBody(
-            input,
-            options
-        );
-
-        const key = [
-            method,
-            url,
-            body
-        ].join('|');
-
-        const duplicateByFlight =
-            state.inFlight;
-
-        const duplicateByCooldown =
-            Date.now() < state.lockUntil
-            && state.lastRequestKey === key;
-
-        if (
-            duplicateByFlight
-            || duplicateByCooldown
-        ) {
-            state.blockedRequests += 1;
-
-            showBlockedMessage();
-
-            console.info(
-                'BEXIA: solicitud repetida de '
-                + 'ticket pendiente bloqueada.',
-                {
-                    blockedRequests:
-                        state.blockedRequests,
-                    inFlight:
-                        state.inFlight,
-                    lastNumber:
-                        state.lastNumber
-                }
-            );
-
-            return Promise.resolve(
-                duplicateResponse()
-            );
-        }
-
-        state.inFlight = true;
-        state.requestCount += 1;
-        state.lastRequestKey = key;
-        state.lastMode =
-            url.includes('/pending-update')
-                ? 'update'
-                : 'create';
-
-        const request = nativeFetch(
-            input,
-            options
-        );
-
-        return request
-            .then(async function (response) {
-                let data = {};
-
-                try {
-                    data = await response
-                        .clone()
-                        .json();
-                } catch (error) {
-                    data = {};
-                }
-
-                if (
-                    response.ok
-                    && data.ok !== false
-                ) {
-                    state.lastOrderId =
-                        data.order_id
-                        || data.id
-                        || (
-                            data.order
-                            && data.order.id
-                        )
-                        || null;
-
-                    state.lastNumber =
-                        data.number
-                        || (
-                            data.order
-                            && data.order.number
-                        )
-                        || '';
-
-                    state.lastSuccessAt =
-                        new Date().toISOString();
-
-                    state.lockUntil =
-                        Date.now() + 7000;
-
-                    openModal({
-                        title:
-                            state.lastMode === 'update'
-                                ? 'Ticket pendiente actualizado'
-                                : 'Ticket pendiente generado',
-                        message:
-                            state.lastMode === 'update'
-                                ? 'Los cambios se guardaron correctamente.'
-                                : 'El ticket se guardó correctamente.',
-                        number:
-                            state.lastNumber,
-                        timeout: 3000
-                    });
-
-                    console.info(
-                        'BEXIA: ticket pendiente '
-                        + 'confirmado por single-flight.',
-                        {
-                            orderId:
-                                state.lastOrderId,
-                            number:
-                                state.lastNumber,
-                            requestCount:
-                                state.requestCount
-                        }
-                    );
-                }
-
-                return response;
-            })
-            .catch(function (error) {
-                state.lockUntil = 0;
-                throw error;
-            })
-            .finally(function () {
-                state.inFlight = false;
-            });
-    };
-})();
-</script>
 
 </body>
 </html>
