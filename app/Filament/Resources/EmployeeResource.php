@@ -568,6 +568,10 @@ public static function canCreate(): bool
                             name: 'attendanceLocations',
                             titleAttribute: 'name',
                             modifyQueryUsing: fn ($query) => $query
+                                ->select([
+                                    'hr_attendance_locations.id',
+                                    'hr_attendance_locations.name',
+                                ])
                                 ->where('hr_attendance_locations.company_id', Filament::getTenant()?->getKey())
                                 ->where('hr_attendance_locations.is_active', true)
                                 ->orderBy('hr_attendance_locations.name')
