@@ -394,8 +394,77 @@ class PurchaseOrderXmlImporter
         $this->set($order, $columns, 'supplier_id', $supplierContact?->id);
         $this->set($order, $columns, 'contact_id', $supplierContact?->id);
         $this->set($order, $columns, 'provider_id', $supplierContact?->id);
+        $warehouseLabel = null;
+        $locationLabel = null;
+
+        if ($warehouseId) {
+            if (! Schema::hasTable('warehouses')) {
+                throw new RuntimeException('No existe el catalogo de almacenes.');
+            }
+
+            $warehouseColumns = Schema::getColumnListing('warehouses');
+            $warehouseQuery = DB::table('warehouses')->where('id', $warehouseId);
+
+            if (in_array('company_id', $warehouseColumns, true)) {
+                $warehouseQuery->where('company_id', $companyId);
+            }
+
+            if (in_array('is_active', $warehouseColumns, true)) {
+                $warehouseQuery->where('is_active', true);
+            }
+
+            $warehouse = $warehouseQuery->first();
+
+            if (! $warehouse) {
+                throw new RuntimeException('El almacen seleccionado no pertenece a la empresa actual o esta inactivo.');
+            }
+
+            $warehouseLabel = trim(implode(' - ', array_values(array_filter([
+                trim((string) ($warehouse->code ?? '')),
+                trim((string) ($warehouse->name ?? '')),
+            ], static fn (string $value): bool => $value !== ''))));
+        }
+
+        if ($locationId) {
+            if (! $warehouseId) {
+                throw new RuntimeException('Selecciona un almacen antes de la ubicacion de recepcion.');
+            }
+
+            if (! Schema::hasTable('stock_locations')) {
+                throw new RuntimeException('No existe el catalogo de ubicaciones.');
+            }
+
+            $locationColumns = Schema::getColumnListing('stock_locations');
+            $locationQuery = DB::table('stock_locations')->where('id', $locationId);
+
+            if (in_array('company_id', $locationColumns, true)) {
+                $locationQuery->where('company_id', $companyId);
+            }
+
+            if (in_array('warehouse_id', $locationColumns, true)) {
+                $locationQuery->where('warehouse_id', $warehouseId);
+            }
+
+            if (in_array('is_active', $locationColumns, true)) {
+                $locationQuery->where('is_active', true);
+            }
+
+            $location = $locationQuery->first();
+
+            if (! $location) {
+                throw new RuntimeException('La ubicacion seleccionada no pertenece al almacen y empresa actuales o esta inactiva.');
+            }
+
+            $locationLabel = trim(implode(' - ', array_values(array_filter([
+                trim((string) ($location->code ?? '')),
+                trim((string) ($location->name ?? '')),
+            ], static fn (string $value): bool => $value !== ''))));
+        }
+
         $this->set($order, $columns, 'warehouse_id', $warehouseId);
         $this->set($order, $columns, 'location_id', $locationId);
+        $this->set($order, $columns, 'warehouse_label', $warehouseLabel);
+        $this->set($order, $columns, 'location_label', $locationLabel);
         $this->set($order, $columns, 'order_date', now());
         $this->set($order, $columns, 'date', now());
         $this->set($order, $columns, 'created_from_xml', true);
