@@ -1184,6 +1184,47 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             );
     }
 
+    protected static function bexiaCanContactPermission(
+        string $permission
+    ): bool {
+        $user = auth()->user();
+
+        return (bool) ($user?->can($permission) ?? false);
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::bexiaCanContactPermission('contacts.create');
+    }
+
+    public static function canEdit(
+        \Illuminate\Database\Eloquent\Model $record
+    ): bool {
+        return static::bexiaCanContactPermission('contacts.update');
+    }
+
+    public static function canDelete(
+        \Illuminate\Database\Eloquent\Model $record
+    ): bool {
+        return static::bexiaCanContactPermission('contacts.delete');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::bexiaCanContactPermission('contacts.delete');
+    }
+
+    public static function canRestore(
+        \Illuminate\Database\Eloquent\Model $record
+    ): bool {
+        return static::bexiaCanContactPermission('contacts.restore');
+    }
+
+    public static function canRestoreAny(): bool
+    {
+        return static::bexiaCanContactPermission('contacts.restore');
+    }
+
     public static function form(Form $form): Form
     {
         return $form

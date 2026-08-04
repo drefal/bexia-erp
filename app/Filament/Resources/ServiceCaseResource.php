@@ -143,20 +143,21 @@ class ServiceCaseResource extends Resource
                             ->required()
                             ->default('general'),
 
-                        Forms\Components\TextInput::make('assigned_team')
-                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-team'])
-                            ->label('Equipo asignado')
-                            ->maxLength(255),
+                        Forms\Components\Hidden::make('assigned_team')
+                            ->dehydrated(false),
 
                         Forms\Components\Select::make('assigned_employee_id')
                             ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-technician'])
+                            ->extraFieldWrapperAttributes([
+                                'class' => 'bexia-svc-dropdown-overlay-host bexia-svc-technician-overlay-host',
+                                'style' => 'position: relative; overflow: visible; z-index: 40;',
+                            ])
                             ->label('Tecnico responsable')
                             ->helperText('Solo empleados del mismo grupo de empresas marcados como tecnico de servicio.')
+                            ->options(ServiceAccess::technicianEmployeeOptions())
                             ->searchable()
                             ->preload()
-                            ->options(fn (): array => ServiceAccess::technicianEmployeeOptions())
-                            ->getSearchResultsUsing(fn (string $search): array => ServiceAccess::technicianEmployeeOptions($search))
-                            ->getOptionLabelUsing(fn ($value): ?string => ServiceAccess::employeeLabel((int) $value)),
+                            ->native(false),
 
                         Forms\Components\DateTimePicker::make('due_at')
                             ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-due-at'])
@@ -169,13 +170,59 @@ class ServiceCaseResource extends Resource
                     ->schema([
                         Forms\Components\Select::make('customer_id')
                             ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-customer'])
+                            ->extraFieldWrapperAttributes([
+                                'class' => 'bexia-svc-dropdown-overlay-host bexia-svc-customer-overlay-host',
+                                'style' => 'position: relative; overflow: visible; z-index: 40;',
+                            ])
+                            ->helperText(new \Illuminate\Support\HtmlString(<<<'HTML'
+<style id="bexia-svc-dropdown-overlay-style">
+.bexia-svc-dropdown-overlay-host,
+.bexia-svc-dropdown-overlay-host .fi-fo-field-wrp,
+.bexia-svc-dropdown-overlay-host .fi-input-wrp,
+.fi-section:has(.bexia-svc-dropdown-overlay-host),
+.fi-section:has(.bexia-svc-dropdown-overlay-host) .fi-section-content-ctn,
+.fi-section:has(.bexia-svc-dropdown-overlay-host) .fi-section-content {
+    overflow: visible !important;
+}
+.bexia-svc-dropdown-overlay-host:focus-within {
+    z-index: 9999 !important;
+}
+.bexia-svc-dropdown-overlay-host .choices {
+    position: relative !important;
+    overflow: visible !important;
+}
+.bexia-svc-dropdown-overlay-host .choices__list--dropdown {
+    position: absolute !important;
+    inset-inline: 0 !important;
+    top: calc(100% + 0.25rem) !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    z-index: 9999 !important;
+}
+.bexia-svc-dropdown-overlay-host .choices__list--dropdown .choices__input {
+    position: static !important;
+}
+.bexia-svc-dropdown-overlay-host .choices__list--dropdown .choices__list[role="listbox"] {
+    position: static !important;
+    inset: auto !important;
+    top: auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-height: 18rem !important;
+    overflow-y: auto !important;
+    z-index: auto !important;
+}
+</style>
+HTML))
                             ->label('Cliente')
+                            ->options(ServiceAccess::contactOptions())
                             ->searchable()
                             ->preload()
+                            ->native(false)
                             ->live()
-                            ->options(fn (): array => ServiceAccess::contactOptions())
-                            ->getSearchResultsUsing(fn (string $search): array => ServiceAccess::contactOptions($search))
-                            ->getOptionLabelUsing(fn ($value): ?string => ServiceAccess::contactLabel((int) $value))
                             ->afterStateUpdated(function ($state, Set $set): void {
                                 $details = ServiceAccess::contactDetails((int) $state);
 
@@ -244,11 +291,19 @@ class ServiceCaseResource extends Resource
                     ->schema([
                         Forms\Components\Select::make('product_id')
                             ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-product'])
+                            ->extraFieldWrapperAttributes([
+                                'class' => 'bexia-svc-dropdown-overlay-host bexia-svc-product-overlay-host',
+                                'style' => 'position: relative; overflow: visible; z-index: 40;',
+                            ])
                             ->label('Producto catálogo')
                             ->searchable()
-                            ->preload()
+                            ->native(false)
                             ->live()
-                            ->options(fn (): array => ServiceAccess::productOptions())
+                            ->searchPrompt('Busca por SKU, nombre o descripción')
+                            ->searchingMessage('Buscando productos...')
+                            ->noSearchResultsMessage('No se encontraron productos')
+                            ->searchDebounce(400)
+                            ->optionsLimit(50)
                             ->getSearchResultsUsing(fn (string $search): array => ServiceAccess::productOptions($search))
                             ->getOptionLabelUsing(fn ($value): ?string => ServiceAccess::productLabel((int) $value))
                             ->afterStateUpdated(function ($state, Set $set): void {
@@ -387,7 +442,7 @@ class ServiceCaseResource extends Resource
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-team bexia-svc-col-wrap'])
                     ->extraCellAttributes(['class' => 'bexia-svc-col-team bexia-svc-col-wrap'])
                     ->label('Equipo')
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('assigned_employee_id')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-technician'])

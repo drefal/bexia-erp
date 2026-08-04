@@ -129,54 +129,49 @@ class ServiceAccess
             return [];
         }
 
-        // 1) Intento estricto: empresa/grupo actual + columnas que indiquen cliente.
-        $strict = self::contactOptionsQuery(
-            search: $search,
-            applyCompanyGroup: true,
-            applyCustomerFilter: true
-        );
-
-        if ($strict !== []) {
-            return $strict;
-        }
-
-        // 2) Si no hay resultados, mantenemos empresa/grupo pero sin bloquear por tipo de contacto.
-        $sameGroup = self::contactOptionsQuery(
-            search: $search,
-            applyCompanyGroup: true,
-            applyCustomerFilter: false
-        );
-
-        if ($sameGroup !== []) {
-            return $sameGroup;
-        }
-
-        // 3) Fallback DEV: si no hay company_id compatible o los contactos son globales,
-        // dejamos ver contactos existentes para poder probar el modulo.
+        // El ticket usa contactos principales activos del tenant actual.
+        // No se incluyen contactos globales ni de otras empresas.
+        // No se obliga is_customer porque el catalogo actual contiene
+        // contactos operativos validos sin esa marca.
         return self::contactOptionsQuery(
             search: $search,
-            applyCompanyGroup: false,
+            applyCompanyScope: true,
             applyCustomerFilter: false
         );
     }
 
     protected static function contactOptionsQuery(
         ?string $search = null,
-        bool $applyCompanyGroup = true,
+        bool $applyCompanyScope = true,
         bool $applyCustomerFilter = true
     ): array {
         try {
             $query = DB::table('contacts')->select('*');
 
-            if ($applyCompanyGroup && self::hasColumn('contacts', 'company_id')) {
-                $companyIds = self::companyGroupCompanyIds();
+            if ($applyCompanyScope && self::hasColumn('contacts', 'company_id')) {
+                $companyId = self::currentCompanyId();
 
-                if ($companyIds !== []) {
-                    $query->where(function ($q) use ($companyIds): void {
-                        $q->whereIn('company_id', $companyIds)
-                            ->orWhereNull('company_id');
-                    });
+                if (! $companyId) {
+                    return [];
                 }
+
+                $query->where('company_id', $companyId);
+            }
+
+            if (self::hasColumn('contacts', 'parent_contact_id')) {
+                $query->whereNull('parent_contact_id');
+            }
+
+            if (self::hasColumn('contacts', 'address_type')) {
+                $query->where('address_type', 'main');
+            }
+
+            if (self::hasColumn('contacts', 'is_active')) {
+                $query->where('is_active', true);
+            }
+
+            if (self::hasColumn('contacts', 'deleted_at')) {
+                $query->whereNull('deleted_at');
             }
 
             if ($applyCustomerFilter) {
