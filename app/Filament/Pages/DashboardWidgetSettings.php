@@ -105,17 +105,25 @@ class DashboardWidgetSettings extends Page
         }
 
         $registry = app(DashboardWidgetRegistry::class);
-        $catalog = $registry->catalog();
+        $user = User::query()->find((int) $this->selectedUserId);
 
-        if (! array_key_exists($widgetKey, $catalog)) {
+        if (! $user) {
+            return;
+        }
+
+        $catalog = $this->catalogForUser($user);
+
+        if (! $catalog->has($widgetKey)) {
             Notification::make()
-                ->title('Widget no válido')
+                ->title('Widget no permitido')
+                ->body('El usuario seleccionado no tiene permiso para este widget.')
                 ->danger()
                 ->send();
 
             return;
         }
 
+        $definition = (array) $catalog->get($widgetKey);
         $current = collect($this->rows)->firstWhere('key', $widgetKey);
         $currentVisible = (bool) ($current['is_visible'] ?? false);
 
@@ -131,7 +139,7 @@ class DashboardWidgetSettings extends Page
 
         Notification::make()
             ->title($currentVisible ? 'Widget oculto' : 'Widget visible')
-            ->body($catalog[$widgetKey]['label'] ?? $widgetKey)
+            ->body($definition['label'] ?? $widgetKey)
             ->success()
             ->send();
     }
@@ -298,7 +306,7 @@ class DashboardWidgetSettings extends Page
         );
 
         $saved = $registry->preferencesFor($this->companyId, (int) $user->id);
-        $catalog = collect($registry->catalog());
+        $catalog = $this->catalogForUser($user);
 
         $this->rows = $catalog
             ->map(function (array $definition, string $key) use ($saved, $registry, $user): array {
@@ -320,6 +328,24 @@ class DashboardWidgetSettings extends Page
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * BEXIA_V582_P7G10A_FILTER_SELECTED_USER_PERMISSIONS
+     */
+    protected function catalogForUser(User $user): Collection
+    {
+        $registry = app(DashboardWidgetRegistry::class);
+
+        return collect($registry->catalog())
+            ->filter(
+                fn (array $definition): bool =>
+                    $registry->userCanViewDefinition(
+                        $user,
+                        $definition,
+                        $this->companyId,
+                    )
+            );
     }
 
     public function selectedUserLabel(): string

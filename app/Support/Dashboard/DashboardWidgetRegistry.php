@@ -13,6 +13,7 @@ class DashboardWidgetRegistry
 {
     public function catalog(): array
     {
+        // BEXIA_V582_P7G9_LEGACY_WIDGETS_REMOVED
         return [
                 'hr_dashboard_section' => [
                     'key' => 'hr_dashboard_section',
@@ -44,86 +45,6 @@ class DashboardWidgetRegistry
                     'permissions_any' => ['dashboard.ver', 'treasury.view', 'treasury.update'],
                     'class' => \App\Filament\Widgets\BexiaTreasuryDashboardSectionWidget::class,
                 ],
-                'hr_section_header' => [
-                    'key' => 'hr_section_header',
-                    'label' => 'Sección Recursos Humanos',
-                    'description' => 'Separador visual para agrupar widgets de Recursos Humanos.',
-                    'module' => 'Recursos Humanos',
-                    'default_visible' => false,
-                    'sort' => 39,
-                    'permissions_any' => ['dashboard.ver', 'rrhh.view', 'rrhh.empleados.ver', 'nomina.ver'],
-                    'class' => \App\Filament\Widgets\BexiaHrSectionHeaderWidget::class,
-                ],
-                'accounting_section_header' => [
-                    'key' => 'accounting_section_header',
-                    'label' => 'Sección Contabilidad',
-                    'description' => 'Separador visual para agrupar widgets contables.',
-                    'module' => 'Contabilidad',
-                    'default_visible' => false,
-                    'sort' => 69,
-                    'permissions_any' => ['dashboard.ver', 'contabilidad.ver', 'accounting.view'],
-                    'class' => \App\Filament\Widgets\BexiaAccountingSectionHeaderWidget::class,
-                ],
-                'treasury_section_header' => [
-                    'key' => 'treasury_section_header',
-                    'label' => 'Sección Tesorería',
-                    'description' => 'Separador visual para agrupar widgets de Tesorería en el Escritorio.',
-                    'module' => 'Tesorería',
-                    'default_visible' => false,
-                    'sort' => 80,
-                    'permissions_any' => ['dashboard.ver', 'treasury.view', 'treasury.update'],
-                    'class' => \App\Filament\Widgets\BexiaTreasurySectionHeaderWidget::class,
-                ],
-                'treasury_summary' => [
-                    'key' => 'treasury_summary',
-                    'label' => 'Resumen Tesorería',
-                    'description' => 'Indicadores de efectivo actual, tránsito, entradas y salidas del día.',
-                    'module' => 'Tesorería',
-                    'default_visible' => false,
-                    'sort' => 81,
-                    'permissions_any' => ['dashboard.ver', 'treasury.view', 'treasury.update'],
-                    'class' => \App\Filament\Widgets\BexiaTreasurySummaryWidget::class,
-                ],
-                'treasury_cash_columns' => [
-                    'key' => 'treasury_cash_columns',
-                    'label' => 'Cajas operativas por saldo',
-                    'description' => 'Columnas visuales que se pintan según el dinero disponible en cada caja.',
-                    'module' => 'Tesorería',
-                    'default_visible' => false,
-                    'sort' => 82,
-                    'permissions_any' => ['dashboard.ver', 'treasury.view', 'treasury.update'],
-                    'class' => \App\Filament\Widgets\BexiaTreasuryCashColumnsWidget::class,
-                ],
-                'treasury_daily_flow' => [
-                    'key' => 'treasury_daily_flow',
-                    'label' => 'Flujo de efectivo del día',
-                    'description' => 'Entradas y salidas de efectivo agrupadas por hora.',
-                    'module' => 'Tesorería',
-                    'default_visible' => false,
-                    'sort' => 83,
-                    'permissions_any' => ['dashboard.ver', 'treasury.view', 'treasury.update'],
-                    'class' => \App\Filament\Widgets\BexiaTreasuryDailyFlowWidget::class,
-                ],
-                'treasury_in_transit' => [
-                    'key' => 'treasury_in_transit',
-                    'label' => 'Cajas en tránsito',
-                    'description' => 'Solicitudes de efectivo pendientes de aplicación.',
-                    'module' => 'Tesorería',
-                    'default_visible' => false,
-                    'sort' => 84,
-                    'permissions_any' => ['dashboard.ver', 'treasury.view', 'treasury.update'],
-                    'class' => \App\Filament\Widgets\BexiaTreasuryInTransitWidget::class,
-                ],
-                'treasury_recent_movements' => [
-                    'key' => 'treasury_recent_movements',
-                    'label' => 'Últimos movimientos de tesorería',
-                    'description' => 'Tabla breve con las entradas y salidas más recientes.',
-                    'module' => 'Tesorería',
-                    'default_visible' => false,
-                    'sort' => 85,
-                    'permissions_any' => ['dashboard.ver', 'treasury.view', 'treasury.update'],
-                    'class' => \App\Filament\Widgets\BexiaTreasuryRecentMovementsWidget::class,
-                ],
             'approvals_summary' => [
                 'key' => 'approvals_summary',
                 'label' => 'Resumen de aprobaciones',
@@ -152,64 +73,6 @@ class DashboardWidgetRegistry
                 'sort_order' => 30,
                     'sort' => 30,
                 'permissions_any' => [],
-            ],
-            'hr_employees_summary' => [
-                'key' => 'hr_employees_summary',
-                'label' => 'Resumen RRHH',
-                'description' => 'Empleados activos e inactivos de la empresa.',
-                'module' => 'Recursos Humanos',
-                'default_visible' => false,
-                'sort_order' => 40,
-                    'sort' => 40,
-                'permissions_any' => [
-                    'rrhh.empleados.ver',
-                    'hr.employees.view',
-                    'employees.view',
-                    'dashboard.ver',
-                ],
-            ],
-            'payroll_runs_summary' => [
-                'key' => 'payroll_runs_summary',
-                'label' => 'Resumen de nómina',
-                'description' => 'Nóminas abiertas, cerradas, aprobadas y totales netos.',
-                'module' => 'Recursos Humanos',
-                'default_visible' => false,
-                'sort_order' => 50,
-                    'sort' => 50,
-                'permissions_any' => [
-                    'nomina.prenomina.ver',
-                    'nomina.prenomina.cerrar',
-                    'dashboard.ver',
-                ],
-            ],
-            'payroll_cfdi_summary' => [
-                'key' => 'payroll_cfdi_summary',
-                'label' => 'CFDI nómina',
-                'description' => 'Recibos CFDI de nómina por estado.',
-                'module' => 'Recursos Humanos',
-                'default_visible' => false,
-                'sort_order' => 60,
-                    'sort' => 60,
-                'permissions_any' => [
-                    'nomina.cfdi.ver',
-                    'nomina.prenomina.ver',
-                    'dashboard.ver',
-                ],
-            ],
-            'payroll_accounting_summary' => [
-                'key' => 'payroll_accounting_summary',
-                'label' => 'Contabilidad de nómina',
-                'description' => 'Pólizas de nómina, reversas y nóminas pendientes de contabilizar.',
-                'module' => 'Contabilidad',
-                'default_visible' => false,
-                'sort_order' => 70,
-                    'sort' => 70,
-                'permissions_any' => [
-                    'accounting.view',
-                    'accounting.post',
-                    'nomina.prenomina.cerrar',
-                    'dashboard.ver',
-                ],
             ],
         ];
     }
@@ -296,7 +159,7 @@ class DashboardWidgetRegistry
         $preferences = $this->preferencesFor((int) $companyId, (int) $user->id);
 
         return collect($this->catalog())
-            ->map(function (array $definition) use ($preferences, $user): array {
+            ->map(function (array $definition) use ($preferences, $user, $companyId): array {
                 $key = (string) $definition['key'];
                 $preference = $preferences->get($key);
 
@@ -312,7 +175,11 @@ class DashboardWidgetRegistry
                     ? json_decode((string) $preference->settings, true)
                     : [];
 
-                $definition['allowed_by_permission'] = $this->userCanViewDefinition($user, $definition);
+                $definition['allowed_by_permission'] = $this->userCanViewDefinition(
+                    $user,
+                    $definition,
+                    (int) $companyId
+                );
 
                 return $definition;
             })
@@ -341,28 +208,133 @@ class DashboardWidgetRegistry
             ->keyBy('widget_key');
     }
 
-    public function userCanViewDefinition(User $user, array $definition): bool
-    {
+    public function userCanViewDefinition(
+        User $user,
+        array $definition,
+        ?int $companyId = null
+    ): bool {
         if ((bool) ($user->is_system_admin ?? false)) {
             return true;
         }
 
-        $permissions = (array) ($definition['permissions_any'] ?? []);
+        $permissions = array_values(array_filter(array_map(
+            'strval',
+            (array) ($definition['permissions_any'] ?? [])
+        )));
 
         if ($permissions === []) {
             return true;
         }
 
+        $companyId = $companyId ?: $this->currentCompanyId();
+
+        if ($companyId <= 0) {
+            return false;
+        }
+
+        $permissionMap = $this->permissionNameMapForUserCompany(
+            $user,
+            $companyId
+        );
+
         foreach ($permissions as $permission) {
-            try {
-                if ($user->can((string) $permission)) {
-                    return true;
-                }
-            } catch (\Throwable) {
+            if (isset($permissionMap[$permission])) {
+                return true;
             }
         }
 
         return false;
+    }
+
+    private function permissionNameMapForUserCompany(
+        User $user,
+        int $companyId
+    ): array {
+        if ($companyId <= 0 || ! $user->getKey()) {
+            return [];
+        }
+
+        $cacheKey = implode('|', [
+            (string) $user->getKey(),
+            (string) $companyId,
+            'web',
+        ]);
+
+        $request = app()->bound('request')
+            ? request()
+            : null;
+
+        $cache = $request
+            ? (array) $request->attributes->get(
+                'bexia.dashboard.permission_name_maps',
+                []
+            )
+            : [];
+
+        if (array_key_exists($cacheKey, $cache)) {
+            return (array) $cache[$cacheKey];
+        }
+
+        try {
+            $modelType = $user->getMorphClass();
+
+            $rolePermissionNames = DB::table(
+                'model_has_roles as mhr'
+            )
+                ->join(
+                    'role_has_permissions as rhp',
+                    'rhp.role_id',
+                    '=',
+                    'mhr.role_id'
+                )
+                ->join(
+                    'permissions as p',
+                    'p.id',
+                    '=',
+                    'rhp.permission_id'
+                )
+                ->where('mhr.model_type', $modelType)
+                ->where('mhr.model_id', $user->getKey())
+                ->where('mhr.company_id', $companyId)
+                ->where('p.guard_name', 'web')
+                ->pluck('p.name');
+
+            $directPermissionNames = DB::table(
+                'model_has_permissions as mhp'
+            )
+                ->join(
+                    'permissions as p',
+                    'p.id',
+                    '=',
+                    'mhp.permission_id'
+                )
+                ->where('mhp.model_type', $modelType)
+                ->where('mhp.model_id', $user->getKey())
+                ->where('mhp.company_id', $companyId)
+                ->where('p.guard_name', 'web')
+                ->pluck('p.name');
+
+            $permissionMap = $rolePermissionNames
+                ->merge($directPermissionNames)
+                ->mapWithKeys(
+                    static fn ($name): array => [
+                        (string) $name => true,
+                    ]
+                )
+                ->all();
+        } catch (\Throwable) {
+            $permissionMap = [];
+        }
+
+        if ($request) {
+            $cache[$cacheKey] = $permissionMap;
+            $request->attributes->set(
+                'bexia.dashboard.permission_name_maps',
+                $cache
+            );
+        }
+
+        return $permissionMap;
     }
 
     public function metrics(string $widgetKey, ?int $companyId = null, ?int $userId = null): array
