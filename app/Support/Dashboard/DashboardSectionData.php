@@ -25,26 +25,65 @@ class DashboardSectionData
         return DB::table('companies')->where('id', $companyId)->value('name');
     }
 
-    public function widgetVisible(string $key, ?int $companyId = null): bool
-    {
+    public function widgetVisible(
+        string $key,
+        ?int $companyId = null
+    ): bool {
         try {
             $user = auth()->user();
 
-            if (! $user || ! Schema::hasTable('dashboard_widget_user_settings')) {
-                return true;
+            if (! $user) {
+                return false;
             }
 
-            $companyId = $companyId ?: $this->currentCompanyId() ?: 5;
+            $companyId = $companyId ?: $this->currentCompanyId();
 
-            $row = DB::table('dashboard_widget_user_settings')
-                ->where('company_id', $companyId)
-                ->where('user_id', $user->id)
-                ->where('widget_key', $key)
-                ->first();
+            if (! $companyId || $companyId <= 0) {
+                return false;
+            }
 
-            return $row ? (bool) $row->is_visible : true;
+            $cacheKey = implode('|', [
+                (string) $user->getKey(),
+                (string) $companyId,
+            ]);
+
+            $request = app()->bound('request')
+                ? request()
+                : null;
+
+            $cache = $request
+                ? (array) $request->attributes->get(
+                    'bexia.dashboard.visible_widget_key_maps',
+                    []
+                )
+                : [];
+
+            if (! array_key_exists($cacheKey, $cache)) {
+                $visibleKeyMap = app(
+                    DashboardWidgetRegistry::class
+                )
+                    ->visibleForUser($user, (int) $companyId)
+                    ->pluck('key')
+                    ->mapWithKeys(
+                        static fn ($visibleKey): array => [
+                            (string) $visibleKey => true,
+                        ]
+                    )
+                    ->all();
+
+                $cache[$cacheKey] = $visibleKeyMap;
+
+                if ($request) {
+                    $request->attributes->set(
+                        'bexia.dashboard.visible_widget_key_maps',
+                        $cache
+                    );
+                }
+            }
+
+            return isset($cache[$cacheKey][(string) $key]);
         } catch (\Throwable) {
-            return true;
+            return false;
         }
     }
 
