@@ -555,14 +555,17 @@
         </div>
     @endif
 
-<div class="qr-box">
-        <img
-            src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&data={{ urlencode($invoiceUrl) }}"
-            alt="QR facturación"
-        >
-        <div>Escanea para facturar</div>
-        <div class="small">{{ $order->number }}</div>
-    </div>
+    {{-- BEXIA_V5829I2_CONDITIONAL_INVOICE_QR --}}
+    @if(($useQrOnReceipt ?? false) && ! empty($invoiceUrl))
+        <div class="qr-box">
+            <img
+                src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&data={{ urlencode($invoiceUrl) }}"
+                alt="QR facturación"
+            >
+            <div>Escanea para facturar</div>
+            <div class="small">{{ $order->number }}</div>
+        </div>
+    @endif
 
     <div class="footer">
         @if($isReturned)
