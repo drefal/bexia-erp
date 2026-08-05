@@ -6932,6 +6932,117 @@ return response()->json([
     }
 
 
+
+    /**
+     * BEXIA_V5829H6_POINT_SESSION_STATE_ENDPOINT
+     *
+     * Devuelve el estado real de la sesión abierta para un Punto de Venta.
+     * La autorización usa la misma lógica efectiva del resto del PDV.
+     */
+    public function v5829h6PointSessionState(int $posPoint)
+    {
+        abort_unless(auth()->check(), 403);
+
+        $pos = $this->posPoint($posPoint);
+
+        if (
+            method_exists(
+                $this,
+                'v5327bAbortIfCannotAccessPos'
+            )
+        ) {
+            $this->v5327bAbortIfCannotAccessPos($pos);
+        }
+
+        $this->authorizePos($pos);
+
+        $openSession = \Illuminate\Support\Facades\DB::table(
+            'pos_sessions'
+        )
+            ->where(
+                'pos_point_id',
+                (int) $pos->id
+            )
+            ->where('status', 'open')
+            ->orderByDesc('id')
+            ->first();
+
+        $companyId =
+            (int) ($pos->company_id ?? 0);
+
+        $sessionPayload = null;
+
+        if ($openSession) {
+            $sessionPayload = [
+                'id' =>
+                    (int) $openSession->id,
+                'number' =>
+                    (string) (
+                        $openSession->number
+                        ?? ('#' . $openSession->id)
+                    ),
+                'opened_at' =>
+                    (string) (
+                        $openSession->opened_at
+                        ?? ''
+                    ),
+                'updated_at' =>
+                    (string) (
+                        $openSession->updated_at
+                        ?? ''
+                    ),
+            ];
+        }
+
+        $state =
+            $openSession
+                ? 'open'
+                : 'closed';
+
+        $stateVersion = implode(':', [
+            (string) $pos->id,
+            $state,
+            (string) ($openSession->id ?? 0),
+            (string) ($openSession->updated_at ?? ''),
+        ]);
+
+        return response()
+            ->json([
+                'ok' => true,
+                'company_id' => $companyId,
+                'pos_point_id' =>
+                    (int) $pos->id,
+                'state' => $state,
+                'state_version' => $stateVersion,
+                'session' => $sessionPayload,
+                'screen_url' =>
+                    $openSession
+                        ? url(
+                            '/pos/sessions/'
+                            . $openSession->id
+                            . '/screen'
+                        )
+                        : null,
+                'open_url' =>
+                    url(
+                        '/pos/'
+                        . $pos->id
+                        . '/open'
+                    ),
+                'checked_at' =>
+                    now()->toIso8601String(),
+            ])
+            ->header(
+                'Cache-Control',
+                'no-store, no-cache, must-revalidate, max-age=0'
+            )
+            ->header(
+                'Pragma',
+                'no-cache'
+            );
+    }
+
+
     public function closeSessionSummary(\Illuminate\Http\Request $request, int $session)
     {
         abort_unless(auth()->check(), 403);

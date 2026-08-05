@@ -282,6 +282,10 @@ Route::middleware(['web', 'auth'])->group(function () {
         [\App\Http\Controllers\PosController::class, 'switchCashier']
     )->name('pos.sessions.switch-cashier');
 Route::get('/pos/sessions/{session}/close-summary', [\App\Http\Controllers\PosController::class, 'closeSessionSummary'])->name('pos.sessions.close-summary');
+Route::get(
+    '/pos/points/{posPoint}/session-state',
+    [\App\Http\Controllers\PosController::class, 'v5829h6PointSessionState']
+)->name('pos.points.session-state');
 Route::get('/pos/sessions/{session}/close-ticket/print', [\App\Http\Controllers\PosController::class, 'printCloseSessionTicket'])->name('pos.sessions.close-ticket.print');
 Route::get('/pos/sessions/{session}/sales-report', [\App\Http\Controllers\PosController::class, 'sessionSalesReport'])->name('pos.sessions.sales-report');
 Route::get('/pos/sessions/{session}/payment-methods', [\App\Http\Controllers\PosController::class, 'paymentMethods'])->name('pos.sessions.payment-methods');
