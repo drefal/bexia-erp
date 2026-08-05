@@ -33,7 +33,26 @@ td{padding:2px 0;vertical-align:top}
 .net-row td{border-top:1px solid #000;font-size:12px;font-weight:900;padding-top:4px}
 .small{font-size:10px}
 .cash-table td{border-bottom:1px dotted #aaa;padding:3px 0}
-@media print{body{margin:0}}
+.no-print{
+    display:flex;
+    justify-content:center;
+    gap:6px;
+    margin-top:10px;
+}
+.no-print button{
+    border:1px solid #222;
+    border-radius:4px;
+    background:#fff;
+    color:#111;
+    padding:6px 10px;
+    font:inherit;
+    font-weight:700;
+    cursor:pointer;
+}
+@media print{
+    body{margin:0}
+    .no-print{display:none!important}
+}
 </style>
 </head>
 <body>
@@ -147,5 +166,25 @@ td{padding:2px 0;vertical-align:top}
 
 <div class="sep"></div>
 <div class="center small">Formato Papelón · Bexia ERP</div>
+
+<div class="no-print">
+    <button type="button" onclick="window.print()">Imprimir</button>
+    <button type="button" onclick="window.close()">Cerrar</button>
+</div>
+
+<script id="BEXIA_V5829G2_PAPELON_CLOSE_AUTO_PRINT">
+    /*
+     * BEXIA_V5829G2_PAPELON_CLOSE_AUTO_PRINT
+     *
+     * Replica el comportamiento de los tickets cobrados:
+     * al terminar de cargar el ticket, abre el diálogo del navegador.
+     */
+    window.addEventListener('load', function () {
+        window.setTimeout(function () {
+            window.focus();
+            window.print();
+        }, 350);
+    }, { once: true });
+</script>
 </body>
 </html>
