@@ -1188,21 +1188,162 @@ Forms\Components\Actions::make([
         ->color('primary')
         ->visible(fn (?\App\Models\Product $record): bool => $record !== null && (bool) $record->getKey())
         ->modalHeading('Cambio de precio de venta')
-        ->modalDescription('Captura el nuevo precio de venta sin IVA y el motivo del cambio.')
+        ->modalDescription('Captura el nuevo precio con o sin IVA. Bexia calculará automáticamente el otro importe usando el IVA de venta configurado en el producto.')
         ->modalSubmitActionLabel('Guardar cambio de precio')
         ->modalSubmitAction(fn ($action) => $action->color('primary'))
         ->form([
-            Forms\Components\Placeholder::make('current_sale_price')
-                ->label('Precio actual sin IVA')
-                ->content(fn (?\App\Models\Product $record): string => $record ? '$ ' . number_format((float) ($record->sale_price ?? 0), 4) : '—'),
+            Forms\Components\Grid::make(3)
+                ->schema([
+                    Forms\Components\Placeholder::make('current_sale_price')
+                        ->label('Precio actual sin IVA')
+                        ->content(
+                            fn (?\App\Models\Product $record): string =>
+                                $record
+                                    ? '$ ' . number_format(
+                                        (float) ($record->sale_price ?? 0),
+                                        4
+                                    )
+                                    : '—'
+                        ),
 
-            Forms\Components\TextInput::make('new_value')
-                ->label('Nuevo precio de venta sin IVA')
-                ->numeric()
-                ->minValue(0)
-                ->step('0.000001')
-                ->prefix('$')
-                ->required(),
+                    Forms\Components\Placeholder::make('current_sale_price_with_tax')
+                        ->label('Precio actual con IVA')
+                        ->content(function (?\App\Models\Product $record): string {
+                            if (! $record) {
+                                return '—';
+                            }
+
+                            $base = (float) ($record->sale_price ?? 0);
+
+                            $taxRate = max(
+                                0,
+                                (float) ($record->sale_tax_rate ?? 0)
+                            );
+
+                            $withTax = $base * (
+                                1 + ($taxRate / 100)
+                            );
+
+                            return '$ ' . number_format(
+                                $withTax,
+                                4
+                            );
+                        }),
+
+                    Forms\Components\Placeholder::make('current_sale_tax_rate')
+                        ->label('IVA venta aplicado')
+                        ->content(
+                            fn (?\App\Models\Product $record): string =>
+                                number_format(
+                                    max(
+                                        0,
+                                        (float) ($record?->sale_tax_rate ?? 0)
+                                    ),
+                                    4
+                                ) . ' %'
+                        ),
+                ]),
+
+            Forms\Components\Hidden::make('entry_basis'),
+
+            Forms\Components\Grid::make(2)
+                ->schema([
+                    Forms\Components\TextInput::make('new_value_without_tax')
+                        ->label('Nuevo precio sin IVA')
+                        ->numeric()
+                        ->minValue(0)
+                        ->step('0.000001')
+                        ->prefix('$')
+                        ->live(onBlur: true)
+                        ->helperText('Puedes capturar este importe. Bexia calculará el precio con IVA.')
+                        ->afterStateUpdated(function (
+                            $state,
+                            Forms\Set $set,
+                            ?\App\Models\Product $record
+                        ): void {
+                            if ($state === null || $state === '') {
+                                return;
+                            }
+
+                            $taxRate = max(
+                                0,
+                                (float) ($record?->sale_tax_rate ?? 0)
+                            );
+
+                            $withTax = round(
+                                (float) $state
+                                * (1 + ($taxRate / 100)),
+                                6
+                            );
+
+                            $set(
+                                'entry_basis',
+                                'without_tax'
+                            );
+
+                            $set(
+                                'new_value_with_tax',
+                                number_format(
+                                    $withTax,
+                                    6,
+                                    '.',
+                                    ''
+                                )
+                            );
+                        }),
+
+                    Forms\Components\TextInput::make('new_value_with_tax')
+                        ->label('Nuevo precio con IVA')
+                        ->numeric()
+                        ->minValue(0)
+                        ->step('0.000001')
+                        ->prefix('$')
+                        ->live(onBlur: true)
+                        ->helperText('También puedes capturar aquí. Bexia calculará automáticamente el precio sin IVA.')
+                        ->afterStateUpdated(function (
+                            $state,
+                            Forms\Set $set,
+                            ?\App\Models\Product $record
+                        ): void {
+                            if ($state === null || $state === '') {
+                                return;
+                            }
+
+                            $taxRate = max(
+                                0,
+                                (float) ($record?->sale_tax_rate ?? 0)
+                            );
+
+                            $factor = 1 + (
+                                $taxRate / 100
+                            );
+
+                            $withoutTax = $factor > 0
+                                ? round(
+                                    (float) $state / $factor,
+                                    6
+                                )
+                                : round(
+                                    (float) $state,
+                                    6
+                                );
+
+                            $set(
+                                'entry_basis',
+                                'with_tax'
+                            );
+
+                            $set(
+                                'new_value_without_tax',
+                                number_format(
+                                    $withoutTax,
+                                    6,
+                                    '.',
+                                    ''
+                                )
+                            );
+                        }),
+                ]),
 
             Forms\Components\Textarea::make('reason')
                 ->label('Motivo')
@@ -1211,16 +1352,81 @@ Forms\Components\Actions::make([
                 ->required()
                 ->helperText('Ejemplo: ajuste por lista de precios nueva, promoción terminada, corrección autorizada.'),
         ])
-        ->action(function (array $data, ?\App\Models\Product $record, $livewire): void {
+        ->action(function (
+            array $data,
+            ?\App\Models\Product $record,
+            $livewire
+        ): void {
             if (! $record) {
                 return;
             }
+
+            $withoutTaxRaw = $data[
+                'new_value_without_tax'
+            ] ?? null;
+
+            $withTaxRaw = $data[
+                'new_value_with_tax'
+            ] ?? null;
+
+            $hasWithoutTax = (
+                $withoutTaxRaw !== null
+                && $withoutTaxRaw !== ''
+            );
+
+            $hasWithTax = (
+                $withTaxRaw !== null
+                && $withTaxRaw !== ''
+            );
+
+            if (! $hasWithoutTax && ! $hasWithTax) {
+                \Filament\Notifications\Notification::make()
+                    ->title('Captura un nuevo precio')
+                    ->body('Puedes capturarlo con IVA o sin IVA.')
+                    ->danger()
+                    ->send();
+
+                return;
+            }
+
+            $taxRate = max(
+                0,
+                (float) ($record->sale_tax_rate ?? 0)
+            );
+
+            $factor = 1 + (
+                $taxRate / 100
+            );
+
+            $basis = (string) (
+                $data['entry_basis'] ?? ''
+            );
+
+            if (
+                $basis === 'with_tax'
+                && $hasWithTax
+            ) {
+                $newValue = $factor > 0
+                    ? (float) $withTaxRaw / $factor
+                    : (float) $withTaxRaw;
+            } elseif ($hasWithoutTax) {
+                $newValue = (float) $withoutTaxRaw;
+            } else {
+                $newValue = $factor > 0
+                    ? (float) $withTaxRaw / $factor
+                    : (float) $withTaxRaw;
+            }
+
+            $newValue = round(
+                max(0, $newValue),
+                6
+            );
 
             static::applyManualProductPriceCostChange(
                 $record,
                 'sale_price',
                 'Precio de venta sin IVA',
-                (float) $data['new_value'],
+                $newValue,
                 (string) $data['reason'],
             );
 
@@ -1229,7 +1435,12 @@ Forms\Components\Actions::make([
                 ->success()
                 ->send();
 
-            $livewire->redirect(self::getUrl('edit', ['record' => $record]));
+            $livewire->redirect(
+                self::getUrl(
+                    'edit',
+                    ['record' => $record]
+                )
+            );
         }),
 
     Forms\Components\Actions\Action::make('change_average_cost_with_reason')
@@ -1238,21 +1449,180 @@ Forms\Components\Actions::make([
         ->color('warning')
         ->visible(fn (?\App\Models\Product $record): bool => $record !== null && (bool) $record->getKey())
         ->modalHeading('Cambio de costo promedio')
-        ->modalDescription('Captura el nuevo costo promedio sin IVA y el motivo del cambio manual.')
+        ->modalDescription('Captura el nuevo costo promedio con o sin IVA. Bexia calculará automáticamente el otro importe usando el IVA de compra configurado en el producto.')
         ->modalSubmitActionLabel('Guardar cambio de costo')
         ->modalSubmitAction(fn ($action) => $action->color('primary'))
         ->form([
-            Forms\Components\Placeholder::make('current_average_cost')
-                ->label('Costo actual sin IVA')
-                ->content(fn (?\App\Models\Product $record): string => $record ? '$ ' . number_format((float) ($record->average_cost_without_tax ?? 0), 4) : '—'),
+            Forms\Components\Grid::make(3)
+                ->schema([
+                    Forms\Components\Placeholder::make('current_average_cost')
+                        ->label('Costo actual sin IVA')
+                        ->content(
+                            fn (?\App\Models\Product $record): string =>
+                                $record
+                                    ? '$ ' . number_format(
+                                        (float) (
+                                            $record->average_cost_without_tax
+                                            ?? 0
+                                        ),
+                                        4
+                                    )
+                                    : '—'
+                        ),
 
-            Forms\Components\TextInput::make('new_value')
-                ->label('Nuevo costo promedio sin IVA')
-                ->numeric()
-                ->minValue(0)
-                ->step('0.000001')
-                ->prefix('$')
-                ->required(),
+                    Forms\Components\Placeholder::make('current_average_cost_with_tax')
+                        ->label('Costo actual con IVA')
+                        ->content(function (?\App\Models\Product $record): string {
+                            if (! $record) {
+                                return '—';
+                            }
+
+                            $base = (float) (
+                                $record->average_cost_without_tax
+                                ?? 0
+                            );
+
+                            $taxRate = max(
+                                0,
+                                (float) (
+                                    $record->purchase_tax_rate
+                                    ?? 0
+                                )
+                            );
+
+                            $withTax = $base * (
+                                1 + ($taxRate / 100)
+                            );
+
+                            return '$ ' . number_format(
+                                $withTax,
+                                4
+                            );
+                        }),
+
+                    Forms\Components\Placeholder::make('current_purchase_tax_rate')
+                        ->label('IVA compra aplicado')
+                        ->content(
+                            fn (?\App\Models\Product $record): string =>
+                                number_format(
+                                    max(
+                                        0,
+                                        (float) (
+                                            $record?->purchase_tax_rate
+                                            ?? 0
+                                        )
+                                    ),
+                                    4
+                                ) . ' %'
+                        ),
+                ]),
+
+            Forms\Components\Hidden::make('entry_basis'),
+
+            Forms\Components\Grid::make(2)
+                ->schema([
+                    Forms\Components\TextInput::make('new_value_without_tax')
+                        ->label('Nuevo costo promedio sin IVA')
+                        ->numeric()
+                        ->minValue(0)
+                        ->step('0.000001')
+                        ->prefix('$')
+                        ->live(onBlur: true)
+                        ->helperText('Puedes capturar este importe. Bexia calculará el costo con IVA.')
+                        ->afterStateUpdated(function (
+                            $state,
+                            Forms\Set $set,
+                            ?\App\Models\Product $record
+                        ): void {
+                            if ($state === null || $state === '') {
+                                return;
+                            }
+
+                            $taxRate = max(
+                                0,
+                                (float) (
+                                    $record?->purchase_tax_rate
+                                    ?? 0
+                                )
+                            );
+
+                            $withTax = round(
+                                (float) $state
+                                * (1 + ($taxRate / 100)),
+                                6
+                            );
+
+                            $set(
+                                'entry_basis',
+                                'without_tax'
+                            );
+
+                            $set(
+                                'new_value_with_tax',
+                                number_format(
+                                    $withTax,
+                                    6,
+                                    '.',
+                                    ''
+                                )
+                            );
+                        }),
+
+                    Forms\Components\TextInput::make('new_value_with_tax')
+                        ->label('Nuevo costo promedio con IVA')
+                        ->numeric()
+                        ->minValue(0)
+                        ->step('0.000001')
+                        ->prefix('$')
+                        ->live(onBlur: true)
+                        ->helperText('También puedes capturar aquí. Bexia calculará automáticamente el costo sin IVA.')
+                        ->afterStateUpdated(function (
+                            $state,
+                            Forms\Set $set,
+                            ?\App\Models\Product $record
+                        ): void {
+                            if ($state === null || $state === '') {
+                                return;
+                            }
+
+                            $taxRate = max(
+                                0,
+                                (float) (
+                                    $record?->purchase_tax_rate
+                                    ?? 0
+                                )
+                            );
+
+                            $factor = 1 + (
+                                $taxRate / 100
+                            );
+
+                            $withoutTax = $factor > 0
+                                ? round(
+                                    (float) $state / $factor,
+                                    6
+                                )
+                                : round(
+                                    (float) $state,
+                                    6
+                                );
+
+                            $set(
+                                'entry_basis',
+                                'with_tax'
+                            );
+
+                            $set(
+                                'new_value_without_tax',
+                                number_format(
+                                    $withoutTax,
+                                    6,
+                                    '.',
+                                    ''
+                                )
+                            );
+                        }),
+                ]),
 
             Forms\Components\Textarea::make('reason')
                 ->label('Motivo')
@@ -1261,16 +1631,84 @@ Forms\Components\Actions::make([
                 ->required()
                 ->helperText('Ejemplo: corrección por costo real, carga inicial, ajuste autorizado.'),
         ])
-        ->action(function (array $data, ?\App\Models\Product $record, $livewire): void {
+        ->action(function (
+            array $data,
+            ?\App\Models\Product $record,
+            $livewire
+        ): void {
             if (! $record) {
                 return;
             }
+
+            $withoutTaxRaw = $data[
+                'new_value_without_tax'
+            ] ?? null;
+
+            $withTaxRaw = $data[
+                'new_value_with_tax'
+            ] ?? null;
+
+            $hasWithoutTax = (
+                $withoutTaxRaw !== null
+                && $withoutTaxRaw !== ''
+            );
+
+            $hasWithTax = (
+                $withTaxRaw !== null
+                && $withTaxRaw !== ''
+            );
+
+            if (! $hasWithoutTax && ! $hasWithTax) {
+                \Filament\Notifications\Notification::make()
+                    ->title('Captura un nuevo costo')
+                    ->body('Puedes capturarlo con IVA o sin IVA.')
+                    ->danger()
+                    ->send();
+
+                return;
+            }
+
+            $taxRate = max(
+                0,
+                (float) (
+                    $record->purchase_tax_rate
+                    ?? 0
+                )
+            );
+
+            $factor = 1 + (
+                $taxRate / 100
+            );
+
+            $basis = (string) (
+                $data['entry_basis'] ?? ''
+            );
+
+            if (
+                $basis === 'with_tax'
+                && $hasWithTax
+            ) {
+                $newValue = $factor > 0
+                    ? (float) $withTaxRaw / $factor
+                    : (float) $withTaxRaw;
+            } elseif ($hasWithoutTax) {
+                $newValue = (float) $withoutTaxRaw;
+            } else {
+                $newValue = $factor > 0
+                    ? (float) $withTaxRaw / $factor
+                    : (float) $withTaxRaw;
+            }
+
+            $newValue = round(
+                max(0, $newValue),
+                6
+            );
 
             static::applyManualProductPriceCostChange(
                 $record,
                 'average_cost_without_tax',
                 'Costo promedio actual sin IVA',
-                (float) $data['new_value'],
+                $newValue,
                 (string) $data['reason'],
             );
 
@@ -1279,7 +1717,12 @@ Forms\Components\Actions::make([
                 ->success()
                 ->send();
 
-            $livewire->redirect(self::getUrl('edit', ['record' => $record]));
+            $livewire->redirect(
+                self::getUrl(
+                    'edit',
+                    ['record' => $record]
+                )
+            );
         }),
 ])
     ->columnSpanFull(),
