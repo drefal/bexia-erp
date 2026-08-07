@@ -18195,3 +18195,130 @@ button[role="switch"] > span {
 /* BEXIA_FILAMENT_NOTIFICATIONS_V5_83_P4A_END */
 
 </style>
+
+<!-- BEXIA_FILAMENT_PAGINATION_AUTOSCROLL_V5_83_P6A2_START -->
+<script>
+(() => {
+    if (window.__bexiaPaginationAutoScrollBound) {
+        return;
+    }
+
+    window.__bexiaPaginationAutoScrollBound = true;
+
+    const getWireClick = (element) => {
+        if (!element) {
+            return '';
+        }
+
+        return (
+            element.getAttribute('wire:click')
+            || element.getAttribute('wire:click.prevent')
+            || element.getAttribute('wire:click.stop')
+            || ''
+        );
+    };
+
+    const isPaginationControl = (element) => {
+        if (!element) {
+            return false;
+        }
+
+        const wireClick = getWireClick(element);
+
+        if (
+            wireClick.includes('gotoPage')
+            || wireClick.includes('nextPage')
+            || wireClick.includes('previousPage')
+        ) {
+            return true;
+        }
+
+        return Boolean(
+            element.closest(
+                '.fi-pagination, .fi-ta-pagination'
+            )
+        );
+    };
+
+    const isDisabledControl = (element) => {
+        return Boolean(
+            element?.disabled
+            || element?.getAttribute(
+                'aria-disabled'
+            ) === 'true'
+        );
+    };
+
+    const scrollBexiaContentToTop = () => {
+        const main = document.querySelector(
+            '.fi-main'
+        );
+
+        const topbar = document.querySelector(
+            '.fi-topbar'
+        );
+
+        const topbarHeight = topbar
+            ? topbar.getBoundingClientRect().height
+            : 0;
+
+        let top = 0;
+
+        if (main) {
+            const rect = main.getBoundingClientRect();
+
+            top = (
+                window.scrollY
+                + rect.top
+                - topbarHeight
+                - 8
+            );
+        }
+
+        window.scrollTo({
+            top: Math.max(0, top),
+            behavior: 'smooth',
+        });
+    };
+
+    document.addEventListener(
+        'click',
+        (event) => {
+            const control = event.target.closest(
+                'button, a'
+            );
+
+            if (!control) {
+                return;
+            }
+
+            if (!isPaginationControl(control)) {
+                return;
+            }
+
+            if (isDisabledControl(control)) {
+                return;
+            }
+
+            /*
+             * Primer desplazamiento:
+             * reacciona inmediatamente al click.
+             */
+            window.requestAnimationFrame(() => {
+                scrollBexiaContentToTop();
+            });
+
+            /*
+             * Segundo desplazamiento:
+             * vuelve a fijar la posición después
+             * de que Livewire actualiza la tabla.
+             */
+            window.setTimeout(() => {
+                scrollBexiaContentToTop();
+            }, 250);
+        },
+        true
+    );
+})();
+</script>
+<!-- BEXIA_FILAMENT_PAGINATION_AUTOSCROLL_V5_83_P6A2_END -->
