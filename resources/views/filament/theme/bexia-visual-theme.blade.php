@@ -18322,3 +18322,141 @@ button[role="switch"] > span {
 })();
 </script>
 <!-- BEXIA_FILAMENT_PAGINATION_AUTOSCROLL_V5_83_P6A2_END -->
+
+<!-- BEXIA_PRODUCT_VARIANTS_TAB_HIGHLIGHT_V5_83_P7A_START -->
+<style>
+/*
+ * Pestaña Variantes en Productos:
+ * visible sin confundirse con la pestaña activa.
+ */
+.bexia-product-resource-tabs
+.fi-tabs-item.bexia-product-variants-tab-highlight {
+    color: #2f6fed !important;
+    font-weight: 700 !important;
+}
+
+.bexia-product-resource-tabs
+.fi-tabs-item.bexia-product-variants-tab-highlight
+.fi-tabs-item-label {
+    color: #2f6fed !important;
+    font-weight: 700 !important;
+}
+
+.bexia-product-resource-tabs
+.fi-tabs-item.bexia-product-variants-tab-highlight
+svg {
+    color: #2f6fed !important;
+}
+
+.bexia-product-resource-tabs
+.fi-tabs-item.bexia-product-variants-tab-highlight
+.fi-badge {
+    font-weight: 700 !important;
+}
+
+html.dark
+.bexia-product-resource-tabs
+.fi-tabs-item.bexia-product-variants-tab-highlight,
+html.dark
+.bexia-product-resource-tabs
+.fi-tabs-item.bexia-product-variants-tab-highlight
+.fi-tabs-item-label,
+html.dark
+.bexia-product-resource-tabs
+.fi-tabs-item.bexia-product-variants-tab-highlight
+svg {
+    color: #93c5fd !important;
+}
+</style>
+
+<script>
+(() => {
+    if (
+        window.__bexiaVariantsTabHighlightInitialized
+    ) {
+        return;
+    }
+
+    window.__bexiaVariantsTabHighlightInitialized = true;
+
+    const markVariantsTab = () => {
+        document
+            .querySelectorAll(
+                '.bexia-product-resource-tabs '
+                + '.fi-tabs-item'
+            )
+            .forEach((tab) => {
+                const text = (
+                    tab.textContent || ''
+                )
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                const isVariants = (
+                    text === 'Variantes'
+                    || text.startsWith(
+                        'Variantes '
+                    )
+                );
+
+                tab.classList.toggle(
+                    'bexia-product-variants-tab-highlight',
+                    isVariants
+                );
+            });
+    };
+
+    const bindLivewireHook = () => {
+        if (
+            ! window.Livewire
+            || window.__bexiaVariantsTabLivewireHook
+        ) {
+            return;
+        }
+
+        window.__bexiaVariantsTabLivewireHook = true;
+
+        window.Livewire.hook(
+            'morph.updated',
+            () => {
+                window.requestAnimationFrame(
+                    markVariantsTab
+                );
+            }
+        );
+    };
+
+    document.addEventListener(
+        'DOMContentLoaded',
+        () => {
+            markVariantsTab();
+            bindLivewireHook();
+        }
+    );
+
+    document.addEventListener(
+        'livewire:init',
+        bindLivewireHook
+    );
+
+    document.addEventListener(
+        'livewire:initialized',
+        () => {
+            markVariantsTab();
+            bindLivewireHook();
+        }
+    );
+
+    document.addEventListener(
+        'livewire:navigated',
+        () => {
+            window.requestAnimationFrame(
+                markVariantsTab
+            );
+
+            bindLivewireHook();
+        }
+    );
+})();
+</script>
+<!-- BEXIA_PRODUCT_VARIANTS_TAB_HIGHLIGHT_V5_83_P7A_END -->
