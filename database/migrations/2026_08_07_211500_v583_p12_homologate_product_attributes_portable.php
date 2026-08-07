@@ -110,6 +110,90 @@ return new class extends Migration
     }
 
 
+    /*
+     * BEXIA_V5_83_P12_DATA_SCOPE_PAPELON_ONLY
+     *
+     * La funcionalidad de atributos y variantes es
+     * multiempresa.
+     *
+     * Esta migración de datos históricos V5.83.P12,
+     * sin embargo, pertenece exclusivamente a
+     * Papelería Papelón.
+     *
+     * Este guard bloquea cualquier ampliación accidental
+     * del JSON hacia otra empresa.
+     */
+    private function assertPapelonOnlyCatalog(
+        array $catalog
+    ): void {
+        $companies = [];
+
+        foreach (
+            $catalog['companies']
+            ?? []
+            as $companySlug
+        ) {
+            $companies[] =
+                $this->normalize(
+                    (string) $companySlug
+                );
+        }
+
+        $companies =
+            array_values(
+                array_unique(
+                    $companies
+                )
+            );
+
+        sort(
+            $companies
+        );
+
+
+        if (
+            $companies
+            !==
+            [
+                'papelon',
+            ]
+        ) {
+            throw new RuntimeException(
+                'V5.83.P12 sólo permite datos de PAPELON.'
+            );
+        }
+
+
+        foreach (
+            $catalog['attributes']
+            ?? []
+            as $definition
+        ) {
+
+            $companySlug =
+                $this->normalize(
+                    (string) (
+                        $definition[
+                            'company_slug'
+                        ]
+                        ?? ''
+                    )
+                );
+
+
+            if (
+                $companySlug
+                !==
+                'papelon'
+            ) {
+                throw new RuntimeException(
+                    'Atributo V5.83.P12 fuera de PAPELON.'
+                );
+            }
+        }
+    }
+
+
     private function catalog(): array
     {
         $path = database_path(
@@ -197,6 +281,12 @@ return new class extends Migration
     {
         $catalog =
             $this->catalog();
+
+
+        $this->assertPapelonOnlyCatalog(
+            $catalog
+        );
+
 
         DB::transaction(
             function () use (
