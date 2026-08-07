@@ -781,11 +781,14 @@ public static function canCreate(): bool
 
     protected static function attributeValueOptions(?int $attributeId): array
     {
-        if (! $attributeId) {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId || ! $attributeId) {
             return [];
         }
 
         return ProductAttributeValue::query()
+            ->where('company_id', $companyId)
             ->where('product_attribute_id', $attributeId)
             ->where('is_active', true)
             ->orderBy('sort_order')
@@ -795,6 +798,163 @@ public static function canCreate(): bool
                 $value->id => "{$value->code} - {$value->name}",
             ])
             ->all();
+    }
+
+    /*
+     * BEXIA_V5_83_P12C4D_VARIANT_ATTRIBUTE_CATALOG
+     *
+     * Las variantes siguen almacenando el nombre del atributo
+     * y valor en products.variant_group / variant_value para
+     * conservar compatibilidad con el modelo actual.
+     *
+     * La captura ya no será texto libre: las opciones vienen
+     * exclusivamente del catálogo homologado de la empresa.
+     */
+    protected static function variantAttributeNameOptions(): array
+    {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId) {
+            return [];
+        }
+
+        return ProductAttribute::query()
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->where('is_variant', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (ProductAttribute $attribute) => [
+                $attribute->name => "{$attribute->code} - {$attribute->name}",
+            ])
+            ->all();
+    }
+
+    protected static function canonicalVariantAttributeName(
+        ?string $attributeName
+    ): ?string {
+        $companyId = static::currentCompanyId();
+        $attributeName = trim((string) $attributeName);
+
+        if (! $companyId || $attributeName === '') {
+            return null;
+        }
+
+        $ascii = mb_strtolower(
+            \Illuminate\Support\Str::ascii($attributeName),
+            'UTF-8'
+        );
+
+        $aliases = [
+            'aplicacion' => 'Aplicación',
+            'froma' => 'Forma',
+            'numero' => 'Número',
+            'diametro' => 'Diámetro',
+            'metalicos' => 'Metálicos',
+        ];
+
+        $candidate = $aliases[$ascii] ?? $attributeName;
+
+        return ProductAttribute::query()
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->where('is_variant', true)
+            ->whereRaw(
+                'LOWER(TRIM(name)) = ?',
+                [mb_strtolower(trim($candidate), 'UTF-8')]
+            )
+            ->value('name');
+    }
+
+    protected static function variantAttributeValueNameOptions(
+        ?string $attributeName
+    ): array {
+        $companyId = static::currentCompanyId();
+
+        $attributeName = static::canonicalVariantAttributeName(
+            $attributeName
+        );
+
+        if (! $companyId || ! $attributeName) {
+            return [];
+        }
+
+        $attribute = ProductAttribute::query()
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->where('is_variant', true)
+            ->whereRaw(
+                'LOWER(TRIM(name)) = ?',
+                [mb_strtolower(trim($attributeName), 'UTF-8')]
+            )
+            ->first();
+
+        if (! $attribute) {
+            return [];
+        }
+
+        return ProductAttributeValue::query()
+            ->where('company_id', $companyId)
+            ->where(
+                'product_attribute_id',
+                $attribute->id
+            )
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (ProductAttributeValue $value) => [
+                $value->name => "{$value->code} - {$value->name}",
+            ])
+            ->all();
+    }
+
+    protected static function canonicalVariantValueName(
+        ?string $attributeName,
+        ?string $valueName
+    ): ?string {
+        $companyId = static::currentCompanyId();
+        $valueName = trim((string) $valueName);
+
+        $attributeName = static::canonicalVariantAttributeName(
+            $attributeName
+        );
+
+        if (
+            ! $companyId
+            || ! $attributeName
+            || $valueName === ''
+        ) {
+            return null;
+        }
+
+        $attribute = ProductAttribute::query()
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->where('is_variant', true)
+            ->whereRaw(
+                'LOWER(TRIM(name)) = ?',
+                [mb_strtolower(trim($attributeName), 'UTF-8')]
+            )
+            ->first();
+
+        if (! $attribute) {
+            return null;
+        }
+
+        return ProductAttributeValue::query()
+            ->where('company_id', $companyId)
+            ->where(
+                'product_attribute_id',
+                $attribute->id
+            )
+            ->where('is_active', true)
+            ->whereRaw(
+                'LOWER(TRIM(name)) = ?',
+                [mb_strtolower(trim($valueName), 'UTF-8')]
+            )
+            ->value('name');
     }
 
 
@@ -1965,8 +2125,9 @@ Forms\Components\Section::make('Auditoría de precios y costos')
                                     ->columns(12),
 
 Forms\Components\Section::make('Atributos de catálogo')
-                                    ->description('Selecciona valores desde el catálogo de atributos. Marca, modelo, material, color, talla, línea, condición y catálogo deben capturarse aquí, no como texto libre.')
-                                    
+                                    ->description('Selecciona valores desde el catálogo homologado de atributos configurado para esta empresa.')
+                                    // BEXIA_V5_83_P12C4D_PRODUCT_ATTRIBUTE_CATALOG_UI
+
                                 // hide_attributes_on_variant_create_v5
                                 ->visible(fn (): bool => ! request()->filled('parent_product_id'))
 
@@ -2001,7 +2162,7 @@ Forms\Components\Section::make('Atributos de catálogo')
                                                     ->native(false)
                                                     ->required()
                                                     ->placeholder('Selecciona un valor')
-                                                    ->helperText('Si no aparece el valor, primero agrégalo en Inventario > Atributos de producto > Valores.')
+                                                    ->helperText('Si no aparece el valor, primero agrégalo en Productos > Atributos de producto > Valores.')
                                                     ->columnSpan(6),
                                             ])
                                             ->columns(12)
@@ -2622,7 +2783,7 @@ Forms\Components\Section::make('Atributos de catálogo')
                                     ->columnSpanFull(), // product_taxes_section_v1
 
                             ]),
-                    
+
                     Forms\Components\Tabs\Tab::make('Variantes')
                         ->icon('heroicon-o-squares-2x2')
                         ->badge(function (?Product $record): ?string {
@@ -2677,7 +2838,16 @@ Forms\Components\Section::make('Atributos de catálogo')
                         ->badgeColor('primary')
                         ->schema([
 
-                            Forms\Components\Section::make('Datos de la variante')
+                            /*
+                             * BEXIA_V5_83_P12C4D2R2_DROPDOWN_OVERFLOW_FIX
+                             *
+                             * Se usa Grid en lugar de Section para evitar
+                             * que los dropdowns queden recortados.
+                             */
+                            Forms\Components\Grid::make(2)
+                                ->extraAttributes([
+                                    'style' => 'position:relative;overflow:visible!important;z-index:40;',
+                                ])
                                 ->visible(fn (?\Illuminate\Database\Eloquent\Model $record): bool => request()->filled('parent_product_id') || (bool) ($record?->is_variant ?? false))
                                 ->schema([
                                     Forms\Components\Placeholder::make('variant_parent_readonly_v6')
@@ -2709,32 +2879,121 @@ Forms\Components\Section::make('Atributos de catálogo')
                                         })
                                         ->columnSpanFull(),
 
-                                    Forms\Components\TextInput::make('variant_group')
+                                    /*
+                                     * BEXIA_V5_83_P12C4D_VARIANT_DEPENDENT_DROPDOWNS
+                                     *
+                                     * Atributo y valor dejan de ser texto libre.
+                                     * Se conserva almacenamiento textual por
+                                     * compatibilidad con variants existentes.
+                                     */
+                                    Forms\Components\Select::make('variant_group')
+                                        ->extraAttributes([
+                                            'style' => 'position:relative;overflow:visible!important;z-index:60;',
+                                        ])
                                         ->label('Atributo de variante')
+                                        ->options(
+                                            fn (): array =>
+                                                static::variantAttributeNameOptions()
+                                        )
                                         ->default('Color')
-                                        ->afterStateHydrated(function ($component, $state): void {
-                                            if (blank($state)) {
-                                                $component->state('Color');
+                                        ->searchable()
+                                        ->preload()
+                                        ->native(false)
+                                        ->live()
+                                        ->afterStateHydrated(
+                                            function (
+                                                Forms\Components\Select $component,
+                                                $state
+                                            ): void {
+                                                if (blank($state)) {
+                                                    $component->state('Color');
+
+                                                    return;
+                                                }
+
+                                                $canonical =
+                                                    static::canonicalVariantAttributeName(
+                                                        (string) $state
+                                                    );
+
+                                                if ($canonical) {
+                                                    $component->state($canonical);
+                                                }
                                             }
-                                        })
+                                        )
+                                        ->afterStateUpdated(
+                                            function (Forms\Set $set): void {
+                                                $set('variant_value', null);
+                                            }
+                                        )
                                         ->required()
                                         ->dehydrated()
-                                        ->maxLength(100),
+                                        ->helperText(
+                                            'Los atributos disponibles se configuran en Productos > Atributos de producto.'
+                                        ),
 
-                                    Forms\Components\TextInput::make('variant_value')
+                                    Forms\Components\Select::make('variant_value')
+                                        ->extraAttributes([
+                                            'style' => 'position:relative;overflow:visible!important;z-index:60;',
+                                        ])
                                         ->label('Valor de variante')
-                                        ->placeholder('Ej. Rojo, Azul, Grande')
-                                        ->required(fn (): bool => request()->filled('parent_product_id'))
-                                        ->dehydrated()
-                                        ->maxLength(150),
+                                        ->options(
+                                            fn (Forms\Get $get): array =>
+                                                static::variantAttributeValueNameOptions(
+                                                    $get('variant_group')
+                                                        ? (string) $get('variant_group')
+                                                        : null
+                                                )
+                                        )
+                                        ->searchable()
+                                        ->preload()
+                                        ->native(false)
+                                        ->placeholder('Selecciona un valor')
+                                        ->afterStateHydrated(
+                                            function (
+                                                Forms\Components\Select $component,
+                                                $state,
+                                                Forms\Get $get
+                                            ): void {
+                                                if (blank($state)) {
+                                                    return;
+                                                }
 
-                                    Forms\Components\TextInput::make('variant_name')
-                                        ->label('Nombre corto de variante')
-                                        ->placeholder('Opcional, normalmente igual al valor')
+                                                $canonical =
+                                                    static::canonicalVariantValueName(
+                                                        $get('variant_group')
+                                                            ? (string) $get('variant_group')
+                                                            : null,
+                                                        (string) $state
+                                                    );
+
+                                                if ($canonical) {
+                                                    $component->state($canonical);
+                                                }
+                                            }
+                                        )
+                                        /*
+                                         * BEXIA_V5_83_P12C4D2R2_NO_VARIANT_NAME_MIRROR
+                                         *
+                                         * variant_value es el dato maestro.
+                                         */
+                                        ->required(
+                                            fn (?Product $record): bool =>
+                                                request()->filled(
+                                                    'parent_product_id'
+                                                )
+                                                || filled(
+                                                    $record?->variant_value
+                                                )
+                                        )
                                         ->dehydrated()
-                                        ->maxLength(150),
+                                        ->helperText(
+                                            'Para variantes nuevas el valor es obligatorio. Las variantes históricas que ya estaban vacías podrán conservarse temporalmente.'
+                                        ),
+
+
                                 ])
-                                ->columns(3)
+                                ->columns(2)
                                 ->columnSpanFull(),
 
 
@@ -2752,7 +3011,7 @@ Forms\Components\Actions::make([
                             ->alignEnd()
                             ->columnSpanFull(),
 
-                                                        
+
                             Forms\Components\Hidden::make('parent_product_id')
                                 ->default(fn () => request()->query('parent_product_id') ? (int) request()->query('parent_product_id') : null)
                                 ->dehydrated(),
@@ -3229,7 +3488,7 @@ variants_inner_table')
             ]);
     }
 
-    
+
 
     public static function archiveProductRecord(Product $record): void
     {

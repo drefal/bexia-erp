@@ -95,7 +95,7 @@ class EditProduct extends EditRecord
         if (! $query->exists()) {
             $data['internal_reference'] = $reference;
 
-    
+
         // BEXIA_V5727N23B_PREVENT_DUPLICATE_CODES_BEFORE_SAVE
         $this->validateUniqueCodesBeforeSave($data);
 
@@ -205,18 +205,23 @@ class EditProduct extends EditRecord
             }
         }
 
+        /*
+         * BEXIA_V5_83_P12C4D2R2_VARIANT_NAME_REMOVED
+         *
+         * variant_value es el único dato maestro nuevo.
+         * Si ya existe valor, variant_name queda vacío.
+         *
+         * Legacy sin variant_value no se reinterpreta.
+         */
         $record = $this->record ?? null;
 
         if ($record && (bool) ($record->is_variant ?? false)) {
-            $variantValue = trim((string) ($data['variant_value'] ?? ''));
-            $variantName = trim((string) ($data['variant_name'] ?? ''));
+            $variantValue = trim(
+                (string) ($data['variant_value'] ?? '')
+            );
 
-            if ($variantValue === '' && $variantName !== '') {
-                $data['variant_value'] = $variantName;
-            }
-
-            if ($variantName === '' && $variantValue !== '') {
-                $data['variant_name'] = $variantValue;
+            if ($variantValue !== '') {
+                $data['variant_name'] = null;
             }
         }
 
@@ -439,7 +444,6 @@ class EditProduct extends EditRecord
         if ($record->name !== $finalName) {
             $record->forceFill([
                 'name' => $finalName,
-                'variant_name' => $record->variant_name ?: $variantValue,
             ])->saveQuietly();
         }
     }

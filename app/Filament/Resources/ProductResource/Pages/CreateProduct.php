@@ -262,7 +262,7 @@ class CreateProduct extends CreateRecord
     }
 
 
-    
+
     protected function afterCreate(): void
     {
         // sync_product_taxes_after_create_v1
@@ -280,7 +280,7 @@ class CreateProduct extends CreateRecord
             return;
         }
 
-        $variantValue = trim((string) ($record->variant_value ?: $record->variant_name));
+        $variantValue = trim((string) $record->variant_value);
 
         if ($variantValue === '') {
             return;
@@ -290,7 +290,8 @@ class CreateProduct extends CreateRecord
 
         $record->forceFill([
             'name' => $finalName,
-            'variant_name' => $record->variant_name ?: $variantValue,
+            'variant_name' => null,
+            // BEXIA_V5_83_P12C4D2R2_VARIANT_NAME_REMOVED
             'has_variants' => false,
             'is_variant' => true,
         ])->saveQuietly();
@@ -341,7 +342,7 @@ class CreateProduct extends CreateRecord
         }
 
         $variantGroup = trim((string) ($data['variant_group'] ?? 'Color'));
-        $variantValue = trim((string) ($data['variant_value'] ?? $data['variant_name'] ?? ''));
+        $variantValue = trim((string) ($data['variant_value'] ?? ''));
 
         if ($variantValue === '') {
             return $data;
@@ -375,7 +376,7 @@ class CreateProduct extends CreateRecord
 
         $data['variant_group'] = $variantGroup;
         $data['variant_value'] = $variantValue;
-        $data['variant_name'] = $data['variant_name'] ?: $variantValue;
+        $data['variant_name'] = null;
         $data['variant_signature'] = Str::slug($variantGroup . ':' . $variantValue);
 
         // Para variantes, el nombre visible se genera automáticamente.
@@ -481,7 +482,7 @@ class CreateProduct extends CreateRecord
 
         $data['variant_group'] = $variantGroup;
         $data['variant_value'] = $variantValue;
-        $data['variant_name'] = $data['variant_name'] ?: $variantValue;
+        $data['variant_name'] = null;
         $data['variant_signature'] = \Illuminate\Support\Str::slug($variantGroup . ':' . $variantValue);
 
         $data['name'] = trim((string) $parent->name) . ' - ' . $variantValue;
@@ -662,7 +663,6 @@ protected function mergeFormStateForVariant(array $data): array
         foreach ([
             'variant_group',
             'variant_value',
-            'variant_name',
             'internal_reference',
             'name',
             'sale_price',
@@ -703,7 +703,7 @@ protected function prepareVariantDataForCreate(array $data, Product $parent): ar
 
         $data['variant_group'] = $variantGroup;
         $data['variant_value'] = $variantValue;
-        $data['variant_name'] = $data['variant_name'] ?: $variantValue;
+        $data['variant_name'] = null;
         $data['variant_signature'] = Str::slug($variantGroup . ':' . $variantValue);
 
         $data['name'] = trim((string) $parent->name) . ' - ' . $variantValue;

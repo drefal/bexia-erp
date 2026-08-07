@@ -71,9 +71,46 @@ public static function canCreate(): bool
         return static::canManage('inventory.update');
     }
 
+    /*
+     * BEXIA_V5_83_P12C4D_PROTECT_USED_ATTRIBUTE
+     *
+     * No permitir eliminar atributos del sistema,
+     * atributos usados por assignments ni atributos
+     * usados históricamente por variantes.
+     */
     public static function canDelete(Model $record): bool
     {
-        return static::canManage('inventory.delete') && ! (bool) $record->is_system;
+        if (! $record instanceof ProductAttribute) {
+            return false;
+        }
+
+        if (
+            ! static::canManage('inventory.delete')
+            || (bool) $record->is_system
+        ) {
+            return false;
+        }
+
+        if ($record->assignments()->exists()) {
+            return false;
+        }
+
+        return ! \App\Models\Product::query()
+            ->where(
+                'company_id',
+                $record->company_id
+            )
+            ->where('is_variant', true)
+            ->whereRaw(
+                'LOWER(TRIM(variant_group)) = ?',
+                [
+                    mb_strtolower(
+                        trim((string) $record->name),
+                        'UTF-8'
+                    ),
+                ]
+            )
+            ->exists();
     }
 
     public static function getEloquentQuery(): Builder
@@ -96,7 +133,9 @@ public static function form(Form $form): Form
                     ->default(fn () => static::currentCompanyId())
                     ->required(),
 
-                Forms\Components\Section::make('Datos del atributo')
+                Forms\Components\Section::make('Configuración del atributo')
+                    // BEXIA_V5_83_P12C4D_HOMOLOGATED_PRODUCT_ATTRIBUTES
+                    ->description('Define un atributo homologado y después agrega todos los valores permitidos. Ejemplo: Forma → Circular, Rectangular, Cuadrada, etc.')
                     ->extraAttributes([
                         'class' => 'bexia-pattr-section bexia-pattr-section-main',
                     ])
@@ -106,7 +145,7 @@ public static function form(Form $form): Form
                                 'class' => 'bexia-pattr-field bexia-pattr-code-field bexia-pattr-compact-field',
                             ])
                             ->label('Código')
-                            ->helperText('Ejemplo: COLOR, TALLA, MATERIAL.')
+                            ->helperText('Código estable del atributo. Ejemplo: COLOR, FORMA, TALLA, MATERIAL.')
                             ->required()
                             ->maxLength(80)
                             ->unique(
@@ -225,6 +264,15 @@ public static function form(Form $form): Form
                     ->sortable()
                     ->weight('medium'),
 
+                /*
+                 * BEXIA_V5_83_P12C4D_ATTRIBUTE_VALUES_COUNT
+                 */
+                Tables\Columns\TextColumn::make('values_count')
+                    ->label('Valores')
+                    ->counts('values')
+                    ->badge()
+                    ->sortable(),
+
                 Tables\Columns\IconColumn::make('is_variant')
                     ->extraHeaderAttributes([
                         'class' => 'bexia-pattr-header bexia-pattr-col-variant',
@@ -280,14 +328,16 @@ public static function form(Form $form): Form
 
                 Tables\Actions\DeleteAction::make()
                     ->label('Eliminar')
-                    ->visible(fn (ProductAttribute $record) => ! (bool) $record->is_system),
+                    ->visible(
+                        fn (ProductAttribute $record): bool =>
+                            static::canDelete($record)
+                    ),
             ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make()
-                        ->label('Eliminar seleccionados'),
-                ]),
-            ]);
+            /*
+             * El borrado masivo se deshabilita para evitar
+             * eliminar catálogos que ya tengan uso histórico.
+             */
+            ->bulkActions([]);
     }
 
     public static function getRelations(): array
