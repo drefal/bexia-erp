@@ -2547,6 +2547,57 @@ Forms\Components\Section::make('Atributos de catálogo')
                             ]),
                     
                     Forms\Components\Tabs\Tab::make('Variantes')
+                        ->icon('heroicon-o-squares-2x2')
+                        ->badge(function (?Product $record): ?string {
+                            if (
+                                ! $record
+                                || ! $record->exists
+                                || (bool) ($record->is_variant ?? false)
+                            ) {
+                                return null;
+                            }
+
+                            $query = Product::query()
+                                ->where(
+                                    'parent_product_id',
+                                    $record->id
+                                )
+                                ->where(
+                                    'is_variant',
+                                    true
+                                );
+
+                            if (
+                                Schema::hasColumn(
+                                    'products',
+                                    'company_id'
+                                )
+                                && ! empty($record->company_id)
+                            ) {
+                                $query->where(
+                                    'company_id',
+                                    (int) $record->company_id
+                                );
+                            }
+
+                            if (
+                                Schema::hasColumn(
+                                    'products',
+                                    'is_active'
+                                )
+                            ) {
+                                $query->where(
+                                    function ($query): void {
+                                        $query
+                                            ->whereNull('is_active')
+                                            ->orWhere('is_active', true);
+                                    }
+                                );
+                            }
+
+                            return (string) $query->count();
+                        })
+                        ->badgeColor('primary')
                         ->schema([
 
                             Forms\Components\Section::make('Datos de la variante')
