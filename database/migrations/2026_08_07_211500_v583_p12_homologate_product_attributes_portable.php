@@ -777,59 +777,17 @@ return new class extends Migration
 
 
                                 /*
-                                 * Regla aprobada:
+                                 * BEXIA_V5_83_P12_SCOPE_GRUPOL7_ONLY
                                  *
-                                 * PAPELON +
-                                 * P8715-15 +
-                                 * nombre Oro Rosado.
+                                 * La homologacion masiva P12 esta
+                                 * limitada exclusivamente a las
+                                 * empresas declaradas en el catalogo
+                                 * versionado. Para esta migracion el
+                                 * unico slug permitido es GRUPOL7.
                                  *
-                                 * No depende del ID local de empresa.
+                                 * No existen reglas especiales para
+                                 * empresas fuera de ese alcance.
                                  */
-                                if (
-                                    $companySlug
-                                    ===
-                                    'papelon'
-                                    &&
-                                    (string) $variant->internal_reference
-                                    ===
-                                    'P8715-15'
-                                    &&
-                                    $value
-                                    ===
-                                    ''
-                                    &&
-                                    stripos(
-                                        (string) $variant->name,
-                                        'Oro Rosado'
-                                    )
-                                    !==
-                                    false
-                                ) {
-
-                                    DB::table(
-                                        'products'
-                                    )
-                                        ->where(
-                                            'id',
-                                            $variant->id
-                                        )
-                                        ->update([
-                                            'variant_group' =>
-                                                'Color',
-
-                                            'variant_value' =>
-                                                'Oro Rosado',
-
-                                            'variant_name' =>
-                                                null,
-
-                                            'updated_at' =>
-                                                now(),
-                                        ]);
-
-                                    continue;
-                                }
-
 
                                 if ($group === '') {
                                     continue;
