@@ -52,6 +52,64 @@ return new class extends Migration
     }
 
 
+    /*
+     * BEXIA_V5_83_P12_IDEMPOTENT_NO_TOUCH
+     *
+     * Evita UPDATE y cambio de updated_at cuando el registro
+     * ya coincide exactamente con el catálogo.
+     */
+    private function changedFields(
+        object $row,
+        array $expected,
+        array $booleanFields = [],
+        array $integerFields = []
+    ): array {
+        $changes = [];
+
+        foreach ($expected as $field => $expectedValue) {
+            $currentValue = $row->{$field};
+
+            if (
+                in_array(
+                    $field,
+                    $booleanFields,
+                    true
+                )
+            ) {
+                $same =
+                    (bool) $currentValue
+                    ===
+                    (bool) $expectedValue;
+
+            } elseif (
+                in_array(
+                    $field,
+                    $integerFields,
+                    true
+                )
+            ) {
+                $same =
+                    (int) $currentValue
+                    ===
+                    (int) $expectedValue;
+
+            } else {
+                $same =
+                    (string) $currentValue
+                    ===
+                    (string) $expectedValue;
+            }
+
+            if (! $same) {
+                $changes[$field] =
+                    $expectedValue;
+            }
+        }
+
+        return $changes;
+    }
+
+
     private function catalog(): array
     {
         $path = database_path(
@@ -377,16 +435,51 @@ return new class extends Migration
 
                     if ($attribute) {
 
-                        DB::table(
-                            'product_attributes'
-                        )
-                            ->where(
-                                'id',
-                                $attribute->id
-                            )
-                            ->update(
-                                $attributeData
+                        $attributeComparable =
+                            $attributeData;
+
+                        unset(
+                            $attributeComparable[
+                                'updated_at'
+                            ]
+                        );
+
+
+                        $attributeChanges =
+                            $this->changedFields(
+                                $attribute,
+                                $attributeComparable,
+                                [
+                                    'is_variant',
+                                    'is_active',
+                                    'is_system',
+                                ],
+                                [
+                                    'company_id',
+                                    'sort_order',
+                                ]
                             );
+
+
+                        if (! empty($attributeChanges)) {
+
+                            $attributeChanges[
+                                'updated_at'
+                            ] =
+                                now();
+
+
+                            DB::table(
+                                'product_attributes'
+                            )
+                                ->where(
+                                    'id',
+                                    $attribute->id
+                                )
+                                ->update(
+                                    $attributeChanges
+                                );
+                        }
 
                         $attributeId =
                             (int) $attribute->id;
@@ -564,16 +657,50 @@ return new class extends Migration
 
                         if ($value) {
 
-                            DB::table(
-                                'product_attribute_values'
-                            )
-                                ->where(
-                                    'id',
-                                    $value->id
-                                )
-                                ->update(
-                                    $valueData
+                            $valueComparable =
+                                $valueData;
+
+                            unset(
+                                $valueComparable[
+                                    'updated_at'
+                                ]
+                            );
+
+
+                            $valueChanges =
+                                $this->changedFields(
+                                    $value,
+                                    $valueComparable,
+                                    [
+                                        'is_active',
+                                    ],
+                                    [
+                                        'company_id',
+                                        'product_attribute_id',
+                                        'sort_order',
+                                    ]
                                 );
+
+
+                            if (! empty($valueChanges)) {
+
+                                $valueChanges[
+                                    'updated_at'
+                                ] =
+                                    now();
+
+
+                                DB::table(
+                                    'product_attribute_values'
+                                )
+                                    ->where(
+                                        'id',
+                                        $value->id
+                                    )
+                                    ->update(
+                                        $valueChanges
+                                    );
+                            }
 
                         } else {
 
