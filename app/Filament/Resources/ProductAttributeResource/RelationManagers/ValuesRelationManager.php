@@ -43,6 +43,56 @@ class ValuesRelationManager extends RelationManager
         return static::canManage('inventory.view');
     }
 
+    /*
+     * BEXIA_V5_83_P12C4D_PROTECT_USED_ATTRIBUTE_VALUE
+     *
+     * Un valor no se elimina si está referenciado por
+     * product_attribute_assignments o por una variante
+     * histórica usando variant_group / variant_value.
+     */
+    protected function valueIsUsed(
+        ProductAttributeValue $record
+    ): bool {
+        if (
+            \App\Models\ProductAttributeAssignment::query()
+                ->where(
+                    'product_attribute_value_id',
+                    $record->id
+                )
+                ->exists()
+        ) {
+            return true;
+        }
+
+        $owner = $this->getOwnerRecord();
+
+        return \App\Models\Product::query()
+            ->where(
+                'company_id',
+                $owner->company_id
+            )
+            ->where('is_variant', true)
+            ->whereRaw(
+                'LOWER(TRIM(variant_group)) = ?',
+                [
+                    mb_strtolower(
+                        trim((string) $owner->name),
+                        'UTF-8'
+                    ),
+                ]
+            )
+            ->whereRaw(
+                'LOWER(TRIM(variant_value)) = ?',
+                [
+                    mb_strtolower(
+                        trim((string) $record->name),
+                        'UTF-8'
+                    ),
+                ]
+            )
+            ->exists();
+    }
+
     public function form(Form $form): Form
     {
         return $form
@@ -56,13 +106,132 @@ class ValuesRelationManager extends RelationManager
                     ->helperText('Ejemplo: ROJO, AZUL, M, G.')
                     ->required()
                     ->maxLength(80)
-                    ->dehydrateStateUsing(fn (?string $state) => strtoupper(trim((string) $state)))
+                    /*
+                     * BEXIA_V5_83_P12C4D_UNIQUE_ATTRIBUTE_VALUE_CODE
+                     */
+                    ->rules(
+                        function (
+                            ?ProductAttributeValue $record
+                        ): array {
+                            $owner = $this->getOwnerRecord();
+
+                            return [
+                                function (
+                                    string $attribute,
+                                    $value,
+                                    \Closure $fail
+                                ) use ($owner, $record): void {
+                                    $normalized =
+                                        mb_strtolower(
+                                            trim(
+                                                (string) $value
+                                            ),
+                                            'UTF-8'
+                                        );
+
+                                    $exists =
+                                        ProductAttributeValue::query()
+                                            ->where(
+                                                'company_id',
+                                                $owner->company_id
+                                            )
+                                            ->where(
+                                                'product_attribute_id',
+                                                $owner->id
+                                            )
+                                            ->whereRaw(
+                                                'LOWER(TRIM(code)) = ?',
+                                                [$normalized]
+                                            )
+                                            ->when(
+                                                $record?->getKey(),
+                                                fn ($query) =>
+                                                    $query->whereKeyNot(
+                                                        $record->getKey()
+                                                    )
+                                            )
+                                            ->exists();
+
+                                    if ($exists) {
+                                        $fail(
+                                            'Ya existe un valor con este código dentro del atributo.'
+                                        );
+                                    }
+                                },
+                            ];
+                        }
+                    )
+                    ->dehydrateStateUsing(
+                        fn (?string $state) =>
+                            strtoupper(
+                                trim((string) $state)
+                            )
+                    )
                     ->columnSpan(4),
 
                 Forms\Components\TextInput::make('name')
                     ->label('Nombre')
                     ->required()
                     ->maxLength(255)
+                    /*
+                     * BEXIA_V5_83_P12C4D_UNIQUE_ATTRIBUTE_VALUE_NAME
+                     */
+                    ->rules(
+                        function (
+                            ?ProductAttributeValue $record
+                        ): array {
+                            $owner = $this->getOwnerRecord();
+
+                            return [
+                                function (
+                                    string $attribute,
+                                    $value,
+                                    \Closure $fail
+                                ) use ($owner, $record): void {
+                                    $normalized =
+                                        mb_strtolower(
+                                            trim(
+                                                (string) $value
+                                            ),
+                                            'UTF-8'
+                                        );
+
+                                    $exists =
+                                        ProductAttributeValue::query()
+                                            ->where(
+                                                'company_id',
+                                                $owner->company_id
+                                            )
+                                            ->where(
+                                                'product_attribute_id',
+                                                $owner->id
+                                            )
+                                            ->whereRaw(
+                                                'LOWER(TRIM(name)) = ?',
+                                                [$normalized]
+                                            )
+                                            ->when(
+                                                $record?->getKey(),
+                                                fn ($query) =>
+                                                    $query->whereKeyNot(
+                                                        $record->getKey()
+                                                    )
+                                            )
+                                            ->exists();
+
+                                    if ($exists) {
+                                        $fail(
+                                            'Ya existe este valor dentro del atributo.'
+                                        );
+                                    }
+                                },
+                            ];
+                        }
+                    )
+                    ->dehydrateStateUsing(
+                        fn (?string $state) =>
+                            trim((string) $state)
+                    )
                     ->columnSpan(5),
 
                 Forms\Components\TextInput::make('sort_order')
@@ -126,7 +295,17 @@ class ValuesRelationManager extends RelationManager
 
                 Tables\Actions\DeleteAction::make()
                     ->label('Eliminar')
-                    ->visible(fn (ProductAttributeValue $record) => static::canManage('inventory.delete')),
+                    ->visible(
+                        fn (
+                            ProductAttributeValue $record
+                        ): bool =>
+                            static::canManage(
+                                'inventory.delete'
+                            )
+                            && ! $this->valueIsUsed(
+                                $record
+                            )
+                    ),
             ])
             ->bulkActions([]);
     }
