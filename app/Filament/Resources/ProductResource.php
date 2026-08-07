@@ -2172,13 +2172,15 @@ Forms\Components\Section::make('Atributos de catálogo')
 
 
 
-                                Forms\Components\Section::make('Compra')
+                                Forms\Components\Section::make('Configuración de compra')
+                                    ->description('Parámetros operativos para compras y abastecimiento. Los costos reales se obtienen de las órdenes y recepciones; el costo manual sólo funciona como respaldo.')
                                     ->schema([
                                         Forms\Components\TextInput::make('purchase_price')
-                                            ->label('Precio de compra')
+                                            ->label('Costo manual de referencia')
                                             ->numeric()
                                             ->default(0)
                                             ->prefix('$')
+                                            ->helperText('Respaldo manual para procesos sin un costo real disponible. No representa la última compra ni sustituye el costo real calculado al recibir una OC.')
                                             ->columnSpan(3),
 
                                         Forms\Components\TextInput::make('purchase_lead_time_days')
@@ -2186,27 +2188,25 @@ Forms\Components\Section::make('Atributos de catálogo')
                                             ->numeric()
                                             ->default(0)
                                             ->suffix('días')
+                                            ->helperText('Tiempo normal esperado entre ordenar y recibir el producto.')
                                             ->columnSpan(3),
 
-
-
                                         Forms\Components\TextInput::make('purchase_pack_units')
-                                            ->label('UXES / unidades por empaque')
+                                            ->label('UXE predeterminado')
                                             ->numeric()
-                                            ->minValue(0)
+                                            ->minValue(0.000001)
                                             ->default(1)
                                             ->step('0.0001')
-                                            ->helperText('Cantidad de unidades que contiene un empaque de compra. Ej. caja de 100 piezas.'),
-
-
-
+                                            ->helperText('Equivalencia general usada por reabastecimiento. Para presentaciones específicas usa Equivalencias de compra.')
+                                            ->columnSpan(2),
 
                                         Forms\Components\TextInput::make('purchase_min_quantity')
                                             ->label('Compra mínima')
                                             ->numeric()
                                             ->minValue(0)
                                             ->step('0.0001')
-                                            ->helperText('Cantidad mínima que normalmente se debe comprar al proveedor.'),
+                                            ->helperText('Cantidad mínima que normalmente se debe comprar al proveedor.')
+                                            ->columnSpan(2),
 
                                         Forms\Components\TextInput::make('purchase_multiple_quantity')
                                             ->label('Múltiplo de compra')
@@ -2214,42 +2214,27 @@ Forms\Components\Section::make('Atributos de catálogo')
                                             ->minValue(0)
                                             ->default(1)
                                             ->step('0.0001')
-                                            ->helperText('El reporte de reabastecimiento redondeará la sugerencia a este múltiplo.'),
+                                            ->helperText('El reabastecimiento redondea la sugerencia a este múltiplo.')
+                                            ->columnSpan(2),
 
                                         Forms\Components\Textarea::make('purchase_description')
                                             ->label('Descripción de compra')
-                                            ->rows(4)
-                                            ->columnSpan(12),
+                                            ->rows(3)
+                                            ->helperText('Descripción interna que puede usarse durante el proceso de compra.')
+                                            ->columnSpanFull(),
                                     ])
                                     ->columns(12),
 
-                                Forms\Components\Section::make('Última compra')
+                                Forms\Components\Section::make('Historial de compras')
+                                    ->description('Información calculada directamente desde órdenes y recepciones. Borradores, revisión y canceladas se muestran, pero no sustituyen el último costo aplicado.')
                                     ->schema([
-
-                                        Forms\Components\Placeholder::make('last_purchases_preview')
-                                            ->label('Últimas 5 compras')
-                                            ->content(fn (?\App\Models\Product $record): HtmlString => static::lastPurchasesPreview($record))
+                                        Forms\Components\Placeholder::make('purchase_history_preview')
+                                            ->label('')
+                                            ->content(
+                                                fn (?\App\Models\Product $record): HtmlString =>
+                                                    static::purchaseHistoryPreview($record)
+                                            )
                                             ->columnSpanFull(),
-
-                                        Forms\Components\TextInput::make('last_purchase_cost')
-                                            ->label('Último costo de compra')
-                                            ->numeric()
-                                            ->prefix('$')
-                                            ->disabled()
-                                            ->dehydrated(false)
-                                            ->columnSpan(3),
-
-                                        Forms\Components\TextInput::make('last_supplier_name')
-                                            ->label('Último proveedor')
-                                            ->disabled()
-                                            ->dehydrated(false)
-                                            ->columnSpan(5),
-
-                                        Forms\Components\DateTimePicker::make('last_purchase_at')
-                                            ->label('Fecha última compra')
-                                            ->disabled()
-                                            ->dehydrated(false)
-                                            ->columnSpan(4),
                                     ])
                                     ->columns(12),
                             ]),
@@ -3457,111 +3442,859 @@ public static function getPages(): array
         return [];
     }
 
-    protected static function lastPurchasesPreview(?\App\Models\Product $record): HtmlString
-    {
-        if (! $record) {
-            return new HtmlString('<span style="color:#6b7280;">Guarda el producto para ver historial.</span>');
+    /*
+     * BEXIA_V5_83_P9B_PRODUCT_PURCHASE_HISTORY
+     *
+     * Historial real de compras para la ficha del producto.
+     * No utiliza products.last_* como fuente visual.
+     */
+    protected static function purchaseHistoryPreview(
+        ?Product $record
+    ): HtmlString {
+        if (! $record || ! $record->exists) {
+            return new HtmlString(
+                '<span style="color:#6b7280;">'
+                . 'Guarda el producto para consultar su historial de compras.'
+                . '</span>'
+            );
         }
 
-        $productId = (int) $record->getKey();
-
-        $rows = static::lastPurchaseRows($productId);
+        $rows = static::purchaseHistoryRows(
+            $record,
+            20
+        );
 
         if (empty($rows)) {
-            return new HtmlString('<span style="color:#6b7280;">Aún no hay compras registradas para este producto.</span>');
+            return new HtmlString(
+                '<div style="padding:12px 0;color:#6b7280;">'
+                . 'Aún no hay órdenes de compra registradas para este producto.'
+                . '</div>'
+            );
         }
 
-        $html = '<div class="bexia-product-resource-table-wrap" role="region" aria-label="Últimas compras" tabindex="0">';
-        $html .= '<table class="bexia-product-resource-table" style="width:100%;border-collapse:collapse;font-size:12px;">';
-        $html .= '<thead><tr>';
-        $html .= '<th style="text-align:left;border-bottom:1px solid #e5e7eb;padding:4px;">Fecha</th>';
-        $html .= '<th style="text-align:left;border-bottom:1px solid #e5e7eb;padding:4px;">Proveedor</th>';
-        $html .= '<th style="text-align:right;border-bottom:1px solid #e5e7eb;padding:4px;">Cantidad</th>';
-        $html .= '<th style="text-align:right;border-bottom:1px solid #e5e7eb;padding:4px;">Costo unit. sin IVA</th>';
-        $html .= '<th style="text-align:left;border-bottom:1px solid #e5e7eb;padding:4px;">Documento</th>';
-        $html .= '</tr></thead><tbody>';
+        $latest = $rows[0];
+
+        $appliedStatuses = [
+            'partially_received',
+            'partial_received',
+            'received',
+            'fully_received',
+        ];
+
+        $latestApplied = null;
 
         foreach ($rows as $row) {
+            if (
+                in_array(
+                    $row['status'],
+                    $appliedStatuses,
+                    true
+                )
+                && (float) $row['received_quantity'] > 0
+            ) {
+                $latestApplied = $row;
+                break;
+            }
+        }
+
+        $status = static::purchaseHistoryStatus(
+            $latest['status']
+        );
+
+        $latestPurchaseCost = static::purchaseHistoryMoney(
+            $latest['cost_without_tax'],
+            4
+        );
+
+        $latestPurchaseCostWithTax = static::purchaseHistoryMoney(
+            $latest['cost_with_tax'],
+            4
+        );
+
+        $latestBaseCost = static::purchaseHistoryMoney(
+            $latest['base_cost_without_tax'],
+            4
+        );
+
+        $latestBaseCostWithTax = static::purchaseHistoryMoney(
+            $latest['base_cost_with_tax'],
+            4
+        );
+
+        $appliedCost = $latestApplied
+            ? static::purchaseHistoryMoney(
+                $latestApplied['base_cost_without_tax'],
+                4
+            )
+            : '—';
+
+        $appliedDocument = $latestApplied
+            ? e($latestApplied['document'])
+            : 'Sin recepción aplicada';
+
+        $html = '<div style="display:grid;'
+            . 'grid-template-columns:repeat(auto-fit,minmax(210px,1fr));'
+            . 'gap:10px;margin-bottom:16px;">';
+
+        $html .= '<div style="border:1px solid #e5e7eb;'
+            . 'border-radius:10px;padding:12px;">'
+            . '<div style="font-size:11px;color:#6b7280;'
+            . 'text-transform:uppercase;font-weight:700;">Última OC</div>'
+            . '<div style="font-size:15px;font-weight:700;margin-top:4px;">'
+            . e($latest['document'])
+            . '</div>'
+            . '<div style="margin-top:7px;">'
+            . '<span style="display:inline-flex;align-items:center;'
+            . 'border-radius:999px;padding:3px 8px;font-size:11px;'
+            . 'font-weight:700;background:'
+            . e($status['background'])
+            . ';color:'
+            . e($status['foreground'])
+            . ';">'
+            . e($status['label'])
+            . '</span>'
+            . '</div>'
+            . '<div style="font-size:12px;color:#6b7280;margin-top:7px;">'
+            . e($latest['date'])
+            . ' · '
+            . e($latest['supplier'])
+            . '</div>'
+            . '</div>';
+
+        /*
+         * BEXIA_V5_83_P9B3_COST_IVA_UXE_VISUAL
+         *
+         * El costo unitario es el dato principal.
+         * s/IVA y c/IVA tienen el mismo peso visual.
+         * UXE se muestra de forma destacada.
+         */
+        $html .= '<div style="border:1px solid #e5e7eb;'
+            . 'border-radius:10px;padding:12px;">'
+
+            . '<div style="font-size:11px;color:#6b7280;'
+            . 'text-transform:uppercase;font-weight:700;">'
+            . 'Costo unitario última OC'
+            . '</div>'
+
+            . '<div style="margin-top:5px;display:flex;'
+            . 'flex-direction:column;gap:2px;">'
+
+            . '<div style="font-size:16px;line-height:1.35;'
+            . 'font-weight:700;color:#111827;">'
+            . $latestBaseCost
+            . ' s/IVA'
+            . '</div>'
+
+            . '<div style="font-size:16px;line-height:1.35;'
+            . 'font-weight:700;color:#2563eb;">'
+            . $latestBaseCostWithTax
+            . ' c/IVA'
+            . '</div>'
+
+            . '</div>'
+
+            . '<div style="margin-top:9px;">'
+            . '<span style="display:inline-flex;align-items:center;'
+            . 'border-radius:8px;padding:4px 9px;'
+            . 'font-size:14px;line-height:1.2;font-weight:700;'
+            . 'background:#f3f4f6;color:#111827;'
+            . 'border:1px solid #d1d5db;">'
+            . 'UXE: '
+            . e(static::purchaseHistoryNumber($latest['uxe'], 4))
+            . '</span>'
+            . '</div>'
+
+            . '<div style="font-size:12px;color:#6b7280;'
+            . 'margin-top:9px;line-height:1.45;">'
+            . 'Presentación s/IVA: '
+            . '<strong style="color:#374151;">'
+            . $latestPurchaseCost
+            . '</strong>'
+            . '</div>'
+
+            . '<div style="font-size:12px;color:#6b7280;'
+            . 'margin-top:2px;line-height:1.45;">'
+            . 'Presentación c/IVA: '
+            . '<strong style="color:#2563eb;">'
+            . $latestPurchaseCostWithTax
+            . '</strong>'
+            . '</div>'
+
+            . '</div>';
+
+        $html .= '<div style="border:1px solid #e5e7eb;'
+            . 'border-radius:10px;padding:12px;">'
+            . '<div style="font-size:11px;color:#6b7280;'
+            . 'text-transform:uppercase;font-weight:700;">Último costo aplicado</div>'
+            . '<div style="font-size:15px;font-weight:700;margin-top:4px;">'
+            . $appliedCost
+            . '</div>'
+            . '<div style="font-size:12px;color:#6b7280;margin-top:5px;">'
+            . 'Costo unitario base, sin IVA'
+            . '</div>'
+            . '<div style="font-size:12px;color:#6b7280;margin-top:3px;">'
+            . $appliedDocument
+            . '</div>'
+            . '</div>';
+
+        $html .= '<div style="border:1px solid #e5e7eb;'
+            . 'border-radius:10px;padding:12px;">'
+            . '<div style="font-size:11px;color:#6b7280;'
+            . 'text-transform:uppercase;font-weight:700;">Recepción última OC</div>'
+            . '<div style="font-size:15px;font-weight:700;margin-top:4px;">'
+            . e(static::purchaseHistoryNumber($latest['received_quantity'], 2))
+            . ' / '
+            . e(static::purchaseHistoryNumber($latest['ordered_quantity'], 2))
+            . '</div>'
+            . '<div style="font-size:12px;color:#6b7280;margin-top:5px;">'
+            . e($latest['purchase_unit'])
+            . '</div>'
+            . '<div style="font-size:12px;color:#6b7280;margin-top:3px;">'
+            . 'Estado línea: '
+            . e($latest['receipt_status'])
+            . '</div>'
+            . '</div>';
+
+        $html .= '</div>';
+
+        $html .= '<div style="font-size:12px;font-weight:700;'
+            . 'margin-bottom:7px;">Últimas 5 líneas de compra</div>';
+
+        $html .= '<div class="bexia-product-resource-table-wrap" '
+            . 'role="region" aria-label="Historial de compras" tabindex="0">';
+
+        $html .= '<table class="bexia-product-resource-table" '
+            . 'style="width:100%;border-collapse:collapse;font-size:12px;">';
+
+        $html .= '<thead><tr>';
+
+        foreach ([
+            ['Fecha', 'left'],
+            ['Estado', 'left'],
+            ['Documento', 'left'],
+            ['Proveedor', 'left'],
+            ['Variante', 'left'],
+            ['Pedido', 'right'],
+            ['Recibido', 'right'],
+            ['Unidad / UXE', 'left'],
+            ['Costo unitario s/IVA', 'right'],
+            ['Costo presentación s/IVA', 'right'],
+        ] as [$label, $align]) {
+            $html .= '<th style="text-align:'
+                . $align
+                . ';border-bottom:1px solid #e5e7eb;'
+                . 'padding:6px;white-space:nowrap;">'
+                . e($label)
+                . '</th>';
+        }
+
+        $html .= '</tr></thead><tbody>';
+
+        foreach (
+            array_slice(
+                $rows,
+                0,
+                5
+            )
+            as $row
+        ) {
+            $rowStatus = static::purchaseHistoryStatus(
+                $row['status']
+            );
+
             $html .= '<tr>';
-            $html .= '<td style="padding:4px;border-bottom:1px solid #f3f4f6;">' . e($row['date'] ?? '—') . '</td>';
-            $html .= '<td style="padding:4px;border-bottom:1px solid #f3f4f6;">' . e($row['supplier'] ?? '—') . '</td>';
-            $html .= '<td style="padding:4px;border-bottom:1px solid #f3f4f6;text-align:right;">' . e($row['quantity'] ?? '—') . '</td>';
-            $html .= '<td style="padding:4px;border-bottom:1px solid #f3f4f6;text-align:right;">' . e($row['cost'] ?? '—') . '</td>';
-            $html .= '<td style="padding:4px;border-bottom:1px solid #f3f4f6;">' . e($row['document'] ?? '—') . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;'
+                . 'white-space:nowrap;">'
+                . e($row['date'])
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;'
+                . 'white-space:nowrap;">'
+                . '<span style="display:inline-flex;border-radius:999px;'
+                . 'padding:3px 7px;font-size:11px;font-weight:700;'
+                . 'background:'
+                . e($rowStatus['background'])
+                . ';color:'
+                . e($rowStatus['foreground'])
+                . ';">'
+                . e($rowStatus['label'])
+                . '</span>'
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;'
+                . 'font-weight:600;white-space:nowrap;">'
+                . e($row['document'])
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;">'
+                . e($row['supplier'])
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;">'
+                . e($row['variant'])
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;'
+                . 'text-align:right;">'
+                . e(static::purchaseHistoryNumber($row['ordered_quantity'], 2))
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;'
+                . 'text-align:right;">'
+                . e(static::purchaseHistoryNumber($row['received_quantity'], 2))
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;">'
+                . e($row['purchase_unit'])
+                . ' / '
+                . e(static::purchaseHistoryNumber($row['uxe'], 4))
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;'
+                . 'text-align:right;white-space:nowrap;font-weight:700;">'
+                . static::purchaseHistoryMoney(
+                    $row['base_cost_without_tax'],
+                    4
+                )
+                . '</td>';
+
+            $html .= '<td style="padding:6px;border-bottom:1px solid #f3f4f6;'
+                . 'text-align:right;white-space:nowrap;">'
+                . static::purchaseHistoryMoney(
+                    $row['cost_without_tax'],
+                    4
+                )
+                . '</td>';
+
             $html .= '</tr>';
         }
 
         $html .= '</tbody></table></div>';
 
+        $html .= '<div style="font-size:11px;color:#6b7280;margin-top:8px;">'
+            . 'Costo unitario = costo de presentación ÷ UXE. '
+            . 'Al recibir la compra, este costo unitario base sin IVA es el que '
+            . 'se registra como último costo del producto. Una OC en borrador, '
+            . 'revisión o sólo confirmada todavía no sustituye el costo aplicado.'
+            . '</div>';
+
         return new HtmlString($html);
     }
 
-    protected static function lastPurchaseRows(int $productId): array
-    {
-        /*
-         * Preparado para compras reales.
-         * Cuando el módulo de compras esté creando tablas definitivas, este método
-         * puede mapear purchase_orders / purchase_order_lines.
-         */
-        $candidates = [
-            ['lines' => 'purchase_order_lines', 'header' => 'purchase_orders'],
-            ['lines' => 'purchase_lines', 'header' => 'purchases'],
-            ['lines' => 'purchase_items', 'header' => 'purchases'],
-        ];
-
-        foreach ($candidates as $candidate) {
-            $lineTable = $candidate['lines'];
-            $headerTable = $candidate['header'];
-
-            if (! Schema::hasTable($lineTable)) {
-                continue;
-            }
-
-            $productColumn = static::firstExistingProductColumn($lineTable, ['product_id']);
-
-            if (! $productColumn) {
-                continue;
-            }
-
-            $dateColumn = Schema::hasTable($headerTable)
-                ? static::firstExistingProductColumn($headerTable, ['date', 'order_date', 'purchase_date', 'created_at'])
-                : null;
-
-            $quantityColumn = static::firstExistingProductColumn($lineTable, ['quantity', 'qty', 'product_qty']);
-            $costColumn = static::firstExistingProductColumn($lineTable, ['unit_cost', 'price_unit', 'unit_price', 'cost', 'purchase_price']);
-
-            $query = DB::table($lineTable)
-                ->where($lineTable . '.' . $productColumn, $productId);
-
-            if (Schema::hasTable($headerTable)) {
-                $foreign = static::firstExistingProductColumn($lineTable, ['purchase_order_id', 'purchase_id', 'order_id']);
-
-                if ($foreign) {
-                    $query->leftJoin($headerTable, $headerTable . '.id', '=', $lineTable . '.' . $foreign);
-                }
-            }
-
-            $rows = $query
-                ->orderByDesc($dateColumn ? $headerTable . '.' . $dateColumn : $lineTable . '.id')
-                ->limit(5)
-                ->get();
-
-            if ($rows->isEmpty()) {
-                continue;
-            }
-
-            return $rows->map(function ($row) use ($dateColumn, $quantityColumn, $costColumn): array {
-                return [
-                    'date' => $dateColumn && isset($row->{$dateColumn}) ? (string) $row->{$dateColumn} : '—',
-                    'supplier' => '—',
-                    'quantity' => $quantityColumn && isset($row->{$quantityColumn}) ? number_format((float) $row->{$quantityColumn}, 2) : '—',
-                    'cost' => $costColumn && isset($row->{$costColumn}) ? '$ ' . number_format((float) $row->{$costColumn}, 4) : '—',
-                    'document' => '—',
-                ];
-            })->all();
+    protected static function purchaseHistoryRows(
+        Product $record,
+        int $limit = 20
+    ): array {
+        if (
+            ! Schema::hasTable('purchase_orders')
+            || ! Schema::hasTable('purchase_order_lines')
+        ) {
+            return [];
         }
 
-        return [];
+        $recordId = (int) $record->getKey();
+
+        if ($recordId <= 0) {
+            return [];
+        }
+
+        $companyId = (int) (
+            $record->company_id
+            ?: static::currentCompanyIdForProducts()
+            ?: 0
+        );
+
+        $isVariant = (bool) (
+            $record->is_variant
+            ?? false
+        );
+
+        $variantIds = [];
+
+        if (! $isVariant) {
+            $variantIds = Product::query()
+                ->where(
+                    'company_id',
+                    $companyId
+                )
+                ->where(
+                    'parent_product_id',
+                    $recordId
+                )
+                ->where(
+                    'is_variant',
+                    true
+                )
+                ->pluck('id')
+                ->map(
+                    fn ($id): int => (int) $id
+                )
+                ->all();
+        }
+
+        $query = DB::table(
+            'purchase_order_lines as pol'
+        )
+            ->join(
+                'purchase_orders as po',
+                'po.id',
+                '=',
+                'pol.purchase_order_id'
+            );
+
+        if ($companyId > 0) {
+            $query->where(
+                'po.company_id',
+                $companyId
+            );
+        }
+
+        $query->where(
+            function ($query) use (
+                $recordId,
+                $isVariant,
+                $variantIds
+            ): void {
+                if ($isVariant) {
+                    $query
+                        ->where(
+                            'pol.product_variant_id',
+                            $recordId
+                        )
+                        ->orWhere(
+                            'pol.product_id',
+                            $recordId
+                        );
+
+                    return;
+                }
+
+                $query->where(
+                    'pol.product_id',
+                    $recordId
+                );
+
+                if (! empty($variantIds)) {
+                    $query
+                        ->orWhereIn(
+                            'pol.product_variant_id',
+                            $variantIds
+                        )
+                        ->orWhereIn(
+                            'pol.product_id',
+                            $variantIds
+                        );
+                }
+            }
+        );
+
+        $rawRows = $query
+            ->orderByRaw(
+                'po.order_date DESC NULLS LAST'
+            )
+            ->orderByDesc('po.id')
+            ->orderByDesc('pol.id')
+            ->limit(100)
+            ->get([
+                'po.id as purchase_order_id',
+                'po.number as document',
+                'po.status',
+                'po.supplier_name',
+                'po.order_date',
+                'po.confirmed_at',
+
+                'pol.id as line_id',
+                'pol.product_id',
+                'pol.product_variant_id',
+                'pol.product_label',
+                'pol.variant_label',
+
+                'pol.purchase_unit_type',
+                'pol.purchase_unit_label',
+                'pol.purchase_unit_factor',
+
+                'pol.ordered_quantity',
+                'pol.base_quantity',
+
+                'pol.received_quantity',
+                'pol.received_base_quantity',
+                'pol.receipt_status',
+
+                'pol.unit_cost_without_tax',
+                'pol.tax_rate',
+                'pol.unit_cost_with_tax',
+            ]);
+
+        $rows = [];
+        $seen = [];
+
+        foreach ($rawRows as $row) {
+            $uxeRaw = (float) (
+                $row->purchase_unit_factor
+                ?? 0
+            );
+
+            $uxe = $uxeRaw > 0
+                ? $uxeRaw
+                : 1.0;
+
+            $costWithoutTax = (float) (
+                $row->unit_cost_without_tax
+                ?? 0
+            );
+
+            $costWithTax = (float) (
+                $row->unit_cost_with_tax
+                ?? 0
+            );
+
+            $signature = implode(
+                '|',
+                [
+                    (int) $row->purchase_order_id,
+                    (int) ($row->product_id ?? 0),
+                    (int) ($row->product_variant_id ?? 0),
+                    trim((string) ($row->purchase_unit_label ?? '')),
+                    number_format($uxe, 6, '.', ''),
+                    number_format(
+                        (float) ($row->ordered_quantity ?? 0),
+                        6,
+                        '.',
+                        ''
+                    ),
+                    number_format(
+                        (float) ($row->received_quantity ?? 0),
+                        6,
+                        '.',
+                        ''
+                    ),
+                    number_format(
+                        $costWithoutTax,
+                        6,
+                        '.',
+                        ''
+                    ),
+                ]
+            );
+
+            /*
+             * Evita mostrar dos veces líneas históricas
+             * completamente idénticas de una misma OC.
+             */
+            if (isset($seen[$signature])) {
+                continue;
+            }
+
+            $seen[$signature] = true;
+
+            $status = strtolower(
+                trim(
+                    (string) (
+                        $row->status
+                        ?? ''
+                    )
+                )
+            );
+
+            $receiptStatus = strtolower(
+                trim(
+                    (string) (
+                        $row->receipt_status
+                        ?? ''
+                    )
+                )
+            );
+
+            $date = static::purchaseHistoryDate(
+                $row->order_date
+                ?? null
+            );
+
+            $variant = trim(
+                (string) (
+                    $row->variant_label
+                    ?? ''
+                )
+            );
+
+            if (
+                $variant === ''
+                || $variant === '—'
+            ) {
+                $variant = '—';
+            }
+
+            $purchaseUnit = trim(
+                (string) (
+                    $row->purchase_unit_label
+                    ?? ''
+                )
+            );
+
+            if ($purchaseUnit === '') {
+                $purchaseUnit = trim(
+                    (string) (
+                        $row->purchase_unit_type
+                        ?? ''
+                    )
+                );
+            }
+
+            if ($purchaseUnit === '') {
+                $purchaseUnit = 'Unidad';
+            }
+
+            $rows[] = [
+                'purchase_order_id' =>
+                    (int) $row->purchase_order_id,
+
+                'line_id' =>
+                    (int) $row->line_id,
+
+                'date' =>
+                    $date,
+
+                'status' =>
+                    $status,
+
+                'document' =>
+                    trim(
+                        (string) (
+                            $row->document
+                            ?? ''
+                        )
+                    ) ?: (
+                        'OC #'
+                        . (int) $row->purchase_order_id
+                    ),
+
+                'supplier' =>
+                    trim(
+                        (string) (
+                            $row->supplier_name
+                            ?? ''
+                        )
+                    ) ?: 'Sin proveedor',
+
+                'product_id' =>
+                    (int) (
+                        $row->product_id
+                        ?? 0
+                    ),
+
+                'variant_id' =>
+                    (int) (
+                        $row->product_variant_id
+                        ?? 0
+                    ),
+
+                'variant' =>
+                    $variant,
+
+                'purchase_unit' =>
+                    $purchaseUnit,
+
+                'uxe' =>
+                    $uxe,
+
+                'ordered_quantity' =>
+                    (float) (
+                        $row->ordered_quantity
+                        ?? 0
+                    ),
+
+                'received_quantity' =>
+                    (float) (
+                        $row->received_quantity
+                        ?? 0
+                    ),
+
+                'receipt_status' =>
+                    static::purchaseHistoryReceiptStatus(
+                        $receiptStatus
+                    ),
+
+                'cost_without_tax' =>
+                    $costWithoutTax,
+
+                'cost_with_tax' =>
+                    $costWithTax,
+
+                'base_cost_without_tax' =>
+                    $costWithoutTax / $uxe,
+
+                'base_cost_with_tax' =>
+                    $costWithTax / $uxe,
+            ];
+
+            if (count($rows) >= $limit) {
+                break;
+            }
+        }
+
+        return $rows;
+    }
+
+    protected static function purchaseHistoryStatus(
+        ?string $status
+    ): array {
+        $status = strtolower(
+            trim(
+                (string) $status
+            )
+        );
+
+        return match ($status) {
+            'draft',
+            'borrador' => [
+                'label' => 'Borrador',
+                'background' => '#f3f4f6',
+                'foreground' => '#4b5563',
+            ],
+
+            'review' => [
+                'label' => 'En revisión',
+                'background' => '#fef3c7',
+                'foreground' => '#92400e',
+            ],
+
+            'confirmed' => [
+                'label' => 'Confirmada',
+                'background' => '#dcfce7',
+                'foreground' => '#166534',
+            ],
+
+            'partially_received',
+            'partial_received' => [
+                'label' => 'Parcialmente recibida',
+                'background' => '#dbeafe',
+                'foreground' => '#1d4ed8',
+            ],
+
+            'received',
+            'fully_received' => [
+                'label' => 'Recibida',
+                'background' => '#dbeafe',
+                'foreground' => '#1d4ed8',
+            ],
+
+            'cancelled',
+            'canceled' => [
+                'label' => 'Cancelada',
+                'background' => '#fee2e2',
+                'foreground' => '#b91c1c',
+            ],
+
+            default => [
+                'label' => $status !== ''
+                    ? ucfirst(
+                        str_replace(
+                            '_',
+                            ' ',
+                            $status
+                        )
+                    )
+                    : 'Sin estado',
+                'background' => '#f3f4f6',
+                'foreground' => '#4b5563',
+            ],
+        };
+    }
+
+    protected static function purchaseHistoryReceiptStatus(
+        ?string $status
+    ): string {
+        $status = strtolower(
+            trim(
+                (string) $status
+            )
+        );
+
+        return match ($status) {
+            'received',
+            'fully_received' =>
+                'Recibida',
+
+            'partially_received',
+            'partial_received' =>
+                'Parcial',
+
+            'pending' =>
+                'Pendiente',
+
+            'cancelled',
+            'canceled' =>
+                'Cancelada',
+
+            default =>
+                $status !== ''
+                    ? ucfirst(
+                        str_replace(
+                            '_',
+                            ' ',
+                            $status
+                        )
+                    )
+                    : 'Sin recepción',
+        };
+    }
+
+    protected static function purchaseHistoryDate(
+        mixed $value
+    ): string {
+        if (! filled($value)) {
+            return '—';
+        }
+
+        try {
+            return \Carbon\Carbon::parse(
+                $value
+            )->format(
+                'd/m/Y H:i'
+            );
+        } catch (\Throwable $e) {
+            return (string) $value;
+        }
+    }
+
+    protected static function purchaseHistoryNumber(
+        mixed $value,
+        int $decimals = 2
+    ): string {
+        $number = (float) (
+            $value
+            ?? 0
+        );
+
+        return rtrim(
+            rtrim(
+                number_format(
+                    $number,
+                    $decimals,
+                    '.',
+                    ','
+                ),
+                '0'
+            ),
+            '.'
+        );
+    }
+
+    protected static function purchaseHistoryMoney(
+        mixed $value,
+        int $decimals = 4
+    ): string {
+        return '$ '
+            . number_format(
+                (float) (
+                    $value
+                    ?? 0
+                ),
+                $decimals,
+                '.',
+                ','
+            );
     }
 
     protected static function firstExistingProductColumn(string $table, array $columns): ?string
