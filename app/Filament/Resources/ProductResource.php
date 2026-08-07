@@ -45,6 +45,61 @@ protected static ?string $modelLabel = 'producto';
         return Filament::getTenant()?->getKey();
     }
 
+
+    /*
+     * BEXIA_V5_83_P11A_SUGGESTED_INTERNAL_REFERENCE
+     *
+     * Referencia sugerida para un producto nuevo:
+     * total de registros products de la empresa + 1.
+     *
+     * El conteo incluye:
+     * - productos padre,
+     * - productos sin variantes,
+     * - variantes,
+     * - productos archivados.
+     *
+     * No mezcla empresas.
+     *
+     * Si el número resultante ya estuviera utilizado como
+     * referencia por datos históricos, avanza hasta encontrar
+     * la siguiente referencia disponible.
+     */
+    protected static function suggestedInternalReference(
+        ?int $companyId = null
+    ): ?string {
+        $companyId = (int) (
+            $companyId
+            ?: static::currentCompanyId()
+            ?: 0
+        );
+
+        if ($companyId <= 0) {
+            return null;
+        }
+
+        $count = Product::query()
+            ->where('company_id', $companyId)
+            ->count();
+
+        $next = $count + 1;
+
+        do {
+            $candidate = (string) $next;
+
+            $exists = Product::query()
+                ->where('company_id', $companyId)
+                ->whereRaw(
+                    'TRIM(internal_reference) = ?',
+                    [$candidate]
+                )
+                ->exists();
+
+            $next++;
+        } while ($exists);
+
+        return $candidate;
+    }
+
     protected static function canManage(string $permission): bool
     {
         $user = Filament::auth()->user();
@@ -1761,6 +1816,19 @@ Forms\Components\Section::make('Auditoría de precios y costos')
 
                                         Forms\Components\TextInput::make('internal_reference')
                                             ->label('Referencia interna')
+                                            /*
+                                             * BEXIA_V5_83_P11A_REFERENCE_DEFAULT
+                                             *
+                                             * Sólo para producto nuevo normal.
+                                             * Las variantes conservan nextVariantReference().
+                                             */
+                                            ->default(function (): ?string {
+                                                if (request()->filled('parent_product_id')) {
+                                                    return null;
+                                                }
+
+                                                return static::suggestedInternalReference();
+                                            })
                                             ->maxLength(80)
                                             ->live(onBlur: true)
                                             ->dehydrateStateUsing(fn ($state): ?string => filled($state) ? trim((string) $state) : null)
