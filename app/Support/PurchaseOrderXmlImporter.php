@@ -37,7 +37,12 @@ class PurchaseOrderXmlImporter
         return DB::transaction(function () use ($data, $companyId, $warehouseId, $locationId, $absoluteXmlPath): int {
             $orderId = $this->createOrder($data, $companyId, $warehouseId, $locationId, $absoluteXmlPath);
 
-            $pending = $this->createLines($orderId, $data['concepts']);
+            $pending = $this->createLines(
+                $orderId,
+                $data['concepts'],
+                $companyId,
+                $data['supplier_rfc'] ?? null,
+            );
 
             $this->updateOrderTotalsAndStatus($orderId, $pending);
 
@@ -381,8 +386,6 @@ class PurchaseOrderXmlImporter
     {
         $columns = Schema::getColumnListing('purchase_orders');
         $supplierContact = $this->findOrCreateSupplierContact($data, $companyId);
-        $supplierContact = $this->findOrCreateSupplierContact($data, $companyId);
-        $supplierContact = $this->findOrCreateSupplierContact($data, $companyId);
 
         $order = [];
 
@@ -391,6 +394,7 @@ class PurchaseOrderXmlImporter
         $this->set($order, $columns, 'status', 'draft');
         $this->set($order, $columns, 'origin', 'XML CFDI ' . $data['uuid']);
         $this->set($order, $columns, 'supplier_name', $this->contactDisplayName($supplierContact) ?: ($data['supplier_name'] ?: 'Proveedor XML'));
+        $this->set($order, $columns, 'supplier_contact_id', $supplierContact?->id);
         $this->set($order, $columns, 'supplier_id', $supplierContact?->id);
         $this->set($order, $columns, 'contact_id', $supplierContact?->id);
         $this->set($order, $columns, 'provider_id', $supplierContact?->id);
@@ -485,7 +489,12 @@ class PurchaseOrderXmlImporter
         return DB::table('purchase_orders')->insertGetId($order);
     }
 
-    protected function createLines(int $orderId, array $concepts): int
+    protected function createLines(
+        int $orderId,
+        array $concepts,
+        int $companyId,
+        ?string $supplierRfc = null,
+    ): int
     {
         if (! Schema::hasTable('purchase_order_lines')) {
             return 0;
@@ -495,7 +504,16 @@ class PurchaseOrderXmlImporter
         $pending = 0;
 
         foreach ($concepts as $concept) {
-            $match = $this->findProductMatch($concept);
+            $historicalMatch = $this->findHistoricalXmlMapping(
+                $companyId,
+                $supplierRfc,
+                $concept,
+                $orderId,
+            );
+
+            $match = $historicalMatch
+                ?: $this->findProductMatch($concept);
+
             $requiresMapping = ! $match;
 
             if ($requiresMapping) {
@@ -542,6 +560,110 @@ class PurchaseOrderXmlImporter
             $this->set($line, $columns, 'line_tax', $concept['tax_amount']);
             $this->set($line, $columns, 'line_total_with_tax', $concept['total']);
 
+            /*
+             * V5.83.P8B
+             *
+             * Si este concepto ya fue mapeado previamente para
+             * la misma empresa + RFC + NoIdentificacion +
+             * ClaveUnidad XML, reutilizamos producto, variante
+             * y presentación de compra.
+             *
+             * El costo NO se reutiliza: siempre pertenece al XML
+             * actual.
+             */
+            if ($historicalMatch) {
+                $factor = max(
+                    1.0,
+                    (float) (
+                        $historicalMatch['purchase_unit_factor']
+                        ?? 1
+                    )
+                );
+
+                $this->set(
+                    $line,
+                    $columns,
+                    'purchase_unit_factor',
+                    $factor
+                );
+
+                $this->set(
+                    $line,
+                    $columns,
+                    'base_quantity',
+                    ((float) ($concept['quantity'] ?? 0))
+                    * $factor
+                );
+
+                if (
+                    ! empty(
+                        $historicalMatch[
+                            'purchase_unit_type'
+                        ]
+                    )
+                ) {
+                    $this->set(
+                        $line,
+                        $columns,
+                        'purchase_unit_type',
+                        $historicalMatch[
+                            'purchase_unit_type'
+                        ]
+                    );
+                }
+
+                if (
+                    ! empty(
+                        $historicalMatch[
+                            'purchase_unit_label'
+                        ]
+                    )
+                ) {
+                    $this->set(
+                        $line,
+                        $columns,
+                        'purchase_unit_label',
+                        $historicalMatch[
+                            'purchase_unit_label'
+                        ]
+                    );
+                }
+
+                if (
+                    ! empty(
+                        $historicalMatch[
+                            'sat_unit_key'
+                        ]
+                    )
+                ) {
+                    $this->set(
+                        $line,
+                        $columns,
+                        'sat_unit_key',
+                        $historicalMatch[
+                            'sat_unit_key'
+                        ]
+                    );
+                }
+
+                if (
+                    ! empty(
+                        $historicalMatch[
+                            'sat_unit_name'
+                        ]
+                    )
+                ) {
+                    $this->set(
+                        $line,
+                        $columns,
+                        'sat_unit_name',
+                        $historicalMatch[
+                            'sat_unit_name'
+                        ]
+                    );
+                }
+            }
+
             $this->set($line, $columns, 'xml_line_index', $concept['index']);
             $this->set($line, $columns, 'xml_no_identificacion', $concept['no_identificacion']);
             $this->set($line, $columns, 'xml_description', $concept['description']);
@@ -581,6 +703,511 @@ class PurchaseOrderXmlImporter
         $this->set($updates, $orderColumns, 'updated_at', now());
 
         DB::table('purchase_orders')->where('id', $orderId)->update($updates);
+    }
+
+    /*
+     * BEXIA_V5_83_P8B_HISTORICAL_XML_MAPPING
+     *
+     * Memoria de producto de proveedor sin tabla adicional.
+     *
+     * Llave:
+     *   empresa + RFC proveedor + NoIdentificacion + ClaveUnidad
+     *
+     * Se toma la última OC válida no cancelada que ya tenga
+     * producto interno y UXE.
+     *
+     * El costo nunca se recupera desde el historial.
+     */
+    protected function findHistoricalXmlMapping(
+        int $companyId,
+        ?string $supplierRfc,
+        array $concept,
+        ?int $currentOrderId = null,
+    ): ?array {
+        if (
+            $companyId <= 0
+            || ! Schema::hasTable('purchase_orders')
+            || ! Schema::hasTable('purchase_order_lines')
+            || ! Schema::hasTable('products')
+        ) {
+            return null;
+        }
+
+        $supplierRfc = strtoupper(
+            trim((string) $supplierRfc)
+        );
+
+        $supplierProductCode = trim(
+            (string) (
+                $concept['no_identificacion']
+                ?? ''
+            )
+        );
+
+        $xmlUnitKey = strtoupper(
+            trim(
+                (string) (
+                    $concept['unit_key']
+                    ?? ''
+                )
+            )
+        );
+
+        if (
+            $supplierRfc === ''
+            || $supplierProductCode === ''
+        ) {
+            return null;
+        }
+
+        $orderColumns = Schema::getColumnListing(
+            'purchase_orders'
+        );
+
+        $lineColumns = Schema::getColumnListing(
+            'purchase_order_lines'
+        );
+
+        foreach ([
+            'company_id',
+            'xml_supplier_rfc',
+        ] as $column) {
+            if (! in_array(
+                $column,
+                $orderColumns,
+                true
+            )) {
+                return null;
+            }
+        }
+
+        foreach ([
+            'purchase_order_id',
+            'product_id',
+            'purchase_unit_factor',
+            'xml_no_identificacion',
+        ] as $column) {
+            if (! in_array(
+                $column,
+                $lineColumns,
+                true
+            )) {
+                return null;
+            }
+        }
+
+        $select = [
+            'po.id as source_purchase_order_id',
+            'po.number as source_purchase_order_number',
+            'po.order_date as source_purchase_order_date',
+            'pol.id as source_purchase_order_line_id',
+            'pol.product_id',
+            'pol.purchase_unit_factor',
+        ];
+
+        foreach ([
+            'product_variant_id',
+            'product_label',
+            'variant_label',
+            'purchase_unit_type',
+            'purchase_unit_label',
+            'sat_unit_key',
+            'sat_unit_name',
+            'xml_unit_key',
+            'xml_unit_name',
+        ] as $column) {
+            if (in_array(
+                $column,
+                $lineColumns,
+                true
+            )) {
+                $select[] = 'pol.' . $column;
+            }
+        }
+
+        $query = DB::table(
+            'purchase_order_lines as pol'
+        )
+            ->join(
+                'purchase_orders as po',
+                'po.id',
+                '=',
+                'pol.purchase_order_id'
+            )
+            ->where(
+                'po.company_id',
+                $companyId
+            )
+            ->whereRaw(
+                "UPPER(TRIM(COALESCE(po.xml_supplier_rfc, ''))) = ?",
+                [$supplierRfc]
+            )
+            ->whereRaw(
+                "TRIM(COALESCE(pol.xml_no_identificacion, '')) = ?",
+                [$supplierProductCode]
+            )
+            ->whereNotNull(
+                'pol.product_id'
+            )
+            ->where(
+                'pol.purchase_unit_factor',
+                '>',
+                0
+            );
+
+        if (
+            $currentOrderId
+            && $currentOrderId > 0
+        ) {
+            $query->where(
+                'po.id',
+                '<>',
+                $currentOrderId
+            );
+        }
+
+        if (
+            in_array(
+                'status',
+                $orderColumns,
+                true
+            )
+        ) {
+            $query->whereNotIn(
+                'po.status',
+                [
+                    'cancelled',
+                    'canceled',
+                ]
+            );
+        }
+
+        /*
+         * UXE depende de la presentación.
+         *
+         * Si el XML nuevo trae ClaveUnidad, sólo reutilizamos
+         * historia con la misma ClaveUnidad.
+         */
+        if (
+            $xmlUnitKey !== ''
+            && in_array(
+                'xml_unit_key',
+                $lineColumns,
+                true
+            )
+        ) {
+            $query->whereRaw(
+                "UPPER(TRIM(COALESCE(pol.xml_unit_key, ''))) = ?",
+                [$xmlUnitKey]
+            );
+        }
+
+        if (
+            in_array(
+                'xml_requires_mapping',
+                $lineColumns,
+                true
+            )
+        ) {
+            $query->where(
+                function ($q): void {
+                    $q
+                        ->whereNull(
+                            'pol.xml_requires_mapping'
+                        )
+                        ->orWhere(
+                            'pol.xml_requires_mapping',
+                            false
+                        );
+                }
+            );
+        }
+
+        $row = $query
+            ->orderByRaw(
+                'po.order_date DESC NULLS LAST'
+            )
+            ->orderByDesc('po.id')
+            ->orderByDesc('pol.id')
+            ->first($select);
+
+        if (! $row) {
+            return null;
+        }
+
+        $productId = (int) (
+            $row->product_id
+            ?? 0
+        );
+
+        if ($productId <= 0) {
+            return null;
+        }
+
+        $productColumns = Schema::getColumnListing(
+            'products'
+        );
+
+        $productQuery = DB::table(
+            'products'
+        )
+            ->where(
+                'id',
+                $productId
+            );
+
+        if (
+            in_array(
+                'company_id',
+                $productColumns,
+                true
+            )
+        ) {
+            $productQuery->where(
+                'company_id',
+                $companyId
+            );
+        }
+
+        foreach ([
+            'is_active',
+            'active',
+        ] as $column) {
+            if (in_array(
+                $column,
+                $productColumns,
+                true
+            )) {
+                $productQuery->where(
+                    function ($q) use ($column): void {
+                        $q
+                            ->whereNull($column)
+                            ->orWhere(
+                                $column,
+                                true
+                            );
+                    }
+                );
+            }
+        }
+
+        $product = $productQuery->first();
+
+        if (! $product) {
+            return null;
+        }
+
+        $variantId = property_exists(
+            $row,
+            'product_variant_id'
+        )
+            ? (int) (
+                $row->product_variant_id
+                ?? 0
+            )
+            : 0;
+
+        $variant = null;
+
+        if ($variantId > 0) {
+            $variantQuery = DB::table(
+                'products'
+            )
+                ->where(
+                    'id',
+                    $variantId
+                );
+
+            if (
+                in_array(
+                    'company_id',
+                    $productColumns,
+                    true
+                )
+            ) {
+                $variantQuery->where(
+                    'company_id',
+                    $companyId
+                );
+            }
+
+            if (
+                in_array(
+                    'parent_product_id',
+                    $productColumns,
+                    true
+                )
+            ) {
+                $variantQuery->where(
+                    'parent_product_id',
+                    $productId
+                );
+            }
+
+            if (
+                in_array(
+                    'is_variant',
+                    $productColumns,
+                    true
+                )
+            ) {
+                $variantQuery->where(
+                    'is_variant',
+                    true
+                );
+            }
+
+            foreach ([
+                'is_active',
+                'active',
+            ] as $column) {
+                if (in_array(
+                    $column,
+                    $productColumns,
+                    true
+                )) {
+                    $variantQuery->where(
+                        function ($q) use ($column): void {
+                            $q
+                                ->whereNull($column)
+                                ->orWhere(
+                                    $column,
+                                    true
+                                );
+                        }
+                    );
+                }
+            }
+
+            $variant = $variantQuery->first();
+
+            /*
+             * Si el mapeo histórico requería variante
+             * y ésta ya no es válida, no hacemos automapping.
+             */
+            if (! $variant) {
+                return null;
+            }
+        }
+
+        $factor = (float) (
+            $row->purchase_unit_factor
+            ?? 0
+        );
+
+        if ($factor <= 0) {
+            return null;
+        }
+
+        return [
+            'product_id' => $productId,
+            'variant_id' => $variantId > 0
+                ? $variantId
+                : null,
+
+            'product_label' =>
+                property_exists(
+                    $row,
+                    'product_label'
+                )
+                && trim(
+                    (string) $row->product_label
+                ) !== ''
+                    ? trim(
+                        (string) $row->product_label
+                    )
+                    : $this->label(
+                        $product,
+                        [
+                            'internal_reference',
+                            'sku',
+                            'code',
+                        ],
+                        [
+                            'name',
+                            'description',
+                        ]
+                    ),
+
+            'variant_label' =>
+                $variant
+                    ? (
+                        property_exists(
+                            $row,
+                            'variant_label'
+                        )
+                        && trim(
+                            (string) $row->variant_label
+                        ) !== ''
+                            ? trim(
+                                (string) $row->variant_label
+                            )
+                            : $this->label(
+                                $variant,
+                                [
+                                    'internal_reference',
+                                    'sku',
+                                    'code',
+                                ],
+                                [
+                                    'variant_value',
+                                    'name',
+                                    'description',
+                                ]
+                            )
+                    )
+                    : '—',
+
+            'purchase_unit_factor' =>
+                $factor,
+
+            'purchase_unit_type' =>
+                property_exists(
+                    $row,
+                    'purchase_unit_type'
+                )
+                    ? $row->purchase_unit_type
+                    : null,
+
+            'purchase_unit_label' =>
+                property_exists(
+                    $row,
+                    'purchase_unit_label'
+                )
+                    ? $row->purchase_unit_label
+                    : null,
+
+            'sat_unit_key' =>
+                property_exists(
+                    $row,
+                    'sat_unit_key'
+                )
+                    ? $row->sat_unit_key
+                    : null,
+
+            'sat_unit_name' =>
+                property_exists(
+                    $row,
+                    'sat_unit_name'
+                )
+                    ? $row->sat_unit_name
+                    : null,
+
+            'source_purchase_order_id' =>
+                (int) (
+                    $row->source_purchase_order_id
+                    ?? 0
+                ),
+
+            'source_purchase_order_number' =>
+                (string) (
+                    $row->source_purchase_order_number
+                    ?? ''
+                ),
+
+            'match_source' =>
+                'supplier_xml_history',
+        ];
     }
 
     protected function findProductMatch(array $concept): ?array
