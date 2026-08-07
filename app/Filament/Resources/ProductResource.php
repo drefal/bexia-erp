@@ -3944,10 +3944,50 @@ public static function getPages(): array
                 ?? 0
             );
 
-            $costWithTax = (float) (
+            /*
+             * BEXIA_V5_83_P9F1_HISTORICAL_TAX_FALLBACK
+             *
+             * Algunas líneas históricas conservan correctamente:
+             * - unit_cost_without_tax
+             * - tax_rate
+             *
+             * pero unit_cost_with_tax quedó en cero.
+             *
+             * No se modifica la BD. Para visualización histórica,
+             * si el costo c/IVA almacenado falta, se reconstruye
+             * usando la tasa guardada en la propia línea de OC.
+             */
+            $taxRate = max(
+                0.0,
+                (float) (
+                    $row->tax_rate
+                    ?? 0
+                )
+            );
+
+            $storedCostWithTax = (float) (
                 $row->unit_cost_with_tax
                 ?? 0
             );
+
+            $costWithTax = $storedCostWithTax;
+
+            $costWithTaxSource = 'stored';
+
+            if (
+                $costWithoutTax > 0
+                && $costWithTax <= 0
+            ) {
+                $costWithTax =
+                    $costWithoutTax
+                    * (
+                        1
+                        + ($taxRate / 100)
+                    );
+
+                $costWithTaxSource =
+                    'calculated_from_line_tax';
+            }
 
             $signature = implode(
                 '|',
@@ -4118,8 +4158,14 @@ public static function getPages(): array
                 'cost_without_tax' =>
                     $costWithoutTax,
 
+                'tax_rate' =>
+                    $taxRate,
+
                 'cost_with_tax' =>
                     $costWithTax,
+
+                'cost_with_tax_source' =>
+                    $costWithTaxSource,
 
                 'base_cost_without_tax' =>
                     $costWithoutTax / $uxe,
