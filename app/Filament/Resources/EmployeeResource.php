@@ -159,11 +159,20 @@ public static function canCreate(): bool
                             ->helperText('Habilita al empleado como candidato para generar tickets en cajas donde tenga permiso.'),
 
                         Forms\Components\TextInput::make('plain_pos_pin')
-                            ->label('PIN / clave PDV')
+                            ->label('NIP PDV (4 dígitos)')
                             ->password()
                             ->revealable()
+                            ->inputMode('numeric')
+                            ->minLength(4)
+                            ->maxLength(4)
+                            ->rule('regex:/^[0-9]{4}$/')
                             ->dehydrated(fn ($state) => filled($state))
-                            ->helperText('Déjalo vacío para conservar la clave actual. Si el empleado no tiene clave, puede entrar directo según la configuración.'),
+                            ->validationMessages([
+                                'regex' => 'El NIP debe contener exactamente 4 dígitos.',
+                                'min' => 'El NIP debe contener exactamente 4 dígitos.',
+                                'max' => 'El NIP debe contener exactamente 4 dígitos.',
+                            ])
+                            ->helperText('Captura exactamente 4 dígitos. Puede iniciar con 0. Déjalo vacío para conservar el NIP actual.'),
                     ]),
 
             Grid::make(12)

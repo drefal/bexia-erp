@@ -123,10 +123,20 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
                         Forms\Components\TextInput::make('plain_pin')
                             ->extraAttributes(['class' => 'bexia-pcash-field bexia-pcash-pin-field bexia-pcash-secret-field bexia-pcash-code-field bexia-pcash-sensitive-field'])
-                            ->label('PIN / clave')
+                            ->label('NIP (4 dígitos)')
                             ->password()
                             ->revealable()
-                            ->helperText('Déjalo vacío para entrada directa o para conservar la clave actual.'),
+                            ->inputMode('numeric')
+                            ->minLength(4)
+                            ->maxLength(4)
+                            ->rule('regex:/^[0-9]{4}$/')
+                            ->dehydrated(fn ($state): bool => filled($state))
+                            ->validationMessages([
+                                'regex' => 'El NIP debe contener exactamente 4 dígitos.',
+                                'min' => 'El NIP debe contener exactamente 4 dígitos.',
+                                'max' => 'El NIP debe contener exactamente 4 dígitos.',
+                            ])
+                            ->helperText('Captura exactamente 4 dígitos. Puede iniciar con 0. Déjalo vacío para conservar el NIP actual.'),
 
                         Forms\Components\Toggle::make('is_active')
                             ->extraAttributes(['class' => 'bexia-pcash-field bexia-pcash-toggle-field bexia-pcash-active-field bexia-pcash-status-field'])
@@ -212,6 +222,53 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             'create' => Pages\CreatePosCashier::route('/create'),
             'edit' => Pages\EditPosCashier::route('/{record}/edit'),
         ];
+    }
+
+    public static function syncPinToLinkedEmployee(
+        PosCashier $cashier,
+        ?string $plainPin
+    ): bool {
+        $plainPin = trim((string) $plainPin);
+
+        if (
+            $plainPin === ''
+            || ! preg_match('/^[0-9]{4}$/', $plainPin)
+        ) {
+            return false;
+        }
+
+        if (
+            ! Schema::hasTable('employees')
+            || ! Schema::hasColumn('employees', 'pos_pin_hash')
+        ) {
+            return false;
+        }
+
+        $companyId = (int) ($cashier->company_id ?? 0);
+        $userId = (int) ($cashier->user_id ?? 0);
+
+        if ($companyId <= 0 || $userId <= 0) {
+            return false;
+        }
+
+        $employee = \App\Models\Employee::query()
+            ->where('company_id', $companyId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if (! $employee) {
+            return false;
+        }
+
+        /*
+         * El runtime PDV prioriza el NIP del empleado cuando existe
+         * una relación por user_id. Por eso ambos hashes deben
+         * recibir el mismo NIP al editar Cajeros PDV.
+         */
+        $employee->plain_pos_pin = $plainPin;
+        $employee->save();
+
+        return true;
     }
 
     protected static function currentCompanyId(): ?int
