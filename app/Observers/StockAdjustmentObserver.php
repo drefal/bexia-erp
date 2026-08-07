@@ -12,7 +12,6 @@ class StockAdjustmentObserver
     public function saving(StockAdjustment $adjustment): void
     {
         $reason = trim((string) ($adjustment->reason ?? ''));
-        $notes = trim((string) ($adjustment->notes ?? ''));
         $status = strtolower((string) ($adjustment->status ?? ''));
 
         if (! $adjustment->exists) {
@@ -20,17 +19,10 @@ class StockAdjustmentObserver
                 throw new \RuntimeException('El motivo del ajuste es obligatorio.');
             }
 
-            if ($notes === '') {
-                throw new \RuntimeException('Las notas del ajuste son obligatorias.');
-            }
         }
 
         if ($adjustment->isDirty('reason') && $reason === '') {
             throw new \RuntimeException('El motivo del ajuste no puede quedar vacío.');
-        }
-
-        if ($adjustment->isDirty('notes') && $notes === '') {
-            throw new \RuntimeException('Las notas del ajuste no pueden quedar vacías.');
         }
 
         if ($adjustment->isDirty('status') && in_array($status, ['done', 'confirmed'], true)) {
@@ -38,9 +30,6 @@ class StockAdjustmentObserver
                 throw new \RuntimeException('El motivo del ajuste es obligatorio antes de confirmar.');
             }
 
-            if ($notes === '') {
-                throw new \RuntimeException('Las notas del ajuste son obligatorias antes de confirmar.');
-            }
         }
 
         if ($adjustment->isDirty('status') && in_array($status, ['cancelled', 'canceled'], true)) {
