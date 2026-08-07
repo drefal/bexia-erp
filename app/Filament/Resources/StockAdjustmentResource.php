@@ -161,18 +161,6 @@ class StockAdjustmentResource extends Resource
                             ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
                             ->columnSpan(9),
 
-                        Forms\Components\Textarea::make('notes')
-                            ->extraAttributes(['class' => 'bexia-stock-adjustment-notes-textarea'])
-                            ->required()
-                            ->minLength(5)
-                            ->validationMessages([
-                                'required' => 'Las notas del ajuste es obligatorio.',
-                                'min' => 'Las notas del ajuste debe tener al menos 5 caracteres.',
-                            ])
-                            ->label('Notas')
-                            ->rows(2)
-                            ->disabled(fn (Forms\Get $get): bool => static::adjustmentIsDoneFromForm($get))
-                            ->columnSpanFull(),
                     ])
                     ->columns(12),
 
