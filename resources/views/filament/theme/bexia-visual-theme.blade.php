@@ -18037,4 +18037,161 @@ button[role="switch"] > span {
     }
 }
 /* BEXIA_POS_SESSION_RESOURCE_RESPONSIVE_V5_79_113C_END */
+
+/* BEXIA_FILAMENT_NOTIFICATIONS_V5_83_P4A_START */
+
+/*
+ * Notificaciones globales Bexia ERP.
+ * Base azul de alto contraste.
+ * Los estados semánticos cambian automáticamente
+ * a azul Bexia, ámbar o rojo.
+ */
+
+.fi-no-notification {
+    background:
+        linear-gradient(
+            135deg,
+            #2f6fed 0%,
+            #1e5ae0 100%
+        ) !important;
+
+    border: 1px solid #93c5fd !important;
+    border-radius: 16px !important;
+
+    color: #ffffff !important;
+
+    box-shadow:
+        0 18px 42px rgba(15, 23, 42, 0.24),
+        0 6px 16px rgba(37, 99, 235, 0.18)
+        !important;
+
+    opacity: 1 !important;
+}
+
+.fi-no-notification .fi-no-notification-title,
+.fi-no-notification .fi-no-notification-body,
+.fi-no-notification .fi-no-notification-actions,
+.fi-no-notification .fi-icon-btn {
+    color: #ffffff !important;
+}
+
+.fi-no-notification .fi-no-notification-title {
+    font-weight: 700 !important;
+}
+
+.fi-no-notification svg {
+    color: currentColor !important;
+    stroke: currentColor !important;
+}
+
+/* ÉXITO: guardado / actualizado */
+.fi-no-notification.fi-color-success,
+.fi-no-notification:has(.fi-color-success) {
+    background:
+        linear-gradient(
+            135deg,
+            #2f6fed 0%,
+            #1e5ae0 100%
+        ) !important;
+
+    border-color: #93c5fd !important;
+
+    box-shadow:
+        0 18px 42px rgba(15, 23, 42, 0.22),
+        0 7px 20px rgba(47, 111, 237, 0.30)
+        !important;
+}
+
+/* INFORMACIÓN */
+.fi-no-notification.fi-color-info,
+.fi-no-notification.fi-color-primary,
+.fi-no-notification:has(.fi-color-info),
+.fi-no-notification:has(.fi-color-primary) {
+    background:
+        linear-gradient(
+            135deg,
+            #2f6fed 0%,
+            #1e5ae0 100%
+        ) !important;
+
+    border-color: #93c5fd !important;
+}
+
+/* ADVERTENCIA */
+.fi-no-notification.fi-color-warning,
+.fi-no-notification:has(.fi-color-warning) {
+    background:
+        linear-gradient(
+            135deg,
+            #fbbf24 0%,
+            #f59e0b 100%
+        ) !important;
+
+    border-color: #d97706 !important;
+
+    color: #422006 !important;
+
+    box-shadow:
+        0 18px 42px rgba(15, 23, 42, 0.20),
+        0 7px 20px rgba(217, 119, 6, 0.24)
+        !important;
+}
+
+.fi-no-notification.fi-color-warning
+    .fi-no-notification-title,
+.fi-no-notification.fi-color-warning
+    .fi-no-notification-body,
+.fi-no-notification.fi-color-warning
+    .fi-no-notification-actions,
+.fi-no-notification.fi-color-warning
+    .fi-icon-btn,
+.fi-no-notification:has(.fi-color-warning)
+    .fi-no-notification-title,
+.fi-no-notification:has(.fi-color-warning)
+    .fi-no-notification-body,
+.fi-no-notification:has(.fi-color-warning)
+    .fi-no-notification-actions,
+.fi-no-notification:has(.fi-color-warning)
+    .fi-icon-btn {
+    color: #422006 !important;
+}
+
+/* ERROR / PELIGRO */
+.fi-no-notification.fi-color-danger,
+.fi-no-notification:has(.fi-color-danger) {
+    background:
+        linear-gradient(
+            135deg,
+            #b91c1c 0%,
+            #dc2626 100%
+        ) !important;
+
+    border-color: #f87171 !important;
+
+    box-shadow:
+        0 18px 42px rgba(15, 23, 42, 0.22),
+        0 7px 20px rgba(220, 38, 38, 0.28)
+        !important;
+}
+
+/* Botón cerrar claramente visible */
+.fi-no-notification .fi-icon-btn {
+    border-radius: 999px !important;
+    opacity: .92 !important;
+}
+
+.fi-no-notification .fi-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.16) !important;
+    opacity: 1 !important;
+}
+
+.fi-no-notification.fi-color-warning
+    .fi-icon-btn:hover,
+.fi-no-notification:has(.fi-color-warning)
+    .fi-icon-btn:hover {
+    background: rgba(66, 32, 6, 0.10) !important;
+}
+
+/* BEXIA_FILAMENT_NOTIFICATIONS_V5_83_P4A_END */
+
 </style>
