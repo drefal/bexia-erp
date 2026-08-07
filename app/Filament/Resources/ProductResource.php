@@ -2037,9 +2037,25 @@ Forms\Components\Section::make('Atributos de catálogo')
 
                                 Forms\Components\Section::make('Punto de venta')
                                     ->schema([
+                                        /*
+                                         * BEXIA_V5_83_P10B_EXPLICIT_POS_TOGGLE_GUARD
+                                         *
+                                         * El callback solo marca el campo cuando el usuario
+                                         * cambia expresamente el switch en pantalla.
+                                         * EditProduct conserva el valor previo si otro refresh
+                                         * del formulario altera el estado sin intervención.
+                                         */
                                         Forms\Components\Toggle::make('available_in_pos')
                                             ->label('Disponible en PdV')
                                             ->default(true)
+                                            ->live()
+                                            ->afterStateUpdated(function (\Livewire\Component $livewire): void {
+                                                if (method_exists($livewire, 'bexiaMarkProductSalesPosFlagTouched')) {
+                                                    $livewire->bexiaMarkProductSalesPosFlagTouched(
+                                                        'available_in_pos'
+                                                    );
+                                                }
+                                            })
                                             ->columnSpan(3),
 
                                         Forms\Components\Toggle::make('is_pos_favorite')
@@ -2056,6 +2072,14 @@ Forms\Components\Section::make('Atributos de catálogo')
                                         Forms\Components\Toggle::make('include_in_global_invoice')
                                             ->label('Incluir en factura global')
                                             ->default(true)
+                                            ->live()
+                                            ->afterStateUpdated(function (\Livewire\Component $livewire): void {
+                                                if (method_exists($livewire, 'bexiaMarkProductSalesPosFlagTouched')) {
+                                                    $livewire->bexiaMarkProductSalesPosFlagTouched(
+                                                        'include_in_global_invoice'
+                                                    );
+                                                }
+                                            })
                                             ->columnSpan(3),
                                     ])
                                     ->columns(12),
