@@ -528,6 +528,16 @@ class PurchaseOrderXmlImporter
             $this->set($line, $columns, 'sat_unit_name', $concept['unit_name']);
             $this->set($line, $columns, 'unit_cost_without_tax', $concept['unit_value']);
             $this->set($line, $columns, 'tax_rate', $concept['tax_rate']);
+            $this->set(
+                $line,
+                $columns,
+                'unit_cost_with_tax',
+                round(
+                    (float) $concept['unit_value']
+                    * (1 + ((float) $concept['tax_rate'] / 100)),
+                    6
+                )
+            );
             $this->set($line, $columns, 'line_total_without_tax', $concept['amount']);
             $this->set($line, $columns, 'line_tax', $concept['tax_amount']);
             $this->set($line, $columns, 'line_total_with_tax', $concept['total']);

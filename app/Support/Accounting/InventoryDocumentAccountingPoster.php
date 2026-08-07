@@ -138,6 +138,34 @@ class InventoryDocumentAccountingPoster
         return $summary;
     }
 
+    private function purchaseBaseUnitFactor(object $line): float
+    {
+        $factor = (float) (
+            $line->purchase_unit_factor
+            ?? 0
+        );
+
+        if ($factor > 0) {
+            return max($factor, 1.0);
+        }
+
+        $ordered = (float) (
+            $line->ordered_quantity
+            ?? 0
+        );
+
+        $base = (float) (
+            $line->base_quantity
+            ?? 0
+        );
+
+        if ($ordered > 0 && $base > 0) {
+            return max($base / $ordered, 1.0);
+        }
+
+        return 1.0;
+    }
+
     private function buildPurchaseLinePayload(object $order, object $line, bool $force): array
     {
         if ($this->lineAlreadyPosted($line) && ! $force) {
@@ -172,8 +200,26 @@ class InventoryDocumentAccountingPoster
             return $this->notProcessable('Cantidad recibida en cero.');
         }
 
-        $unitCost = (float) ($line->unit_cost_without_tax ?? 0);
-        $amount = round($quantity * $unitCost, 6);
+        /*
+         * quantity representa unidades base.
+         * unit_cost_without_tax representa costo por unidad comprada.
+         * Convertimos el costo a unidad base antes de valorizar.
+         */
+        $purchaseUnitCost = (float) (
+            $line->unit_cost_without_tax
+            ?? 0
+        );
+
+        $baseFactor = $this->purchaseBaseUnitFactor($line);
+
+        $unitCost = $baseFactor > 0
+            ? round($purchaseUnitCost / $baseFactor, 6)
+            : $purchaseUnitCost;
+
+        $amount = round(
+            $quantity * $unitCost,
+            6
+        );
 
         if ($amount <= 0) {
             $lineTotal = (float) ($line->line_total_without_tax ?? 0);

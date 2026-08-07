@@ -163,7 +163,12 @@ class PurchaseReceiptInventoryPoster
         $this->set($data, $columns, 'lot_id', ! empty($line->lot_id) ? (int) $line->lot_id : null);
         $this->set($data, $columns, 'requested_quantity', $quantity);
         $this->set($data, $columns, 'done_quantity', $quantity);
-        $this->set($data, $columns, 'unit_cost', $line->unit_cost_without_tax ?? 0);
+        $this->set(
+            $data,
+            $columns,
+            'unit_cost',
+            $this->baseUnitCostWithoutTax($line)
+        );
         $this->set($data, $columns, 'notes', $line->product_label ?? null);
         $this->set($data, $columns, 'created_at', now());
         $this->set($data, $columns, 'updated_at', now());
@@ -186,7 +191,12 @@ class PurchaseReceiptInventoryPoster
         $this->set($updates, $columns, 'lot_id', ! empty($line->lot_id) ? (int) $line->lot_id : null);
         $this->set($updates, $columns, 'requested_quantity', $quantity);
         $this->set($updates, $columns, 'done_quantity', $quantity);
-        $this->set($updates, $columns, 'unit_cost', $line->unit_cost_without_tax ?? 0);
+        $this->set(
+            $updates,
+            $columns,
+            'unit_cost',
+            $this->baseUnitCostWithoutTax($line)
+        );
         $this->set($updates, $columns, 'notes', $line->product_label ?? null);
         $this->set($updates, $columns, 'updated_at', now());
 
@@ -207,7 +217,7 @@ class PurchaseReceiptInventoryPoster
         $productId = (int) ($line->product_id ?? 0);
         $variantId = (int) ($line->product_variant_id ?? 0);
         $lotId = (int) ($line->lot_id ?? 0);
-        $unitCost = (float) ($line->unit_cost_without_tax ?? 0);
+        $unitCost = $this->baseUnitCostWithoutTax($line);
 
         if ($productId <= 0) {
             throw new RuntimeException('No se puede aumentar existencia de una línea sin producto interno: ' . ($line->product_label ?? 'producto'));
@@ -472,6 +482,76 @@ class PurchaseReceiptInventoryPoster
         return $serials;
     }
 
+    protected function baseUnitCostWithoutTax(object $line): float
+    {
+        $purchaseUnitCost = (float) (
+            $line->unit_cost_without_tax
+            ?? 0
+        );
+
+        if ($purchaseUnitCost <= 0) {
+            return 0.0;
+        }
+
+        /*
+         * La recepción conserva el costo por unidad comprada.
+         * Inventario trabaja con cantidad base, por lo que el costo
+         * debe convertirse a costo por unidad base.
+         *
+         * Ejemplo:
+         *   1 caja = 20 piezas
+         *   costo caja = 100
+         *   costo base = 100 / 20 = 5
+         */
+        $receivedQty = (float) (
+            $line->received_quantity
+            ?? 0
+        );
+
+        $receivedBaseQty = (float) (
+            $line->received_base_quantity
+            ?? 0
+        );
+
+        $factor = 0.0;
+
+        if ($receivedQty > 0 && $receivedBaseQty > 0) {
+            $factor = $receivedBaseQty / $receivedQty;
+        }
+
+        if (
+            $factor <= 0
+            && property_exists($line, 'purchase_unit_factor')
+        ) {
+            $factor = (float) (
+                $line->purchase_unit_factor
+                ?? 0
+            );
+        }
+
+        if (
+            $factor <= 0
+            && Schema::hasTable('purchase_order_lines')
+            && ! empty($line->purchase_order_line_id)
+        ) {
+            $factor = (float) DB::table('purchase_order_lines')
+                ->where(
+                    'id',
+                    (int) $line->purchase_order_line_id
+                )
+                ->value('purchase_unit_factor');
+        }
+
+        if ($factor < 1) {
+            $factor = 1.0;
+        }
+
+        return round(
+            $purchaseUnitCost / $factor,
+            6
+        );
+    }
+
     protected function updateProductCosts(object $line): void
     {
         if (! Schema::hasTable('products')) {
@@ -492,7 +572,12 @@ class PurchaseReceiptInventoryPoster
 
         $updates = [];
 
-        $this->set($updates, $columns, 'last_purchase_cost', (float) ($line->unit_cost_without_tax ?? 0));
+        $this->set(
+            $updates,
+            $columns,
+            'last_purchase_cost',
+            $this->baseUnitCostWithoutTax($line)
+        );
         $this->set($updates, $columns, 'last_purchase_at', now());
         $this->set($updates, $columns, 'average_cost_without_tax', $this->averageCostForProduct($targetProductId));
         $this->set($updates, $columns, 'updated_at', now());

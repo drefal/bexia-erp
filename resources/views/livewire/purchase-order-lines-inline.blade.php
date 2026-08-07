@@ -26,7 +26,7 @@
 
         .po-add-grid {
             display: grid;
-            grid-template-columns: minmax(260px, 2fr) minmax(190px, 1.25fr) minmax(150px, 1fr) minmax(100px, .7fr) minmax(140px, 1fr) minmax(150px, 1fr) 92px;
+            grid-template-columns: minmax(250px, 2fr) minmax(180px, 1.2fr) minmax(140px, .9fr) minmax(85px, .55fr) minmax(95px, .6fr) minmax(135px, .85fr) minmax(145px, .9fr) 92px;
             gap: 10px;
             align-items: end;
             padding: 14px 16px;
@@ -41,7 +41,7 @@
 
         .po-edit-grid {
             display: grid;
-            grid-template-columns: minmax(260px, 2fr) minmax(190px, 1.25fr) minmax(150px, 1fr) minmax(100px, .7fr) minmax(140px, 1fr) minmax(150px, 1fr) 110px 95px;
+            grid-template-columns: minmax(250px, 2fr) minmax(180px, 1.2fr) minmax(140px, .9fr) minmax(85px, .55fr) minmax(95px, .6fr) minmax(135px, .85fr) minmax(145px, .9fr) 110px 95px;
             gap: 10px;
             align-items: end;
         }
@@ -85,6 +85,73 @@
 
         .po-input-num {
             text-align: right;
+        }
+
+        .po-hint {
+            margin-top: 4px;
+            font-size: 10px;
+            line-height: 1.25;
+            color: #64748b;
+        }
+
+        .po-suggest-btn {
+            border: 0;
+            background: transparent;
+            color: #2563eb;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 0 0 0 4px;
+            cursor: pointer;
+        }
+
+        .po-suggest-btn:hover {
+            text-decoration: underline;
+        }
+
+        .po-cost-preview {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: stretch;
+            gap: 8px;
+            padding: 0 16px 14px 16px;
+            color: #334155;
+        }
+
+        .po-preview-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-height: 30px;
+            padding: 6px 9px;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            background: #ffffff;
+            font-size: 11px;
+            line-height: 1.2;
+        }
+
+        .po-preview-item strong {
+            color: #0f172a;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .po-preview-unit {
+            background: #eff6ff;
+            border-color: #dbeafe;
+        }
+
+        .po-preview-total {
+            background: #f0fdf4;
+            border-color: #dcfce7;
+        }
+
+        .po-preview-label {
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .02em;
         }
 
         .po-btn {
@@ -190,6 +257,126 @@
             border-bottom: 1px solid #eef2f7;
             color: #0f172a;
             vertical-align: middle;
+        }
+
+        .po-cell-main {
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.25;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .po-cell-sub {
+            margin-top: 2px;
+            color: #64748b;
+            font-size: 9.5px;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+
+        .po-th-title {
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.15;
+            white-space: nowrap;
+        }
+
+        .po-th-sub {
+            margin-top: 3px;
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 500;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+
+        .po-th-purchase {
+            background: #f8fafc;
+            border-left: 2px solid #cbd5e1;
+        }
+
+        .po-th-unit {
+            background: #eff6ff;
+            border-left: 2px solid #93c5fd;
+        }
+
+        .po-th-total {
+            background: #f0fdf4;
+            border-left: 2px solid #86efac;
+        }
+
+        .po-money-block {
+            border-left: 2px solid transparent;
+        }
+
+        .po-money-purchase {
+            background: #f8fafc;
+            border-left-color: #cbd5e1;
+        }
+
+        .po-money-unit {
+            background: #eff6ff;
+            border-left-color: #93c5fd;
+        }
+
+        .po-money-total {
+            background: #f0fdf4;
+            border-left-color: #86efac;
+        }
+
+        .po-money-line {
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.25;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .po-money-line + .po-money-line {
+            margin-top: 4px;
+        }
+
+        .po-money-label {
+            margin-left: 3px;
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+        }
+
+        .po-money-context {
+            margin-top: 3px;
+            color: #64748b;
+            font-size: 9px;
+            line-height: 1.15;
+            white-space: nowrap;
+        }
+
+        .po-money-unit .po-money-line:last-child {
+            color: #1d4ed8;
+        }
+
+        .po-money-total .po-money-line:last-child {
+            color: #166534;
+            font-weight: 700;
+        }
+
+        .po-uxe-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            padding: 3px 7px;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1e40af;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
         }
 
         .po-table .right {
@@ -306,7 +493,7 @@
         <div class="po-card-header">
             <div class="po-title">Agregar producto</div>
             <div class="po-subtitle">
-                Busca el producto, elige variante si aplica, captura cantidad y costo.
+                Busca el producto, elige variante si aplica, captura UXE, cantidad, IVA y costo de compra.
             </div>
         </div>
 
@@ -359,36 +546,66 @@
                 </div>
 
                 <div class="po-field">
+                    <label class="po-label">UXE</label>
+                    <input
+                        type="number"
+                        step="0.000001"
+                        min="1"
+                        wire:model.live.debounce.300ms="newPurchaseUnitFactor"
+                        class="po-input po-input-num"
+                        title="Unidades base por unidad comprada"
+                        @if($editingLineId) disabled @endif
+                    >
+
+                    @if($newSuggestedUxeText !== '')
+                        <div class="po-hint">
+                            {{ $newSuggestedUxeText }}
+
+                            @if($newSuggestedUxe)
+                                <button
+                                    type="button"
+                                    wire:click="applySuggestedUxe"
+                                    class="po-suggest-btn"
+                                    @if($editingLineId) disabled @endif
+                                >
+                                    Usar
+                                </button>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+
+                <div class="po-field">
                     <label class="po-label">Cantidad</label>
                     <input
                         type="number"
                         step="0.000001"
                         min="0"
-                        wire:model.defer="newQuantity"
+                        wire:model.live.debounce.300ms="newQuantity"
                         class="po-input po-input-num"
                         @if($editingLineId) disabled @endif
                     >
                 </div>
 
                 <div class="po-field">
-                    <label class="po-label">Costo s/IVA</label>
-                    <input
-                        type="number"
-                        step="0.0001"
-                        min="0"
-                        wire:model.defer="newUnitCostWithoutTax"
-                        class="po-input po-input-num"
-                        @if($editingLineId) disabled @endif
-                    >
-                </div>
-
-                <div class="po-field">
-                    <label class="po-label">Impuesto</label>
-                    <select wire:model.defer="newTaxRate" class="po-select" @if($editingLineId) disabled @endif>
+                    <label class="po-label">IVA</label>
+                    <select wire:model.live="newTaxRate" class="po-select" @if($editingLineId) disabled @endif>
                         @foreach($taxOptions as $rate => $label)
                             <option value="{{ $rate }}">{{ $label }}</option>
                         @endforeach
                     </select>
+                </div>
+
+                <div class="po-field">
+                    <label class="po-label">Costo compra s/IVA</label>
+                    <input
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        wire:model.live.debounce.300ms="newUnitCostWithoutTax"
+                        class="po-input po-input-num"
+                        @if($editingLineId) disabled @endif
+                    >
                 </div>
 
                 <div class="po-field">
@@ -402,6 +619,71 @@
                         Agregar
                     </button>
                 </div>
+            </div>
+
+            @php
+                $newQtyPreview = max((float) $newQuantity, 0);
+                $newUxePreview = max((float) $newPurchaseUnitFactor, 1);
+                $newCostPreview = max((float) $newUnitCostWithoutTax, 0);
+                $newTaxPreview = max((float) $newTaxRate, 0);
+
+                $newBaseUnitWithoutTaxPreview =
+                    $newUxePreview > 0
+                        ? $newCostPreview / $newUxePreview
+                        : $newCostPreview;
+
+                $newBaseUnitWithTaxPreview =
+                    $newBaseUnitWithoutTaxPreview
+                    * (1 + ($newTaxPreview / 100));
+
+                $newTotalWithoutTaxPreview =
+                    $newQtyPreview * $newCostPreview;
+
+                $newTotalWithTaxPreview =
+                    $newTotalWithoutTaxPreview
+                    * (1 + ($newTaxPreview / 100));
+
+                $newBaseQtyPreview =
+                    $newQtyPreview * $newUxePreview;
+            @endphp
+
+            <div class="po-cost-preview">
+                <span class="po-preview-item">
+                    <span class="po-preview-label">Base</span>
+                    <strong>{{ number_format($newBaseQtyPreview, 2) }}</strong>
+                </span>
+
+                <span class="po-preview-item po-preview-unit">
+                    <span class="po-preview-label">Unitario</span>
+
+                    <strong>
+                        $ {{ number_format($newBaseUnitWithoutTaxPreview, 4) }}
+                    </strong>
+
+                    <span>s/IVA</span>
+
+                    <strong>
+                        $ {{ number_format($newBaseUnitWithTaxPreview, 4) }}
+                    </strong>
+
+                    <span>c/IVA</span>
+                </span>
+
+                <span class="po-preview-item po-preview-total">
+                    <span class="po-preview-label">Total</span>
+
+                    <strong>
+                        $ {{ number_format($newTotalWithoutTaxPreview, 2) }}
+                    </strong>
+
+                    <span>s/IVA</span>
+
+                    <strong>
+                        $ {{ number_format($newTotalWithTaxPreview, 2) }}
+                    </strong>
+
+                    <span>c/IVA</span>
+                </span>
             </div>
 
             @if($editingLineId)
@@ -425,22 +707,50 @@
                         </div>
 
                         <div class="po-field">
+                            <label class="po-label">UXE</label>
+                            <input
+                                type="number"
+                                step="0.000001"
+                                min="1"
+                                wire:model.live.debounce.300ms="editPurchaseUnitFactor"
+                                class="po-input po-input-num"
+                                title="Unidades base por unidad comprada"
+                            >
+
+                            @if($editSuggestedUxeText !== '')
+                                <div class="po-hint">
+                                    {{ $editSuggestedUxeText }}
+
+                                    @if($editSuggestedUxe)
+                                        <button
+                                            type="button"
+                                            wire:click="applyEditSuggestedUxe"
+                                            class="po-suggest-btn"
+                                        >
+                                            Usar
+                                        </button>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="po-field">
                             <label class="po-label">Cantidad</label>
-                            <input type="number" step="0.000001" min="0" wire:model.defer="editQuantity" class="po-input po-input-num">
+                            <input type="number" step="0.000001" min="0" wire:model.live.debounce.300ms="editQuantity" class="po-input po-input-num">
                         </div>
 
                         <div class="po-field">
-                            <label class="po-label">Costo s/IVA</label>
-                            <input type="number" step="0.0001" min="0" wire:model.defer="editUnitCostWithoutTax" class="po-input po-input-num">
-                        </div>
-
-                        <div class="po-field">
-                            <label class="po-label">Impuesto</label>
-                            <select wire:model.defer="editTaxRate" class="po-select">
+                            <label class="po-label">IVA</label>
+                            <select wire:model.live="editTaxRate" class="po-select">
                                 @foreach($taxOptions as $rate => $label)
                                     <option value="{{ $rate }}">{{ $label }}</option>
                                 @endforeach
                             </select>
+                        </div>
+
+                        <div class="po-field">
+                            <label class="po-label">Costo compra s/IVA</label>
+                            <input type="number" step="0.0001" min="0" wire:model.live.debounce.300ms="editUnitCostWithoutTax" class="po-input po-input-num">
                         </div>
 
                         <div class="po-field">
@@ -456,6 +766,71 @@
                                 Cancelar
                             </button>
                         </div>
+                    </div>
+
+                    @php
+                        $editQtyPreview = max((float) $editQuantity, 0);
+                        $editUxePreview = max((float) $editPurchaseUnitFactor, 1);
+                        $editCostPreview = max((float) $editUnitCostWithoutTax, 0);
+                        $editTaxPreview = max((float) $editTaxRate, 0);
+
+                        $editBaseUnitWithoutTaxPreview =
+                            $editUxePreview > 0
+                                ? $editCostPreview / $editUxePreview
+                                : $editCostPreview;
+
+                        $editBaseUnitWithTaxPreview =
+                            $editBaseUnitWithoutTaxPreview
+                            * (1 + ($editTaxPreview / 100));
+
+                        $editTotalWithoutTaxPreview =
+                            $editQtyPreview * $editCostPreview;
+
+                        $editTotalWithTaxPreview =
+                            $editTotalWithoutTaxPreview
+                            * (1 + ($editTaxPreview / 100));
+
+                        $editBaseQtyPreview =
+                            $editQtyPreview * $editUxePreview;
+                    @endphp
+
+                    <div class="po-cost-preview" style="padding:12px 0 0 0;">
+                        <span class="po-preview-item">
+                            <span class="po-preview-label">Base</span>
+                            <strong>{{ number_format($editBaseQtyPreview, 2) }}</strong>
+                        </span>
+
+                        <span class="po-preview-item po-preview-unit">
+                            <span class="po-preview-label">Unitario</span>
+
+                            <strong>
+                                $ {{ number_format($editBaseUnitWithoutTaxPreview, 4) }}
+                            </strong>
+
+                            <span>s/IVA</span>
+
+                            <strong>
+                                $ {{ number_format($editBaseUnitWithTaxPreview, 4) }}
+                            </strong>
+
+                            <span>c/IVA</span>
+                        </span>
+
+                        <span class="po-preview-item po-preview-total">
+                            <span class="po-preview-label">Total</span>
+
+                            <strong>
+                                $ {{ number_format($editTotalWithoutTaxPreview, 2) }}
+                            </strong>
+
+                            <span>s/IVA</span>
+
+                            <strong>
+                                $ {{ number_format($editTotalWithTaxPreview, 2) }}
+                            </strong>
+
+                            <span>c/IVA</span>
+                        </span>
                     </div>
 
                     <div class="po-field" style="margin-top:10px;">
@@ -506,13 +881,24 @@
                     <tr>
                         <th style="min-width: 220px;">Producto</th>
                         <th style="min-width: 130px;">Variante</th>
-                        <th style="min-width: 110px;">Unidad</th>
+                        <th style="min-width: 100px;">Unidad</th>
+                        <th class="right" style="min-width: 65px;">UXE</th>
                         <th class="right" style="min-width: 95px;">Cantidad</th>
-                        <th class="right" style="min-width: 95px;">Cant. base</th>
-                        <th class="right" style="min-width: 110px;">Costo s/IVA</th>
-                        <th class="right" style="min-width: 80px;">IVA</th>
-                        <th class="right" style="min-width: 110px;">Costo c/IVA</th>
-                        <th class="right" style="min-width: 110px;">Importe</th>
+                        <th class="right" style="min-width: 70px;">IVA</th>
+                        <th class="right po-th-purchase" style="min-width: 125px;">
+                            <div class="po-th-title">Costo compra</div>
+                            <div class="po-th-sub">por unidad de compra · s/IVA</div>
+                        </th>
+
+                        <th class="right po-th-unit" style="min-width: 135px;">
+                            <div class="po-th-title">Costo unitario</div>
+                            <div class="po-th-sub">por unidad base</div>
+                        </th>
+
+                        <th class="right po-th-total" style="min-width: 130px;">
+                            <div class="po-th-title">Total</div>
+                            <div class="po-th-sub">por partida</div>
+                        </th>
                         <th class="right" style="min-width: 105px;">Acciones</th>
                     </tr>
                 </thead>
@@ -522,13 +908,88 @@
                         <tr>
                             <td>{{ $line['product_label'] ?: '—' }}</td>
                             <td>{{ $line['variant_label'] ?: '—' }}</td>
+                            @php
+                                $lineUxe = max(
+                                    (float) ($line['purchase_unit_factor'] ?? 1),
+                                    1
+                                );
+
+                                $linePurchaseCostWithoutTax =
+                                    (float) ($line['unit_cost_without_tax'] ?? 0);
+
+                                $lineTaxRate =
+                                    (float) ($line['tax_rate'] ?? 0);
+
+                                $lineBaseUnitCostWithoutTax =
+                                    $linePurchaseCostWithoutTax / $lineUxe;
+
+                                $lineBaseUnitCostWithTax =
+                                    $lineBaseUnitCostWithoutTax
+                                    * (1 + ($lineTaxRate / 100));
+
+                                $lineTotalWithoutTax =
+                                    (float) ($line['line_total_without_tax'] ?? 0);
+
+                                $lineTotalWithTax =
+                                    (float) ($line['line_total_with_tax'] ?? 0);
+                            @endphp
+
                             <td>{{ $line['purchase_unit_label'] ?: '—' }}</td>
-                            <td class="right">{{ number_format((float) $line['ordered_quantity'], 2) }}</td>
-                            <td class="right">{{ number_format((float) $line['base_quantity'], 2) }}</td>
-                            <td class="right">$ {{ number_format((float) $line['unit_cost_without_tax'], 4) }}</td>
-                            <td class="right">{{ number_format((float) $line['tax_rate'], 2) }}%</td>
-                            <td class="right">$ {{ number_format((float) ($line['unit_cost_with_tax'] ?? 0), 4) }}</td>
-                            <td class="right"><strong>$ {{ number_format((float) $line['line_total_with_tax'], 2) }}</strong></td>
+
+                            <td class="right">
+                                <span class="po-uxe-chip">
+                                    {{ rtrim(rtrim(number_format($lineUxe, 6, '.', ''), '0'), '.') }}
+                                </span>
+                            </td>
+
+                            <td class="right">
+                                <div class="po-cell-main">
+                                    {{ number_format((float) $line['ordered_quantity'], 2) }}
+                                </div>
+
+                                <div class="po-cell-sub">
+                                    {{ number_format((float) $line['base_quantity'], 2) }} base
+                                </div>
+                            </td>
+
+                            <td class="right">
+                                {{ number_format($lineTaxRate, 2) }}%
+                            </td>
+
+                            <td class="right po-money-block po-money-purchase">
+                                <div class="po-money-line">
+                                    $ {{ number_format($linePurchaseCostWithoutTax, 4) }}
+                                    <span class="po-money-label">s/IVA</span>
+                                </div>
+
+                                <div class="po-money-context">
+                                    unidad de compra
+                                </div>
+                            </td>
+
+                            <td class="right po-money-block po-money-unit">
+                                <div class="po-money-line">
+                                    $ {{ number_format($lineBaseUnitCostWithoutTax, 4) }}
+                                    <span class="po-money-label">s/IVA</span>
+                                </div>
+
+                                <div class="po-money-line">
+                                    $ {{ number_format($lineBaseUnitCostWithTax, 4) }}
+                                    <span class="po-money-label">c/IVA</span>
+                                </div>
+                            </td>
+
+                            <td class="right po-money-block po-money-total">
+                                <div class="po-money-line">
+                                    $ {{ number_format($lineTotalWithoutTax, 2) }}
+                                    <span class="po-money-label">s/IVA</span>
+                                </div>
+
+                                <div class="po-money-line">
+                                    $ {{ number_format($lineTotalWithTax, 2) }}
+                                    <span class="po-money-label">c/IVA</span>
+                                </div>
+                            </td>
                             <td class="right">
                                 @if($isDraft)
                                     <button type="button" wire:click="editLine({{ $line['id'] }})" class="po-link">

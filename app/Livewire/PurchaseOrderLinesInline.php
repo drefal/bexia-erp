@@ -34,17 +34,25 @@ class PurchaseOrderLinesInline extends Component
     public array $taxOptions = [];
 
     public string $newQuantity = '1';
+    public string $newPurchaseUnitFactor = '1';
     public string $newUnitCostWithoutTax = '0';
     public string $newTaxRate = '16.0000';
+
+    public ?float $newSuggestedUxe = null;
+    public string $newSuggestedUxeText = '';
 
     public ?int $editingLineId = null;
     public string $editingProductLabel = '';
     public string $editingVariantLabel = '';
     public string $editingUnitLabel = '';
     public string $editQuantity = '1';
+    public string $editPurchaseUnitFactor = '1';
     public string $editUnitCostWithoutTax = '0';
     public string $editTaxRate = '16.0000';
     public string $editNotes = '';
+
+    public ?float $editSuggestedUxe = null;
+    public string $editSuggestedUxeText = '';
 
     public ?int $deleteLineId = null;
     public string $deleteLineLabel = '';
@@ -109,10 +117,10 @@ class PurchaseOrderLinesInline extends Component
                 'base_quantity' => (string) ($line->base_quantity ?? '0'),
                 'unit_cost_without_tax' => (string) ($line->unit_cost_without_tax ?? '0'),
                 'tax_rate' => $this->normalizeTaxRate($line->tax_rate ?? 0),
-                'unit_cost_with_tax' => (string) ($line->unit_cost_with_tax ?? '0'),
+                'unit_cost_with_tax' => (string) $this->resolvedUnitCostWithTax($line),
                 'line_total_without_tax' => (string) ($line->line_total_without_tax ?? '0'),
                 'line_tax' => (string) ($line->line_tax ?? '0'),
-                'line_total_with_tax' => (string) ($line->line_total_with_tax ?? '0'),
+                'line_total_with_tax' => (string) $this->resolvedLineTotalWithTax($line),
                 'notes' => (string) ($line->notes ?? ''),
             ])
             ->all();
@@ -225,11 +233,18 @@ class PurchaseOrderLinesInline extends Component
             return;
         }
 
-        $factor = (float) ($this->unitOptions[$this->selectedUnitKey]['factor'] ?? 1);
+        $factor = max(
+            (float) ($this->unitOptions[$this->selectedUnitKey]['factor'] ?? 1),
+            1
+        );
+
         $baseCost = $variant ? $this->productCost($variant) : $this->productCost($product);
 
-        $this->newUnitCostWithoutTax = number_format($baseCost * max($factor, 1), 4, '.', '');
+        $this->newPurchaseUnitFactor = number_format($factor, 6, '.', '');
+        $this->newUnitCostWithoutTax = number_format($baseCost * $factor, 4, '.', '');
         $this->newTaxRate = $this->resolveDefaultTaxRate($source);
+
+        $this->refreshNewUxeSuggestion();
     }
 
     public function addProduct(): void
@@ -268,7 +283,7 @@ class PurchaseOrderLinesInline extends Component
         $unit = $this->unitOptions[$this->selectedUnitKey] ?? $this->baseUnitOption();
 
         $qty = max($this->toFloat($this->newQuantity), 0);
-        $factor = max((float) ($unit['factor'] ?? 1), 1);
+        $factor = max($this->toFloat($this->newPurchaseUnitFactor), 1);
         $baseQty = round($qty * $factor, 6);
 
         $unitCost = max($this->toFloat($this->newUnitCostWithoutTax), 0);
@@ -341,9 +356,12 @@ class PurchaseOrderLinesInline extends Component
         $this->editingVariantLabel = (string) ($line->variant_label ?? '—');
         $this->editingUnitLabel = (string) ($line->purchase_unit_label ?? 'Pieza');
         $this->editQuantity = (string) ($line->ordered_quantity ?? '0');
+        $this->editPurchaseUnitFactor = (string) ($line->purchase_unit_factor ?? '1');
         $this->editUnitCostWithoutTax = (string) ($line->unit_cost_without_tax ?? '0');
         $this->editTaxRate = $this->normalizeTaxRate($line->tax_rate ?? 0);
         $this->editNotes = (string) ($line->notes ?? '');
+
+        $this->refreshEditUxeSuggestion($line);
 
         $this->productSearch = $this->editingProductLabel;
         $this->productResults = [];
@@ -356,9 +374,12 @@ class PurchaseOrderLinesInline extends Component
         $this->editingVariantLabel = '';
         $this->editingUnitLabel = '';
         $this->editQuantity = '1';
+        $this->editPurchaseUnitFactor = '1';
         $this->editUnitCostWithoutTax = '0';
         $this->editTaxRate = '16.0000';
         $this->editNotes = '';
+        $this->editSuggestedUxe = null;
+        $this->editSuggestedUxeText = '';
 
         $this->resetAddFields();
     }
@@ -390,7 +411,7 @@ class PurchaseOrderLinesInline extends Component
         }
 
         $qty = max($this->toFloat($this->editQuantity), 0);
-        $factor = max((float) ($line->purchase_unit_factor ?? 1), 1);
+        $factor = max($this->toFloat($this->editPurchaseUnitFactor), 1);
         $baseQty = round($qty * $factor, 6);
 
         $unitCost = max($this->toFloat($this->editUnitCostWithoutTax), 0);
@@ -405,6 +426,7 @@ class PurchaseOrderLinesInline extends Component
             ->where('id', $this->editingLineId)
             ->where('purchase_order_id', $this->purchaseOrderId)
             ->update([
+                'purchase_unit_factor' => $factor,
                 'ordered_quantity' => $qty,
                 'base_quantity' => $baseQty,
                 'unit_cost_without_tax' => $unitCost,
@@ -595,8 +617,287 @@ class PurchaseOrderLinesInline extends Component
         $this->selectedUnitKey = 'base';
         $this->unitOptions = [];
         $this->newQuantity = '1';
+        $this->newPurchaseUnitFactor = '1';
         $this->newUnitCostWithoutTax = '0';
         $this->newTaxRate = '16.0000';
+        $this->newSuggestedUxe = null;
+        $this->newSuggestedUxeText = '';
+    }
+
+    public function applySuggestedUxe(): void
+    {
+        if ($this->newSuggestedUxe === null || $this->newSuggestedUxe < 1) {
+            return;
+        }
+
+        $this->newPurchaseUnitFactor = number_format(
+            $this->newSuggestedUxe,
+            6,
+            '.',
+            ''
+        );
+    }
+
+    public function applyEditSuggestedUxe(): void
+    {
+        if ($this->editSuggestedUxe === null || $this->editSuggestedUxe < 1) {
+            return;
+        }
+
+        $this->editPurchaseUnitFactor = number_format(
+            $this->editSuggestedUxe,
+            6,
+            '.',
+            ''
+        );
+    }
+
+    protected function refreshNewUxeSuggestion(): void
+    {
+        $this->newSuggestedUxe = null;
+        $this->newSuggestedUxeText = '';
+
+        if (! $this->selectedProductId) {
+            return;
+        }
+
+        $unitLabel = (string) (
+            $this->unitOptions[$this->selectedUnitKey]['label']
+            ?? 'Pieza'
+        );
+
+        $history = $this->findHistoricalUxe(
+            (int) $this->selectedProductId,
+            $this->selectedVariantId
+                ? (int) $this->selectedVariantId
+                : null,
+            $unitLabel
+        );
+
+        if (! $history) {
+            $this->newSuggestedUxeText =
+                'Sin UXE histórico para este producto/proveedor.';
+            return;
+        }
+
+        $this->newSuggestedUxe = (float) $history['factor'];
+        $this->newSuggestedUxeText = $this->uxeHistoryText($history);
+    }
+
+    protected function refreshEditUxeSuggestion(object $line): void
+    {
+        $this->editSuggestedUxe = null;
+        $this->editSuggestedUxeText = '';
+
+        $productId = (int) ($line->product_id ?? 0);
+
+        if ($productId <= 0) {
+            return;
+        }
+
+        $variantId = (int) ($line->product_variant_id ?? 0);
+
+        $history = $this->findHistoricalUxe(
+            $productId,
+            $variantId > 0 ? $variantId : null,
+            (string) ($line->purchase_unit_label ?? '')
+        );
+
+        if (! $history) {
+            $this->editSuggestedUxeText =
+                'Sin UXE histórico para este producto/proveedor.';
+            return;
+        }
+
+        $this->editSuggestedUxe = (float) $history['factor'];
+        $this->editSuggestedUxeText = $this->uxeHistoryText($history);
+    }
+
+    protected function findHistoricalUxe(
+        int $productId,
+        ?int $variantId,
+        string $unitLabel = ''
+    ): ?array {
+        $companyId = (int) ($this->order['company_id'] ?? 0);
+
+        if ($companyId <= 0 || $productId <= 0) {
+            return null;
+        }
+
+        $supplierContactId = (int) (
+            $this->order['supplier_contact_id']
+            ?? 0
+        );
+
+        $supplierName = trim((string) (
+            $this->order['supplier_name']
+            ?? ''
+        ));
+
+        $query = DB::table('purchase_order_lines as pol')
+            ->join(
+                'purchase_orders as po',
+                'po.id',
+                '=',
+                'pol.purchase_order_id'
+            )
+            ->where('po.company_id', $companyId)
+            ->where('po.id', '<>', $this->purchaseOrderId)
+            ->where('pol.product_id', $productId)
+            ->where('pol.purchase_unit_factor', '>', 0)
+            ->whereNotIn('po.status', ['cancelled', 'canceled']);
+
+        if ($variantId) {
+            $query->where('pol.product_variant_id', $variantId);
+        } else {
+            $query->whereNull('pol.product_variant_id');
+        }
+
+        if ($supplierContactId > 0) {
+            $query->where(
+                'po.supplier_contact_id',
+                $supplierContactId
+            );
+        } elseif ($supplierName !== '') {
+            $query->whereRaw(
+                "LOWER(TRIM(COALESCE(po.supplier_name, ''))) = ?",
+                [mb_strtolower($supplierName)]
+            );
+        } else {
+            return null;
+        }
+
+        $columns = [
+            'pol.purchase_unit_factor',
+            'pol.purchase_unit_label',
+            'po.number as purchase_order_number',
+            'po.order_date as purchase_order_date',
+        ];
+
+        $row = null;
+
+        if (trim($unitLabel) !== '') {
+            $row = (clone $query)
+                ->where('pol.purchase_unit_label', $unitLabel)
+                ->orderByDesc('po.order_date')
+                ->orderByDesc('po.id')
+                ->orderByDesc('pol.id')
+                ->first($columns);
+        }
+
+        if (! $row) {
+            $row = $query
+                ->orderByDesc('po.order_date')
+                ->orderByDesc('po.id')
+                ->orderByDesc('pol.id')
+                ->first($columns);
+        }
+
+        if (! $row) {
+            return null;
+        }
+
+        $factor = (float) ($row->purchase_unit_factor ?? 0);
+
+        if ($factor < 1) {
+            return null;
+        }
+
+        return [
+            'factor' => $factor,
+            'unit_label' => (string) (
+                $row->purchase_unit_label
+                ?? ''
+            ),
+            'order_number' => (string) (
+                $row->purchase_order_number
+                ?? ''
+            ),
+            'order_date' => (string) (
+                $row->purchase_order_date
+                ?? ''
+            ),
+        ];
+    }
+
+    protected function uxeHistoryText(array $history): string
+    {
+        $factor = rtrim(
+            rtrim(
+                number_format(
+                    (float) ($history['factor'] ?? 1),
+                    6,
+                    '.',
+                    ''
+                ),
+                '0'
+            ),
+            '.'
+        );
+
+        $parts = ['UXE sugerido: ' . $factor];
+
+        $number = trim((string) (
+            $history['order_number']
+            ?? ''
+        ));
+
+        if ($number !== '') {
+            $parts[] = 'última compra ' . $number;
+        }
+
+        $date = trim((string) (
+            $history['order_date']
+            ?? ''
+        ));
+
+        if ($date !== '' && strtotime($date) !== false) {
+            $parts[] = date('d/m/Y', strtotime($date));
+        }
+
+        $unit = trim((string) (
+            $history['unit_label']
+            ?? ''
+        ));
+
+        if ($unit !== '') {
+            $parts[] = 'unidad ' . $unit;
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    protected function resolvedUnitCostWithTax(object $line): float
+    {
+        $stored = (float) ($line->unit_cost_with_tax ?? 0);
+        $withoutTax = (float) ($line->unit_cost_without_tax ?? 0);
+
+        if ($stored > 0 || $withoutTax <= 0) {
+            return $stored;
+        }
+
+        $taxRate = (float) ($line->tax_rate ?? 0);
+
+        return round(
+            $withoutTax * (1 + ($taxRate / 100)),
+            6
+        );
+    }
+
+    protected function resolvedLineTotalWithTax(object $line): float
+    {
+        $stored = (float) ($line->line_total_with_tax ?? 0);
+
+        if ($stored > 0) {
+            return $stored;
+        }
+
+        $quantity = (float) ($line->ordered_quantity ?? 0);
+
+        return round(
+            $quantity * $this->resolvedUnitCostWithTax($line),
+            6
+        );
     }
 
     protected function refreshTotals(): void
