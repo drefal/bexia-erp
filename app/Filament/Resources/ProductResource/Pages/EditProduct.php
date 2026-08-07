@@ -12,6 +12,30 @@ class EditProduct extends EditRecord
 {
     protected static string $resource = ProductResource::class;
 
+    /*
+     * BEXIA_V5_83_P10B_SALES_POS_TOGGLE_GUARD
+     *
+     * Registra únicamente cambios explícitos hechos por el usuario
+     * sobre los switches sensibles de Ventas / POS.
+     */
+    public array $bexiaExplicitProductSalesPosFlags = [];
+
+    public function bexiaMarkProductSalesPosFlagTouched(string $field): void
+    {
+        if (! in_array(
+            $field,
+            [
+                'available_in_pos',
+                'include_in_global_invoice',
+            ],
+            true
+        )) {
+            return;
+        }
+
+        $this->bexiaExplicitProductSalesPosFlags[$field] = true;
+    }
+
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
@@ -22,6 +46,21 @@ class EditProduct extends EditRecord
 
         // V5.72.5l3b: evitar 500 al guardar variantes/productos con tracking avanzado vacío.
         $data = $this->normalizeAdvancedTrackingBeforeSave($data);
+
+        /*
+         * BEXIA_V5_83_P10B_PRESERVE_UNTOUCHED_SALES_POS_FLAGS
+         *
+         * Si el usuario NO tocó expresamente estos switches,
+         * conservar exactamente lo que ya existe en BD.
+         *
+         * Esto evita cambios accidentales provocados por
+         * rehidrataciones parciales del formulario Filament.
+         */
+        $data = static::bexiaPreserveUntouchedSalesPosFlags(
+            $data,
+            $this->record,
+            $this->bexiaExplicitProductSalesPosFlags
+        );
 
         // BEXIA_V5550E_EDIT_INTERNAL_REFERENCE_MUTATE_BEFORE_SAVE
         $reference = trim((string) ($data['internal_reference'] ?? ''));
@@ -89,6 +128,58 @@ class EditProduct extends EditRecord
         );
 
         throw new \Filament\Support\Exceptions\Halt();
+    }
+
+
+    protected static function bexiaPreserveUntouchedSalesPosFlags(
+        array $data,
+        ?Product $record,
+        array $explicitlyTouched
+    ): array {
+        if (! $record) {
+            return $data;
+        }
+
+        foreach ([
+            'available_in_pos',
+            'include_in_global_invoice',
+        ] as $field) {
+
+            if (
+                (bool) (
+                    $explicitlyTouched[$field]
+                    ?? false
+                )
+            ) {
+                /*
+                 * Cambio explícito del usuario:
+                 * respetar el estado enviado por el formulario.
+                 */
+                if (array_key_exists($field, $data)) {
+                    $data[$field] =
+                        (bool) $data[$field];
+                }
+
+                continue;
+            }
+
+            /*
+             * Sin interacción explícita:
+             * tomar el valor original del registro.
+             */
+            $original =
+                $record->getRawOriginal($field);
+
+            if ($original === null) {
+                $original =
+                    $record->getAttribute($field);
+            }
+
+            $data[$field] =
+                (bool) $original;
+        }
+
+        return $data;
     }
 
 
@@ -316,6 +407,12 @@ class EditProduct extends EditRecord
 
     protected function afterSave(): void
     {
+        /*
+         * Cada guardado inicia nuevamente sin switches marcados
+         * como modificados explícitamente.
+         */
+        $this->bexiaExplicitProductSalesPosFlags = [];
+
         // sync_product_taxes_after_save_v1
         $this->syncProductTaxRatesFromForm();
 
