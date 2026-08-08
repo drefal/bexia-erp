@@ -134,8 +134,8 @@ public static function form(Form $form): Form
                     ->required(),
 
                 Forms\Components\Section::make('Configuración del atributo')
-                    // BEXIA_V5_83_P12C4D_HOMOLOGATED_PRODUCT_ATTRIBUTES
-                    ->description('Define un atributo homologado y después agrega todos los valores permitidos. Ejemplo: Forma → Circular, Rectangular, Cuadrada, etc.')
+                    // BEXIA_V5_83_P14A_SIMPLIFIED_ATTRIBUTE_CREATE
+                    ->description('Captura el nombre del atributo. Al crear, Bexia genera automáticamente el código y los valores predeterminados.')
                     ->extraAttributes([
                         'class' => 'bexia-pattr-section bexia-pattr-section-main',
                     ])
@@ -145,8 +145,9 @@ public static function form(Form $form): Form
                                 'class' => 'bexia-pattr-field bexia-pattr-code-field bexia-pattr-compact-field',
                             ])
                             ->label('Código')
-                            ->helperText('Código estable del atributo. Ejemplo: COLOR, FORMA, TALLA, MATERIAL.')
-                            ->required()
+                            ->helperText('Código interno generado automáticamente al crear el atributo.')
+                            ->hiddenOn('create')
+                            ->required(fn (string $operation): bool => $operation === 'edit')
                             ->maxLength(80)
                             ->unique(
                                 table: 'product_attributes',
@@ -165,7 +166,7 @@ public static function form(Form $form): Form
                             ->helperText('Ejemplo: Color, Talla, Material.')
                             ->required()
                             ->maxLength(255)
-                            ->columnSpan(5),
+                            ->columnSpanFull(),
 
                         Forms\Components\TextInput::make('sort_order')
                             ->extraAttributes([
@@ -174,6 +175,7 @@ public static function form(Form $form): Form
                             ->label('Orden')
                             ->numeric()
                             ->default(0)
+                            ->hiddenOn('create')
                             ->columnSpan(3),
 
                         Forms\Components\Toggle::make('is_variant')
@@ -183,6 +185,7 @@ public static function form(Form $form): Form
                             ->label('Usar para variantes')
                             ->helperText('Actívalo si este atributo genera variantes del producto.')
                             ->default(true)
+                            ->hiddenOn('create')
                             ->columnSpan(4),
 
                         Forms\Components\Toggle::make('is_active')
@@ -191,6 +194,7 @@ public static function form(Form $form): Form
                             ])
                             ->label('Activo')
                             ->default(true)
+                            ->hiddenOn('create')
                             ->columnSpan(4),
 
                         Forms\Components\Toggle::make('is_system')
@@ -199,6 +203,7 @@ public static function form(Form $form): Form
                             ])
                             ->label('Sistema')
                             ->helperText('Los registros del sistema no se deberían eliminar.')
+                            ->hiddenOn('create')
                             ->disabled()
                             ->dehydrated(false)
                             ->columnSpan(4),
@@ -239,7 +244,7 @@ public static function form(Form $form): Form
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultSort('sort_order')
+            ->defaultSort('name')
             ->columns([
                 Tables\Columns\TextColumn::make('code')
                     ->extraHeaderAttributes([
@@ -250,7 +255,8 @@ public static function form(Form $form): Form
                     ])
                     ->label('Código')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('name')
                     ->extraHeaderAttributes([
@@ -313,7 +319,7 @@ public static function form(Form $form): Form
                     ])
                     ->label('Orden')
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_variant')
