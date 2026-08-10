@@ -214,6 +214,23 @@ class CreateProduct extends CreateRecord
     {
         $parentId = (int) request()->query('parent_product_id');
 
+        /*
+         * En la carga inicial el parent_product_id viene en la URL.
+         * En peticiones Livewire posteriores el query string original
+         * puede no estar disponible en request(), por lo que debemos
+         * conservar el contexto desde el estado del formulario.
+         */
+        if (
+            $parentId <= 0
+            && property_exists($this, 'data')
+            && is_array($this->data)
+        ) {
+            $parentId = (int) (
+                $this->data['parent_product_id']
+                ?? 0
+            );
+        }
+
         if ($parentId <= 0) {
             return null;
         }
@@ -257,7 +274,7 @@ class CreateProduct extends CreateRecord
             'sale_price' => $parent->sale_price,
             'standard_cost' => $parent->standard_cost,
             'purchase_price' => $parent->purchase_price,
-            'variant_group' => request()->query('variant_group') ?: 'Color',
+            'variant_group' => request()->query('variant_group') ?: null,
         ]);
     }
 
@@ -341,7 +358,7 @@ class CreateProduct extends CreateRecord
             return $data;
         }
 
-        $variantGroup = trim((string) ($data['variant_group'] ?? 'Color'));
+        $variantGroup = trim((string) ($data['variant_group'] ?? ''));
         $variantValue = trim((string) ($data['variant_value'] ?? ''));
 
         if ($variantValue === '') {
@@ -460,11 +477,13 @@ class CreateProduct extends CreateRecord
         }
 
         // validate_and_name_variant_v6
-        $variantGroup = trim((string) ($data['variant_group'] ?? 'Color'));
+        $variantGroup = trim((string) ($data['variant_group'] ?? ''));
         $variantValue = trim((string) ($data['variant_value'] ?? ''));
 
         if ($variantGroup === '') {
-            $variantGroup = 'Color';
+            throw ValidationException::withMessages([
+                'variant_group' => 'Selecciona el atributo de la variante antes de guardar.',
+            ]);
         }
 
         if ($variantValue === '') {
@@ -683,11 +702,13 @@ protected function mergeFormStateForVariant(array $data): array
 protected function prepareVariantDataForCreate(array $data, Product $parent): array
     {
         // prepare_variant_data_v7
-        $variantGroup = trim((string) ($data['variant_group'] ?? 'Color'));
+        $variantGroup = trim((string) ($data['variant_group'] ?? ''));
         $variantValue = trim((string) ($data['variant_value'] ?? ''));
 
         if ($variantGroup === '') {
-            $variantGroup = 'Color';
+            throw ValidationException::withMessages([
+                'variant_group' => 'Selecciona el atributo de la variante antes de guardar.',
+            ]);
         }
 
         if ($variantValue === '') {
