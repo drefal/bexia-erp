@@ -2911,7 +2911,12 @@ Forms\Components\Section::make('Atributos de catálogo')
                                         )
                                         ->placeholder('Selecciona un atributo')
                                         ->required()
-                                        ->native()
+                                        // BEXIA_V5_83_P16B_VARIANT_GROUP_SEARCHABLE_SCROLL
+                                        ->native(false)
+                                        ->searchable()
+                                        ->optionsLimit(12)
+                                        ->searchPrompt('Escribe para buscar un atributo')
+                                        ->noSearchResultsMessage('No se encontraron atributos')
                                         ->live()
                                         ->afterStateHydrated(
                                             function (
@@ -2957,7 +2962,12 @@ Forms\Components\Section::make('Atributos de catálogo')
                                                     (int) ($get('company_id') ?: 0)
                                                 )
                                         )
-                                        ->native()
+                                        // BEXIA_V5_83_P16A_VARIANT_VALUE_SEARCHABLE_SCROLL
+                                        ->native(false)
+                                        ->searchable()
+                                        ->optionsLimit(12)
+                                        ->searchPrompt('Escribe para buscar un valor')
+                                        ->noSearchResultsMessage('No se encontraron valores')
                                         ->placeholder('Selecciona un valor')
                                         ->afterStateHydrated(
                                             function (
