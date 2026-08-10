@@ -810,9 +810,9 @@ public static function canCreate(): bool
      * La captura ya no será texto libre: las opciones vienen
      * exclusivamente del catálogo homologado de la empresa.
      */
-    protected static function variantAttributeNameOptions(): array
+    protected static function variantAttributeNameOptions(?int $companyId = null): array
     {
-        $companyId = static::currentCompanyId();
+        $companyId = $companyId ?: static::currentCompanyId();
 
         if (! $companyId) {
             return [];
@@ -821,7 +821,6 @@ public static function canCreate(): bool
         return ProductAttribute::query()
             ->where('company_id', $companyId)
             ->where('is_active', true)
-            ->where('is_variant', true)
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get()
@@ -832,9 +831,10 @@ public static function canCreate(): bool
     }
 
     protected static function canonicalVariantAttributeName(
-        ?string $attributeName
+        ?string $attributeName,
+        ?int $companyId = null
     ): ?string {
-        $companyId = static::currentCompanyId();
+        $companyId = $companyId ?: static::currentCompanyId();
         $attributeName = trim((string) $attributeName);
 
         if (! $companyId || $attributeName === '') {
@@ -859,7 +859,6 @@ public static function canCreate(): bool
         return ProductAttribute::query()
             ->where('company_id', $companyId)
             ->where('is_active', true)
-            ->where('is_variant', true)
             ->whereRaw(
                 'LOWER(TRIM(name)) = ?',
                 [mb_strtolower(trim($candidate), 'UTF-8')]
@@ -868,12 +867,14 @@ public static function canCreate(): bool
     }
 
     protected static function variantAttributeValueNameOptions(
-        ?string $attributeName
+        ?string $attributeName,
+        ?int $companyId = null
     ): array {
-        $companyId = static::currentCompanyId();
+        $companyId = $companyId ?: static::currentCompanyId();
 
         $attributeName = static::canonicalVariantAttributeName(
-            $attributeName
+            $attributeName,
+            $companyId
         );
 
         if (! $companyId || ! $attributeName) {
@@ -883,7 +884,6 @@ public static function canCreate(): bool
         $attribute = ProductAttribute::query()
             ->where('company_id', $companyId)
             ->where('is_active', true)
-            ->where('is_variant', true)
             ->whereRaw(
                 'LOWER(TRIM(name)) = ?',
                 [mb_strtolower(trim($attributeName), 'UTF-8')]
@@ -932,7 +932,6 @@ public static function canCreate(): bool
         $attribute = ProductAttribute::query()
             ->where('company_id', $companyId)
             ->where('is_active', true)
-            ->where('is_variant', true)
             ->whereRaw(
                 'LOWER(TRIM(name)) = ?',
                 [mb_strtolower(trim($attributeName), 'UTF-8')]
@@ -2848,14 +2847,27 @@ Forms\Components\Section::make('Atributos de catálogo')
                                 ->extraAttributes([
                                     'style' => 'position:relative;overflow:visible!important;z-index:40;',
                                 ])
-                                ->visible(fn (?\Illuminate\Database\Eloquent\Model $record): bool => request()->filled('parent_product_id') || (bool) ($record?->is_variant ?? false))
+                                ->visible(
+                                    fn (
+                                        Forms\Get $get,
+                                        ?\Illuminate\Database\Eloquent\Model $record
+                                    ): bool =>
+                                        filled($get('parent_product_id'))
+                                        || (bool) ($record?->is_variant ?? false)
+                                )
                                 ->schema([
                                     Forms\Components\Placeholder::make('variant_parent_readonly_v6')
                                         ->label('Producto padre')
-                                        ->visible(fn (): bool => request()->filled('parent_product_id'))
-                                        ->content(function (): \Illuminate\Support\HtmlString {
+                                        ->visible(
+                                            fn (Forms\Get $get): bool =>
+                                                filled($get('parent_product_id'))
+                                        )
+                                        ->content(function (Forms\Get $get): \Illuminate\Support\HtmlString {
                                             // variant_fields_in_variants_tab_v6
-                                            $parentId = (int) request()->query('parent_product_id');
+                                            $parentId = (int) (
+                                                $get('parent_product_id')
+                                                ?: request()->query('parent_product_id')
+                                            );
 
                                             if ($parentId <= 0) {
                                                 return new \Illuminate\Support\HtmlString('');
@@ -2892,13 +2904,14 @@ Forms\Components\Section::make('Atributos de catálogo')
                                         ])
                                         ->label('Atributo de variante')
                                         ->options(
-                                            fn (): array =>
-                                                static::variantAttributeNameOptions()
+                                            fn (Forms\Get $get): array =>
+                                                static::variantAttributeNameOptions(
+                                                    (int) ($get('company_id') ?: 0)
+                                                )
                                         )
-                                        ->default('Color')
-                                        ->searchable()
-                                        ->preload()
-                                        ->native(false)
+                                        ->placeholder('Selecciona un atributo')
+                                        ->required()
+                                        ->native()
                                         ->live()
                                         ->afterStateHydrated(
                                             function (
@@ -2906,8 +2919,6 @@ Forms\Components\Section::make('Atributos de catálogo')
                                                 $state
                                             ): void {
                                                 if (blank($state)) {
-                                                    $component->state('Color');
-
                                                     return;
                                                 }
 
@@ -2942,12 +2953,11 @@ Forms\Components\Section::make('Atributos de catálogo')
                                                 static::variantAttributeValueNameOptions(
                                                     $get('variant_group')
                                                         ? (string) $get('variant_group')
-                                                        : null
+                                                        : null,
+                                                    (int) ($get('company_id') ?: 0)
                                                 )
                                         )
-                                        ->searchable()
-                                        ->preload()
-                                        ->native(false)
+                                        ->native()
                                         ->placeholder('Selecciona un valor')
                                         ->afterStateHydrated(
                                             function (
@@ -2978,10 +2988,11 @@ Forms\Components\Section::make('Atributos de catálogo')
                                          * variant_value es el dato maestro.
                                          */
                                         ->required(
-                                            fn (?Product $record): bool =>
-                                                request()->filled(
-                                                    'parent_product_id'
-                                                )
+                                            fn (
+                                                Forms\Get $get,
+                                                ?Product $record
+                                            ): bool =>
+                                                filled($get('parent_product_id'))
                                                 || filled(
                                                     $record?->variant_value
                                                 )
