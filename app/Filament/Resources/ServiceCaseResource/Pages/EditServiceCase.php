@@ -16,6 +16,8 @@ use Filament\Resources\Pages\EditRecord;
 
 class EditServiceCase extends EditRecord
 {
+    use \App\Support\Service\Concerns\HasServiceCaseDirectAttentionHeaderActions;
+
     protected static string $resource = ServiceCaseResource::class;
 
     protected ?string $oldStatus = null;
@@ -27,6 +29,8 @@ class EditServiceCase extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            ...$this->serviceCaseDirectAttentionHeaderActions(),
+
             Action::make('classify_attention')
                 ->label('Clasificar atención')
                 ->icon('heroicon-o-arrows-right-left')

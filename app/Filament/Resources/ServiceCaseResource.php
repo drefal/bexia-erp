@@ -61,6 +61,10 @@ class ServiceCaseResource extends Resource
     public static function canEdit(Model $record): bool
     {
         if (in_array((string) ($record->status ?? ''), ['entregado', 'cerrado', 'rechazado', 'cancelado'], true)) {
+            if ((string) ($record->attention_route ?? '') === 'non_repair') {
+                return ServiceAccess::can('service.cases.update');
+            }
+
             return ServiceAccess::can('service.repairs.reopen');
         }
 
@@ -164,6 +168,88 @@ class ServiceCaseResource extends Resource
                     ->visible(fn ($record): bool => (bool) $record && filled($record->attention_route))
                     ->collapsible(),
 
+                Forms\Components\Section::make('Atención directa')
+                    ->extraAttributes([
+                        'class' =>
+                            'bexia-svc-section bexia-svc-section-direct-attention',
+                    ])
+                    ->description(
+                        'Seguimiento y resolución del ticket que no requiere reparación.'
+                    )
+                    ->columns(4)
+                    ->schema([
+                        Forms\Components\Placeholder::make(
+                            'direct_attention_type_display'
+                        )
+                            ->label('Tipo de atención')
+                            ->content(fn ($record): string =>
+                                ServiceCase::NON_REPAIR_TYPES[
+                                    (string) (
+                                        $record?->non_repair_type
+                                        ?? ''
+                                    )
+                                ]
+                                ?? 'Sin definir'
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'first_response_display'
+                        )
+                            ->label('Primera respuesta')
+                            ->content(fn ($record): string =>
+                                filled(
+                                    $record?->first_response_at
+                                )
+                                    ? (string)
+                                        $record
+                                            ->first_response_at
+                                    : 'Pendiente'
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'resolution_type_display'
+                        )
+                            ->label('Resolución')
+                            ->content(fn ($record): string =>
+                                \App\Support\Service\ServiceCaseDirectAttentionService::resolutionTypeLabel(
+                                    $record?->resolution_type
+                                )
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'direct_closed_at_display'
+                        )
+                            ->label('Cerrado')
+                            ->content(fn ($record): string =>
+                                filled($record?->closed_at)
+                                    ? (string)
+                                        $record->closed_at
+                                    : 'Abierto'
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'resolution_notes_display'
+                        )
+                            ->label('Solución proporcionada')
+                            ->content(fn ($record): string =>
+                                filled(
+                                    $record?->resolution_notes
+                                )
+                                    ? (string)
+                                        $record
+                                            ->resolution_notes
+                                    : 'Pendiente'
+                            )
+                            ->columnSpanFull(),
+                    ])
+                    ->visible(fn ($record): bool =>
+                        (bool) $record
+                        && (string) (
+                            $record->attention_route
+                            ?? ''
+                        ) === 'non_repair'
+                    )
+                    ->collapsible(),
                 Forms\Components\Section::make('Datos generales')
                     ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-general'])
                     ->columns(3)

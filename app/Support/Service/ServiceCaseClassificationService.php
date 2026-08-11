@@ -84,6 +84,117 @@ class ServiceCaseClassificationService
         });
     }
 
+    public function convertNonRepairToRepair(
+        ServiceCase $serviceCase,
+        array $data
+    ): RepairOrder {
+        if (! ServiceAccess::can('service.cases.classify')) {
+            throw new AuthorizationException(
+                'No tienes permiso para convertir tickets a reparación.'
+            );
+        }
+
+        $actorId = (int) auth()->id();
+
+        if ($actorId <= 0) {
+            throw new AuthorizationException(
+                'Debes iniciar sesión para convertir el ticket.'
+            );
+        }
+
+        return DB::transaction(function () use (
+            $serviceCase,
+            $data,
+            $actorId
+        ): RepairOrder {
+            $case = ServiceCase::query()
+                ->whereKey($serviceCase->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (
+                (string) $case->attention_route
+                    !== 'non_repair'
+            ) {
+                throw ValidationException::withMessages([
+                    'conversion_notes' =>
+                        'Sólo un ticket sin reparación puede convertirse.',
+                ]);
+            }
+
+            if (
+                in_array(
+                    (string) $case->status,
+                    [
+                        'cerrado',
+                        'rechazado',
+                        'cancelado',
+                        'entregado',
+                    ],
+                    true
+                )
+            ) {
+                throw ValidationException::withMessages([
+                    'conversion_notes' =>
+                        'Reabre el ticket antes de convertirlo a reparación.',
+                ]);
+            }
+
+            $notes = trim((string) (
+                $data['conversion_notes'] ?? ''
+            ));
+
+            if ($notes === '') {
+                throw ValidationException::withMessages([
+                    'conversion_notes' =>
+                        'Captura el motivo de conversión.',
+                ]);
+            }
+
+            $oldStatus = (string) $case->status;
+            $oldType = $case->non_repair_type;
+
+            $payload = $data;
+            $payload['classification_notes'] =
+                $notes;
+
+            $repair = $this->classifyAsRepair(
+                $case,
+                $payload,
+                $actorId
+            );
+
+            $this->logEvent(
+                serviceCaseId: (int) $case->id,
+                repairOrderId: (int) $repair->id,
+                companyId: (int) $case->company_id,
+                eventType:
+                    'ticket_convertido_a_reparacion',
+                fromStatus: $oldStatus,
+                toStatus: 'en_diagnostico',
+                actorId: $actorId,
+                notes: $notes,
+                oldValues: [
+                    'attention_route' =>
+                        'non_repair',
+                    'non_repair_type' =>
+                        $oldType,
+                    'status' =>
+                        $oldStatus,
+                ],
+                newValues: [
+                    'attention_route' =>
+                        'repair',
+                    'repair_order_id' =>
+                        $repair->id,
+                    'status' =>
+                        'en_diagnostico',
+                ]
+            );
+
+            return $repair;
+        });
+    }
     protected function classifyAsRepair(
         ServiceCase $case,
         array $data,
@@ -183,6 +294,7 @@ class ServiceCaseClassificationService
         );
 
         $oldStatus = (string) $case->status;
+        $oldAttentionRoute = $case->attention_route;
         $now = now();
 
         $repair = RepairOrder::create([
@@ -255,7 +367,7 @@ class ServiceCaseClassificationService
             actorId: $actorId,
             notes: $notes,
             oldValues: [
-                'attention_route' => null,
+                'attention_route' => $oldAttentionRoute,
                 'status' => $oldStatus,
             ],
             newValues: [
