@@ -3,6 +3,7 @@
 namespace App\Support\Service;
 
 use Filament\Facades\Filament;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\PermissionRegistrar;
@@ -232,13 +233,39 @@ class ServiceAccess
 
     public static function productOptions(?string $search = null): array
     {
-        return self::optionsFromTable(
-            table: 'products',
-            labelColumns: ['code', 'sku', 'name', 'description'],
-            searchColumns: ['code', 'sku', 'name', 'description'],
-            search: $search,
-            allowGlobal: true
-        );
+        if (! self::tableExists('products')) {
+            return [];
+        }
+
+        try {
+            $query = DB::table('products')->select('*');
+
+            self::applyCompanyScope($query, 'products', true);
+            self::applySearch(
+                $query,
+                'products',
+                ['code', 'sku', 'name', 'description'],
+                $search
+            );
+
+            $rows = $query->orderBy('id', 'desc')->limit(50)->get();
+
+            $options = [];
+
+            foreach ($rows as $row) {
+                $id = (int) ($row->id ?? 0);
+
+                if ($id <= 0) {
+                    continue;
+                }
+
+                $options[$id] = self::makeProductDisplayLabel($row);
+            }
+
+            return $options;
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     public static function serviceCaseOptions(?string $search = null): array
@@ -350,7 +377,98 @@ class ServiceAccess
 
     public static function productLabel(?int $id): ?string
     {
-        return self::labelForId('products', $id, ['code', 'sku', 'name', 'description']);
+        if (! $id || ! self::tableExists('products')) {
+            return null;
+        }
+
+        try {
+            $row = DB::table('products')->where('id', $id)->first();
+
+            if (! $row) {
+                return null;
+            }
+
+            return self::makeProductDisplayLabel($row);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    protected static function makeProductDisplayLabel(object $row): string
+    {
+        $rawSku = trim((string) self::firstNonEmpty($row, ['sku']));
+        $rawName = trim((string) self::firstNonEmpty($row, ['name']));
+
+        $embeddedSku = '';
+
+        if (
+            preg_match(
+                '/^\s*\[([^\]]+)\]\s*/u',
+                $rawName,
+                $matches
+            ) === 1
+        ) {
+            $embeddedSku = trim((string) ($matches[1] ?? ''));
+        }
+
+        $sku = $rawSku;
+
+        if (
+            $sku === ''
+            || preg_match('/^ODOO-HIST-P-/i', $sku) === 1
+        ) {
+            $sku = '';
+
+            if (
+                $embeddedSku !== ''
+                && preg_match(
+                    '/^ODOO-HIST-P-/i',
+                    $embeddedSku
+                ) !== 1
+            ) {
+                $sku = $embeddedSku;
+            } elseif (
+                property_exists($row, 'code')
+                && filled($row->code)
+                && preg_match(
+                    '/^ODOO-HIST-P-/i',
+                    (string) $row->code
+                ) !== 1
+            ) {
+                $sku = trim((string) $row->code);
+            }
+        }
+
+        $name = (string) preg_replace(
+            '/^\s*\[[^\]]+\]\s*/u',
+            '',
+            $rawName
+        );
+
+        $name = (string) preg_replace(
+            '/^\s*ODOO-HIST-P-\d+\s*-\s*/iu',
+            '',
+            $name
+        );
+
+        $name = (string) preg_replace(
+            '/\s*-?\s*Producto historico auto-creado desde Odoo.*$/iu',
+            '',
+            $name
+        );
+
+        $name = trim($name);
+
+        $parts = array_values(array_unique(array_filter(
+            [$sku, $name],
+            fn (string $value): bool => $value !== ''
+        )));
+
+        if ($parts !== []) {
+            return implode(' - ', $parts);
+        }
+
+        return '#' . (string) ($row->id ?? '');
     }
 
     public static function userLabel(?int $id): ?string
@@ -1915,5 +2033,323 @@ class ServiceAccess
             || ($stage === '' && $status === 'draft');
     }
 
+
+
+    public static function currentServiceRoleNames(): array
+    {
+        $user = auth()->user();
+
+        if (! $user || ! method_exists($user, 'getRoleNames')) {
+            return [];
+        }
+
+        self::setPermissionTeam();
+
+        try {
+            return $user->getRoleNames()
+                ->map(fn ($role): string => (string) $role)
+                ->values()
+                ->all();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    public static function hasServiceRole(string|array $roles): bool
+    {
+        $roles = is_array($roles) ? $roles : [$roles];
+
+        return array_intersect(
+            $roles,
+            self::currentServiceRoleNames()
+        ) !== [];
+    }
+
+    public static function currentUserEmployeeId(): ?int
+    {
+        $user = auth()->user();
+
+        if (! $user || ! self::tableExists('employees')) {
+            return null;
+        }
+
+        try {
+            if (self::hasColumn('employees', 'user_id')) {
+                $id = (int) (
+                    DB::table('employees')
+                        ->where('user_id', $user->getKey())
+                        ->value('id') ?: 0
+                );
+
+                if ($id > 0) {
+                    return $id;
+                }
+            }
+
+            $email = mb_strtolower(
+                trim((string) ($user->email ?? ''))
+            );
+
+            if ($email === '') {
+                return null;
+            }
+
+            foreach (['email', 'work_email'] as $column) {
+                if (! self::hasColumn('employees', $column)) {
+                    continue;
+                }
+
+                $id = (int) (
+                    DB::table('employees')
+                        ->whereRaw(
+                            'LOWER(' . $column . ') = ?',
+                            [$email]
+                        )
+                        ->value('id') ?: 0
+                );
+
+                if ($id > 0) {
+                    return $id;
+                }
+            }
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return null;
+    }
+
+    public static function isAssignedRepairTechnician(
+        ?object $repairOrder
+    ): bool {
+        if (! $repairOrder) {
+            return false;
+        }
+
+        $employeeId = self::currentUserEmployeeId();
+
+        return $employeeId
+            && (int) self::serviceRepairValue(
+                $repairOrder,
+                'assigned_employee_id'
+            ) === $employeeId;
+    }
+
+    public static function scopeRepairOrdersForCurrentUser(
+        Builder $query
+    ): void {
+        if (! self::hasServiceRole('Servicio - Técnico')) {
+            return;
+        }
+
+        if (self::hasServiceRole([
+            'Servicio - Supervisor',
+            'Servicio - Encargado de Técnicos',
+            'Servicio - Recepción',
+            'Servicio - Cajero Reparaciones',
+        ])) {
+            return;
+        }
+
+        $employeeId = self::currentUserEmployeeId();
+
+        if (! $employeeId) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where('assigned_employee_id', $employeeId);
+    }
+
+    public static function canViewRepairOrder(
+        ?object $repairOrder
+    ): bool {
+        if (! self::can([
+            'service.repairs.view',
+            'service.repairs.update',
+        ])) {
+            return false;
+        }
+
+        if (! self::hasServiceRole('Servicio - Técnico')) {
+            return true;
+        }
+
+        return self::isAssignedRepairTechnician($repairOrder);
+    }
+
+    public static function canEditRepairOrder(
+        ?object $repairOrder
+    ): bool {
+        return self::can('service.repairs.update')
+            && self::canViewRepairOrder($repairOrder);
+    }
+
+    public static function canSubmitRepairQuote(
+        ?object $repairOrder
+    ): bool {
+        return $repairOrder
+            && self::can('service.repairs.quote.submit')
+            && self::canSendRepairQuoteToApproval($repairOrder);
+    }
+
+    public static function repairQuoteApprovalStatus(
+        ?object $repairOrder
+    ): ?string {
+        if (
+            ! $repairOrder
+            || ! self::tableExists('approval_requests')
+        ) {
+            return null;
+        }
+
+        $repairOrderId = (int) self::serviceRepairValue(
+            $repairOrder,
+            'id'
+        );
+
+        if ($repairOrderId <= 0) {
+            return null;
+        }
+
+        try {
+            $query = DB::table('approval_requests')
+                ->where('approvable_id', $repairOrderId);
+
+            if (self::hasColumn(
+                'approval_requests',
+                'approvable_type'
+            )) {
+                $query->where(
+                    'approvable_type',
+                    \App\Models\RepairOrder::class
+                );
+            }
+
+            if (self::hasColumn(
+                'approval_requests',
+                'document_type'
+            )) {
+                $query->where(
+                    'document_type',
+                    'service_repair_quote_internal'
+                );
+            }
+
+            return $query->orderByDesc('id')->value('status');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public static function canConfirmRepairQuoteApproval(
+        ?object $repairOrder
+    ): bool {
+        return $repairOrder
+            && (string) self::serviceRepairValue(
+                $repairOrder,
+                'workflow_stage'
+            ) === 'pending_approval'
+            && self::can('service.repairs.quote.approve')
+            && in_array(
+                strtolower((string) self::repairQuoteApprovalStatus(
+                    $repairOrder
+                )),
+                ['approved', 'aprobado'],
+                true
+            );
+    }
+
+    public static function canWorkRepair(
+        ?object $repairOrder
+    ): bool {
+        if (
+            ! $repairOrder
+            || ! self::can('service.repairs.work')
+        ) {
+            return false;
+        }
+
+        if (self::hasServiceRole('Servicio - Técnico')) {
+            return self::isAssignedRepairTechnician($repairOrder);
+        }
+
+        return self::hasServiceRole([
+            'Servicio - Supervisor',
+            'Servicio - Encargado de Técnicos',
+        ]) || self::can('company.update');
+    }
+
+    public static function canRequestRepairSupervisorReview(
+        ?object $repairOrder
+    ): bool {
+        return self::canWorkRepair($repairOrder)
+            && self::canSendRepairToSupervisorReview(
+                $repairOrder
+            );
+    }
+
+    public static function canApproveRepairSupervisorReview(
+        ?object $repairOrder
+    ): bool {
+        return $repairOrder
+            && (string) self::serviceRepairValue(
+                $repairOrder,
+                'workflow_stage'
+            ) === 'supervisor_review'
+            && self::can(
+                'service.repairs.supervisor_review.approve'
+            );
+    }
+
+    public static function canMarkRepairReadyForDelivery(
+        ?object $repairOrder
+    ): bool {
+        return $repairOrder
+            && (string) self::serviceRepairValue(
+                $repairOrder,
+                'workflow_stage'
+            ) === 'repaired'
+            && ! self::repairSupervisorReviewConfigured(
+                $repairOrder
+            )
+            && self::can(
+                'service.repairs.supervisor_review.approve'
+            );
+    }
+
+    public static function canDeliverRepair(
+        ?object $repairOrder
+    ): bool {
+        return $repairOrder
+            && (string) self::serviceRepairValue(
+                $repairOrder,
+                'workflow_stage'
+            ) === 'ready_for_delivery'
+            && self::can('service.repairs.delivery');
+    }
+
+    public static function canManageRepairEconomic(
+        ?object $repairOrder = null
+    ): bool {
+        return self::can('service.repairs.economic');
+    }
+
+    public static function canManageRepairPublicTracking(): bool
+    {
+        return self::hasServiceRole([
+            'Servicio - Supervisor',
+            'Servicio - Encargado de Técnicos',
+        ]) || self::can('company.update');
+    }
+
+    public static function canCaptureRepairReception(): bool
+    {
+        return self::hasServiceRole([
+            'Servicio - Recepción',
+            'Servicio - Encargado de Técnicos',
+            'Servicio - Supervisor',
+        ]) || self::can('company.update');
+    }
 
 }

@@ -444,6 +444,24 @@ if ($reason === '') {
             return;
         }
 
+        if ($type === 'service_repair_quote_internal') {
+            $this->markServiceRepairApproval(
+                $request,
+                $user,
+                'approved',
+                $comment
+            );
+
+            $this->notifyRequester(
+                $request,
+                'Presupuesto de reparación aprobado',
+                'El presupuesto ' . $request->document_number . ' fue aprobado internamente y ya puede confirmarse con el cliente.',
+                'service_repair_quote_internal_approved',
+                $comment
+            );
+
+            return;
+        }
 
         if ($type === 'employee_incident') {
             EmployeeIncidentApprovalWorkflow::markApproved($request, $user->id, $comment);
@@ -508,6 +526,24 @@ if ($reason === '') {
             return;
         }
 
+        if ($type === 'service_repair_quote_internal') {
+            $this->markServiceRepairApproval(
+                $request,
+                $user,
+                'rejected',
+                $reason
+            );
+
+            $this->notifyRequester(
+                $request,
+                'Presupuesto de reparación rechazado',
+                'El presupuesto ' . $request->document_number . ' fue rechazado. Motivo: ' . $reason,
+                'service_repair_quote_internal_rejected',
+                $reason
+            );
+
+            return;
+        }
 
         if ($type === 'employee_incident') {
             EmployeeIncidentApprovalWorkflow::markRejected($request, $user->id, $reason);
@@ -559,6 +595,102 @@ if ($reason === '') {
                 'purchase_request_rejected',
                 $reason
             );
+        }
+    }
+
+    protected function markServiceRepairApproval(
+        object $request,
+        object $user,
+        string $decision,
+        string $reason
+    ): void {
+        $repairOrderId = (int) ($request->approvable_id ?? 0);
+
+        if ($repairOrderId <= 0) {
+            throw new \RuntimeException(
+                'La solicitud no tiene una reparación relacionada.'
+            );
+        }
+
+        $approved = $decision === 'approved';
+        $serviceApprovalStatus = $approved
+            ? 'approved'
+            : 'rejected';
+
+        if (Schema::hasTable('repair_order_approvals')) {
+            $serviceApproval = DB::table('repair_order_approvals')
+                ->where('repair_order_id', $repairOrderId)
+                ->where(
+                    'approval_type',
+                    'service_repair_quote_internal'
+                )
+                ->whereIn('status', ['pending', 'pendiente'])
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->first();
+
+            if ($serviceApproval) {
+                DB::table('repair_order_approvals')
+                    ->where('id', $serviceApproval->id)
+                    ->update([
+                        'status' => $serviceApprovalStatus,
+                        'decided_by' => $user->id,
+                        'decided_at' => now(),
+                        'comments' => $reason,
+                        'updated_at' => now(),
+                    ]);
+            }
+        }
+
+        $repair = DB::table('repair_orders')
+            ->where('id', $repairOrderId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $repair) {
+            throw new \RuntimeException(
+                'No se encontró la reparación relacionada.'
+            );
+        }
+
+        if (! $approved) {
+            DB::table('repair_orders')
+                ->where('id', $repairOrderId)
+                ->update([
+                    'workflow_stage' => 'quote_draft',
+                    'status' => 'in_diagnosis',
+                    'quote_status' => 'rejected_internal',
+                    'quote_approved_at' => null,
+                    'updated_at' => now(),
+                ]);
+        }
+
+        if (Schema::hasTable('service_case_events')) {
+            DB::table('service_case_events')->insert([
+                'company_id' => $repair->company_id,
+                'service_case_id' => $repair->service_case_id,
+                'repair_order_id' => $repairOrderId,
+                'event_type' => $approved
+                    ? 'presupuesto_aprobado_internamente'
+                    : 'presupuesto_rechazado_internamente',
+                'from_status' => 'pending_approval',
+                'to_status' => $approved
+                    ? 'internal_approved'
+                    : 'quote_draft',
+                'performed_by' => $user->id,
+                'performed_at' => now(),
+                'notes' => $reason,
+                'metadata' => json_encode([
+                    'approval_request_id' => (int) $request->id,
+                    'document_type' =>
+                        'service_repair_quote_internal',
+                    'decision' => $decision,
+                ], JSON_UNESCAPED_UNICODE),
+                'ip_address' => request()?->ip(),
+                'user_agent' => request()?->userAgent(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         }
     }
 
@@ -821,6 +953,7 @@ if ($reason === '') {
             'sale_order' => 'Pedido de venta',
             'treasury_cash_transfer_request' => 'Traspaso de efectivo',
             'service_repair_request' => 'Orden de servicio',
+            'service_repair_quote_internal' => 'Presupuesto de reparación / servicio',
             'service_repair_delivery' => 'Entrega de servicio',
             default => \Illuminate\Support\Str::headline((string) $type),
         };
@@ -836,6 +969,7 @@ if ($reason === '') {
             'sale_order', 'sales_order' => 'Pedido de venta',
             'treasury_cash_transfer_request' => 'Traspaso de efectivo',
             'service_repair_request' => 'Orden de servicio',
+            'service_repair_quote_internal' => 'Presupuesto de reparación / servicio',
             'service_repair_delivery' => 'Entrega de servicio',
             default => \Illuminate\Support\Str::headline((string) $type),
         };

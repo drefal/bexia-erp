@@ -62,21 +62,28 @@
                                             Abrir
                                         </a>
 
-                                        <button
+                                        <x-filament::button
                                             type="button"
+                                            size="sm"
+                                            color="success"
+                                            icon="heroicon-o-check"
                                             wire:click="approveStep({{ (int) $row['step_id'] }})"
-                                            class="inline-flex items-center rounded-lg bg-success-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-success-500"
+                                            wire:confirm="¿Aprobar {{ $row['document_label'] }} {{ $row['document_number'] }}?"
+                                            wire:loading.attr="disabled"
                                         >
                                             Aprobar
-                                        </button>
+                                        </x-filament::button>
 
-                                        <button
+                                        <x-filament::button
                                             type="button"
+                                            size="sm"
+                                            color="danger"
+                                            icon="heroicon-o-x-mark"
                                             wire:click="openRejectModal({{ (int) $row['step_id'] }})"
-                                            class="inline-flex items-center rounded-lg bg-danger-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-danger-500"
+                                            wire:loading.attr="disabled"
                                         >
                                             Rechazar
-                                        </button>
+                                        </x-filament::button>
                                     </div>
                                 </td>
                             </tr>

@@ -52,7 +52,7 @@ class RepairOrderResource extends Resource
 
     public static function canView(Model $record): bool
     {
-        return static::canViewAny();
+        return ServiceAccess::canViewRepairOrder($record);
     }
 
     public static function canCreate(): bool
@@ -66,7 +66,7 @@ class RepairOrderResource extends Resource
             return static::canReopen();
         }
 
-        return ServiceAccess::can('service.repairs.update');
+        return ServiceAccess::canEditRepairOrder($record);
     }
 
     public static function canDelete(Model $record): bool
@@ -110,6 +110,8 @@ class RepairOrderResource extends Resource
         if ($companyId && ServiceAccess::tableHasCompany('repair_orders')) {
             $query->where('company_id', $companyId);
         }
+
+        ServiceAccess::scopeRepairOrdersForCurrentUser($query);
 
         return $query;
     }
