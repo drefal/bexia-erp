@@ -504,32 +504,185 @@ $this->viewAccountReceivableAction(),
                     $this->redirect($this->getResource()::getUrl('edit', ['record' => $record]));
                 }),
 
-            \Filament\Actions\Action::make('stage_mark_quote_approved')
-                ->label('Confirmar aprobación del cliente')
+            \Filament\Actions\Action::make('stage_record_customer_decision')
+                ->label('Registrar VoBo del cliente')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->requiresConfirmation()
-                ->visible(fn (): bool => ServiceAccess::canConfirmRepairQuoteApproval($this->record))
-                ->action(function (): void {
+                ->modalHeading('Registrar respuesta del cliente')
+                ->modalDescription(
+                    'Registra si el cliente autorizó o rechazó la cotización y el medio por el que confirmó.'
+                )
+                ->modalSubmitActionLabel(
+                    'Registrar respuesta'
+                )
+                ->visible(
+                    fn (): bool =>
+                        ServiceAccess::canRecordRepairCustomerDecision(
+                            $this->record
+                        )
+                )
+                ->form([
+                    \Filament\Forms\Components\Radio::make(
+                        'customer_decision'
+                    )
+                        ->label('Respuesta del cliente')
+                        ->options(
+                            \App\Support\Service\ServiceRepairCustomerDecisionService::DECISIONS
+                        )
+                        ->required()
+                        ->live(),
+
+                    \Filament\Forms\Components\Select::make(
+                        'customer_decision_channel'
+                    )
+                        ->label('Medio de confirmación')
+                        ->options(
+                            \App\Support\Service\ServiceRepairCustomerDecisionService::CHANNELS
+                        )
+                        ->default('whatsapp')
+                        ->native(false)
+                        ->required(),
+
+                    \Filament\Forms\Components\DateTimePicker::make(
+                        'customer_decision_at'
+                    )
+                        ->label('Fecha y hora de respuesta')
+                        ->default(now())
+                        ->seconds(false)
+                        ->required(),
+
+                    \Filament\Forms\Components\Textarea::make(
+                        'customer_decision_notes'
+                    )
+                        ->label('Observaciones')
+                        ->helperText(
+                            'Ejemplo: Cliente confirma por WhatsApp que autoriza la reparación por el importe cotizado.'
+                        )
+                        ->rows(4)
+                        ->required()
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\FileUpload::make(
+                        'customer_decision_files'
+                    )
+                        ->label(
+                            'Evidencia de la respuesta (opcional)'
+                        )
+                        ->helperText(
+                            'Puedes adjuntar captura de WhatsApp, correo, foto o documento.'
+                        )
+                        ->acceptedFileTypes([
+                            'image/jpeg',
+                            'image/png',
+                            'image/webp',
+                            'image/gif',
+                            'application/pdf',
+                            'text/plain',
+                        ])
+                        ->disk('public')
+                        ->directory(
+                            'service/customer-quote-decisions'
+                        )
+                        ->multiple()
+                        ->reorderable()
+                        ->downloadable()
+                        ->openable()
+                        ->imagePreviewHeight('120')
+                        ->maxFiles(5)
+                        ->maxSize(10240)
+                        ->columnSpanFull(),
+                ])
+                ->action(function (array $data): void {
                     $record = $this->record;
 
-                    $record->update([
-                        'workflow_stage' => 'quote_approved',
-                        'status' => 'approved_pending_repair',
-                        'quote_status' => 'customer_approved',
-                        // BEXIA_V582_P7H24B_CUSTOMER_APPROVAL_TIMESTAMP
-                        'quote_approved_at' => now(),
-                        'customer_approved_at' => now(),
-                        'customer_rejected_at' => null,
-                    ]);
+                    $decision = (string) (
+                        $data['customer_decision'] ?? ''
+                    );
 
-                    \Filament\Notifications\Notification::make()
-                        ->title('Cotizacion aprobada')
-                        ->body('La reparacion queda pendiente de que el tecnico la tome.')
-                        ->success()
-                        ->send();
+                    $channel = (string) (
+                        $data[
+                            'customer_decision_channel'
+                        ] ?? ''
+                    );
 
-                    $this->redirect($this->getResource()::getUrl('edit', ['record' => $record]));
+                    $notes = trim((string) (
+                        $data[
+                            'customer_decision_notes'
+                        ] ?? ''
+                    ));
+
+                    $record = app(
+                        \App\Support\Service\ServiceRepairCustomerDecisionService::class
+                    )->recordDecision(
+                        $record,
+                        $data
+                    );
+
+                    $files = (array) (
+                        $data[
+                            'customer_decision_files'
+                        ] ?? []
+                    );
+
+                    if ($files !== []) {
+                        $approved =
+                            $decision === 'approved';
+
+                        $channelLabel =
+                            \App\Support\Service\ServiceRepairCustomerDecisionService::CHANNELS[
+                                $channel
+                            ] ?? $channel;
+
+                        $this->saveServiceStageFilesForRepair(
+                            record: $record,
+                            paths: $files,
+                            stage: $approved
+                                ? 'customer_quote_approval'
+                                : 'customer_quote_rejection',
+                            notes: (
+                                $approved
+                                    ? 'Evidencia VoBo cliente'
+                                    : 'Evidencia rechazo cliente'
+                            )
+                                . ' - '
+                                . $channelLabel
+                                . ' - '
+                                . $notes,
+                            eventType:
+                                'customer_quote_decision_evidence_uploaded',
+                            eventDescription:
+                                'Se agregó evidencia de la respuesta del cliente a la cotización.'
+                        );
+                    }
+
+                    if ($decision === 'approved') {
+                        \Filament\Notifications\Notification::make()
+                            ->title(
+                                'VoBo del cliente registrado'
+                            )
+                            ->body(
+                                'La cotización quedó autorizada y la reparación puede continuar.'
+                            )
+                            ->success()
+                            ->send();
+                    } else {
+                        \Filament\Notifications\Notification::make()
+                            ->title(
+                                'Cliente no autorizó la cotización'
+                            )
+                            ->body(
+                                'La cotización regresó a borrador para poder revisarla o modificarla.'
+                            )
+                            ->warning()
+                            ->send();
+                    }
+
+                    $this->redirect(
+                        $this->getResource()::getUrl(
+                            'edit',
+                            ['record' => $record]
+                        )
+                    );
                 }),
 
             \Filament\Actions\Action::make('stage_start_repair')

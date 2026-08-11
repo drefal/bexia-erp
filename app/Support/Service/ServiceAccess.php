@@ -1882,7 +1882,13 @@ class ServiceAccess
             return false;
         }
 
-        if ($quoteStatus !== 'draft') {
+        if (
+            ! in_array(
+                $quoteStatus,
+                ['draft', 'customer_rejected'],
+                true
+            )
+        ) {
             return false;
         }
 
@@ -2257,6 +2263,51 @@ class ServiceAccess
                 )),
                 ['approved', 'aprobado'],
                 true
+            );
+    }
+
+    public static function canRecordRepairCustomerDecision(
+        ?object $repairOrder
+    ): bool {
+        if (! $repairOrder) {
+            return false;
+        }
+
+        if (
+            (string) self::serviceRepairValue(
+                $repairOrder,
+                'workflow_stage'
+            ) !== 'pending_approval'
+        ) {
+            return false;
+        }
+
+        if (
+            ! in_array(
+                strtolower(
+                    (string)
+                    self::repairQuoteApprovalStatus(
+                        $repairOrder
+                    )
+                ),
+                ['approved', 'aprobado'],
+                true
+            )
+        ) {
+            return false;
+        }
+
+        /*
+         * El VoBo del cliente es una tarea operativa,
+         * no una segunda aprobación interna.
+         *
+         * Puede registrarlo el técnico asignado o un
+         * responsable con capacidad de trabajar la
+         * reparación.
+         */
+        return self::canWorkRepair($repairOrder)
+            || self::can(
+                'service.repairs.quote.approve'
             );
     }
 
