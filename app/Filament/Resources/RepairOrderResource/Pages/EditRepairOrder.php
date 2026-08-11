@@ -1382,6 +1382,11 @@ $this->viewAccountReceivableAction(),
 
         $record->refresh();
 
+        // BEXIA_V582_P7H26A_CLOSE_SERVICE_CASE_AFTER_DELIVERY
+        app(
+            \App\Support\Service\ServiceRepairCaseLifecycleService::class
+        )->closeCaseAfterDelivery($record);
+
         \Filament\Notifications\Notification::make()
             ->title('Reparación entregada')
             ->success()

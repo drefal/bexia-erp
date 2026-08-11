@@ -311,7 +311,17 @@ public function allowedTargetsForStage(?string $fromStage): array
 
     public function canMove(string $fromStage, string $targetStage): bool
     {
-        return in_array($targetStage, $this->allowedTargetsForStage($fromStage), true);
+        // BEXIA_V582_P7H26A_BLOCK_KANBAN_DIRECT_DELIVERY
+        // La entrega final exige evidencia + firma desde la reparación.
+        if ($targetStage === 'delivered') {
+            return false;
+        }
+
+        return in_array(
+            $targetStage,
+            $this->allowedTargetsForStage($fromStage),
+            true
+        );
     }
 
     public function blockedMoveMessage(string $fromStage, string $targetStage): string
@@ -322,6 +332,10 @@ public function allowedTargetsForStage(?string $fromStage): array
 
         if ($targetStage === 'quote_approved') {
             return 'La aprobación debe hacerse desde Mis aprobaciones; no se permite aprobar arrastrando.';
+        }
+
+        if ($targetStage === 'delivered') {
+            return 'La entrega final debe hacerse desde la reparación con la acción Entregar al cliente para capturar evidencia y firma.';
         }
 
         return 'Solo se permite avanzar al siguiente paso operativo permitido.';
