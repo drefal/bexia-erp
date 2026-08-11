@@ -271,9 +271,98 @@ $this->viewAccountReceivableAction(),
                         ->required()
                         ->maxLength(255),
 
-                    \Filament\Forms\Components\Textarea::make('reception_notes')
+                    \Filament\Forms\Components\Select::make(
+                        'reception_physical_condition'
+                    )
+                        ->label('Estado físico al recibir')
+                        ->options(
+                            \App\Support\Service\ServiceRepairReceptionChecklistService::PHYSICAL_CONDITIONS
+                        )
+                        ->native(false)
+                        ->required(),
+
+                    \Filament\Forms\Components\Select::make(
+                        'reception_power_status'
+                    )
+                        ->label('Prueba de encendido')
+                        ->options(
+                            \App\Support\Service\ServiceRepairReceptionChecklistService::POWER_STATUSES
+                        )
+                        ->native(false)
+                        ->required(),
+
+                    \Filament\Forms\Components\CheckboxList::make(
+                        'reception_accessories'
+                    )
+                        ->label('Accesorios recibidos')
+                        ->options(
+                            \App\Support\Service\ServiceRepairReceptionChecklistService::ACCESSORIES
+                        )
+                        ->columns(2)
+                        ->required()
+                        ->minItems(1)
+                        ->live()
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\TextInput::make(
+                        'reception_accessories_other'
+                    )
+                        ->label('Otro accesorio recibido')
+                        ->helperText(
+                            'Describe cualquier accesorio que no aparezca en la lista.'
+                        )
+                        ->required(
+                            fn (
+                                \Filament\Forms\Get $get
+                            ): bool =>
+                                in_array(
+                                    'otro',
+                                    (array) $get(
+                                        'reception_accessories'
+                                    ),
+                                    true
+                                )
+                        )
+                        ->visible(
+                            fn (
+                                \Filament\Forms\Get $get
+                            ): bool =>
+                                in_array(
+                                    'otro',
+                                    (array) $get(
+                                        'reception_accessories'
+                                    ),
+                                    true
+                                )
+                        )
+                        ->maxLength(500)
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\CheckboxList::make(
+                        'reception_confirmations'
+                    )
+                        ->label('Checklist obligatorio')
+                        ->options(
+                            \App\Support\Service\ServiceRepairReceptionChecklistService::CONFIRMATIONS
+                        )
+                        ->helperText(
+                            'Los cuatro puntos deben confirmarse antes de firmar la recepción.'
+                        )
+                        ->required()
+                        ->minItems(4)
+                        ->maxItems(4)
+                        ->columns(1)
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\Textarea::make(
+                        'reception_notes'
+                    )
                         ->label('Observaciones de recepción')
-                        ->rows(3)
+                        ->helperText(
+                            'Describe golpes, rayones, faltantes, condición especial o cualquier detalle relevante.'
+                        )
+                        ->rows(4)
+                        ->required()
                         ->columnSpanFull(),
 
                     \Filament\Forms\Components\FileUpload::make('reception_files')
@@ -1347,19 +1436,62 @@ $this->viewAccountReceivableAction(),
             return;
         }
 
-        $this->saveReceptionFilesForRepair($record, (array) ($data['reception_files'] ?? []));
+        $checklistService = app(
+            \App\Support\Service\ServiceRepairReceptionChecklistService::class
+        );
+
+        /*
+         * Validar antes de guardar archivos o firma para
+         * no dejar una recepción parcial.
+         */
+        $checklistService->validateData(
+            $data
+        );
+
+        $this->saveReceptionFilesForRepair(
+            $record,
+            (array) (
+                $data['reception_files']
+                ?? []
+            )
+        );
+
         $this->saveReceptionSignatureForRepair(
             $record,
-            $data['reception_signature_data'] ?? null,
+            $data[
+                'reception_signature_data'
+            ] ?? null,
             $data['received_from'] ?? null,
             $data['reception_notes'] ?? null
         );
 
+        if (
+            ! $this->repairHasAttachmentStage(
+                $record,
+                'reception_signature'
+            )
+        ) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'reception_signature_data' =>
+                    'No fue posible guardar la firma de recepción. Intenta nuevamente.',
+            ]);
+        }
+
+        $record =
+            $checklistService->recordChecklist(
+                $record,
+                $data
+            );
+
         $record->refresh();
 
         \Filament\Notifications\Notification::make()
-            ->title('Firma de recepción guardada')
-            ->body('La firma digital de recepción quedó guardada en el expediente.')
+            ->title(
+                'Recepción registrada'
+            )
+            ->body(
+                'Checklist, condición de recepción y firma quedaron guardados en el expediente.'
+            )
             ->success()
             ->send();
     }
