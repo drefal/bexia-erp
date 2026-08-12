@@ -232,9 +232,54 @@ class AccountReceivablePaymentResource extends Resource
         return false;
     }
 
-    public static function canCancelPayment(AccountReceivablePayment $record): bool
+    /*
+     * BEXIA_V582_B28G1K_LEGACY_CXC_PAYMENT_READONLY
+     *
+     * Los cobros historicos migrados son documentos de consulta.
+     * No se deben cancelar ni afectar CxC, tesoreria o contabilidad.
+     *
+     * No usar locked por si solo: un cobro nativo puede adquirir
+     * bloqueo operativo sin convertirse en documento historico.
+     */
+    private static function legacyFlagIsTrue(mixed $value): bool
     {
-        return (string) $record->status === 'posted';
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return $value === 1;
+        }
+
+        return in_array(
+            strtolower(trim((string) $value)),
+            ['1', 'true', 't', 'yes', 'y', 'on'],
+            true,
+        );
+    }
+
+    private static function legacyPaymentFlagsAreReadOnly(
+        mixed $isLegacy,
+        mixed $locked,
+    ): bool {
+        return static::legacyFlagIsTrue($isLegacy)
+            && static::legacyFlagIsTrue($locked);
+    }
+
+    public static function isLegacyReadOnlyPayment(
+        AccountReceivablePayment $record
+    ): bool {
+        return static::legacyPaymentFlagsAreReadOnly(
+            $record->is_legacy ?? false,
+            $record->locked ?? false,
+        );
+    }
+
+    public static function canCancelPayment(
+        AccountReceivablePayment $record
+    ): bool {
+        return ! static::isLegacyReadOnlyPayment($record)
+            && (string) $record->status === 'posted';
     }
 
     public static function cancelPostedPayment(int $paymentId): array
@@ -254,6 +299,20 @@ class AccountReceivablePaymentResource extends Resource
 
             if (! $payment) {
                 throw new \RuntimeException('No se encontró el cobro.');
+            }
+
+            /*
+             * Defensa backend:
+             * aunque una llamada omita la visibilidad de Filament,
+             * un cobro historico bloqueado nunca puede cancelarse.
+             */
+            if (static::legacyPaymentFlagsAreReadOnly(
+                $payment->is_legacy ?? false,
+                $payment->locked ?? false,
+            )) {
+                throw new \RuntimeException(
+                    'El cobro histórico es de solo lectura y no puede cancelarse.'
+                );
             }
 
             if ((string) $payment->status !== 'posted') {
