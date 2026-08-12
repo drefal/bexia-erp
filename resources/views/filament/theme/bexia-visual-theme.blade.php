@@ -18367,6 +18367,69 @@ html.dark
 svg {
     color: #93c5fd !important;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* BEXIA_V582_P7H23I_FILAMENT_TOAST_START */
+
+:root {
+    --bexia-filament-toast-top: 76px;
+    --bexia-filament-toast-gap: 12px;
+}
+
+/*
+ * Filament Notifications:
+ * .fi-no es el contenedor FIXED de los toast.
+ *
+ * Filament lo deja por defecto en inset: 1rem y z-index: 50.
+ * Nuestra topbar Bexia está por encima de esa capa.
+ *
+ * Solución:
+ * - iniciar el toast debajo del borde real de la cabecera;
+ * - usar z-index 1000 para mantenerlo por encima del contenido;
+ * - conservar left/right/bottom del componente original.
+ */
+.fi-no {
+    top: calc(
+        var(--bexia-filament-toast-top, 76px)
+        + var(--bexia-filament-toast-gap, 12px)
+    ) !important;
+    z-index: 1000 !important;
+}
+
+/* BEXIA_V582_P7H23I_FILAMENT_TOAST_END */
+
 </style>
 
 <script>
@@ -18460,3 +18523,266 @@ svg {
 })();
 </script>
 <!-- BEXIA_PRODUCT_VARIANTS_TAB_HIGHLIGHT_V5_83_P7A_END -->
+
+<script>
+
+</script>
+
+<script>
+
+</script>
+
+<script>
+
+</script>
+
+<script>
+
+</script>
+
+<script>
+/* BEXIA_V582_P7H23I_FILAMENT_TOAST_MEASURE_START */
+(() => {
+    if (window.__bexiaToastTopbarMeasureV582P7H23I) {
+        return;
+    }
+
+    window.__bexiaToastTopbarMeasureV582P7H23I = true;
+
+    let resizeObserver = null;
+
+    const measure = () => {
+        const topbar = document.querySelector('.fi-topbar');
+
+        const bottom = topbar
+            ? Math.max(
+                0,
+                Math.ceil(
+                    topbar.getBoundingClientRect().bottom
+                )
+            )
+            : 64;
+
+        document.documentElement.style.setProperty(
+            '--bexia-filament-toast-top',
+            `${bottom}px`
+        );
+    };
+
+    const observe = () => {
+        if (resizeObserver) {
+            resizeObserver.disconnect();
+        }
+
+        const topbar = document.querySelector('.fi-topbar');
+
+        if (
+            topbar
+            && typeof ResizeObserver !== 'undefined'
+        ) {
+            resizeObserver = new ResizeObserver(measure);
+            resizeObserver.observe(topbar);
+        }
+
+        measure();
+    };
+
+    window.addEventListener(
+        'resize',
+        measure,
+        { passive: true }
+    );
+
+    document.addEventListener(
+        'livewire:navigated',
+        observe
+    );
+
+    if (document.readyState === 'loading') {
+        document.addEventListener(
+            'DOMContentLoaded',
+            observe,
+            { once: true }
+        );
+    } else {
+        observe();
+    }
+})();
+/* BEXIA_V582_P7H23I_FILAMENT_TOAST_MEASURE_END */
+</script>
+
+{{-- BEXIA_V582_P7H24F_REPAIR_TOAST_HEADER_START --}}
+<style>
+html.bexia-repair-order-edit-page .fi-no {
+    top: calc(
+        var(--bexia-repair-page-actions-bottom, 136px)
+        + 12px
+    ) !important;
+    z-index: 2147483000 !important;
+}
+
+/* BEXIA_V582_P7H24F3_USER_MENU_OVER_REPAIR_ACTIONS */
+html.bexia-repair-order-edit-page .fi-topbar {
+    position: sticky !important;
+    z-index: 2147482000 !important;
+    overflow: visible !important;
+}
+
+html.bexia-repair-order-edit-page .fi-topbar > nav,
+html.bexia-repair-order-edit-page .fi-topbar nav {
+    position: relative !important;
+    z-index: 2147482500 !important;
+    overflow: visible !important;
+}
+
+html.bexia-repair-order-edit-page .fi-topbar .fi-user-menu,
+html.bexia-repair-order-edit-page .fi-topbar .fi-dropdown {
+    position: relative !important;
+    z-index: 2147483400 !important;
+    overflow: visible !important;
+}
+
+html.bexia-repair-order-edit-page .fi-topbar .fi-user-menu .fi-dropdown-panel,
+html.bexia-repair-order-edit-page .fi-topbar .fi-dropdown-panel {
+    z-index: 2147483500 !important;
+}
+
+html.bexia-repair-order-edit-page .fi-header,
+html.bexia-repair-order-edit-page .fi-header-actions {
+    z-index: auto !important;
+}
+/* BEXIA_V582_P7H24F3_USER_MENU_OVER_REPAIR_ACTIONS_END */
+</style>
+
+<script>
+(() => {
+    if (window.__bexiaRepairToastHeaderV582P7H24F) {
+        return;
+    }
+
+    window.__bexiaRepairToastHeaderV582P7H24F = true;
+
+    const root = document.documentElement;
+    let resizeObserver = null;
+    let mutationObserver = null;
+    let queued = false;
+
+    const isRepairEditPage = () => {
+        return /\/admin\/\d+\/repair-orders\/\d+\/edit\/?$/
+            .test(window.location.pathname);
+    };
+
+    const isVisible = (element) => {
+        if (!element || !element.isConnected) {
+            return false;
+        }
+
+        const style = window.getComputedStyle(element);
+
+        return (
+            style.display !== 'none'
+            && style.visibility !== 'hidden'
+            && element.getClientRects().length > 0
+        );
+    };
+
+    const measure = () => {
+        queued = false;
+
+        if (!isRepairEditPage()) {
+            root.classList.remove('bexia-repair-order-edit-page');
+            root.style.removeProperty(
+                '--bexia-repair-page-actions-bottom'
+            );
+            return;
+        }
+
+        root.classList.add('bexia-repair-order-edit-page');
+
+        let bottom = 0;
+
+        document
+            .querySelectorAll(
+                '.fi-header-actions, '
+                + '.fi-header .fi-actions, '
+                + '.fi-page .fi-header-actions'
+            )
+            .forEach((element) => {
+                if (!isVisible(element)) {
+                    return;
+                }
+
+                bottom = Math.max(
+                    bottom,
+                    element.getBoundingClientRect().bottom
+                );
+            });
+
+        const topbar = document.querySelector('.fi-topbar');
+
+        if (isVisible(topbar)) {
+            bottom = Math.max(
+                bottom,
+                topbar.getBoundingClientRect().bottom
+            );
+        }
+
+        if (bottom <= 0) {
+            bottom = 136;
+        }
+
+        root.style.setProperty(
+            '--bexia-repair-page-actions-bottom',
+            `${Math.ceil(bottom)}px`
+        );
+    };
+
+    const queueMeasure = () => {
+        if (queued) {
+            return;
+        }
+
+        queued = true;
+        window.requestAnimationFrame(measure);
+    };
+
+    const bind = () => {
+        queueMeasure();
+
+        if (!mutationObserver) {
+            mutationObserver = new MutationObserver(queueMeasure);
+            mutationObserver.observe(document.body, {
+                subtree: true,
+                childList: true,
+                attributes: true,
+                attributeFilter: ['class', 'style', 'hidden'],
+            });
+        }
+
+        if (window.ResizeObserver && !resizeObserver) {
+            resizeObserver = new ResizeObserver(queueMeasure);
+            resizeObserver.observe(document.documentElement);
+        }
+    };
+
+    document.addEventListener(
+        'DOMContentLoaded',
+        bind,
+        { once: true }
+    );
+
+    document.addEventListener(
+        'livewire:navigated',
+        bind
+    );
+
+    window.addEventListener(
+        'resize',
+        queueMeasure,
+        { passive: true }
+    );
+
+    bind();
+})();
+</script>
+{{-- BEXIA_V582_P7H24F_REPAIR_TOAST_HEADER_END --}}

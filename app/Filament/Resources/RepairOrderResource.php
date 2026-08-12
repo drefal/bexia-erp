@@ -52,7 +52,7 @@ class RepairOrderResource extends Resource
 
     public static function canView(Model $record): bool
     {
-        return static::canViewAny();
+        return ServiceAccess::canViewRepairOrder($record);
     }
 
     public static function canCreate(): bool
@@ -62,11 +62,43 @@ class RepairOrderResource extends Resource
 
     public static function canEdit(Model $record): bool
     {
-        if (in_array((string) ($record->status ?? ''), ['entregado', 'cerrado', 'rechazado', 'cancelado'], true)) {
+        $workflowStage = (string) (
+            $record->workflow_stage ?? ''
+        );
+
+        $status = (string) (
+            $record->status ?? ''
+        );
+
+        $isFinalState =
+            in_array(
+                $workflowStage,
+                [
+                    'delivered',
+                    'cancelled',
+                ],
+                true
+            )
+            || in_array(
+                $status,
+                [
+                    'delivered',
+                    'entregado',
+                    'cerrado',
+                    'rechazado',
+                    'cancelled',
+                    'cancelado',
+                ],
+                true
+            );
+
+        if ($isFinalState) {
             return static::canReopen();
         }
 
-        return ServiceAccess::can('service.repairs.update');
+        return ServiceAccess::canEditRepairOrder(
+            $record
+        );
     }
 
     public static function canDelete(Model $record): bool
@@ -110,6 +142,8 @@ class RepairOrderResource extends Resource
         if ($companyId && ServiceAccess::tableHasCompany('repair_orders')) {
             $query->where('company_id', $companyId);
         }
+
+        ServiceAccess::scopeRepairOrdersForCurrentUser($query);
 
         return $query;
     }
@@ -985,33 +1019,84 @@ Forms\Components\Hidden::make('status')
 
 
                 Tables\Actions\Action::make('reabrir')
-                    ->label('Reabrir')
+                    ->label('Reabrir reparación')
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
-                    ->requiresConfirmation()
-                    ->visible(fn (RepairOrder $record): bool => in_array((string) $record->status, ['entregado', 'cerrado', 'rechazado', 'cancelado'], true) && static::canReopen())
-                    ->action(function (RepairOrder $record): void {
-                        $oldStatus = $record->status;
+                    ->modalHeading(
+                        'Reabrir reparación entregada'
+                    )
+                    ->modalDescription(
+                        'La reparación regresará a En reparación. El ticket ATC se reabrirá, pero la CxC y los pagos existentes no serán modificados.'
+                    )
+                    ->modalSubmitActionLabel(
+                        'Confirmar reapertura'
+                    )
+                    ->form([
+                        Forms\Components\Textarea::make(
+                            'reason'
+                        )
+                            ->label(
+                                'Motivo de reapertura'
+                            )
+                            ->helperText(
+                                'Describe por qué el cliente regresa el producto o por qué es necesario continuar la reparación.'
+                            )
+                            ->rows(4)
+                            ->required()
+                            ->maxLength(2000),
+                    ])
+                    ->visible(
+                        fn (
+                            RepairOrder $record
+                        ): bool =>
+                            (
+                                (string) (
+                                    $record->workflow_stage
+                                    ?? ''
+                                ) === 'delivered'
+                                || in_array(
+                                    (string) (
+                                        $record->status
+                                        ?? ''
+                                    ),
+                                    [
+                                        'delivered',
+                                        'entregado',
+                                        'cerrado',
+                                    ],
+                                    true
+                                )
+                            )
+                            && static::canReopen()
+                    )
+                    ->action(
+                        function (
+                            RepairOrder $record,
+                            array $data
+                        ): void {
+                            $result = app(
+                                \App\Support\Service\ServiceRepairCaseLifecycleService::class
+                            )->reopenAfterDelivery(
+                                $record,
+                                (string) (
+                                    $data['reason']
+                                    ?? ''
+                                )
+                            );
 
-                        $record->update([
-                            'status' => 'en_diagnostico',
-                            'closed_at' => null,
-                            'delivered_at' => null,
-                        ]);
+                            $record->refresh();
 
-                        static::logEvent(
-                            $record,
-                            'reparacion_reabierta',
-                            $oldStatus,
-                            $record->status,
-                            'Reparacion reabierta desde Filament.'
-                        );
-
-                        Notification::make()
-                            ->title('Reparacion reabierta')
-                            ->success()
-                            ->send();
-                    }),
+                            Notification::make()
+                                ->title(
+                                    'Reparación reabierta'
+                                )
+                                ->body(
+                                    'La reparación regresó a En reparación y el ticket ATC quedó activo. La CxC existente se conservó sin cambios.'
+                                )
+                                ->success()
+                                ->send();
+                        }
+                    ),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

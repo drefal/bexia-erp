@@ -38,14 +38,19 @@ class ServiceEconomicClosureCalculator
             ? round(($totalProfit / $totalCost) * 100, 2)
             : null;
 
+        // BEXIA_V582_P7H24H_APPROVED_PRETAX_BASELINE_FIX
+        // quote_total is the approved customer budget before tax.
+        // Compare the final pre-tax subtotal against that same pre-tax basis.
+        // Do not use total_amount here: after an economic close it contains the
+        // current tax-inclusive economic total and would hide later differences.
         $approvedTotal = self::firstPositive([
+            $repair->quote_total ?? null,
             $repair->approved_total ?? null,
             $repair->budget_total ?? null,
-            $repair->total_amount ?? null,
         ]);
 
         $differenceAmount = $approvedTotal > 0
-            ? round($economicTotal - $approvedTotal, 2)
+            ? round($economicSubtotal - $approvedTotal, 2)
             : 0.0;
 
         $differencePercent = $approvedTotal > 0
@@ -204,8 +209,10 @@ class ServiceEconomicClosureCalculator
 
     protected static function calculateLabor(object $repair): array
     {
+        // BEXIA_V582_P7H24H_LABOR_HOURS_FIELD_FIX
         $hours = self::firstPositive([
             $repair->actual_labor_hours ?? null,
+            $repair->labor_hours_estimate ?? null,
             $repair->estimated_labor_hours ?? null,
         ]);
 

@@ -27,6 +27,13 @@ class ServiceCase extends Model
         'description',
         'channel',
         'case_type',
+        'attention_route',
+        'classified_at',
+        'classified_by',
+        'classification_notes',
+        'non_repair_type',
+        'resolution_type',
+        'resolution_notes',
         'priority',
         'status',
         'contact_name',
@@ -46,6 +53,7 @@ class ServiceCase extends Model
     ];
 
     protected $casts = [
+        'classified_at' => 'datetime',
         'assigned_at' => 'datetime',
         'first_response_at' => 'datetime',
         'due_at' => 'datetime',
@@ -100,6 +108,27 @@ class ServiceCase extends Model
         'mantenimiento' => 'Mantenimiento',
         'refaccion' => 'Refaccion',
         'soporte_interno' => 'Soporte interno',
+    ];
+
+    public const ATTENTION_ROUTES = [
+        'repair' => 'Reparación',
+        'non_repair' => 'Sin reparación',
+    ];
+
+    public const NON_REPAIR_TYPES = [
+        'asesoria' => 'Asesoría',
+        'soporte_tecnico' => 'Soporte técnico',
+        'configuracion' => 'Configuración',
+        'instalacion' => 'Instalación',
+        'diagnostico_sin_reparacion' => 'Diagnóstico sin reparación',
+        'garantia_administrativa' => 'Garantía administrativa',
+        'reclamacion' => 'Reclamación',
+        'devolucion' => 'Devolución',
+        'seguimiento_venta' => 'Seguimiento de venta',
+        'seguimiento_factura' => 'Seguimiento de factura',
+        'documentos' => 'Solicitud de documentos',
+        'visita_tecnica' => 'Visita técnica',
+        'otro' => 'Otro servicio',
     ];
 
     protected static function booted(): void

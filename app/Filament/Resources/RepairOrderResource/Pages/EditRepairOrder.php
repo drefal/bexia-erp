@@ -18,6 +18,8 @@ use Filament\Resources\Pages\EditRecord;
 
 class EditRepairOrder extends EditRecord
 {
+    use \App\Support\Service\Concerns\HasRepairQuoteApprovalHeaderActions;
+
     protected static string $resource = RepairOrderResource::class;
 
     protected ?string $oldStatus = null;
@@ -117,7 +119,8 @@ class EditRepairOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            $this->viewAccountReceivableAction(),
+                        ...$this->repairQuoteApprovalHeaderActions(),
+$this->viewAccountReceivableAction(),
             $this->createAccountReceivableAction(),
             $this->viewEconomicSummaryAction(),
             $this->closeEconomicAction(),
@@ -171,7 +174,8 @@ class EditRepairOrder extends EditRecord
                     ->modalHeading('Enlace público de seguimiento')
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Cerrar')
-                    ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.view')
+                    ->visible(fn (): bool => ServiceAccess::canManageRepairPublicTracking()
+                        && $this->canUsePublicTracking('service.repairs.public_tracking.view')
                         && (
                             ! $this->recordHasPublicTrackingTokenForRecord($this->record)
                             || $this->publicTrackingEnabledForRecord($this->record)
@@ -187,7 +191,8 @@ class EditRepairOrder extends EditRecord
                     ->requiresConfirmation()
                     ->modalHeading('Regenerar enlace público')
                     ->modalDescription('El enlace anterior dejará de funcionar. El cliente solo podrá consultar el nuevo enlace.')
-                    ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.regenerate')
+                    ->visible(fn (): bool => ServiceAccess::canManageRepairPublicTracking()
+                        && $this->canUsePublicTracking('service.repairs.public_tracking.regenerate')
                         && $this->recordHasPublicTrackingTokenForRecord($this->record))
                     ->action(function (): void {
                         $this->regeneratePublicTrackingTokenForRecord($this->record);
@@ -206,7 +211,8 @@ class EditRepairOrder extends EditRecord
                     ->requiresConfirmation()
                     ->modalHeading('Desactivar enlace público')
                     ->modalDescription('La URL pública dejará de estar disponible para el cliente.')
-                    ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.disable')
+                    ->visible(fn (): bool => ServiceAccess::canManageRepairPublicTracking()
+                        && $this->canUsePublicTracking('service.repairs.public_tracking.disable')
                         && $this->recordHasPublicTrackingTokenForRecord($this->record)
                         && $this->publicTrackingEnabledForRecord($this->record))
                     ->action(function (): void {
@@ -226,7 +232,8 @@ class EditRepairOrder extends EditRecord
                     ->requiresConfirmation()
                     ->modalHeading('Activar enlace público')
                     ->modalDescription('La URL pública volverá a estar disponible para el cliente.')
-                    ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.disable')
+                    ->visible(fn (): bool => ServiceAccess::canManageRepairPublicTracking()
+                        && $this->canUsePublicTracking('service.repairs.public_tracking.disable')
                         && $this->recordHasPublicTrackingTokenForRecord($this->record)
                         && ! $this->publicTrackingEnabledForRecord($this->record))
                     ->action(function (): void {
@@ -242,9 +249,12 @@ class EditRepairOrder extends EditRecord
                 ->label('Enlaces')
                 ->icon('heroicon-o-link')
                 ->color('gray')
-                ->visible(fn (): bool => $this->canUsePublicTracking('service.repairs.public_tracking.view')
-                    || $this->canUsePublicTracking('service.repairs.public_tracking.regenerate')
-                    || $this->canUsePublicTracking('service.repairs.public_tracking.disable')),
+                ->visible(fn (): bool => ServiceAccess::canManageRepairPublicTracking()
+                        && $this->canUsePublicTracking('service.repairs.public_tracking.view')
+                    || ServiceAccess::canManageRepairPublicTracking()
+                        && $this->canUsePublicTracking('service.repairs.public_tracking.regenerate')
+                    || ServiceAccess::canManageRepairPublicTracking()
+                        && $this->canUsePublicTracking('service.repairs.public_tracking.disable')),
 
             \Filament\Actions\Action::make('capture_reception_signature')
                 ->label('Firmar recepción')
@@ -252,7 +262,8 @@ class EditRepairOrder extends EditRecord
                 ->color('primary')
                 ->modalHeading('Firma digital de recepción')
                 ->modalSubmitActionLabel('Guardar firma de recepción')
-                ->visible(fn (): bool => ! $this->repairHasAttachmentStage($this->record, 'reception_signature'))
+                ->visible(fn (): bool => ServiceAccess::canCaptureRepairReception()
+                    && ! $this->repairHasAttachmentStage($this->record, 'reception_signature'))
                 ->form([
                     \Filament\Forms\Components\TextInput::make('received_from')
                         ->label('Nombre de quien entrega')
@@ -260,9 +271,98 @@ class EditRepairOrder extends EditRecord
                         ->required()
                         ->maxLength(255),
 
-                    \Filament\Forms\Components\Textarea::make('reception_notes')
+                    \Filament\Forms\Components\Select::make(
+                        'reception_physical_condition'
+                    )
+                        ->label('Estado físico al recibir')
+                        ->options(
+                            \App\Support\Service\ServiceRepairReceptionChecklistService::PHYSICAL_CONDITIONS
+                        )
+                        ->native(false)
+                        ->required(),
+
+                    \Filament\Forms\Components\Select::make(
+                        'reception_power_status'
+                    )
+                        ->label('Prueba de encendido')
+                        ->options(
+                            \App\Support\Service\ServiceRepairReceptionChecklistService::POWER_STATUSES
+                        )
+                        ->native(false)
+                        ->required(),
+
+                    \Filament\Forms\Components\CheckboxList::make(
+                        'reception_accessories'
+                    )
+                        ->label('Accesorios recibidos')
+                        ->options(
+                            \App\Support\Service\ServiceRepairReceptionChecklistService::ACCESSORIES
+                        )
+                        ->columns(2)
+                        ->required()
+                        ->minItems(1)
+                        ->live()
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\TextInput::make(
+                        'reception_accessories_other'
+                    )
+                        ->label('Otro accesorio recibido')
+                        ->helperText(
+                            'Describe cualquier accesorio que no aparezca en la lista.'
+                        )
+                        ->required(
+                            fn (
+                                \Filament\Forms\Get $get
+                            ): bool =>
+                                in_array(
+                                    'otro',
+                                    (array) $get(
+                                        'reception_accessories'
+                                    ),
+                                    true
+                                )
+                        )
+                        ->visible(
+                            fn (
+                                \Filament\Forms\Get $get
+                            ): bool =>
+                                in_array(
+                                    'otro',
+                                    (array) $get(
+                                        'reception_accessories'
+                                    ),
+                                    true
+                                )
+                        )
+                        ->maxLength(500)
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\CheckboxList::make(
+                        'reception_confirmations'
+                    )
+                        ->label('Checklist obligatorio')
+                        ->options(
+                            \App\Support\Service\ServiceRepairReceptionChecklistService::CONFIRMATIONS
+                        )
+                        ->helperText(
+                            'Los cuatro puntos deben confirmarse antes de firmar la recepción.'
+                        )
+                        ->required()
+                        ->minItems(4)
+                        ->maxItems(4)
+                        ->columns(1)
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\Textarea::make(
+                        'reception_notes'
+                    )
                         ->label('Observaciones de recepción')
-                        ->rows(3)
+                        ->helperText(
+                            'Describe golpes, rayones, faltantes, condición especial o cualquier detalle relevante.'
+                        )
+                        ->rows(4)
+                        ->required()
                         ->columnSpanFull(),
 
                     \Filament\Forms\Components\FileUpload::make('reception_files')
@@ -310,25 +410,13 @@ class EditRepairOrder extends EditRecord
 
 
 
-            \Filament\Actions\Action::make('mark_ready_for_delivery')
-                ->label('Marcar listo para entrega')
-                ->icon('heroicon-o-check-circle')
-                ->color('success')
-                ->requiresConfirmation()
-                ->modalHeading('Marcar como listo para entrega')
-                ->modalDescription('La reparación quedará lista para que el cliente pueda recogerla.')
-                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?? '') === 'repaired')
-                ->action(function (): void {
-                    $this->markRepairReadyForDelivery();
-                }),
-
-            \Filament\Actions\Action::make('deliver_to_customer')
+\Filament\Actions\Action::make('deliver_to_customer')
                 ->label('Entregar al cliente')
                 ->icon('heroicon-o-truck')
                 ->color('success')
                 ->modalHeading('Entregar al cliente')
                 ->modalSubmitActionLabel('Confirmar entrega')
-                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?? '') === 'ready_for_delivery')
+                ->visible(fn (): bool => ServiceAccess::canDeliverRepair($this->record))
                 ->form([
                     \Filament\Forms\Components\TextInput::make('delivered_to')
                         ->label('Nombre de quien recibe')
@@ -424,7 +512,7 @@ class EditRepairOrder extends EditRecord
                         return false;
                     }
 
-                    return \App\Support\Service\ServiceAccess::canSendRepairQuoteToApproval($record);
+                    return ServiceAccess::canSubmitRepairQuote($record);
                 })
                 ->action(function (array $data): void {
 
@@ -505,32 +593,185 @@ class EditRepairOrder extends EditRecord
                     $this->redirect($this->getResource()::getUrl('edit', ['record' => $record]));
                 }),
 
-            \Filament\Actions\Action::make('stage_mark_quote_approved')
-                ->label('Marcar aprobada')
+            \Filament\Actions\Action::make('stage_record_customer_decision')
+                ->label('Registrar VoBo del cliente')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->requiresConfirmation()
-                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?: '') === 'pending_approval')
-                ->action(function (): void {
+                ->modalHeading('Registrar respuesta del cliente')
+                ->modalDescription(
+                    'Registra si el cliente autorizó o rechazó la cotización y el medio por el que confirmó.'
+                )
+                ->modalSubmitActionLabel(
+                    'Registrar respuesta'
+                )
+                ->visible(
+                    fn (): bool =>
+                        ServiceAccess::canRecordRepairCustomerDecision(
+                            $this->record
+                        )
+                )
+                ->form([
+                    \Filament\Forms\Components\Radio::make(
+                        'customer_decision'
+                    )
+                        ->label('Respuesta del cliente')
+                        ->options(
+                            \App\Support\Service\ServiceRepairCustomerDecisionService::DECISIONS
+                        )
+                        ->required()
+                        ->live(),
+
+                    \Filament\Forms\Components\Select::make(
+                        'customer_decision_channel'
+                    )
+                        ->label('Medio de confirmación')
+                        ->options(
+                            \App\Support\Service\ServiceRepairCustomerDecisionService::CHANNELS
+                        )
+                        ->default('whatsapp')
+                        ->native(false)
+                        ->required(),
+
+                    \Filament\Forms\Components\DateTimePicker::make(
+                        'customer_decision_at'
+                    )
+                        ->label('Fecha y hora de respuesta')
+                        ->default(now())
+                        ->seconds(false)
+                        ->required(),
+
+                    \Filament\Forms\Components\Textarea::make(
+                        'customer_decision_notes'
+                    )
+                        ->label('Observaciones')
+                        ->helperText(
+                            'Ejemplo: Cliente confirma por WhatsApp que autoriza la reparación por el importe cotizado.'
+                        )
+                        ->rows(4)
+                        ->required()
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\FileUpload::make(
+                        'customer_decision_files'
+                    )
+                        ->label(
+                            'Evidencia de la respuesta (opcional)'
+                        )
+                        ->helperText(
+                            'Puedes adjuntar captura de WhatsApp, correo, foto o documento.'
+                        )
+                        ->acceptedFileTypes([
+                            'image/jpeg',
+                            'image/png',
+                            'image/webp',
+                            'image/gif',
+                            'application/pdf',
+                            'text/plain',
+                        ])
+                        ->disk('public')
+                        ->directory(
+                            'service/customer-quote-decisions'
+                        )
+                        ->multiple()
+                        ->reorderable()
+                        ->downloadable()
+                        ->openable()
+                        ->imagePreviewHeight('120')
+                        ->maxFiles(5)
+                        ->maxSize(10240)
+                        ->columnSpanFull(),
+                ])
+                ->action(function (array $data): void {
                     $record = $this->record;
 
-                $this->saveSolutionFilesForRepair($record, (array) ($data['solution_files'] ?? []));
+                    $decision = (string) (
+                        $data['customer_decision'] ?? ''
+                    );
 
+                    $channel = (string) (
+                        $data[
+                            'customer_decision_channel'
+                        ] ?? ''
+                    );
 
-                    $record->update([
-                        'workflow_stage' => 'quote_approved',
-                        'status' => 'approved_pending_repair',
-                        'quote_status' => 'customer_approved',
-                        'quote_approved_at' => now(),
-                    ]);
+                    $notes = trim((string) (
+                        $data[
+                            'customer_decision_notes'
+                        ] ?? ''
+                    ));
 
-                    \Filament\Notifications\Notification::make()
-                        ->title('Cotizacion aprobada')
-                        ->body('La reparacion queda pendiente de que el tecnico la tome.')
-                        ->success()
-                        ->send();
+                    $record = app(
+                        \App\Support\Service\ServiceRepairCustomerDecisionService::class
+                    )->recordDecision(
+                        $record,
+                        $data
+                    );
 
-                    $this->redirect($this->getResource()::getUrl('edit', ['record' => $record]));
+                    $files = (array) (
+                        $data[
+                            'customer_decision_files'
+                        ] ?? []
+                    );
+
+                    if ($files !== []) {
+                        $approved =
+                            $decision === 'approved';
+
+                        $channelLabel =
+                            \App\Support\Service\ServiceRepairCustomerDecisionService::CHANNELS[
+                                $channel
+                            ] ?? $channel;
+
+                        $this->saveServiceStageFilesForRepair(
+                            record: $record,
+                            paths: $files,
+                            stage: $approved
+                                ? 'customer_quote_approval'
+                                : 'customer_quote_rejection',
+                            notes: (
+                                $approved
+                                    ? 'Evidencia VoBo cliente'
+                                    : 'Evidencia rechazo cliente'
+                            )
+                                . ' - '
+                                . $channelLabel
+                                . ' - '
+                                . $notes,
+                            eventType:
+                                'customer_quote_decision_evidence_uploaded',
+                            eventDescription:
+                                'Se agregó evidencia de la respuesta del cliente a la cotización.'
+                        );
+                    }
+
+                    if ($decision === 'approved') {
+                        \Filament\Notifications\Notification::make()
+                            ->title(
+                                'VoBo del cliente registrado'
+                            )
+                            ->body(
+                                'La cotización quedó autorizada y la reparación puede continuar.'
+                            )
+                            ->success()
+                            ->send();
+                    } else {
+                        \Filament\Notifications\Notification::make()
+                            ->title(
+                                'Cliente no autorizó la cotización'
+                            )
+                            ->body(
+                                'La cotización regresó a borrador para poder revisarla o modificarla.'
+                            )
+                            ->warning()
+                            ->send();
+                    }
+
+                    $this->redirect(
+                        $this->getResource()::getUrl(
+                            'edit',
+                            ['record' => $record]
+                        )
+                    );
                 }),
 
             \Filament\Actions\Action::make('stage_start_repair')
@@ -538,7 +779,8 @@ class EditRepairOrder extends EditRecord
                 ->icon('heroicon-o-play')
                 ->color('primary')
                 ->requiresConfirmation()
-                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?: '') === 'quote_approved')
+                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?: '') === 'quote_approved'
+                    && ServiceAccess::canWorkRepair($this->record))
                 ->action(function (): void {
                     $record = $this->record;
 
@@ -600,7 +842,8 @@ class EditRepairOrder extends EditRecord
                         ->maxSize(10240),
 
                 ])
-                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?: '') === 'in_repair')
+                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?: '') === 'in_repair'
+                    && ServiceAccess::canWorkRepair($this->record))
                 ->action(function (array $data): void {
                     $record = $this->record;
 
@@ -623,15 +866,31 @@ class EditRepairOrder extends EditRecord
                 }),
 
             \Filament\Actions\Action::make('stage_send_supervisor_review')
-                ->label('Enviar a revision supervisor')
-                    ->hidden(fn (): bool => ! \App\Support\Service\ServiceAccess::canSendRepairToSupervisorReview($this->record))
-
+                ->label('Enviar a revisión supervisor')
                 ->icon('heroicon-o-eye')
                 ->color('warning')
                 ->requiresConfirmation()
-                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?: '') === 'repaired')
+                ->modalHeading('Enviar a revisión de supervisor')
+                ->modalDescription(
+                    'La reparación quedará pendiente de la revisión final del supervisor.'
+                )
+                ->visible(
+                    fn (): bool => $this->canSendRepairToSupervisorReview()
+                )
                 ->action(function (): void {
                     $record = $this->record;
+
+                    if (! $this->canSendRepairToSupervisorReview()) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('No se puede enviar a revisión')
+                            ->body(
+                                'La reparación debe estar reparada y tu usuario debe ser el técnico asignado, encargado o supervisor autorizado.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
 
                     $record->update([
                         'workflow_stage' => 'supervisor_review',
@@ -640,22 +899,57 @@ class EditRepairOrder extends EditRecord
                     ]);
 
                     \Filament\Notifications\Notification::make()
-                        ->title('Enviada a revision')
-                        ->body('La reparacion queda pendiente de revision de supervisor.')
+                        ->title('Enviada a revisión')
+                        ->body(
+                            'La reparación queda pendiente de revisión del supervisor.'
+                        )
                         ->success()
                         ->send();
 
-                    $this->redirect($this->getResource()::getUrl('edit', ['record' => $record]));
+                    $this->redirect(
+                        $this->getResource()::getUrl(
+                            'edit',
+                            ['record' => $record]
+                        )
+                    );
                 }),
 
             \Filament\Actions\Action::make('stage_approve_supervisor_review')
-                ->label('Aprobar revision')
+                ->label('Aprobar revisión')
                 ->icon('heroicon-o-shield-check')
                 ->color('success')
                 ->requiresConfirmation()
-                ->visible(fn (): bool => (string) ($this->record->workflow_stage ?: '') === 'supervisor_review')
+                ->modalHeading('Aprobar revisión de supervisor')
+                ->modalDescription(
+                    'Confirma que la reparación fue revisada y puede pasar a entrega.'
+                )
+                ->visible(
+                    fn (): bool =>
+                        (string) ($this->record->workflow_stage ?: '') === 'supervisor_review'
+                        && \App\Support\Service\ServiceAccess::can(
+                            'service.repairs.supervisor_review.approve'
+                        )
+                )
                 ->action(function (): void {
                     $record = $this->record;
+
+                    if (
+                        ! $record
+                        || (string) ($record->workflow_stage ?: '') !== 'supervisor_review'
+                        || ! \App\Support\Service\ServiceAccess::can(
+                            'service.repairs.supervisor_review.approve'
+                        )
+                    ) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('No se puede aprobar la revisión')
+                            ->body(
+                                'La reparación debe estar en revisión de supervisor y tu usuario debe tener permiso de aprobación.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
 
                     $record->update([
                         'workflow_stage' => 'ready_for_delivery',
@@ -666,11 +960,18 @@ class EditRepairOrder extends EditRecord
 
                     \Filament\Notifications\Notification::make()
                         ->title('Lista para entrega')
-                        ->body('La reparacion ya puede entregarse al cliente.')
+                        ->body(
+                            'La revisión del supervisor fue aprobada y la reparación ya puede entregarse al cliente.'
+                        )
                         ->success()
                         ->send();
 
-                    $this->redirect($this->getResource()::getUrl('edit', ['record' => $record]));
+                    $this->redirect(
+                        $this->getResource()::getUrl(
+                            'edit',
+                            ['record' => $record]
+                        )
+                    );
                 }),
 
 
@@ -679,6 +980,97 @@ class EditRepairOrder extends EditRecord
         ];
     }
 
+
+
+    protected function canSendRepairToSupervisorReview(): bool
+    {
+        $record = $this->record;
+        $user = auth()->user();
+
+        if (! $record || ! $user) {
+            return false;
+        }
+
+        if (
+            (string) ($record->workflow_stage ?? '') !== 'repaired'
+            || (string) ($record->status ?? '') !== 'repaired'
+        ) {
+            return false;
+        }
+
+        if (! \App\Support\Service\ServiceAccess::can('service.repairs.work')) {
+            return false;
+        }
+
+        // Encargado y Supervisor también pueden enviar la reparación a revisión.
+        if (
+            \App\Support\Service\ServiceAccess::can('service.repairs.quote.submit')
+            || \App\Support\Service\ServiceAccess::can(
+                'service.repairs.supervisor_review.approve'
+            )
+        ) {
+            return true;
+        }
+
+        $employeeId = (int) ($record->assigned_employee_id ?? 0);
+
+        if (
+            $employeeId <= 0
+            || ! \Illuminate\Support\Facades\Schema::hasTable('employees')
+        ) {
+            return false;
+        }
+
+        $employee = \Illuminate\Support\Facades\DB::table('employees')
+            ->where('id', $employeeId)
+            ->first();
+
+        if (! $employee) {
+            return false;
+        }
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasColumn(
+                'employees',
+                'user_id'
+            )
+            && (int) ($employee->user_id ?? 0) === (int) $user->id
+        ) {
+            return true;
+        }
+
+        $userEmail = mb_strtolower(
+            trim((string) ($user->email ?? ''))
+        );
+
+        if ($userEmail === '') {
+            return false;
+        }
+
+        foreach (['work_email', 'email'] as $column) {
+            if (
+                ! \Illuminate\Support\Facades\Schema::hasColumn(
+                    'employees',
+                    $column
+                )
+            ) {
+                continue;
+            }
+
+            $employeeEmail = mb_strtolower(
+                trim((string) ($employee->{$column} ?? ''))
+            );
+
+            if (
+                $employeeEmail !== ''
+                && $employeeEmail === $userEmail
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
 
     protected function saveSolutionFilesForRepair(object $record, array $paths): void
@@ -1044,19 +1436,62 @@ class EditRepairOrder extends EditRecord
             return;
         }
 
-        $this->saveReceptionFilesForRepair($record, (array) ($data['reception_files'] ?? []));
+        $checklistService = app(
+            \App\Support\Service\ServiceRepairReceptionChecklistService::class
+        );
+
+        /*
+         * Validar antes de guardar archivos o firma para
+         * no dejar una recepción parcial.
+         */
+        $checklistService->validateData(
+            $data
+        );
+
+        $this->saveReceptionFilesForRepair(
+            $record,
+            (array) (
+                $data['reception_files']
+                ?? []
+            )
+        );
+
         $this->saveReceptionSignatureForRepair(
             $record,
-            $data['reception_signature_data'] ?? null,
+            $data[
+                'reception_signature_data'
+            ] ?? null,
             $data['received_from'] ?? null,
             $data['reception_notes'] ?? null
         );
 
+        if (
+            ! $this->repairHasAttachmentStage(
+                $record,
+                'reception_signature'
+            )
+        ) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'reception_signature_data' =>
+                    'No fue posible guardar la firma de recepción. Intenta nuevamente.',
+            ]);
+        }
+
+        $record =
+            $checklistService->recordChecklist(
+                $record,
+                $data
+            );
+
         $record->refresh();
 
         \Filament\Notifications\Notification::make()
-            ->title('Firma de recepción guardada')
-            ->body('La firma digital de recepción quedó guardada en el expediente.')
+            ->title(
+                'Recepción registrada'
+            )
+            ->body(
+                'Checklist, condición de recepción y firma quedaron guardados en el expediente.'
+            )
             ->success()
             ->send();
     }
@@ -1232,6 +1667,11 @@ class EditRepairOrder extends EditRecord
 
         $record->refresh();
 
+        // BEXIA_V582_P7H26A_CLOSE_SERVICE_CASE_AFTER_DELIVERY
+        app(
+            \App\Support\Service\ServiceRepairCaseLifecycleService::class
+        )->closeCaseAfterDelivery($record);
+
         \Filament\Notifications\Notification::make()
             ->title('Reparación entregada')
             ->success()
@@ -1385,7 +1825,9 @@ class EditRepairOrder extends EditRecord
                 'ready_for_delivery',
                 'delivered',
             ], true))
-            ->visible(fn (): bool => $this->canShowEconomicClosureAction())
+            // BEXIA_V582_P7H24F_HIDE_ECONOMIC_CLOSE_AFTER_CLOSED
+            ->visible(fn (): bool => $this->canShowEconomicClosureAction()
+                && blank($this->record?->economic_closed_at))
             ->action(function (): void {
                 $result = ServiceEconomicClosureCalculator::recalculate((int) $this->record->getKey(), [
                     'closed_by' => auth()->id(),
@@ -1430,6 +1872,10 @@ class EditRepairOrder extends EditRecord
             ->modalDescription('Se creará una cuenta por cobrar con el total económico de la reparación. Si ya existe una CxC para esta reparación, no se duplicará.')
             ->modalSubmitActionLabel('Crear CxC')
             ->visible(function (): bool {
+                if (! ServiceAccess::canManageRepairEconomic($this->record)) {
+                    return false;
+                }
+
                 $total = (float) ($this->record->total_amount ?? $this->record->economic_total ?? 0);
                 $status = (string) ($this->record->economic_status ?? '');
 
@@ -1498,6 +1944,6 @@ class EditRepairOrder extends EditRecord
             return false;
         }
 
-        return true;
+        return ServiceAccess::canManageRepairEconomic($record);
     }
 }

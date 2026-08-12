@@ -65,7 +65,10 @@ class RepairOrderApprovalResource extends Resource
 
     public static function canEdit(Model $record): bool
     {
-        return ($record->status ?? null) === 'pendiente' && static::canViewAny();
+        return $record instanceof RepairOrderApproval
+            && static::isPendingStatus($record)
+            && ! static::hasLinkedApprovalRequest($record)
+            && static::canViewAny();
     }
 
     public static function canDelete(Model $record): bool
@@ -184,6 +187,13 @@ class RepairOrderApprovalResource extends Resource
                     ->extraCellAttributes(['class' => 'bexia-roa-col-status bexia-roa-col-context bexia-roa-col-badge'])
                     ->label('Estado')
                     ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'pending', 'pendiente' => 'Pendiente',
+                        'approved', 'aprobado' => 'Aprobado',
+                        'rejected', 'rechazado' => 'Rechazado',
+                        'cancelled', 'canceled', 'cancelado' => 'Cancelado',
+                        default => (string) $state,
+                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('repair_order_id')
@@ -259,6 +269,24 @@ class RepairOrderApprovalResource extends Resource
                     ->options(RepairOrderApproval::TYPES),
             ])
             ->actions([
+                Tables\Actions\Action::make('resolver_flujo')
+                    ->label('Resolver')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('primary')
+                    ->visible(
+                        fn (RepairOrderApproval $record): bool =>
+                            static::isPendingStatus($record)
+                            && static::hasLinkedApprovalRequest($record)
+                    )
+                    ->url(
+                        fn (RepairOrderApproval $record): string =>
+                            url(
+                                '/admin/'
+                                . (int) $record->company_id
+                                . '/my-pending-approvals'
+                            )
+                    ),
+
                 Tables\Actions\EditAction::make()
                     ->visible(fn (RepairOrderApproval $record): bool => static::canEdit($record)),
 
@@ -267,7 +295,12 @@ class RepairOrderApprovalResource extends Resource
                     ->icon('heroicon-o-check')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (RepairOrderApproval $record): bool => $record->status === 'pendiente' && static::canApproveRecord($record))
+                    ->visible(
+                        fn (RepairOrderApproval $record): bool =>
+                            static::isPendingStatus($record)
+                            && ! static::hasLinkedApprovalRequest($record)
+                            && static::canApproveRecord($record)
+                    )
                     ->action(function (RepairOrderApproval $record): void {
                         $record->update([
                             'status' => 'aprobado',
@@ -288,7 +321,12 @@ class RepairOrderApprovalResource extends Resource
                     ->icon('heroicon-o-x-mark')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->visible(fn (RepairOrderApproval $record): bool => $record->status === 'pendiente' && static::canRejectRecord($record))
+                    ->visible(
+                        fn (RepairOrderApproval $record): bool =>
+                            static::isPendingStatus($record)
+                            && ! static::hasLinkedApprovalRequest($record)
+                            && static::canRejectRecord($record)
+                    )
                     ->action(function (RepairOrderApproval $record): void {
                         $record->update([
                             'status' => 'rechazado',
@@ -305,6 +343,42 @@ class RepairOrderApprovalResource extends Resource
                     }),
             ])
             ->bulkActions([]);
+    }
+
+    public static function isPendingStatus(
+        RepairOrderApproval $record
+    ): bool {
+        return in_array(
+            strtolower((string) $record->status),
+            ['pending', 'pendiente'],
+            true
+        );
+    }
+
+    public static function linkedApprovalRequestId(
+        RepairOrderApproval $record
+    ): ?int {
+        $metadata = $record->metadata;
+
+        if (is_string($metadata)) {
+            $metadata = json_decode($metadata, true);
+        }
+
+        if (! is_array($metadata)) {
+            return null;
+        }
+
+        $requestId = (int) (
+            $metadata['approval_request_id'] ?? 0
+        );
+
+        return $requestId > 0 ? $requestId : null;
+    }
+
+    public static function hasLinkedApprovalRequest(
+        RepairOrderApproval $record
+    ): bool {
+        return static::linkedApprovalRequestId($record) !== null;
     }
 
     public static function canApproveRecord(RepairOrderApproval $record): bool

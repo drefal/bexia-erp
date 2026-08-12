@@ -61,6 +61,10 @@ class ServiceCaseResource extends Resource
     public static function canEdit(Model $record): bool
     {
         if (in_array((string) ($record->status ?? ''), ['entregado', 'cerrado', 'rechazado', 'cancelado'], true)) {
+            if ((string) ($record->attention_route ?? '') === 'non_repair') {
+                return ServiceAccess::can('service.cases.update');
+            }
+
             return ServiceAccess::can('service.repairs.reopen');
         }
 
@@ -105,6 +109,147 @@ class ServiceCaseResource extends Resource
                 Forms\Components\Hidden::make('company_id')
                     ->default(fn (): ?int => ServiceAccess::currentCompanyId()),
 
+                Forms\Components\Section::make('Clasificación de atención')
+                    ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-classification'])
+                    ->description('La ruta la determina el Encargado de Técnicos o el Supervisor.')
+                    ->columns(4)
+                    ->schema([
+                        Forms\Components\Placeholder::make('attention_route_display')
+                            ->label('Ruta')
+                            ->content(fn ($record): string => $record
+                                ? (ServiceCase::ATTENTION_ROUTES[(string) ($record->attention_route ?? '')] ?? 'Pendiente')
+                                : 'Pendiente'),
+
+                        Forms\Components\Placeholder::make('non_repair_type_display')
+                            ->label('Tipo sin reparación')
+                            ->content(fn ($record): string => $record
+                                ? (ServiceCase::NON_REPAIR_TYPES[(string) ($record->non_repair_type ?? '')] ?? 'No aplica')
+                                : 'No aplica'),
+
+                        Forms\Components\Placeholder::make('classified_at_display')
+                            ->label('Clasificado')
+                            ->content(fn ($record): string => filled($record?->classified_at)
+                                ? (string) $record->classified_at
+                                : 'Pendiente'),
+
+                        Forms\Components\Placeholder::make('repair_order_display')
+                            ->label('Orden vinculada')
+                            ->content(function ($record): string {
+                                if (! $record) {
+                                    return 'No aplica';
+                                }
+
+                                $repair = $record->repairOrders()
+                                    ->orderByDesc('id')
+                                    ->first();
+
+                                return $repair?->folio ?: 'No aplica';
+                            }),
+
+                        Forms\Components\Placeholder::make('assigned_employee_display')
+                            ->label('Responsable')
+                            ->content(fn ($record): string => filled($record?->assigned_employee_id)
+                                ? (ServiceAccess::employeeLabel((int) $record->assigned_employee_id) ?? 'Sin asignar')
+                                : 'Sin asignar'),
+
+                        Forms\Components\Placeholder::make('due_at_display')
+                            ->label('Fecha compromiso')
+                            ->content(fn ($record): string => filled($record?->due_at)
+                                ? (string) $record->due_at
+                                : 'Sin fecha'),
+
+                        Forms\Components\Placeholder::make('classification_notes_display')
+                            ->label('Notas')
+                            ->content(fn ($record): string => filled($record?->classification_notes)
+                                ? (string) $record->classification_notes
+                                : 'Sin notas')
+                            ->columnSpanFull(),
+                    ])
+                    ->visible(fn ($record): bool => (bool) $record && filled($record->attention_route))
+                    ->collapsible(),
+
+                Forms\Components\Section::make('Atención directa')
+                    ->extraAttributes([
+                        'class' =>
+                            'bexia-svc-section bexia-svc-section-direct-attention',
+                    ])
+                    ->description(
+                        'Seguimiento y resolución del ticket que no requiere reparación.'
+                    )
+                    ->columns(4)
+                    ->schema([
+                        Forms\Components\Placeholder::make(
+                            'direct_attention_type_display'
+                        )
+                            ->label('Tipo de atención')
+                            ->content(fn ($record): string =>
+                                ServiceCase::NON_REPAIR_TYPES[
+                                    (string) (
+                                        $record?->non_repair_type
+                                        ?? ''
+                                    )
+                                ]
+                                ?? 'Sin definir'
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'first_response_display'
+                        )
+                            ->label('Primera respuesta')
+                            ->content(fn ($record): string =>
+                                filled(
+                                    $record?->first_response_at
+                                )
+                                    ? (string)
+                                        $record
+                                            ->first_response_at
+                                    : 'Pendiente'
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'resolution_type_display'
+                        )
+                            ->label('Resolución')
+                            ->content(fn ($record): string =>
+                                \App\Support\Service\ServiceCaseDirectAttentionService::resolutionTypeLabel(
+                                    $record?->resolution_type
+                                )
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'direct_closed_at_display'
+                        )
+                            ->label('Cerrado')
+                            ->content(fn ($record): string =>
+                                filled($record?->closed_at)
+                                    ? (string)
+                                        $record->closed_at
+                                    : 'Abierto'
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'resolution_notes_display'
+                        )
+                            ->label('Solución proporcionada')
+                            ->content(fn ($record): string =>
+                                filled(
+                                    $record?->resolution_notes
+                                )
+                                    ? (string)
+                                        $record
+                                            ->resolution_notes
+                                    : 'Pendiente'
+                            )
+                            ->columnSpanFull(),
+                    ])
+                    ->visible(fn ($record): bool =>
+                        (bool) $record
+                        && (string) (
+                            $record->attention_route
+                            ?? ''
+                        ) === 'non_repair'
+                    )
+                    ->collapsible(),
                 Forms\Components\Section::make('Datos generales')
                     ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-general'])
                     ->columns(3)
@@ -146,22 +291,6 @@ class ServiceCaseResource extends Resource
                         Forms\Components\Hidden::make('assigned_team')
                             ->dehydrated(false),
 
-                        Forms\Components\Select::make('assigned_employee_id')
-                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-technician'])
-                            ->extraFieldWrapperAttributes([
-                                'class' => 'bexia-svc-dropdown-overlay-host bexia-svc-technician-overlay-host',
-                                'style' => 'position: relative; overflow: visible; z-index: 40;',
-                            ])
-                            ->label('Tecnico responsable')
-                            ->helperText('Solo empleados del mismo grupo de empresas marcados como tecnico de servicio.')
-                            ->options(ServiceAccess::technicianEmployeeOptions())
-                            ->searchable()
-                            ->preload()
-                            ->native(false),
-
-                        Forms\Components\DateTimePicker::make('due_at')
-                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-due-at'])
-                            ->label('Fecha compromiso'),
                     ]),
 
                 Forms\Components\Section::make('Cliente / contacto')
@@ -397,6 +526,18 @@ HTML))
                     ->badge()
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('attention_route')
+                    ->extraHeaderAttributes(['class' => 'bexia-svc-col-route'])
+                    ->extraCellAttributes(['class' => 'bexia-svc-col-route'])
+                    ->label('Ruta')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'repair' => 'Reparación',
+                        'non_repair' => 'Sin reparación',
+                        default => 'Pendiente',
+                    })
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('priority')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-priority'])
                     ->extraCellAttributes(['class' => 'bexia-svc-col-priority'])
@@ -476,6 +617,10 @@ HTML))
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Estado')
                     ->options(ServiceCase::STATUSES),
+
+                Tables\Filters\SelectFilter::make('attention_route')
+                    ->label('Ruta de atención')
+                    ->options(ServiceCase::ATTENTION_ROUTES),
 
                 Tables\Filters\SelectFilter::make('priority')
                     ->label('Prioridad')
