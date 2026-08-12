@@ -10,6 +10,12 @@ use Illuminate\Validation\ValidationException;
 
 class ServiceCaseDirectAttentionService
 {
+    public const EVENT_RESPONSE =
+        'respuesta_atencion_directa';
+
+    public const EVENT_RESPONSE_VALIDATED =
+        'respuesta_atencion_directa_validada';
+
     public const RESOLUTION_TYPES = [
         'informacion_proporcionada' =>
             'Información proporcionada',
@@ -46,9 +52,21 @@ class ServiceCaseDirectAttentionService
 
     public function registerResponse(
         ServiceCase $serviceCase,
-        string $notes
+        string $notes,
+        mixed $image = null
     ): ServiceCase {
-        $actorId = $this->actorId();
+        // BEXIA_ATC_ASSIGNED_TECH_RESPONSE_ACTOR_V5_82_P7H32A4B2
+        //
+        // Esta acción tiene autorización propia mediante
+        // assertCanRegisterResponse(). El técnico asignado no
+        // necesita recibir permisos CRUD generales del ticket.
+        $actorId = (int) auth()->id();
+
+        if ($actorId <= 0) {
+            throw new AuthorizationException(
+                'Debes iniciar sesión para registrar una respuesta.'
+            );
+        }
 
         $notes = trim($notes);
 
@@ -62,11 +80,13 @@ class ServiceCaseDirectAttentionService
         return DB::transaction(function () use (
             $serviceCase,
             $actorId,
-            $notes
+            $notes,
+            $image
         ): ServiceCase {
             $case = $this->lockCase($serviceCase);
 
             $this->assertOpenDirectCase($case);
+            $this->assertCanRegisterResponse($case);
 
             $oldStatus = (string) $case->status;
             $now = now();
@@ -83,7 +103,7 @@ class ServiceCaseDirectAttentionService
 
             $this->logEvent(
                 case: $case,
-                eventType: 'respuesta_atencion_directa',
+                eventType: self::EVENT_RESPONSE,
                 fromStatus: $oldStatus,
                 toStatus: 'en_revision',
                 actorId: $actorId,
@@ -98,6 +118,138 @@ class ServiceCaseDirectAttentionService
                     'first_response_at' =>
                         $case->fresh()->first_response_at,
                 ]
+            );
+
+            ServiceAccess::saveUploadedAttachments(
+                companyId: $case->company_id,
+                serviceCaseId: $case->id,
+                repairOrderId: null,
+                files: $image,
+                stage: 'direct_attention_response',
+                isCustomerVisible: false
+            );
+
+            /*
+             * Si la respuesta fue registrada directamente por
+             * Encargado de Técnicos o Supervisor, queda validada
+             * automáticamente y puede procederse al cierre.
+             *
+             * Si fue registrada por el técnico asignado, queda
+             * pendiente de validación.
+             */
+            if (
+                ServiceAccess::canValidateDirectServiceCaseResponse(
+                    $case
+                )
+            ) {
+                $responseEvent =
+                    $this->latestResponseEvent($case);
+
+                if (
+                    $responseEvent
+                    && ! $this->responseEventIsValidated(
+                        $case,
+                        $responseEvent
+                    )
+                ) {
+                    $this->logResponseValidation(
+                        case: $case,
+                        responseEvent: $responseEvent,
+                        actorId: $actorId,
+                        mode: 'automatic',
+                        notes:
+                            'Respuesta validada automáticamente porque fue registrada por Encargado de Técnicos o Supervisor.'
+                    );
+                }
+            }
+
+            return $case->fresh();
+        });
+    }
+
+    public function latestResponseIsValidated(
+        ServiceCase $serviceCase
+    ): bool {
+        $responseEvent =
+            $this->latestResponseEvent(
+                $serviceCase
+            );
+
+        if (! $responseEvent) {
+            return false;
+        }
+
+        return $this->responseEventIsValidated(
+            $serviceCase,
+            $responseEvent
+        );
+    }
+
+    public function validateLatestResponse(
+        ServiceCase $serviceCase,
+        string $notes = ''
+    ): ServiceCase {
+        $actorId = $this->actorId();
+
+        return DB::transaction(function () use (
+            $serviceCase,
+            $actorId,
+            $notes
+        ): ServiceCase {
+            $case =
+                $this->lockCase(
+                    $serviceCase
+                );
+
+            $this->assertOpenDirectCase($case);
+
+            if (
+                ! ServiceAccess::canValidateDirectServiceCaseResponse(
+                    $case
+                )
+            ) {
+                throw new AuthorizationException(
+                    'Sólo el Encargado de Técnicos o el Supervisor pueden validar una respuesta.'
+                );
+            }
+
+            $responseEvent =
+                $this->latestResponseEvent(
+                    $case
+                );
+
+            if (! $responseEvent) {
+                throw ValidationException::withMessages([
+                    'validation_notes' =>
+                        'No existe una respuesta pendiente de validar.',
+                ]);
+            }
+
+            if (
+                $this->responseEventIsValidated(
+                    $case,
+                    $responseEvent
+                )
+            ) {
+                throw ValidationException::withMessages([
+                    'validation_notes' =>
+                        'La última respuesta ya fue validada.',
+                ]);
+            }
+
+            $notes = trim($notes);
+
+            if ($notes === '') {
+                $notes =
+                    'Respuesta del técnico validada por Encargado de Técnicos o Supervisor.';
+            }
+
+            $this->logResponseValidation(
+                case: $case,
+                responseEvent: $responseEvent,
+                actorId: $actorId,
+                mode: 'manual',
+                notes: $notes
             );
 
             return $case->fresh();
@@ -195,6 +347,8 @@ class ServiceCaseDirectAttentionService
             $case = $this->lockCase($serviceCase);
 
             $this->assertOpenDirectCase($case);
+            $this->assertCanCloseDirectCase($case);
+            $this->assertLatestResponseValidated($case);
 
             $oldStatus = (string) $case->status;
             $now = now();
@@ -370,6 +524,170 @@ class ServiceCaseDirectAttentionService
         }
 
         return $case;
+    }
+
+    protected function latestResponseEvent(
+        ServiceCase $case
+    ): ?object {
+        if (
+            ! Schema::hasTable(
+                'service_case_events'
+            )
+        ) {
+            return null;
+        }
+
+        return $case->events()
+            ->where(
+                'event_type',
+                self::EVENT_RESPONSE
+            )
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    protected function responseEventIsValidated(
+        ServiceCase $case,
+        object $responseEvent
+    ): bool {
+        if (
+            ! Schema::hasTable(
+                'service_case_events'
+            )
+        ) {
+            return false;
+        }
+
+        $validationEvents =
+            $case->events()
+                ->where(
+                    'event_type',
+                    self::EVENT_RESPONSE_VALIDATED
+                )
+                ->orderByDesc('id')
+                ->get([
+                    'id',
+                    'new_values',
+                ]);
+
+        foreach ($validationEvents as $validationEvent) {
+            $values =
+                $validationEvent->new_values;
+
+            if (is_string($values)) {
+                $values =
+                    json_decode(
+                        $values,
+                        true
+                    ) ?: [];
+            }
+
+            if (! is_array($values)) {
+                $values = [];
+            }
+
+            if (
+                (int) (
+                    $values['response_event_id']
+                    ?? 0
+                )
+                === (int) $responseEvent->id
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function logResponseValidation(
+        ServiceCase $case,
+        object $responseEvent,
+        int $actorId,
+        string $mode,
+        string $notes
+    ): void {
+        $this->logEvent(
+            case: $case,
+            eventType:
+                self::EVENT_RESPONSE_VALIDATED,
+            fromStatus:
+                (string) $case->status,
+            toStatus:
+                (string) $case->status,
+            actorId: $actorId,
+            notes: $notes,
+            oldValues: null,
+            newValues: [
+                'response_event_id' =>
+                    (int) $responseEvent->id,
+                'response_performed_by' =>
+                    (int) (
+                        $responseEvent->performed_by
+                        ?? 0
+                    ),
+                'validated_by' =>
+                    $actorId,
+                'validation_mode' =>
+                    $mode,
+            ]
+        );
+    }
+
+    protected function assertCanRegisterResponse(
+        ServiceCase $case
+    ): void {
+        if (
+            ! ServiceAccess::canRespondToDirectServiceCase(
+                $case
+            )
+        ) {
+            throw new AuthorizationException(
+                'Sólo el técnico asignado, el Encargado de Técnicos o el Supervisor pueden registrar una respuesta al cliente.'
+            );
+        }
+    }
+
+    protected function assertCanCloseDirectCase(
+        ServiceCase $case
+    ): void {
+        if (
+            ! ServiceAccess::canCloseDirectServiceCase(
+                $case
+            )
+        ) {
+            throw new AuthorizationException(
+                'Sólo el Encargado de Técnicos o el Supervisor pueden resolver y cerrar una atención directa.'
+            );
+        }
+    }
+
+    protected function assertLatestResponseValidated(
+        ServiceCase $case
+    ): void {
+        $responseEvent =
+            $this->latestResponseEvent(
+                $case
+            );
+
+        if (! $responseEvent) {
+            throw ValidationException::withMessages([
+                'resolution_notes' =>
+                    'Registra al menos una respuesta al cliente antes de resolver y cerrar el ticket.',
+            ]);
+        }
+
+        if (
+            ! $this->responseEventIsValidated(
+                $case,
+                $responseEvent
+            )
+        ) {
+            throw ValidationException::withMessages([
+                'resolution_notes' =>
+                    'La última respuesta del técnico debe ser validada por el Encargado de Técnicos o el Supervisor antes de cerrar el ticket.',
+            ]);
+        }
     }
 
     protected function assertOpenDirectCase(

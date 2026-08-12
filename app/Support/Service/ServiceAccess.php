@@ -2071,6 +2071,176 @@ class ServiceAccess
         ) !== [];
     }
 
+    /*
+     * BEXIA_ATC_DIRECT_RESPONSE_AUTH_V5_82_P7H32A2
+     *
+     * Puede registrar una respuesta de atención directa:
+     * - Servicio - Supervisor
+     * - Servicio - Encargado de Técnicos
+     * - Servicio - Técnico, únicamente cuando está asignado al ticket
+     */
+    public static function canRespondToDirectServiceCase(
+        ?object $serviceCase
+    ): bool {
+        if (
+            ! $serviceCase
+            || ! auth()->check()
+        ) {
+            return false;
+        }
+
+        if (
+            self::hasServiceRole([
+                'Servicio - Supervisor',
+                'Servicio - Encargado de Técnicos',
+            ])
+        ) {
+            return true;
+        }
+
+        if (
+            ! self::hasServiceRole(
+                'Servicio - Técnico'
+            )
+        ) {
+            return false;
+        }
+
+        $employeeId =
+            self::currentUserEmployeeId();
+
+        if (! $employeeId) {
+            return false;
+        }
+
+        $assignedEmployeeId =
+            (int) (
+                $serviceCase->assigned_employee_id
+                ?? 0
+            );
+
+        return $assignedEmployeeId > 0
+            && $assignedEmployeeId === $employeeId;
+    }
+
+    /*
+     * BEXIA_ATC_DIRECT_RESPONSE_REVIEW_V5_82_P7H32A3
+     *
+     * La validación de respuestas y el cierre de una atención
+     * directa corresponden únicamente a:
+     * - Servicio - Encargado de Técnicos
+     * - Servicio - Supervisor
+     */
+    public static function canValidateDirectServiceCaseResponse(
+        ?object $serviceCase
+    ): bool {
+        if (
+            ! $serviceCase
+            || ! auth()->check()
+            || ! self::can('service.cases.update')
+        ) {
+            return false;
+        }
+
+        return self::hasServiceRole([
+            'Servicio - Encargado de Técnicos',
+            'Servicio - Supervisor',
+        ]);
+    }
+
+    public static function canCloseDirectServiceCase(
+        ?object $serviceCase
+    ): bool {
+        return self::canValidateDirectServiceCaseResponse(
+            $serviceCase
+        );
+    }
+
+    /*
+     * BEXIA_ATC_TECH_SERVICE_CASE_SCOPE_V5_82_P7H32A4
+     *
+     * Un usuario con rol Servicio - Técnico debe ver únicamente
+     * los tickets cuyo assigned_employee_id corresponda a su
+     * empleado.
+     *
+     * Si además posee un rol operativo superior, no se limita
+     * como técnico:
+     * - Servicio - Encargado de Técnicos
+     * - Servicio - Supervisor
+     * - Servicio - Recepción
+     * - Servicio - Cajero Reparaciones
+     */
+    public static function isRestrictedServiceTechnician(): bool
+    {
+        if (
+            ! self::hasServiceRole(
+                'Servicio - Técnico'
+            )
+        ) {
+            return false;
+        }
+
+        return ! self::hasServiceRole([
+            'Servicio - Encargado de Técnicos',
+            'Servicio - Supervisor',
+            'Servicio - Recepción',
+            'Servicio - Cajero Reparaciones',
+        ]);
+    }
+
+    public static function isAssignedServiceCaseTechnician(
+        ?object $serviceCase
+    ): bool {
+        if (
+            ! $serviceCase
+            || ! self::isRestrictedServiceTechnician()
+        ) {
+            return false;
+        }
+
+        $employeeId =
+            self::currentUserEmployeeId();
+
+        if (! $employeeId) {
+            return false;
+        }
+
+        return (int) (
+            $serviceCase->assigned_employee_id
+            ?? 0
+        ) === $employeeId;
+    }
+
+    public static function scopeServiceCasesForCurrentUser(
+        Builder $query
+    ): void {
+        if (
+            ! self::isRestrictedServiceTechnician()
+        ) {
+            return;
+        }
+
+        $employeeId =
+            self::currentUserEmployeeId();
+
+        if (! $employeeId) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(
+            'assigned_employee_id',
+            $employeeId
+        );
+    }
+
+    public static function technicianCanEnterServiceCases(): bool
+    {
+        return self::isRestrictedServiceTechnician()
+            && self::currentUserEmployeeId() !== null;
+    }
+
     public static function currentUserEmployeeId(): ?int
     {
         $user = auth()->user();

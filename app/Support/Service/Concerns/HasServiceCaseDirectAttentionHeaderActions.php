@@ -30,11 +30,38 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         ->label('Respuesta proporcionada')
                         ->rows(5)
                         ->required(),
+
+                    // BEXIA_ATC_DIRECT_RESPONSE_IMAGE_V5_82_P7H32A2
+                    Forms\Components\FileUpload::make(
+                        'response_image'
+                    )
+                        ->label(
+                            'Imagen de evidencia (opcional)'
+                        )
+                        ->helperText(
+                            'Puedes adjuntar una fotografía relacionada con la respuesta proporcionada.'
+                        )
+                        ->acceptedFileTypes([
+                            'image/jpeg',
+                            'image/png',
+                            'image/webp',
+                            'image/gif',
+                        ])
+                        ->disk('public')
+                        ->directory(
+                            'service-attachments/direct-attention-responses'
+                        )
+                        ->downloadable()
+                        ->openable()
+                        ->previewable()
+                        ->imagePreviewHeight('160')
+                        ->maxSize(10240)
+                        ->columnSpanFull(),
                 ])
                 ->visible(fn (): bool =>
                     $this->isDirectAttentionOpen()
-                    && ServiceAccess::can(
-                        'service.cases.update'
+                    && ServiceAccess::canRespondToDirectServiceCase(
+                        $this->record
                     )
                 )
                 ->action(function (array $data): void {
@@ -44,7 +71,8 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         $this->record,
                         (string) (
                             $data['response_notes'] ?? ''
-                        )
+                        ),
+                        $data['response_image'] ?? null
                     );
 
                     $this->record->refresh();
@@ -102,6 +130,83 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         ->send();
                 }),
 
+            Action::make(
+                'direct_attention_validate_response'
+            )
+                ->label('Validar respuesta')
+                ->icon('heroicon-o-shield-check')
+                ->color('info')
+                ->modalHeading(
+                    'Validar respuesta del técnico'
+                )
+                ->modalDescription(
+                    'Confirma que la respuesta proporcionada por el técnico es correcta antes de permitir el cierre del ticket.'
+                )
+                ->modalSubmitActionLabel(
+                    'Validar respuesta'
+                )
+                ->form([
+                    Forms\Components\Textarea::make(
+                        'validation_notes'
+                    )
+                        ->label(
+                            'Observaciones de validación'
+                        )
+                        ->helperText(
+                            'Opcional. Puedes agregar una observación sobre la respuesta revisada.'
+                        )
+                        ->rows(3),
+                ])
+                ->visible(fn (): bool =>
+                    $this->isDirectAttentionOpen()
+                    && $this->hasDirectAttentionResponse()
+                    && ! $this->latestDirectAttentionResponseValidated()
+                    && ServiceAccess::canValidateDirectServiceCaseResponse(
+                        $this->record
+                    )
+                )
+                ->action(function (array $data): void {
+                    app(
+                        ServiceCaseDirectAttentionService::class
+                    )->validateLatestResponse(
+                        $this->record,
+                        (string) (
+                            $data['validation_notes']
+                            ?? ''
+                        )
+                    );
+
+                    $this->record->refresh();
+
+                    Notification::make()
+                        ->title('Respuesta validada')
+                        ->body(
+                            'La respuesta fue aprobada. El ticket ya puede resolverse y cerrarse.'
+                        )
+                        ->success()
+                        ->send();
+                }),
+
+            // BEXIA_ATC_DIRECT_SOLUTION_PRINT_ACTION_V5_82_P7H32D
+            Action::make('direct_attention_print_solution')
+                ->label('Imprimir solución')
+                ->icon('heroicon-o-printer')
+                ->color('gray')
+                ->visible(fn (): bool =>
+                    (string) ($this->record->attention_route ?? '') === 'non_repair'
+                    && (string) ($this->record->status ?? '') === 'cerrado'
+                    && $this->latestDirectAttentionResponseValidated()
+                )
+                ->url(fn (): string => route(
+                    'service.service-cases.solution.print',
+                    [
+                        'tenant' => ServiceAccess::currentCompanyId()
+                            ?? (int) $this->record->company_id,
+                        'record' => $this->record->id,
+                    ]
+                ))
+                ->openUrlInNewTab(),
+
             Action::make('direct_attention_resolve')
                 ->label('Resolver y cerrar')
                 ->icon('heroicon-o-check-circle')
@@ -135,8 +240,10 @@ trait HasServiceCaseDirectAttentionHeaderActions
                 ])
                 ->visible(fn (): bool =>
                     $this->isDirectAttentionOpen()
-                    && ServiceAccess::can(
-                        'service.cases.update'
+                    && $this->hasDirectAttentionResponse()
+                    && $this->latestDirectAttentionResponseValidated()
+                    && ServiceAccess::canCloseDirectServiceCase(
+                        $this->record
                     )
                 )
                 ->action(function (array $data): void {
@@ -333,6 +440,43 @@ trait HasServiceCaseDirectAttentionHeaderActions
                     );
                 }),
         ];
+    }
+
+    protected function latestDirectAttentionResponseValidated(): bool
+    {
+        if (
+            ! isset($this->record)
+            || ! $this->record->exists
+        ) {
+            return false;
+        }
+
+        return app(
+            ServiceCaseDirectAttentionService::class
+        )->latestResponseIsValidated(
+            $this->record
+        );
+    }
+
+    protected function hasDirectAttentionResponse(): bool
+    {
+        if (
+            ! isset($this->record)
+            || ! $this->record->exists
+            || ! ServiceAccess::tableExists(
+                'service_case_events'
+            )
+        ) {
+            return false;
+        }
+
+        return $this->record
+            ->events()
+            ->where(
+                'event_type',
+                ServiceCaseDirectAttentionService::EVENT_RESPONSE
+            )
+            ->exists();
     }
 
     protected function isDirectAttentionOpen(): bool
