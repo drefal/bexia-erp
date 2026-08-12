@@ -47,8 +47,30 @@ class InvoiceResource extends Resource
     protected static ?string $pluralModelLabel = 'facturas';
 
     protected static ?int $navigationSort = 10;
-public static function canEdit(Model $record): bool
+
+    /*
+     * BEXIA_V582_B28G1E_LEGACY_INVOICE_READONLY
+     *
+     * Documentos historicos migrados son solamente de consulta.
+     * No usar locked por si solo: una factura nativa emitida tambien
+     * puede estar bloqueada y aun requerir operaciones CFDI.
+     */
+    public static function isLegacyReadOnly(?Invoice $record): bool
     {
+        if (! $record) {
+            return false;
+        }
+
+        return (bool) ($record->is_legacy ?? false)
+            && (bool) ($record->locked ?? false);
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        if ($record instanceof Invoice && static::isLegacyReadOnly($record)) {
+            return false;
+        }
+
         // BEXIA_V5523R4_NO_EDIT_STAMPED
         return ! in_array((string) ($record->cfdi_status ?? ''), [
             'stamped',
@@ -599,7 +621,8 @@ public static function canEdit(Model $record): bool
                     ->label('Timbrar')
                     ->icon('heroicon-o-bolt')
                     ->color('success')
-                    ->visible(fn ($record): bool => in_array((string) ($record->cfdi_status ?? ''), ['ready_to_stamp', 'stamp_error'], true)
+                    ->visible(fn ($record): bool => ! static::isLegacyReadOnly($record)
+                        && in_array((string) ($record->cfdi_status ?? ''), ['ready_to_stamp', 'stamp_error'], true)
                         && ! in_array((string) ($record->status ?? ''), ['cancelled'], true))
                     ->requiresConfirmation()
                     ->modalHeading('Timbrar CFDI con SW')
@@ -625,7 +648,9 @@ public static function canEdit(Model $record): bool
                     ->label('Facturar')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->visible(fn (Invoice $record): bool => (string) ($record->source_type ?? '') !== 'pos_global_invoice' && (string) ($record->status ?? '') === 'draft')
+                    ->visible(fn (Invoice $record): bool => ! static::isLegacyReadOnly($record)
+                        && (string) ($record->source_type ?? '') !== 'pos_global_invoice'
+                        && (string) ($record->status ?? '') === 'draft')
                     ->requiresConfirmation()
                     ->modalHeading('Marcar factura como facturada')
                     ->modalDescription('La factura quedará bloqueada para edición. No timbra CFDI todavía.')
@@ -637,7 +662,8 @@ public static function canEdit(Model $record): bool
                     ->label('Cancelar')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
-                    ->visible(fn (Invoice $record): bool => (string) $record->status !== 'cancelled')
+                    ->visible(fn (Invoice $record): bool => ! static::isLegacyReadOnly($record)
+                        && (string) $record->status !== 'cancelled')
                     ->form([
                         Forms\Components\Textarea::make('reason')
                             ->label('Motivo')
@@ -649,7 +675,8 @@ public static function canEdit(Model $record): bool
                     }),
 
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->visible(fn (Invoice $record): bool => static::canEdit($record)),
             ])
             ->defaultSort('id', 'desc');
     }
@@ -1372,6 +1399,10 @@ public static function canEdit(Model $record): bool
 
     public static function recalculateInvoice(Invoice $invoice): void
     {
+        if (static::isLegacyReadOnly($invoice)) {
+            return;
+        }
+
         if (! Schema::hasTable('invoice_lines')) {
             return;
         }
@@ -1421,6 +1452,16 @@ public static function canEdit(Model $record): bool
 
     public static function issueInvoice(Invoice $record): void
     {
+        if (static::isLegacyReadOnly($record)) {
+            Notification::make()
+                ->title('Documento historico de solo lectura')
+                ->body('Las facturas migradas desde el sistema anterior no pueden modificarse.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         static::recalculateInvoice($record);
         $record->refresh();
 
@@ -1461,6 +1502,16 @@ public static function canEdit(Model $record): bool
 
     public static function cancelInvoice(Invoice $record, string $reason = ''): void
     {
+        if (static::isLegacyReadOnly($record)) {
+            Notification::make()
+                ->title('Documento historico de solo lectura')
+                ->body('Las facturas migradas desde el sistema anterior no pueden cancelarse desde Bexia.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         DB::table('invoices')
             ->where('id', $record->id)
             ->update([

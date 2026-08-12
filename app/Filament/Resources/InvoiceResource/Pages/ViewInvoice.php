@@ -40,7 +40,8 @@ class ViewInvoice extends ViewRecord
                 ->modalDescription('Esto cancelará internamente la factura global en borrador y liberará los tickets para que vuelvan a estar disponibles. No aplica a CFDI timbrados.')
                 ->modalSubmitActionLabel('Sí, cancelar y liberar tickets')
                 ->modalCancelActionLabel('Salir')
-                ->visible(fn (): bool => app(PosGlobalInvoiceService::class)->canCancelDraftGlobalInvoice($this->record))
+                ->visible(fn (): bool => ! InvoiceResource::isLegacyReadOnly($this->record)
+                    && app(PosGlobalInvoiceService::class)->canCancelDraftGlobalInvoice($this->record))
                 ->action(function (): void {
                     try {
                         app(PosGlobalInvoiceService::class)
@@ -75,7 +76,8 @@ class ViewInvoice extends ViewRecord
                 ->label('Cancelar factura interna')
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
-                ->visible(fn (): bool => (string) ($this->record->source_type ?? '') !== 'pos_global_invoice'
+                ->visible(fn (): bool => ! InvoiceResource::isLegacyReadOnly($this->record)
+                    && (string) ($this->record->source_type ?? '') !== 'pos_global_invoice'
                     && (string) ($this->record->status ?? '') !== 'cancelled'
                     && blank($this->record->cfdi_uuid ?? null)
                     && ! in_array((string) ($this->record->cfdi_status ?? ''), ['stamped', 'cancel_requested', 'cancelled'], true))
@@ -193,7 +195,9 @@ class ViewInvoice extends ViewRecord
                 ->label('Cancelar CFDI')
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
-                ->visible(fn (): bool => $this->isStamped() && ! $this->hasCancelRequestPrepared())
+                ->visible(fn (): bool => ! InvoiceResource::isLegacyReadOnly($this->record)
+                    && $this->isStamped()
+                    && ! $this->hasCancelRequestPrepared())
                 ->form([
                     Select::make('reason_code')
                         ->label('Motivo de cancelación SAT')
@@ -368,7 +372,8 @@ class ViewInvoice extends ViewRecord
 
             Actions\EditAction::make()
                 ->label('Editar')
-                ->visible(fn (): bool => ! $this->isFinalCfdiStatus()),
+                ->visible(fn (): bool => ! InvoiceResource::isLegacyReadOnly($this->record)
+                    && ! $this->isFinalCfdiStatus()),
         ];
     }
 
@@ -390,7 +395,8 @@ class ViewInvoice extends ViewRecord
 
     private function canSendCancelToPac(): bool
     {
-        return $this->isStamped()
+        return ! InvoiceResource::isLegacyReadOnly($this->record)
+            && $this->isStamped()
             && (string) ($this->record->cfdi_cancel_status ?? '') === 'ready_to_cancel';
     }
 
@@ -411,7 +417,8 @@ class ViewInvoice extends ViewRecord
         /*
          * BEXIA_V5526V_QUERY_CFDI_CANCEL_STATUS_BUTTON
          */
-        return filled($this->record->cfdi_uuid ?? null)
+        return ! InvoiceResource::isLegacyReadOnly($this->record)
+            && filled($this->record->cfdi_uuid ?? null)
             && in_array((string) ($this->record->cfdi_cancel_status ?? ''), [
                 'cancel_requested',
                 'cancel_error',
@@ -421,6 +428,10 @@ class ViewInvoice extends ViewRecord
 
     private function canStamp(): bool
     {
+        if (InvoiceResource::isLegacyReadOnly($this->record)) {
+            return false;
+        }
+
         /*
          * BEXIA_V5526N_SHOW_STAMP_FOR_DRAFT_INVOICES
          * El botón Timbrar CFDI debe aparecer también para facturas en borrador
