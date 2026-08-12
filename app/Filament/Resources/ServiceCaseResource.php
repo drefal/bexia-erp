@@ -40,6 +40,19 @@ class ServiceCaseResource extends Resource
 
     public static function canViewAny(): bool
     {
+        /*
+         * BEXIA_ATC_TECH_TICKET_ACCESS_V5_82_P7H32A4
+         *
+         * El Técnico puede abrir el módulo aun cuando no posea
+         * permisos CRUD generales. La consulta queda limitada
+         * posteriormente a sus tickets asignados.
+         */
+        if (
+            ServiceAccess::technicianCanEnterServiceCases()
+        ) {
+            return true;
+        }
+
         return ServiceAccess::can([
             'service.menu.view',
             'service.cases.view',
@@ -50,6 +63,14 @@ class ServiceCaseResource extends Resource
 
     public static function canView(Model $record): bool
     {
+        if (
+            ServiceAccess::isRestrictedServiceTechnician()
+        ) {
+            return ServiceAccess::isAssignedServiceCaseTechnician(
+                $record
+            );
+        }
+
         return static::canViewAny();
     }
 
@@ -60,6 +81,14 @@ class ServiceCaseResource extends Resource
 
     public static function canEdit(Model $record): bool
     {
+        if (
+            ServiceAccess::isRestrictedServiceTechnician()
+        ) {
+            return ServiceAccess::isAssignedServiceCaseTechnician(
+                $record
+            );
+        }
+
         if (in_array((string) ($record->status ?? ''), ['entregado', 'cerrado', 'rechazado', 'cancelado'], true)) {
             if ((string) ($record->attention_route ?? '') === 'non_repair') {
                 return ServiceAccess::can('service.cases.update');
@@ -92,6 +121,10 @@ class ServiceCaseResource extends Resource
         if ($companyId && ServiceAccess::tableHasCompany('service_cases')) {
             $query->where('company_id', $companyId);
         }
+
+        ServiceAccess::scopeServiceCasesForCurrentUser(
+            $query
+        );
 
         return $query;
     }

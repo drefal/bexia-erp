@@ -159,6 +159,29 @@ class EditServiceCase extends EditRecord
         ];
     }
 
+    /*
+     * BEXIA_ATC_TECH_TICKET_READONLY_V5_82_P7H32A4B2
+     *
+     * El técnico entra por la página Edit porque ServiceCase
+     * actualmente no tiene una página View independiente.
+     *
+     * Para un Técnico restringido se eliminan las acciones de
+     * guardado del formulario general.
+     *
+     * Las acciones operativas expresamente autorizadas, como
+     * Registrar respuesta, permanecen disponibles.
+     */
+    protected function getFormActions(): array
+    {
+        if (
+            ServiceAccess::isRestrictedServiceTechnician()
+        ) {
+            return [];
+        }
+
+        return parent::getFormActions();
+    }
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $this->oldStatus = $this->record->status;
@@ -169,6 +192,14 @@ class EditServiceCase extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        if (
+            ServiceAccess::isRestrictedServiceTechnician()
+        ) {
+            throw new \Illuminate\Auth\Access\AuthorizationException(
+                'El técnico sólo puede consultar el ticket y utilizar las acciones operativas autorizadas.'
+            );
+        }
+
         $this->uploadedAttachments = $data['uploaded_attachments'] ?? [];
         unset($data['uploaded_attachments']);
 

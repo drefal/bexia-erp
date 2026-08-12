@@ -557,4 +557,13 @@ Route::post('/admin/{tenant}/dashboard-section-settings/{section}', [\App\Http\C
     ->name('service.repair-orders.print');
 
 
+// BEXIA_ATC_DIRECT_SOLUTION_PRINT_ROUTE_V5_82_P7H32D
+\Illuminate\Support\Facades\Route::middleware(['web', 'auth'])
+    ->get(
+        '/admin/{tenant}/service/service-cases/{record}/solution/print',
+        \App\Http\Controllers\Service\ServiceCaseSolutionPrintController::class
+    )
+    ->name('service.service-cases.solution.print');
+
+
 
