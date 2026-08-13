@@ -41,6 +41,7 @@ class ViewAccountPayable extends ViewRecord
                     $record = $this->record;
 
                     return $this->userCanPermission('account_payables.pay')
+                        && ! AccountPayableResource::isLegacyReadOnly($record)
                         && in_array((string) $record->status, ['open', 'partial'], true)
                         && (float) $record->balance_total > 0;
                 })
@@ -201,6 +202,19 @@ class ViewAccountPayable extends ViewRecord
 
             if (! $payable) {
                 throw new \RuntimeException('No se encontró la cuenta por pagar.');
+            }
+
+            /*
+             * Defensa backend independiente de la visibilidad Filament.
+             * Una CxP historica Odoo nunca debe generar un pago nuevo.
+             */
+            if (AccountPayableResource::legacyValuesAreReadOnly(
+                $payable->source_type ?? null,
+                $payable->metadata ?? null,
+            )) {
+                throw new \RuntimeException(
+                    'La cuenta por pagar histórica es de solo lectura y no admite pagos.'
+                );
             }
 
             if (! in_array((string) $payable->status, ['open', 'partial'], true)) {

@@ -286,13 +286,78 @@ class AccountPayableResource extends Resource
         return static::userCanPermission('account_payables.create');
     }
 
+    /*
+     * BEXIA_V582_B28H3_LEGACY_AP_READONLY
+     *
+     * account_payables no posee columnas is_legacy/locked.
+     * Para CxP historicas usamos una identidad compuesta:
+     *
+     * source_type = odoo_account_move
+     * metadata.route = AP
+     * metadata.migration_batch_id = ODOO_GL7_*
+     */
+    public static function legacyValuesAreReadOnly(
+        mixed $sourceType,
+        mixed $metadata,
+    ): bool {
+        if (
+            strtolower(trim((string) $sourceType))
+            !== 'odoo_account_move'
+        ) {
+            return false;
+        }
+
+        if (is_array($metadata)) {
+            $values = $metadata;
+        } elseif (is_string($metadata)) {
+            $decoded = json_decode($metadata, true);
+            $values = is_array($decoded) ? $decoded : [];
+        } else {
+            $values = [];
+        }
+
+        $route = strtoupper(
+            trim((string) ($values['route'] ?? ''))
+        );
+
+        $batch = trim(
+            (string) ($values['migration_batch_id'] ?? '')
+        );
+
+        return $route === 'AP'
+            && str_starts_with($batch, 'ODOO_GL7_');
+    }
+
+    public static function isLegacyReadOnly(
+        AccountPayable $record
+    ): bool {
+        return static::legacyValuesAreReadOnly(
+            $record->source_type ?? null,
+            $record->metadata ?? null,
+        );
+    }
+
     public static function canEdit(Model $record): bool
     {
+        if (
+            $record instanceof AccountPayable
+            && static::isLegacyReadOnly($record)
+        ) {
+            return false;
+        }
+
         return static::userCanPermission('account_payables.update');
     }
 
     public static function canDelete(Model $record): bool
     {
+        if (
+            $record instanceof AccountPayable
+            && static::isLegacyReadOnly($record)
+        ) {
+            return false;
+        }
+
         return static::userCanPermission('account_payables.cancel');
     }
 
