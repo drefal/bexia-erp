@@ -43,6 +43,7 @@ class ViewAccountReceivable extends ViewRecord
                     $record = $this->record;
 
                     return $this->canCollectReceivable()
+                        && ! AccountReceivableResource::isLegacyReadOnly($record)
                         && in_array((string) $record->status, ['open', 'partial'], true)
                         && (float) $record->balance_total > 0;
                 })
@@ -203,6 +204,22 @@ class ViewAccountReceivable extends ViewRecord
 
             if (! $receivable) {
                 throw new \RuntimeException('No se encontró la cuenta por cobrar.');
+            }
+
+            /*
+             * BEXIA_V582_B28I2A_LEGACY_AR_READONLY
+             *
+             * Defensa backend independiente de Filament.
+             * Una CxC historica Odoo nunca debe generar un cobro nuevo,
+             * movimiento de tesoreria o asiento contable.
+             */
+            if (AccountReceivableResource::legacyValuesAreReadOnly(
+                $receivable->source_type ?? null,
+                $receivable->metadata ?? null,
+            )) {
+                throw new \RuntimeException(
+                    'La cuenta por cobrar histórica es de solo lectura y no admite cobros.'
+                );
             }
 
             if (! in_array((string) $receivable->status, ['open', 'partial'], true)) {
