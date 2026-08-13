@@ -206,13 +206,52 @@ class AccountPayablePaymentResource extends Resource
         return false;
     }
 
-    public static function canCancelPayment(AccountPayablePayment $record): bool
+    /*
+     * BEXIA_V582_B28H3_LEGACY_AP_PAYMENT_READONLY
+     */
+    private static function legacyFlagIsTrue(mixed $value): bool
     {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return $value === 1;
+        }
+
+        return in_array(
+            strtolower(trim((string) $value)),
+            ['1', 'true', 't', 'yes', 'y', 'on'],
+            true,
+        );
+    }
+
+    private static function legacyPaymentFlagsAreReadOnly(
+        mixed $isLegacy,
+        mixed $locked,
+    ): bool {
+        return static::legacyFlagIsTrue($isLegacy)
+            && static::legacyFlagIsTrue($locked);
+    }
+
+    public static function isLegacyReadOnlyPayment(
+        AccountPayablePayment $record
+    ): bool {
+        return static::legacyPaymentFlagsAreReadOnly(
+            $record->is_legacy ?? false,
+            $record->locked ?? false,
+        );
+    }
+
+    public static function canCancelPayment(
+        AccountPayablePayment $record
+    ): bool {
         /*
-         * Se permite cancelar pagos aplicados aunque ya tengan póliza.
-         * Si tiene accounting_entry_id, cancelPostedPayment() genera reversa contable.
+         * Los pagos nativos aplicados conservan su flujo normal.
+         * Los pagos legacy + locked son solo consulta.
          */
-        return (string) $record->status === 'posted';
+        return ! static::isLegacyReadOnlyPayment($record)
+            && (string) $record->status === 'posted';
     }
 
     public static function cancelPostedPayment(int $paymentId): array
@@ -232,6 +271,19 @@ class AccountPayablePaymentResource extends Resource
 
             if (! $payment) {
                 throw new \RuntimeException('No se encontró el pago.');
+            }
+
+            /*
+             * Defensa backend: no permitir cancelacion aunque
+             * la accion UI sea omitida.
+             */
+            if (static::legacyPaymentFlagsAreReadOnly(
+                $payment->is_legacy ?? false,
+                $payment->locked ?? false,
+            )) {
+                throw new \RuntimeException(
+                    'El pago histórico es de solo lectura y no puede cancelarse.'
+                );
             }
 
             if ((string) $payment->status !== 'posted') {
