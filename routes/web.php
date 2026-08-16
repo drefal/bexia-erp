@@ -12,6 +12,13 @@ $appDomain  = env('BEXIA_APP_DOMAIN', 'app.bexiaerp.com');
 $rootDomain = env('BEXIA_ROOT_DOMAIN', 'bexiaerp.com');
 $wwwDomain  = env('BEXIA_WWW_DOMAIN', 'www.bexiaerp.com');
 
+// BEXIA_PUBLIC_MP_DOMAIN_V5_83_0B1
+// En DEV usa dev.bexiaerp.com; en PROD usara el APP_URL de PROD.
+$publicCalculatorDomain = parse_url(
+    (string) config('app.url'),
+    PHP_URL_HOST
+) ?: $appDomain;
+
 /*
 |--------------------------------------------------------------------------
 | 1) Marketing / Landing (bexiaerp.com)
@@ -38,6 +45,24 @@ Route::domain($wwwDomain)->group(function () use ($rootDomain) {
 | 3) App (app.bexiaerp.com)
 |--------------------------------------------------------------------------
 */
+// BEXIA_PUBLIC_MP_CALCULATOR_V5_83_0B
+// Ruta publica ligada al dominio runtime de APP_URL.
+Route::domain($publicCalculatorDomain)->group(function () {
+    Route::get(
+        '/calculadora/{companySlug}/mercado-pago',
+        \App\Http\Controllers\PublicMercadoPagoCalculatorController::class
+    )->name('public.calculator.mercado-pago');
+
+
+    // BEXIA_PUBLIC_MP_PDF_V5_83_0E
+    Route::get(
+        '/calculadora/{companySlug}/mercado-pago/pdf',
+        \App\Http\Controllers\PublicMercadoPagoCalculatorPdfController::class
+    )
+        ->middleware('throttle:30,1')
+        ->name('public.calculator.mercado-pago.pdf');
+});
+
 Route::domain($appDomain)->group(function () {
 
     // Si alguien entra a app.bexiaerp.com/ lo mandamos al login del admin

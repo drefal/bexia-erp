@@ -204,6 +204,51 @@ protected static ?string $modelLabel = 'lista de precios';
                             ->columnSpanFull(),
                     ]),
 
+                /*
+                 * BEXIA_PUBLIC_CALCULATOR_V5_83_0B
+                 * Metadatos para publicar listas de financiamiento.
+                 */
+                Forms\Components\Section::make('Calculadora pública de financiamiento')
+                    ->description('Permite utilizar esta lista como plan de pago en una calculadora pública.')
+                    ->columns(4)
+                    ->schema([
+                        Forms\Components\Select::make('payment_provider')
+                            ->label('Proveedor de pago')
+                            ->options([
+                                'mercado_pago' => 'Mercado Pago',
+                            ])
+                            ->placeholder('No aplica')
+                            ->reactive()
+                            ->required(
+                                fn (Forms\Get $get): bool =>
+                                    (bool) $get('public_calculator')
+                            ),
+
+                        Forms\Components\TextInput::make('installment_months')
+                            ->label('Plazo (meses)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(120)
+                            ->required(
+                                fn (Forms\Get $get): bool =>
+                                    (bool) $get('public_calculator')
+                            )
+                            ->helperText('Ejemplo: 3, 6, 9, 12, 18 o 24.'),
+
+                        Forms\Components\Toggle::make('public_calculator')
+                            ->label('Mostrar en calculadora pública')
+                            ->default(false)
+                            ->reactive()
+                            ->helperText('Solo se publican listas activas tipo fórmula sobre otra lista.'),
+
+                        Forms\Components\TextInput::make('public_sort')
+                            ->label('Orden público')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(999)
+                            ->default(0),
+                    ]),
+
                 Forms\Components\Section::make('Precios por producto')
                     ->extraAttributes(['class' => 'bexia-spl-section bexia-spl-section-lines'])
                     ->visible(fn (Forms\Get $get): bool => ($get('calculation_type') ?? 'items') === 'items')
