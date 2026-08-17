@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use App\Models\SalesPriceList;
+use App\Support\PublicPageAnalytics;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -52,6 +53,46 @@ class PublicMercadoPagoCalculatorController extends Controller
             ])
             ->values();
 
+        /*
+         * BEXIA_PUBLIC_ANALYTICS_V5_83_1A
+         * Solo cuenta calculadoras realmente configuradas.
+         */
+        if ($plans->isNotEmpty()) {
+            app(PublicPageAnalytics::class)
+                ->recordView(
+                    (int) $company->id,
+                    PublicPageAnalytics::MERCADO_PAGO_CALCULATOR,
+                    $request
+                );
+        }
+
+        /*
+         * BEXIA_PUBLIC_COUNTER_V5_83_1B
+         * Resumen visible en la pagina publica.
+         */
+        $publicStats = $plans->isNotEmpty()
+            ? app(PublicPageAnalytics::class)->summary(
+                (int) $company->id,
+                PublicPageAnalytics::MERCADO_PAGO_CALCULATOR
+            )
+            : [
+                'today' => [
+                    'views' => 0,
+                    'unique' => 0,
+                    'pdf' => 0,
+                ],
+                'last30' => [
+                    'views' => 0,
+                    'unique' => 0,
+                    'pdf' => 0,
+                ],
+                'all' => [
+                    'views' => 0,
+                    'unique' => 0,
+                    'pdf' => 0,
+                ],
+            ];
+
         $initialAmount = 0.0;
 
         if ($request->filled('monto') && is_numeric($request->query('monto'))) {
@@ -65,6 +106,7 @@ class PublicMercadoPagoCalculatorController extends Controller
             'company' => $company,
             'plans' => $plans,
             'initialAmount' => $initialAmount,
+            'publicStats' => $publicStats,
         ]);
     }
 }

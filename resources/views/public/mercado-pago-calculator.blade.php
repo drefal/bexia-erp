@@ -204,6 +204,27 @@
         }
 
         /* BEXIA_CALCULATOR_BRANDING_V5_83_0C */
+        /* BEXIA_PUBLIC_COUNTER_V5_83_1B */
+        .public-counter {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            margin-top: 18px;
+            color: #98a2b3;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .public-counter strong {
+            color: #667085;
+            font-weight: 650;
+        }
+
+        .public-counter-dot {
+            opacity: .55;
+        }
+
         .bexia-powered {
             display: flex;
             justify-content: flex-end;
@@ -326,6 +347,27 @@
             Las mensualidades mostradas son aproximadas.
             El total a pagar es el importe de referencia.
         </p>
+
+        {{-- BEXIA_PUBLIC_COUNTER_V5_83_1B --}}
+        @if (!empty($publicStats))
+            <div class="public-counter">
+                <span>
+                    <strong>
+                        {{ number_format($publicStats['all']['views'] ?? 0) }}
+                    </strong>
+                    {{ ($publicStats['all']['views'] ?? 0) === 1 ? 'visita' : 'visitas' }}
+                </span>
+
+                <span class="public-counter-dot">•</span>
+
+                <span>
+                    <strong>
+                        {{ number_format($publicStats['all']['unique'] ?? 0) }}
+                    </strong>
+                    {{ ($publicStats['all']['unique'] ?? 0) === 1 ? 'visitante' : 'visitantes' }}
+                </span>
+            </div>
+        @endif
 
         <div class="bexia-powered">
             <span>Plataforma</span>

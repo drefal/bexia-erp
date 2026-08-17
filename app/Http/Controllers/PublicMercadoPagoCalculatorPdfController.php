@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Company;
 use App\Models\SalesPriceList;
+use App\Support\PublicPageAnalytics;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -136,6 +137,17 @@ class PublicMercadoPagoCalculatorPdfController extends Controller
             '-' .
             $amountText .
             '.pdf';
+
+        /*
+         * BEXIA_PUBLIC_PDF_ANALYTICS_V5_83_1A
+         * Se registra solo despues de construir correctamente el PDF.
+         */
+        app(PublicPageAnalytics::class)
+            ->recordPdfDownload(
+                (int) $company->id,
+                PublicPageAnalytics::MERCADO_PAGO_CALCULATOR,
+                $request
+            );
 
         return $pdf->download($fileName);
     }
