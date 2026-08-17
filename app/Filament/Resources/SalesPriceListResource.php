@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\SalesPriceListResource\Pages;
 use App\Models\SalesPriceList;
 use App\Models\SalesPriceListItem;
+use App\Support\PublicPageAnalytics;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -13,6 +14,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\HtmlString;
 
 class SalesPriceListResource extends Resource
 {
@@ -247,6 +249,116 @@ protected static ?string $modelLabel = 'lista de precios';
                             ->minValue(0)
                             ->maxValue(999)
                             ->default(0),
+
+                        /*
+                         * BEXIA_PUBLIC_ANALYTICS_STATS_V5_83_1A
+                         */
+                        Forms\Components\Placeholder::make(
+                            'public_calculator_stats'
+                        )
+                            ->label('Estadísticas de uso')
+                            ->columnSpanFull()
+                            ->visible(
+                                fn (
+                                    Forms\Get $get,
+                                    ?SalesPriceList $record
+                                ): bool =>
+                                    $record !== null
+                                    && (bool) $get(
+                                        'public_calculator'
+                                    )
+                                    && $get(
+                                        'payment_provider'
+                                    ) === 'mercado_pago'
+                            )
+                            ->content(
+                                function (
+                                    ?SalesPriceList $record
+                                ): HtmlString {
+                                    if (
+                                        ! $record
+                                        || ! $record->company_id
+                                    ) {
+                                        return new HtmlString(
+                                            'Sin estadísticas.'
+                                        );
+                                    }
+
+                                    $stats =
+                                        app(
+                                            PublicPageAnalytics::class
+                                        )->summary(
+                                            (int)
+                                            $record->company_id,
+                                            PublicPageAnalytics::
+                                                MERCADO_PAGO_CALCULATOR
+                                        );
+
+                                    $card = static function (
+                                        string $title,
+                                        array $data
+                                    ): string {
+                                        return sprintf(
+                                            '<div style="' .
+                                            'border:1px solid #d1d5db;' .
+                                            'border-radius:10px;' .
+                                            'padding:12px 14px;' .
+                                            'line-height:1.65;' .
+                                            '">' .
+                                            '<strong>%s</strong><br>' .
+                                            'Visitas: <strong>%s</strong><br>' .
+                                            'Visitantes únicos: ' .
+                                            '<strong>%s</strong><br>' .
+                                            'PDF descargados: ' .
+                                            '<strong>%s</strong>' .
+                                            '</div>',
+                                            e($title),
+                                            number_format(
+                                                $data['views']
+                                            ),
+                                            number_format(
+                                                $data['unique']
+                                            ),
+                                            number_format(
+                                                $data['pdf']
+                                            )
+                                        );
+                                    };
+
+                                    return new HtmlString(
+                                        '<div style="' .
+                                        'display:grid;' .
+                                        'grid-template-columns:' .
+                                        'repeat(auto-fit,' .
+                                        'minmax(190px,1fr));' .
+                                        'gap:12px;' .
+                                        '">' .
+                                        $card(
+                                            'Hoy',
+                                            $stats['today']
+                                        ) .
+                                        $card(
+                                            'Últimos 30 días',
+                                            $stats['last30']
+                                        ) .
+                                        $card(
+                                            'Acumulado',
+                                            $stats['all']
+                                        ) .
+                                        '</div>' .
+                                        '<div style="' .
+                                        'margin-top:8px;' .
+                                        'font-size:12px;' .
+                                        'opacity:.7;' .
+                                        '">' .
+                                        'Los visitantes únicos son ' .
+                                        'navegadores identificados de ' .
+                                        'forma anónima. No se almacena ' .
+                                        'la dirección IP.' .
+                                        '</div>'
+                                    );
+                                }
+                            ),
                     ]),
 
                 Forms\Components\Section::make('Precios por producto')
