@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
-use App\Models\SalesPriceList;
+use App\Support\MercadoPagoCalculator;
 use App\Support\PublicPageAnalytics;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -16,140 +16,204 @@ class PublicMercadoPagoCalculatorPdfController extends Controller
         Request $request,
         string $companySlug
     ): Response {
-        if (! app()->bound('dompdf.wrapper')) {
-            abort(500, 'No hay motor PDF disponible.');
+        if (
+            ! app()->bound(
+                'dompdf.wrapper'
+            )
+        ) {
+            abort(
+                500,
+                'No hay motor PDF disponible.'
+            );
         }
 
-        $company = Company::query()
-            ->where('active', true)
-            ->whereRaw(
-                'LOWER(slug) = ?',
-                [Str::lower($companySlug)]
-            )
-            ->firstOrFail();
+        $company =
+            Company::query()
+                ->where(
+                    'active',
+                    true
+                )
+                ->whereRaw(
+                    'LOWER(slug) = ?',
+                    [
+                        Str::lower(
+                            $companySlug
+                        ),
+                    ]
+                )
+                ->firstOrFail();
 
-        $amount = $this->validatedAmount($request);
+        $amount =
+            $this->validatedAmount(
+                $request
+            );
 
-        $today = now()->toDateString();
+        $calculator =
+            app(
+                MercadoPagoCalculator::class
+            );
 
-        $plans = SalesPriceList::query()
-            ->where('company_id', $company->id)
-            ->where('is_active', true)
-            ->where('public_calculator', true)
-            ->where(
-                'payment_provider',
-                'mercado_pago'
-            )
-            ->where(
-                'calculation_type',
-                'formula'
-            )
-            ->where(
-                'formula_basis',
-                'price_list'
-            )
-            ->whereNotNull('installment_months')
-            ->whereNotNull('adjustment_percent')
-            ->where(function ($query) use ($today): void {
-                $query
-                    ->whereNull('valid_from')
-                    ->orWhereDate(
-                        'valid_from',
-                        '<=',
-                        $today
-                    );
-            })
-            ->where(function ($query) use ($today): void {
-                $query
-                    ->whereNull('valid_to')
-                    ->orWhereDate(
-                        'valid_to',
-                        '>=',
-                        $today
-                    );
-            })
-            ->orderByRaw(
-                'COALESCE(public_sort, installment_months) ASC'
-            )
-            ->orderBy('installment_months')
-            ->get();
+        $mode =
+            $calculator
+                ->normalizeMode(
+                    $request->query(
+                        'modo'
+                    )
+                );
+
+        $terms =
+            $calculator->terms(
+                $company
+            );
 
         abort_if(
-            $plans->isEmpty(),
+            $terms
+                ->where(
+                    'months',
+                    '>',
+                    1
+                )
+                ->isEmpty(),
             404,
-            'No hay planes de pago publicados.'
+            'No hay planes publicados.'
         );
 
-        $rows = $plans
-            ->map(function (
-                SalesPriceList $plan
-            ) use ($amount): array {
-                $months = (int) $plan->installment_months;
-                $rate = (float) $plan->adjustment_percent;
+        /*
+         * BEXIA_MP_PDF_SELECTED_PLANS_V5_83_2A5
+         *
+         * planes=1,6,12
+         *
+         * Sin parametro o sin seleccion valida:
+         * se imprimen todos.
+         */
+        $availableMonths =
+            $terms
+                ->pluck('months')
+                ->map(
+                    fn ($value): int =>
+                        (int) $value
+                )
+                ->all();
 
-                $total = round(
-                    $amount * (1 + ($rate / 100)),
-                    2
-                );
-
-                $monthly = round(
-                    $total / $months,
-                    2
-                );
-
-                return [
-                    'months' => $months,
-                    'rate' => $rate,
-                    'monthly' => $monthly,
-                    'total' => $total,
-                ];
-            })
-            ->values();
-
-        $pdf = app('dompdf.wrapper')
-            ->loadView(
-                'pdfs.public.mercado-pago-calculator',
-                [
-                    'company' => $company,
-                    'amount' => $amount,
-                    'rows' => $rows,
-                    'generatedAt' => now(),
-                    'companyLogoDataUri' =>
-                        $this->companyLogoDataUri($company),
-                    'bexiaLogoDataUri' =>
-                        $this->fileDataUri(
-                            public_path('logo.png')
-                        ),
-                ]
+        $selectedMonths =
+            collect(
+                explode(
+                    ',',
+                    (string)
+                    $request->query(
+                        'planes',
+                        ''
+                    )
+                )
             )
-            ->setPaper('letter', 'portrait');
+                ->map(
+                    fn ($value): int =>
+                        (int)
+                        trim(
+                            (string) $value
+                        )
+                )
+                ->filter(
+                    fn (int $months): bool =>
+                        in_array(
+                            $months,
+                            $availableMonths,
+                            true
+                        )
+                )
+                ->unique()
+                ->values();
 
-        $amountText = number_format(
-            $amount,
-            2,
-            '-',
-            ''
-        );
+        if (
+            $selectedMonths->isNotEmpty()
+        ) {
+            $terms =
+                $terms
+                    ->whereIn(
+                        'months',
+                        $selectedMonths->all()
+                    )
+                    ->values();
+        }
+
+        $rows =
+            $calculator->calculate(
+                $terms,
+                $amount,
+                $mode
+            );
+
+        $pdf =
+            app('dompdf.wrapper')
+                ->loadView(
+                    'pdfs.public.mercado-pago-calculator',
+                    [
+                        'company' =>
+                            $company,
+
+                        'amount' =>
+                            $amount,
+
+                        'mode' =>
+                            $mode,
+
+                        'rows' =>
+                            $rows,
+
+                        'generatedAt' =>
+                            now(),
+
+                        'companyLogoDataUri' =>
+                            $this
+                                ->companyLogoDataUri(
+                                    $company
+                                ),
+
+                        'bexiaLogoDataUri' =>
+                            $this
+                                ->fileDataUri(
+                                    public_path(
+                                        'logo.png'
+                                    )
+                                ),
+                    ]
+                )
+                ->setPaper(
+                    'letter',
+                    'landscape'
+                );
+
+        $amountText =
+            number_format(
+                $amount,
+                2,
+                '-',
+                ''
+            );
 
         $fileName =
             'simulacion-mercado-pago-' .
-            Str::slug($company->slug) .
+            Str::slug(
+                $company->slug
+            ) .
+            '-' .
+            $mode .
             '-' .
             $amountText .
             '.pdf';
 
-        /*
-         * BEXIA_PUBLIC_PDF_ANALYTICS_V5_83_1A
-         * Se registra solo despues de construir correctamente el PDF.
-         */
-        app(PublicPageAnalytics::class)
-            ->recordPdfDownload(
-                (int) $company->id,
-                PublicPageAnalytics::MERCADO_PAGO_CALCULATOR,
-                $request
-            );
+        app(
+            PublicPageAnalytics::class
+        )->recordPdfDownload(
+            (int) $company->id,
+            PublicPageAnalytics::
+                MERCADO_PAGO_CALCULATOR,
+            $request
+        );
 
-        return $pdf->download($fileName);
+        return $pdf->download(
+            $fileName
+        );
     }
 
     protected function validatedAmount(
@@ -165,7 +229,8 @@ class PublicMercadoPagoCalculatorPdfController extends Controller
         ]);
 
         return round(
-            (float) $request->query('monto'),
+            (float)
+            $request->query('monto'),
             2
         );
     }
@@ -173,15 +238,21 @@ class PublicMercadoPagoCalculatorPdfController extends Controller
     protected function companyLogoDataUri(
         Company $company
     ): ?string {
-        $path = trim(
-            (string) ($company->logo_path ?? '')
-        );
+        $path =
+            trim(
+                (string)
+                ($company->logo_path ?? '')
+            );
 
         if ($path === '') {
             return null;
         }
 
-        $normalized = ltrim($path, '/');
+        $normalized =
+            ltrim(
+                $path,
+                '/'
+            );
 
         if (
             str_starts_with(
@@ -189,30 +260,45 @@ class PublicMercadoPagoCalculatorPdfController extends Controller
                 'storage/'
             )
         ) {
-            $normalized = substr(
-                $normalized,
-                strlen('storage/')
-            );
+            $normalized =
+                substr(
+                    $normalized,
+                    strlen(
+                        'storage/'
+                    )
+                );
         }
 
         if (
-            Storage::disk('public')->exists(
-                $normalized
-            )
-        ) {
-            return $this->fileDataUri(
-                Storage::disk('public')->path(
+            Storage::disk('public')
+                ->exists(
                     $normalized
                 )
-            );
+        ) {
+            return $this
+                ->fileDataUri(
+                    Storage::disk(
+                        'public'
+                    )->path(
+                        $normalized
+                    )
+                );
         }
 
-        $publicPath = public_path($path);
-
-        if (is_file($publicPath)) {
-            return $this->fileDataUri(
-                $publicPath
+        $publicPath =
+            public_path(
+                $path
             );
+
+        if (
+            is_file(
+                $publicPath
+            )
+        ) {
+            return $this
+                ->fileDataUri(
+                    $publicPath
+                );
         }
 
         return null;
@@ -225,18 +311,27 @@ class PublicMercadoPagoCalculatorPdfController extends Controller
             return null;
         }
 
-        $extension = strtolower(
-            pathinfo(
-                $path,
-                PATHINFO_EXTENSION
-            )
-        );
+        $extension =
+            strtolower(
+                pathinfo(
+                    $path,
+                    PATHINFO_EXTENSION
+                )
+            );
 
         $mime = match ($extension) {
-            'jpg', 'jpeg' => 'image/jpeg',
-            'gif' => 'image/gif',
-            'webp' => 'image/webp',
-            default => 'image/png',
+            'jpg',
+            'jpeg' =>
+                'image/jpeg',
+
+            'gif' =>
+                'image/gif',
+
+            'webp' =>
+                'image/webp',
+
+            default =>
+                'image/png',
         };
 
         return
@@ -244,7 +339,10 @@ class PublicMercadoPagoCalculatorPdfController extends Controller
             $mime .
             ';base64,' .
             base64_encode(
-                (string) file_get_contents($path)
+                (string)
+                file_get_contents(
+                    $path
+                )
             );
     }
 }

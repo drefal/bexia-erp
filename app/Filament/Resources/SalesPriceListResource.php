@@ -237,6 +237,90 @@ protected static ?string $modelLabel = 'lista de precios';
                             )
                             ->helperText('Ejemplo: 3, 6, 9, 12, 18 o 24.'),
 
+                        /*
+                         * BEXIA_MP_FINANCING_V5_83_2A2
+                         * adjustment_percent conserva la tasa total
+                         * histórica de crédito.
+                         */
+                        Forms\Components\TextInput::make(
+                            'financing_percent'
+                        )
+                            ->label(
+                                'Financiamiento adicional (%)'
+                            )
+                            ->numeric()
+                            ->step('0.0001')
+                            ->minValue(0)
+                            ->maxValue(99)
+                            ->suffix('%')
+                            ->reactive()
+                            ->helperText(
+                                'No incluye deslizamiento. ' .
+                                'Crédito agrega 2.19% y débito 1.69%.'
+                            )
+                            ->required(
+                                fn (Forms\Get $get): bool =>
+                                    (bool) $get(
+                                        'public_calculator'
+                                    )
+                            )
+                            ->afterStateUpdated(
+                                function (
+                                    $state,
+                                    Forms\Set $set
+                                ): void {
+                                    if (
+                                        $state === null
+                                        || $state === ''
+                                    ) {
+                                        return;
+                                    }
+
+                                    $financing =
+                                        (float) $state;
+
+                                    /*
+                                     * Mantener adjustment_percent
+                                     * compatible con la tasa total
+                                     * de crédito usada históricamente.
+                                     */
+                                    $set(
+                                        'adjustment_percent',
+                                        round(
+                                            $financing
+                                            + 2.1900,
+                                            4
+                                        )
+                                    );
+                                }
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'public_rate_preview'
+                        )
+                            ->label(
+                                'Tasas calculadas'
+                            )
+                            ->content(
+                                function (
+                                    Forms\Get $get
+                                ): string {
+                                    $financing =
+                                        (float) (
+                                            $get(
+                                                'financing_percent'
+                                            )
+                                            ?? 0
+                                        );
+
+                                    return sprintf(
+                                        'Crédito %.4f%% · Débito %.4f%%',
+                                        $financing + 2.1900,
+                                        $financing + 1.6900
+                                    );
+                                }
+                            ),
+
                         Forms\Components\Toggle::make('public_calculator')
                             ->label('Mostrar en calculadora pública')
                             ->default(false)
