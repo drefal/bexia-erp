@@ -4,277 +4,660 @@
     <meta charset="utf-8">
 
     <title>
-        Simulación de pagos - {{ $company->name }}
+        Simulación de pagos -
+        {{ $company->name }}
     </title>
 
     <style>
         @page {
-            margin: 30px 36px 32px;
+            margin: 13px 16px;
         }
 
         body {
             margin: 0;
-            font-family: DejaVu Sans, sans-serif;
-            font-size: 10px;
+            font-family:
+                DejaVu Sans,
+                sans-serif;
+            font-size: 6.3px;
             color: #172033;
         }
 
-        .header-table {
+        .pdf-page {
             width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 22px;
         }
 
-        .header-table td {
+        .page-break {
+            page-break-after: always;
+        }
+
+        .header {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5px;
+        }
+
+        .header td {
             vertical-align: middle;
         }
 
         .company-logo {
-            max-width: 150px;
-            max-height: 66px;
+            max-width: 95px;
+            max-height: 38px;
         }
 
-        .title-cell {
+        .title {
             text-align: right;
         }
 
-        .company-name {
-            margin: 0 0 3px;
-            font-size: 9px;
+        .title-company {
             color: #667085;
+            font-size: 5.7px;
         }
 
-        h1 {
-            margin: 0;
-            font-size: 22px;
-            line-height: 1.15;
+        .title h1 {
+            margin: 1px 0 0;
+            font-size: 14px;
+            line-height: 1.05;
         }
 
         .subtitle {
-            margin-top: 5px;
-            font-size: 10px;
+            margin-top: 1px;
             color: #667085;
+            font-size: 6px;
         }
 
         .summary {
-            margin-bottom: 20px;
+            margin-bottom: 4px;
+            padding: 5px 7px;
             border: 1px solid #dfe3e8;
-            border-radius: 7px;
             background: #f8fafc;
-            padding: 14px 16px;
         }
 
-        .summary-label {
-            font-size: 9px;
-            color: #667085;
-        }
-
-        .amount {
-            margin-top: 3px;
-            font-size: 24px;
-            font-weight: bold;
-        }
-
-        .date {
-            margin-top: 7px;
-            font-size: 9px;
-            color: #667085;
-        }
-
-        table.results {
+        .summary-table {
             width: 100%;
             border-collapse: collapse;
         }
 
-        .results th {
-            background: #172033;
-            color: #ffffff;
-            padding: 9px 8px;
-            font-size: 9px;
-            text-align: center;
-        }
-
-        .results td {
-            padding: 10px 8px;
-            border-bottom: 1px solid #e4e7ec;
+        .summary-table td {
             vertical-align: middle;
         }
 
-        .results td.center {
-            text-align: center;
-        }
-
-        .results td.money {
-            text-align: right;
-            font-size: 11px;
-        }
-
-        .monthly {
-            font-weight: bold;
-            font-size: 13px;
-        }
-
-        .notice {
-            margin-top: 20px;
-            padding: 11px 13px;
-            background: #f8fafc;
-            border-left: 3px solid #98a2b3;
+        .summary-label {
             color: #667085;
-            line-height: 1.5;
-            font-size: 8.5px;
+            font-size: 5.7px;
         }
 
-        .footer-table {
+        .summary-amount {
+            margin-top: 1px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .summary-meta {
+            text-align: right;
+            color: #667085;
+            font-size: 5.4px;
+            line-height: 1.35;
+        }
+
+        /*
+         * BEXIA_MP_PDF_SIX_CARDS_V5_83_2A5
+         *
+         * 2 columnas x 3 filas = 6 planes por hoja.
+         */
+        .cards-grid {
             width: 100%;
-            margin-top: 24px;
+            border-collapse: separate;
+            border-spacing: 4px 4px;
+            table-layout: fixed;
+        }
+
+        .grid-cell {
+            width: 50%;
+            vertical-align: top;
+        }
+
+        /*
+         * BEXIA_MP_PDF_FULL_LAST_ROW_V5_83_2A6
+         *
+         * Si en una fila queda un solo plazo,
+         * ocupa las dos columnas.
+         */
+        .grid-cell-full {
+            width: 100%;
+            vertical-align: top;
+        }
+
+        .term-card {
+            width: 100%;
+            border: 1px solid #dfe3e8;
+            border-collapse: collapse;
+            background: #fff;
+            page-break-inside: avoid;
+        }
+
+        .term-title {
+            padding: 4px 6px;
+            background: #f9fafb;
+            border-bottom: 1px solid #eaecf0;
+            font-weight: bold;
+            font-size: 7.8px;
+        }
+
+        .card-columns {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .card-columns > tbody > tr > td {
+            width: 50%;
+            vertical-align: top;
+            padding: 5px 6px;
+        }
+
+        .card-columns > tbody > tr > td + td {
+            border-left: 1px solid #eaecf0;
+        }
+
+        .card-type {
+            color: #475467;
+            font-size: 5.4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+
+        .main-payment {
+            margin-top: 2px;
+            font-size: 11.5px;
+            line-height: 1.05;
+            font-weight: bold;
+        }
+
+        .payment-note {
+            margin-top: 1px;
+            color: #667085;
+            font-size: 5px;
+        }
+
+        .block {
+            margin-top: 4px;
+            padding-top: 3px;
+            border-top: 1px solid #eaecf0;
+        }
+
+        .line,
+        .fee-line {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1px;
+        }
+
+        .line td,
+        .fee-line td {
+            padding: 1px 0;
+            vertical-align: top;
+            line-height: 1.25;
+        }
+
+        .line td:first-child,
+        .fee-line td:first-child {
+            width: 44%;
+            color: #667085;
+        }
+
+        .line td:last-child,
+        .fee-line td:last-child {
+            width: 56%;
+            text-align: right;
+        }
+
+        .line td:last-child {
+            font-weight: bold;
+        }
+
+        .fees {
+            margin-top: 3px;
+            padding-top: 3px;
+            border-top: 1px dashed #dfe3e8;
+        }
+
+        .fee-value {
+            white-space: nowrap;
+        }
+
+        .fee-percent,
+        .fee-money {
+            display: block;
+            line-height: 1.2;
+        }
+
+        .fee-money {
+            margin-top: 1px;
+        }
+
+        .fee-total td {
+            padding-top: 2px;
+            color: #172033;
+            font-weight: bold;
+        }
+
+        .footer-note {
+            margin-top: 3px;
+            padding: 3px 5px;
+            border-left: 2px solid #98a2b3;
+            background: #f8fafc;
+            color: #667085;
+            font-size: 4.9px;
+            line-height: 1.3;
+        }
+
+        .footer {
+            width: 100%;
+            margin-top: 3px;
             border-collapse: collapse;
         }
 
-        .footer-table td {
+        .footer td {
             vertical-align: middle;
         }
 
         .footer-text {
             color: #98a2b3;
-            font-size: 8px;
+            font-size: 4.8px;
         }
 
-        .bexia-cell {
+        .bexia {
             text-align: right;
         }
 
         .bexia-logo {
-            max-width: 145px;
-            max-height: 48px;
+            max-width: 75px;
+            max-height: 23px;
         }
     </style>
 </head>
 
 <body>
 
-<table class="header-table">
-    <tr>
-        <td style="width: 34%;">
-            @if ($companyLogoDataUri)
-                <img
-                    class="company-logo"
-                    src="{{ $companyLogoDataUri }}"
-                    alt="{{ $company->name }}"
-                >
-            @endif
-        </td>
+@php
+    /*
+     * Cada grupo representa una hoja.
+     */
+    $pages = collect($rows)->chunk(6);
 
-        <td class="title-cell">
-            <div class="company-name">
-                {{ $company->name }}
-            </div>
+    $selectedLabels = collect($rows)
+        ->pluck('months')
+        ->map(
+            fn ($months) =>
+                (int) $months === 1
+                    ? '1 pago'
+                    : $months . ' meses'
+        )
+        ->implode(', ');
+@endphp
 
-            <h1>Simulación de pagos</h1>
-
-            <div class="subtitle">
-                Mercado Pago
-            </div>
-        </td>
-    </tr>
-</table>
-
-<div class="summary">
-    <div class="summary-label">
-        Monto de referencia
-    </div>
-
-    <div class="amount">
-        ${{ number_format($amount, 2, '.', ',') }}
-    </div>
-
-    <div class="date">
-        Generado:
-        {{ $generatedAt->format('d/m/Y H:i') }}
-    </div>
-</div>
-
-<table class="results">
-    <thead>
-        <tr>
-            <th style="width: 17%;">Plazo</th>
-            <th style="width: 18%;">Recargo</th>
-            <th style="width: 32%;">
-                Pago mensual aproximado
-            </th>
-            <th style="width: 33%;">
-                Total a pagar
-            </th>
-        </tr>
-    </thead>
-
-    <tbody>
-        @foreach ($rows as $row)
+@foreach ($pages as $pageRows)
+    <div
+        class="pdf-page {{
+            ! $loop->last
+                ? 'page-break'
+                : ''
+        }}"
+    >
+        <table class="header">
             <tr>
-                <td class="center">
-                    <strong>
-                        {{ $row['months'] }} meses
-                    </strong>
+                <td>
+                    @if ($companyLogoDataUri)
+                        <img
+                            class="company-logo"
+                            src="{{ $companyLogoDataUri }}"
+                            alt="{{ $company->name }}"
+                        >
+                    @endif
                 </td>
 
-                <td class="center">
-                    {{ number_format(
-                        $row['rate'],
-                        4,
-                        '.',
-                        ','
-                    ) }}%
-                </td>
+                <td class="title">
+                    <div class="title-company">
+                        {{ $company->name }}
+                    </div>
 
-                <td class="money monthly">
-                    ${{ number_format(
-                        $row['monthly'],
-                        2,
-                        '.',
-                        ','
-                    ) }}
-                </td>
+                    <h1>
+                        Simulación de pagos
+                    </h1>
 
-                <td class="money">
-                    ${{ number_format(
-                        $row['total'],
-                        2,
-                        '.',
-                        ','
-                    ) }}
+                    <div class="subtitle">
+                        Mercado Pago
+                    </div>
                 </td>
             </tr>
-        @endforeach
-    </tbody>
-</table>
+        </table>
 
-<div class="notice">
-    Esta simulación es únicamente informativa.
-    Las mensualidades mostradas son aproximadas.
-    El total a pagar es el importe de referencia.
-    Los planes y condiciones pueden cambiar conforme
-    a la configuración vigente en Bexia ERP.
-</div>
+        <div class="summary">
+            <table class="summary-table">
+                <tr>
+                    <td>
+                        <div class="summary-label">
+                            {{
+                                $mode === 'receive'
+                                    ? 'Monto que se desea recibir'
+                                    : 'Monto que se cobrará'
+                            }}
+                        </div>
 
-<table class="footer-table">
-    <tr>
-        <td class="footer-text">
-            Calculado con los planes públicos vigentes
-            de {{ $company->name }}.
-        </td>
+                        <div class="summary-amount">
+                            ${{
+                                number_format(
+                                    $amount,
+                                    2,
+                                    '.',
+                                    ','
+                                )
+                            }}
+                        </div>
+                    </td>
 
-        <td class="bexia-cell">
-            @if ($bexiaLogoDataUri)
-                <img
-                    class="bexia-logo"
-                    src="{{ $bexiaLogoDataUri }}"
-                    alt="Bexia ERP"
-                >
-            @else
-                Bexia ERP
-            @endif
-        </td>
-    </tr>
-</table>
+                    <td class="summary-meta">
+                        {{
+                            $mode === 'receive'
+                                ? 'Cálculo desde monto neto recibido'
+                                : 'Cálculo desde monto cobrado'
+                        }}
+
+                        <br>
+
+                        Planes:
+                        {{ $selectedLabels }}
+
+                        <br>
+
+                        {{
+                            $generatedAt->format(
+                                'd/m/Y H:i'
+                            )
+                        }}
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <table class="cards-grid">
+            @foreach (
+                collect($pageRows)->chunk(2)
+                as $rowChunk
+            )
+                <tr>
+                    @foreach ($rowChunk as $row)
+                        <td
+                            class="{{
+                                $rowChunk->count() === 1
+                                    ? 'grid-cell-full'
+                                    : 'grid-cell'
+                            }}"
+                            {{
+                                $rowChunk->count() === 1
+                                    ? 'colspan=2'
+                                    : ''
+                            }}
+                        >
+                            <table class="term-card">
+                                <tr>
+                                    <td
+                                        class="term-title"
+                                        colspan="2"
+                                    >
+                                        {{
+                                            $row['months'] === 1
+                                                ? '1 pago'
+                                                : $row['months'] .
+                                                    ' meses'
+                                        }}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td
+                                        colspan="2"
+                                        style="padding:0;"
+                                    >
+                                        <table class="card-columns">
+                                            <tr>
+                                                @foreach ([
+                                                    'credit' =>
+                                                        'Crédito',
+                                                    'debit' =>
+                                                        'Débito',
+                                                ] as $key => $label)
+                                                    @php
+                                                        $data =
+                                                            $row[$key];
+
+                                                        $paymentNote =
+                                                            $row[
+                                                                'months'
+                                                            ] === 1
+                                                                ? 'pago único'
+                                                                : 'mensualidad aproximada';
+                                                    @endphp
+
+                                                    <td>
+                                                        <div class="card-type">
+                                                            {{ $label }}
+                                                        </div>
+
+                                                        <div class="main-payment">
+                                                            ${{
+                                                                number_format(
+                                                                    $data[
+                                                                        'payment'
+                                                                    ],
+                                                                    2,
+                                                                    '.',
+                                                                    ','
+                                                                )
+                                                            }}
+                                                        </div>
+
+                                                        <div class="payment-note">
+                                                            {{
+                                                                $paymentNote
+                                                            }}
+                                                        </div>
+
+                                                        <div class="block">
+                                                            <table class="line">
+                                                                <tr>
+                                                                    <td>
+                                                                        Cobrar
+                                                                    </td>
+
+                                                                    <td>
+                                                                        ${{
+                                                                            number_format(
+                                                                                $data[
+                                                                                    'charged'
+                                                                                ],
+                                                                                2,
+                                                                                '.',
+                                                                                ','
+                                                                            )
+                                                                        }}
+                                                                    </td>
+                                                                </tr>
+
+                                                                <tr>
+                                                                    <td>
+                                                                        Recibir
+                                                                    </td>
+
+                                                                    <td>
+                                                                        ${{
+                                                                            number_format(
+                                                                                $data[
+                                                                                    'received'
+                                                                                ],
+                                                                                2,
+                                                                                '.',
+                                                                                ','
+                                                                            )
+                                                                        }}
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                        </div>
+
+                                                        <div class="fees">
+                                                            <table class="fee-line">
+                                                                <tr>
+                                                                    <td>
+                                                                        Desliz.
+                                                                    </td>
+
+                                                                    <td class="fee-value">
+                                                                        <span class="fee-percent">
+                                                                            {{
+                                                                                number_format(
+                                                                                    $data[
+                                                                                        'swipe'
+                                                                                    ],
+                                                                                    4,
+                                                                                    '.',
+                                                                                    ','
+                                                                                )
+                                                                            }}%
+                                                                        </span>
+
+                                                                        <span class="fee-money">
+                                                                            ${{
+                                                                                number_format(
+                                                                                    $data[
+                                                                                        'swipe_amount'
+                                                                                    ],
+                                                                                    2,
+                                                                                    '.',
+                                                                                    ','
+                                                                                )
+                                                                            }}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+
+                                                            <table class="fee-line">
+                                                                <tr>
+                                                                    <td>
+                                                                        Financ.
+                                                                    </td>
+
+                                                                    <td class="fee-value">
+                                                                        <span class="fee-percent">
+                                                                            {{
+                                                                                number_format(
+                                                                                    $data[
+                                                                                        'financing'
+                                                                                    ],
+                                                                                    4,
+                                                                                    '.',
+                                                                                    ','
+                                                                                )
+                                                                            }}%
+                                                                        </span>
+
+                                                                        <span class="fee-money">
+                                                                            ${{
+                                                                                number_format(
+                                                                                    $data[
+                                                                                        'financing_amount'
+                                                                                    ],
+                                                                                    2,
+                                                                                    '.',
+                                                                                    ','
+                                                                                )
+                                                                            }}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+
+                                                            <table class="fee-line fee-total">
+                                                                <tr>
+                                                                    <td>
+                                                                        Total
+                                                                    </td>
+
+                                                                    <td class="fee-value">
+                                                                        <span class="fee-percent">
+                                                                            {{
+                                                                                number_format(
+                                                                                    $data[
+                                                                                        'rate'
+                                                                                    ],
+                                                                                    4,
+                                                                                    '.',
+                                                                                    ','
+                                                                                )
+                                                                            }}%
+                                                                        </span>
+
+                                                                        <span class="fee-money">
+                                                                            ${{
+                                                                                number_format(
+                                                                                    $data[
+                                                                                        'fee_amount'
+                                                                                    ],
+                                                                                    2,
+                                                                                    '.',
+                                                                                    ','
+                                                                                )
+                                                                            }}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                        </div>
+                                                    </td>
+                                                @endforeach
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    @endforeach
+
+                </tr>
+            @endforeach
+        </table>
+
+        <div class="footer-note">
+            Crédito utiliza 2.1900% de deslizamiento
+            y débito 1.6900%.
+            El financiamiento adicional depende
+            del plazo seleccionado.
+        </div>
+
+        <table class="footer">
+            <tr>
+                <td class="footer-text">
+                    Simulación informativa ·
+                    Página {{ $loop->iteration }}
+                    de {{ $pages->count() }}
+                </td>
+
+                <td class="bexia">
+                    @if ($bexiaLogoDataUri)
+                        <img
+                            class="bexia-logo"
+                            src="{{ $bexiaLogoDataUri }}"
+                            alt="Bexia ERP"
+                        >
+                    @endif
+                </td>
+            </tr>
+        </table>
+    </div>
+@endforeach
 
 </body>
 </html>

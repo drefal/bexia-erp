@@ -20,6 +20,7 @@ class SalesPriceList extends Model
         'formula_basis',
         'base_price_list_id',
         'adjustment_percent',
+        'financing_percent',
         'payment_provider',
         'installment_months',
         'public_calculator',
@@ -33,6 +34,7 @@ class SalesPriceList extends Model
 
     protected $casts = [
         'adjustment_percent' => 'decimal:4',
+        'financing_percent' => 'decimal:4',
         'installment_months' => 'integer',
         'public_calculator' => 'boolean',
         'public_sort' => 'integer',
