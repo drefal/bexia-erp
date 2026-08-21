@@ -8917,7 +8917,7 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
 
         // BEXIA_V5545G_SELECT_PARENT_TRACKING_FOR_SERIAL_STOCK
         // Necesario para calcular stock visual de variantes serializadas.
-        foreach (['parent_product_id', 'tracking', 'advanced_tracking_mode'] as $column) {
+        foreach (['parent_product_id', 'tracking', 'advanced_tracking_mode', 'product_type'] as $column) {
             if (in_array($column, $productColumns, true)) {
                 $select[] = "p.$column";
             }
@@ -8935,121 +8935,25 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             ->limit($productIds->isNotEmpty() ? 500 : 2000)
             ->get();
 
-        $ids = $products->pluck('id')->map(fn ($id) => (int) $id)->filter()->values();
+        // BEXIA_V5832A_PENDING_REFRESH_STOCK_PARITY
+        //
+        // Usar la misma lógica de existencia que la carga inicial del PDV.
+        // Resuelve producto padre + variante + empresa + almacén +
+        // ubicación + reservados + series + servicios.
+        $stockByProduct = $this->v5828b5BulkStockForProducts(
+            $products,
+            $pos
+        );
 
-        $stockByProduct = collect();
+        $payload = $products->map(function ($product) use ($productColumns, $stockByProduct, $selectedPriceListId) {
+            // BEXIA_V5832A_PENDING_REFRESH_AVAILABLE_STOCK
+            $available = round(
+                (float) ($stockByProduct->get((int) $product->id) ?? 0),
+                4
+            );
 
-        // BEXIA_V5545G_SERIAL_AVAILABLE_BY_PRODUCT_VARIANT
-        // Para productos con número de serie, el stock visible en PDV debe ser el conteo de series available.
-        $productStockPairs = $products
-            ->map(function ($product): array {
-                $parentId = ! empty($product->parent_product_id) ? (int) $product->parent_product_id : 0;
-
-                return [
-                    'product_id' => $parentId > 0 ? $parentId : (int) $product->id,
-                    'product_variant_id' => $parentId > 0 ? (int) $product->id : null,
-                ];
-            })
-            ->filter(fn (array $pair): bool => (int) $pair['product_id'] > 0)
-            ->unique(fn (array $pair): string => ((int) $pair['product_id']) . ':' . ((int) ($pair['product_variant_id'] ?? 0)))
-            ->values();
-
-        $serialAvailableByProductVariant = collect();
-
-        if (
-            $productStockPairs->isNotEmpty()
-            && \Illuminate\Support\Facades\Schema::hasTable('stock_serial_numbers')
-            && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'product_id')
-        ) {
-            $serialProductIds = $productStockPairs
-                ->pluck('product_id')
-                ->map(fn ($id) => (int) $id)
-                ->filter()
-                ->unique()
-                ->values();
-
-            $serialQuery = \Illuminate\Support\Facades\DB::table('stock_serial_numbers')
-                ->whereIn('product_id', $serialProductIds)
-                ->where('status', 'available');
-
-            if ($companyId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'company_id')) {
-                $serialQuery->where('company_id', $companyId);
-            }
-
-            if ($warehouseId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'current_warehouse_id')) {
-                $serialQuery->where('current_warehouse_id', $warehouseId);
-            }
-
-            if (! empty($locationId) && \Illuminate\Support\Facades\Schema::hasColumn('stock_serial_numbers', 'current_location_id')) {
-                $serialQuery->where('current_location_id', $locationId);
-            }
-
-            $serialRows = $serialQuery
-                ->selectRaw('product_id, product_variant_id, COUNT(*) as available_serials')
-                ->groupBy('product_id', 'product_variant_id')
-                ->get();
-
-            $serialAvailableByProductVariant = $serialRows->keyBy(function ($row): string {
-                return ((int) $row->product_id) . ':' . ((int) ($row->product_variant_id ?? 0));
-            });
-        }
-
-        if (
-            $ids->isNotEmpty()
-            && \Illuminate\Support\Facades\Schema::hasTable('stock_quants')
-            && \Illuminate\Support\Facades\Schema::hasColumn('stock_quants', 'product_id')
-        ) {
-            $stockQuery = \Illuminate\Support\Facades\DB::table('stock_quants')
-                ->whereIn('product_id', $ids);
-
-            if ($companyId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('stock_quants', 'company_id')) {
-                $stockQuery->where('company_id', $companyId);
-            }
-
-            if ($warehouseId > 0 && \Illuminate\Support\Facades\Schema::hasColumn('stock_quants', 'warehouse_id')) {
-                $stockQuery->where('warehouse_id', $warehouseId);
-            }
-
-            $quantityColumn = \Illuminate\Support\Facades\Schema::hasColumn('stock_quants', 'quantity')
-                ? 'quantity'
-                : null;
-
-            $reservedColumn = \Illuminate\Support\Facades\Schema::hasColumn('stock_quants', 'reserved_quantity')
-                ? 'reserved_quantity'
-                : null;
-
-            $stockRows = $stockQuery
-                ->selectRaw('product_id'
-                    . ($quantityColumn ? ", SUM($quantityColumn) as quantity" : ', 0 as quantity')
-                    . ($reservedColumn ? ", SUM($reservedColumn) as reserved_quantity" : ', 0 as reserved_quantity')
-                )
-                ->groupBy('product_id')
-                ->get();
-
-            $stockByProduct = $stockRows->keyBy(fn ($row) => (int) $row->product_id);
-        }
-
-        $payload = $products->map(function ($product) use ($productColumns, $stockByProduct, $serialAvailableByProductVariant, $selectedPriceListId) {
-            $stock = $stockByProduct->get((int) $product->id);
-
-            $quantity = round((float) ($stock->quantity ?? 0), 4);
-            $reserved = round((float) ($stock->reserved_quantity ?? 0), 4);
-            $available = round($quantity - $reserved, 4);
-
-            // BEXIA_V5545G_USE_SERIAL_COUNT_AS_VISIBLE_STOCK
-            // Si esta fila es una variante serializada, mostrar el conteo real de series disponibles.
-            $parentIdForStock = ! empty($product->parent_product_id) ? (int) $product->parent_product_id : 0;
-            $productIdForSerialStock = $parentIdForStock > 0 ? $parentIdForStock : (int) $product->id;
-            $variantIdForSerialStock = $parentIdForStock > 0 ? (int) $product->id : 0;
-            $serialStockKey = $productIdForSerialStock . ':' . $variantIdForSerialStock;
-
-            if ($serialAvailableByProductVariant->has($serialStockKey)) {
-                $serialStock = (float) ($serialAvailableByProductVariant->get($serialStockKey)->available_serials ?? 0);
-
-                $quantity = $serialStock;
-                $reserved = 0.0;
-                $available = $serialStock;
-            }
+            $quantity = $available;
+            $reserved = 0.0;
 
             $basePrice = 0.0;
 
@@ -9065,21 +8969,29 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
              * se guarda en products.sale_price sin IVA: 1.2931.
              * El PDV debe refrescar y mostrar precio público con IVA incluido.
              */
-            $taxRate = 0.0;
+            // BEXIA_V5832A_PENDING_REFRESH_TAX_NORMALIZATION
+            // normalizePosTaxRate soporta tanto 16 como 0.16.
+            $rawTaxRate = null;
 
-            if (in_array('sale_tax_rate', $productColumns, true) && isset($product->sale_tax_rate)) {
-                $taxRate = round((float) $product->sale_tax_rate, 4);
+            if (
+                in_array('sale_tax_rate', $productColumns, true)
+                && isset($product->sale_tax_rate)
+            ) {
+                $rawTaxRate = $product->sale_tax_rate;
             }
 
-            $basePrice = $this->v5491bPriceWithoutTaxFromList((int) $product->id, $selectedPriceListId, $basePrice);
+            $taxRate = $this->normalizePosTaxRate($rawTaxRate);
 
-            $price = $basePrice;
+            $basePrice = $this->v5491bPriceWithoutTaxFromList(
+                (int) $product->id,
+                $selectedPriceListId,
+                $basePrice
+            );
 
-            if ($basePrice > 0 && $taxRate > 0) {
-                $price = round($basePrice * (1 + ($taxRate / 100)), 2);
-            } else {
-                $price = round($basePrice, 2);
-            }
+            $price = round(
+                $basePrice * (1 + $taxRate),
+                2
+            );
 
             $name = $product->name
                 ?? $product->display_name
