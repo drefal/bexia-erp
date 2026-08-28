@@ -18652,6 +18652,96 @@ html.bexia-repair-order-edit-page .fi-header-actions {
     z-index: auto !important;
 }
 /* BEXIA_V582_P7H24F3_USER_MENU_OVER_REPAIR_ACTIONS_END */
+
+/* BEXIA_PAYROLL_PURCHASE_DROPDOWN_FIX_V5_83_5B8_START */
+/* Local fix only for Compras via nomina. */
+.fi-section.bexia-payroll-purchase-section,
+.bexia-payroll-purchase-section.fi-section,
+.bexia-payroll-purchase-section .fi-section-content-ctn,
+.bexia-payroll-purchase-section .fi-section-content,
+.bexia-payroll-purchase-repeater,
+.bexia-payroll-purchase-repeater .fi-fo-repeater-item,
+.bexia-payroll-purchase-repeater .fi-fo-repeater-item-content {
+    overflow: visible !important;
+}
+
+.fi-section.bexia-payroll-purchase-section {
+    position: relative !important;
+    transform: none !important;
+}
+
+.fi-section.bexia-payroll-purchase-section-employee {
+    z-index: 30 !important;
+}
+
+.fi-section.bexia-payroll-purchase-section-products {
+    z-index: 20 !important;
+}
+
+.fi-section.bexia-payroll-purchase-section-financing {
+    z-index: 10 !important;
+}
+
+.bexia-payroll-purchase-select,
+.bexia-payroll-purchase-select .fi-fo-select,
+.bexia-payroll-purchase-select .choices,
+.bexia-payroll-purchase-select .ts-wrapper {
+    position: relative !important;
+    z-index: 100 !important;
+}
+
+.bexia-payroll-purchase-select .choices__list--dropdown,
+.bexia-payroll-purchase-select .choices__list[aria-expanded],
+.bexia-payroll-purchase-select .ts-dropdown,
+.bexia-payroll-purchase-section [role="listbox"] {
+    z-index: 9999 !important;
+}
+/* BEXIA_PAYROLL_PURCHASE_DROPDOWN_FIX_V5_83_5B8_END */
+
+
+/* BEXIA_PAYROLL_PURCHASE_CALENDAR_OVERLAY_FIX_V5_83_5B10_START */
+/* When a field inside a payroll-purchase section is active, lift that section above siblings. */
+.fi-section.bexia-payroll-purchase-section:focus-within,
+.bexia-payroll-purchase-section.fi-section:focus-within {
+    z-index: 120 !important;
+}
+
+/* Keep dropdowns and date pickers above all neighboring sections/cards in Compras vía nómina only. */
+.bexia-payroll-purchase-section .flatpickr-calendar,
+.bexia-payroll-purchase-section .flatpickr-calendar.open,
+.bexia-payroll-purchase-section .flatpickr-calendar.inline,
+.bexia-payroll-purchase-section .fi-fo-date-time-picker-panel,
+.bexia-payroll-purchase-section .fi-dropdown-panel,
+.bexia-payroll-purchase-section [data-placement],
+.bexia-payroll-purchase-section [role="dialog"] {
+    z-index: 99999 !important;
+}
+/* BEXIA_PAYROLL_PURCHASE_CALENDAR_OVERLAY_FIX_V5_83_5B10_END */
+
+
+/* BEXIA_PAYROLL_PURCHASE_REPORT_MODAL_DATEPICKER_FIX_V5_83_5B13_START */
+/* Allow datepickers inside Filament modals to escape the modal body clipping. */
+.fi-modal-window,
+.fi-modal-window > .fi-modal-content,
+.fi-modal-window [x-ref="modalPanel"],
+.fi-modal-window .fi-section,
+.fi-modal-window .fi-fo-field-wrp,
+.fi-modal-window .fi-fo-field-wrp > div {
+    overflow: visible !important;
+}
+
+/* Keep modal datepickers above the modal content and neighboring UI. */
+.fi-modal-window .flatpickr-calendar,
+.fi-modal-window .flatpickr-calendar.open,
+.fi-modal-window .flatpickr-calendar.inline,
+.fi-modal-window .fi-fo-date-time-picker-panel,
+.fi-modal-window .fi-dropdown-panel,
+.fi-modal-window [data-placement],
+.fi-modal-window [role="dialog"] {
+    z-index: 100000 !important;
+}
+/* BEXIA_PAYROLL_PURCHASE_REPORT_MODAL_DATEPICKER_FIX_V5_83_5B13_END */
+
 </style>
 
 <script>
