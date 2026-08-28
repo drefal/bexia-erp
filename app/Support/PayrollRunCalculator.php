@@ -640,6 +640,35 @@ class PayrollRunCalculator
             ->get();
 
         foreach ($applications as $application) {
+            $applicationMetadata = is_array($application->metadata)
+                ? $application->metadata
+                : [];
+
+            $purchaseInstallmentIds = array_values(array_filter(
+                array_map(
+                    'intval',
+                    (array) ($applicationMetadata['purchase_installment_ids'] ?? [])
+                ),
+                fn (int $id): bool => $id > 0
+            ));
+
+            if (
+                $purchaseInstallmentIds
+                && Schema::hasTable('employee_payroll_purchase_installments')
+            ) {
+                DB::table('employee_payroll_purchase_installments')
+                    ->whereIn('id', $purchaseInstallmentIds)
+                    ->where('employee_payroll_deduction_application_id', $application->id)
+                    ->update([
+                        'status' => 'pending',
+                        'applied_amount' => 0,
+                        'employee_payroll_deduction_application_id' => null,
+                        'payroll_run_id' => null,
+                        'applied_at' => null,
+                        'updated_at' => now(),
+                    ]);
+            }
+
             $deduction = EmployeePayrollDeduction::query()
                 ->whereKey($application->employee_payroll_deduction_id)
                 ->lockForUpdate()
@@ -657,6 +686,20 @@ class PayrollRunCalculator
             }
 
             $deduction->save();
+
+            if (
+                (int) ($deduction->employee_payroll_purchase_id ?? 0) > 0
+                && Schema::hasTable('employee_payroll_purchases')
+                && (float) $deduction->outstanding_amount > 0
+            ) {
+                DB::table('employee_payroll_purchases')
+                    ->where('id', (int) $deduction->employee_payroll_purchase_id)
+                    ->where('status', 'paid')
+                    ->update([
+                        'status' => 'confirmed',
+                        'updated_at' => now(),
+                    ]);
+            }
         }
 
         EmployeePayrollDeductionApplication::query()
@@ -710,6 +753,40 @@ class PayrollRunCalculator
         foreach ($deductions as $deduction) {
             $balanceBefore = (float) $deduction->outstanding_amount;
             $periodAmount = (float) $deduction->period_amount;
+            $purchaseId = (int) ($deduction->employee_payroll_purchase_id ?? 0);
+            $purchaseInstallmentIds = [];
+
+            if (
+                $purchaseId > 0
+                && Schema::hasTable('employee_payroll_purchase_installments')
+            ) {
+                $dueInstallments = DB::table('employee_payroll_purchase_installments')
+                    ->where('employee_payroll_purchase_id', $purchaseId)
+                    ->where('employee_payroll_deduction_id', $deduction->id)
+                    ->where('status', 'pending')
+                    ->whereDate('due_date', '<=', $paymentDate)
+                    ->orderBy('due_date')
+                    ->orderBy('installment_number')
+                    ->get(['id', 'scheduled_amount']);
+
+                if ($dueInstallments->isEmpty()) {
+                    continue;
+                }
+
+                $purchaseInstallmentIds = $dueInstallments
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+                    ->values()
+                    ->all();
+
+                $periodAmount = round(
+                    (float) $dueInstallments->sum(
+                        fn ($row) => (float) $row->scheduled_amount
+                    ),
+                    2
+                );
+            }
+
             $applyAmount = round(min($balanceBefore, $periodAmount), 2);
 
             if ($applyAmount <= 0) {
@@ -729,9 +806,12 @@ class PayrollRunCalculator
                 'balance_before' => $balanceBefore,
                 'balance_after' => round($balanceBefore - $applyAmount, 2),
                 'period_amount' => $periodAmount,
+                'employee_payroll_purchase_id' => $purchaseId > 0 ? $purchaseId : null,
+                'purchase_installment_ids' => $purchaseInstallmentIds,
                 'sort_order' => $concept?->sort_order ?: match ((string) $deduction->type) {
                     'loan' => 210,
                     'advance' => 220,
+                    'product_purchase' => 240,
                     default => 230,
                 },
             ];
@@ -786,7 +866,7 @@ class PayrollRunCalculator
         $deduction->status = $balanceAfter <= 0 ? 'paid' : 'active';
         $deduction->save();
 
-        EmployeePayrollDeductionApplication::create([
+        $application = EmployeePayrollDeductionApplication::create([
             'company_id' => $line->company_id,
             'employee_payroll_deduction_id' => $deduction->id,
             'payroll_run_id' => $line->payroll_run_id,
@@ -801,8 +881,67 @@ class PayrollRunCalculator
                 'code' => $concept->code,
                 'name' => $concept->name,
                 'type' => $deduction->type,
+                'employee_payroll_purchase_id' => $item['employee_payroll_purchase_id'] ?? null,
+                'purchase_installment_ids' => $item['purchase_installment_ids'] ?? [],
             ],
         ]);
+
+        $purchaseInstallmentIds = array_values(array_filter(
+            array_map('intval', (array) ($item['purchase_installment_ids'] ?? [])),
+            fn (int $id): bool => $id > 0
+        ));
+
+        if (
+            $purchaseInstallmentIds
+            && Schema::hasTable('employee_payroll_purchase_installments')
+        ) {
+            $remainingToApply = $amount;
+
+            $installments = DB::table('employee_payroll_purchase_installments')
+                ->whereIn('id', $purchaseInstallmentIds)
+                ->where('status', 'pending')
+                ->orderBy('due_date')
+                ->orderBy('installment_number')
+                ->get();
+
+            foreach ($installments as $installment) {
+                if ($remainingToApply <= 0) {
+                    break;
+                }
+
+                $scheduled = (float) $installment->scheduled_amount;
+                $applied = round(min($scheduled, $remainingToApply), 2);
+                $isFullyApplied = abs($applied - $scheduled) < 0.005;
+
+                DB::table('employee_payroll_purchase_installments')
+                    ->where('id', (int) $installment->id)
+                    ->update([
+                        'status' => $isFullyApplied ? 'applied' : 'pending',
+                        'applied_amount' => $applied,
+                        'employee_payroll_deduction_application_id' => $application->id,
+                        'payroll_run_id' => $line->payroll_run_id,
+                        'applied_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                $remainingToApply = round($remainingToApply - $applied, 2);
+            }
+        }
+
+        $purchaseId = (int) ($item['employee_payroll_purchase_id'] ?? 0);
+
+        if (
+            $purchaseId > 0
+            && Schema::hasTable('employee_payroll_purchases')
+            && $balanceAfter <= 0
+        ) {
+            DB::table('employee_payroll_purchases')
+                ->where('id', $purchaseId)
+                ->update([
+                    'status' => 'paid',
+                    'updated_at' => now(),
+                ]);
+        }
     }
 
     protected static function createLineConcepts(PayrollRunLine $line): void

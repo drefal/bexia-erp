@@ -9,6 +9,7 @@ class EmployeePayrollDeduction extends Model
     protected $fillable = [
         'company_id',
         'employee_id',
+        'employee_payroll_purchase_id',
         'payroll_concept_id',
         'type',
         'code',
@@ -67,6 +68,14 @@ class EmployeePayrollDeduction extends Model
         return $this->belongsTo(\App\Models\Employee::class);
     }
 
+    public function purchase()
+    {
+        return $this->belongsTo(
+            \App\Models\EmployeePayrollPurchase::class,
+            'employee_payroll_purchase_id'
+        );
+    }
+
     public function concept()
     {
         return $this->belongsTo(\App\Models\PayrollConcept::class, 'payroll_concept_id');
@@ -83,6 +92,7 @@ class EmployeePayrollDeduction extends Model
             'loan' => 'Préstamo empleado',
             'advance' => 'Anticipo de nómina',
             'recurring_discount' => 'Descuento recurrente',
+            'product_purchase' => 'Compra vía nómina',
             'other' => 'Otro descuento',
         ];
     }
@@ -102,6 +112,7 @@ class EmployeePayrollDeduction extends Model
         return match ($type) {
             'advance' => 'ANTICIPO_NOMINA',
             'recurring_discount' => 'DESCUENTO_RECURRENTE',
+            'product_purchase' => 'COMPRA_EMPLEADO',
             'loan' => 'PRESTAMO_EMPLEADO',
             default => 'DESCUENTO_RECURRENTE',
         };
