@@ -8772,6 +8772,27 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
         $warehouseId = (int) ($pos->warehouse_id ?? $sessionRow->warehouse_id ?? 0);
         $selectedPriceListId = $this->v5491bResolveRequestedPriceListId($request, $pos);
 
+        /*
+         * BEXIA_V5835B_PRODUCT_GROUP_CONSULT
+         *
+         * Consulta informativa de productos desde PDV.
+         *
+         * - No depende de existencia positiva.
+         * - No agrega al carrito.
+         * - No modifica inventario.
+         * - Reutiliza la lista de precios seleccionada.
+         * - Consulta disponibilidad de almacenes dentro del mismo grupo empresarial.
+         */
+        if ($request->boolean('v5835b_consult')) {
+            return $this->v5835bProductGroupConsult(
+                $request,
+                $sessionRow,
+                $pos,
+                $companyId,
+                $selectedPriceListId
+            );
+        }
+
         // V5.51.5O - Auditoría backend cambio lista precios desde products-refresh.
         try {
             $v5515oRequestedPriceList = $request->query('price_list_id', $request->input('price_list_id', null));
@@ -9049,6 +9070,3849 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             'count' => $payload->count(),
             'products' => $payload,
             'generated_at' => now()->toDateTimeString(),
+        ]);
+    }
+
+
+
+    /**
+     * BEXIA_V5835B_PRODUCT_GROUP_CONSULT
+     *
+     * Busqueda y consulta informativa de producto desde una sesion PDV.
+     *
+     * El alcance empresarial se calcula SIEMPRE en servidor desde:
+     *
+     *     companies.company_group_id
+     *
+     * No se acepta company_group_id enviado desde navegador.
+     */
+    protected function v5835bProductGroupConsult(
+        \Illuminate\Http\Request $request,
+        object $sessionRow,
+        object $pos,
+        int $companyId,
+        ?int $selectedPriceListId
+    ): \Illuminate\Http\JsonResponse {
+        if (
+            ! \Illuminate\Support\Facades\Schema::hasTable('products')
+            || ! \Illuminate\Support\Facades\Schema::hasTable('companies')
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No estan disponibles los catalogos necesarios.',
+            ], 500);
+        }
+
+        $productColumns =
+            \Illuminate\Support\Facades\Schema::getColumnListing('products');
+
+        $hasProductColumn = static function (string $column) use ($productColumns): bool {
+            return in_array($column, $productColumns, true);
+        };
+
+        $productSelect = ['p.id'];
+
+        foreach ([
+            'company_id',
+            'name',
+            'variant_name',
+            'sku',
+            'barcode',
+            'internal_reference',
+            'model',
+            'brand',
+            'sale_price',
+            'price',
+            'list_price',
+            'public_price',
+            'sale_tax_rate',
+            'product_type',
+            'tracking',
+            'advanced_tracking_mode',
+            'parent_product_id',
+            'is_variant',
+            'has_variants',
+            'can_be_sold',
+            'available_in_pos',
+            'is_active',
+            'odoo_product_id',
+            'odoo_template_id',
+        ] as $column) {
+            if ($hasProductColumn($column)) {
+                $productSelect[] = 'p.' . $column;
+            }
+        }
+
+        $applyActiveScope = function ($query) use ($hasProductColumn) {
+            if ($hasProductColumn('is_active')) {
+                $query->where('p.is_active', true);
+            } elseif ($hasProductColumn('active')) {
+                $query->where('p.active', true);
+            }
+
+            /*
+             * Los auxiliares historicos ODOO-HIST no deben volver a aparecer
+             * en una consulta operativa del PDV.
+             */
+            foreach (['sku', 'internal_reference'] as $legacyColumn) {
+                if (! $hasProductColumn($legacyColumn)) {
+                    continue;
+                }
+
+                $query->where(function ($inner) use ($legacyColumn): void {
+                    $inner
+                        ->whereNull('p.' . $legacyColumn)
+                        ->orWhereRaw(
+                            "UPPER(TRIM(COALESCE(p.{$legacyColumn}, ''))) NOT LIKE ?",
+                            ['ODOO-HIST-%']
+                        );
+                });
+            }
+
+            return $query;
+        };
+
+        $currentCompanyProducts = function () use (
+            $companyId,
+            $hasProductColumn,
+            $applyActiveScope
+        ) {
+            $query =
+                \Illuminate\Support\Facades\DB::table('products as p');
+
+            if ($hasProductColumn('company_id') && $companyId > 0) {
+                $query->where(function ($inner) use ($companyId): void {
+                    $inner
+                        ->where('p.company_id', $companyId)
+                        ->orWhereNull('p.company_id');
+                });
+            }
+
+            return $applyActiveScope($query);
+        };
+
+        $displayName = static function (object $product): string {
+            $name = trim((string) ($product->name ?? ''));
+
+            $variant = trim(
+                (string) ($product->variant_name ?? '')
+            );
+
+            if (
+                $variant !== ''
+                && ! str_contains(
+                    mb_strtolower($name, 'UTF-8'),
+                    mb_strtolower($variant, 'UTF-8')
+                )
+            ) {
+                $name .= ($name !== '' ? ' / ' : '') . $variant;
+            }
+
+            return $name !== ''
+                ? $name
+                : ('Producto #' . (int) ($product->id ?? 0));
+        };
+
+        $priceData = function (object $product) use (
+            $selectedPriceListId
+        ): array {
+            $basePrice = 0.0;
+
+            foreach ([
+                'sale_price',
+                'price',
+                'list_price',
+                'public_price',
+            ] as $column) {
+                if (
+                    isset($product->{$column})
+                    && is_numeric($product->{$column})
+                ) {
+                    $basePrice = (float) $product->{$column};
+                    break;
+                }
+            }
+
+            $rawTaxRate = $product->sale_tax_rate ?? null;
+
+            $taxRate =
+                $this->normalizePosTaxRate($rawTaxRate);
+
+            $basePrice =
+                $this->v5491bPriceWithoutTaxFromList(
+                    (int) $product->id,
+                    $selectedPriceListId,
+                    $basePrice
+                );
+
+            $publicPrice =
+                round(
+                    $basePrice * (1 + $taxRate),
+                    2
+                );
+
+            return [
+                'price_without_tax' =>
+                    round($basePrice, 4),
+
+                'tax_rate' =>
+                    $taxRate,
+
+                'price' =>
+                    $publicPrice,
+
+                'public_price' =>
+                    $publicPrice,
+            ];
+        };
+
+        $priceListName =
+            method_exists($this, 'v5491bPriceListLabel')
+                ? $this->v5491bPriceListLabel(
+                    $selectedPriceListId
+                )
+                : (
+                    $selectedPriceListId
+                        ? ('Lista #' . $selectedPriceListId)
+                        : 'Precio publico'
+                );
+
+        $requestedProductId =
+            (int) $request->query('product_id', 0);
+
+        /*
+        |--------------------------------------------------------------------------
+        | MODO BUSQUEDA
+        |--------------------------------------------------------------------------
+        |
+        | IMPORTANTISIMO:
+        | No se filtra por stock, can_sell ni available_in_pos.
+        | La consulta debe encontrar productos activos aun con existencia 0.
+        |
+        */
+
+        /*
+         * BEXIA_V5835B4_CATALOG_SEARCH
+         *
+         * La busqueda informativa NO usa el filtro de existencias
+         * del grid PDV.
+         *
+         * Se consulta todo el catalogo ACTIVO de la empresa de la
+         * sesion y se hace la coincidencia en PHP.
+         *
+         * Esto permite:
+         * - encontrar stock 0;
+         * - evitar diferencias de collation/LIKE;
+         * - normalizar acentos;
+         * - buscar por cualquiera de los identificadores reales.
+         */
+        if ($requestedProductId <= 0) {
+            $term =
+                trim(
+                    (string) $request->query(
+                        'q',
+                        ''
+                    )
+                );
+
+            if ($term === '') {
+                return response()->json([
+                    'ok' =>
+                        true,
+
+                    'mode' =>
+                        'search',
+
+                    'query' =>
+                        '',
+
+                    'selected_price_list_id' =>
+                        $selectedPriceListId,
+
+                    'selected_price_list_name' =>
+                        $priceListName,
+
+                    'catalog_count' =>
+                        0,
+
+                    'count' =>
+                        0,
+
+                    'results' =>
+                        [],
+                ]);
+            }
+
+            /*
+             * Normalizador intencionalmente simple y estable.
+             * No depende de extensiones PostgreSQL como unaccent.
+             */
+            $normalizeSearchValue =
+                static function (
+                    mixed $value
+                ): string {
+                    $value =
+                        mb_strtolower(
+                            trim(
+                                (string) $value
+                            ),
+                            'UTF-8'
+                        );
+
+                    $value =
+                        strtr(
+                            $value,
+                            [
+                                'á' => 'a',
+                                'à' => 'a',
+                                'ä' => 'a',
+                                'â' => 'a',
+                                'ã' => 'a',
+
+                                'é' => 'e',
+                                'è' => 'e',
+                                'ë' => 'e',
+                                'ê' => 'e',
+
+                                'í' => 'i',
+                                'ì' => 'i',
+                                'ï' => 'i',
+                                'î' => 'i',
+
+                                'ó' => 'o',
+                                'ò' => 'o',
+                                'ö' => 'o',
+                                'ô' => 'o',
+                                'õ' => 'o',
+
+                                'ú' => 'u',
+                                'ù' => 'u',
+                                'ü' => 'u',
+                                'û' => 'u',
+
+                                'ñ' => 'n',
+                            ]
+                        );
+
+                    $normalized =
+                        preg_replace(
+                            '/\s+/u',
+                            ' ',
+                            $value
+                        );
+
+                    return is_string(
+                        $normalized
+                    )
+                        ? $normalized
+                        : $value;
+                };
+
+            $needle =
+                $normalizeSearchValue(
+                    $term
+                );
+
+            /*
+             * Usamos exactamente la empresa de la sesion.
+             *
+             * A diferencia del grid normal:
+             * - NO filtramos stock;
+             * - NO filtramos can_sell;
+             * - NO filtramos available_in_pos;
+             * - NO filtramos precio.
+             *
+             * La finalidad aqui es CONSULTAR.
+             */
+            $catalogQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'products as p'
+                );
+
+            if (
+                $companyId > 0
+                && $hasProductColumn(
+                    'company_id'
+                )
+            ) {
+                $catalogQuery->where(
+                    'p.company_id',
+                    $companyId
+                );
+            }
+
+            if (
+                $hasProductColumn(
+                    'is_active'
+                )
+            ) {
+                $catalogQuery->where(
+                    'p.is_active',
+                    true
+                );
+            } elseif (
+                $hasProductColumn(
+                    'active'
+                )
+            ) {
+                $catalogQuery->where(
+                    'p.active',
+                    true
+                );
+            }
+
+            $catalogRows =
+                $catalogQuery
+                    ->select(
+                        $productSelect
+                    )
+                    ->orderBy(
+                        'p.id'
+                    )
+                    ->limit(
+                        15000
+                    )
+                    ->get();
+
+            $searchFields = [
+                'name',
+                'variant_name',
+                'internal_reference',
+                'sku',
+                'barcode',
+                'model',
+                'brand',
+            ];
+
+            $matched =
+                $catalogRows
+                    ->map(
+                        function (
+                            object $product
+                        ) use (
+                            $needle,
+                            $normalizeSearchValue,
+                            $searchFields
+                        ): ?array {
+                            /*
+                             * Los productos auxiliares de migracion
+                             * ODOO-HIST no deben volver a una
+                             * consulta operativa.
+                             */
+                            foreach ([
+                                'sku',
+                                'internal_reference',
+                            ] as $legacyField) {
+                                $legacyValue =
+                                    mb_strtoupper(
+                                        trim(
+                                            (string) (
+                                                $product->{
+                                                    $legacyField
+                                                }
+                                                ?? ''
+                                            )
+                                        ),
+                                        'UTF-8'
+                                    );
+
+                                if (
+                                    $legacyValue !== ''
+                                    && str_starts_with(
+                                        $legacyValue,
+                                        'ODOO-HIST-'
+                                    )
+                                ) {
+                                    return null;
+                                }
+                            }
+
+                            $score = 0;
+                            $found = false;
+
+                            foreach (
+                                $searchFields
+                                as $field
+                            ) {
+                                $rawValue =
+                                    (string) (
+                                        $product->{$field}
+                                        ?? ''
+                                    );
+
+                                if (
+                                    trim($rawValue)
+                                    === ''
+                                ) {
+                                    continue;
+                                }
+
+                                $value =
+                                    $normalizeSearchValue(
+                                        $rawValue
+                                    );
+
+                                if (
+                                    $value === ''
+                                    || ! str_contains(
+                                        $value,
+                                        $needle
+                                    )
+                                ) {
+                                    continue;
+                                }
+
+                                $found = true;
+
+                                $identifierField =
+                                    in_array(
+                                        $field,
+                                        [
+                                            'internal_reference',
+                                            'sku',
+                                            'barcode',
+                                        ],
+                                        true
+                                    );
+
+                                if (
+                                    $value
+                                    === $needle
+                                ) {
+                                    $score =
+                                        max(
+                                            $score,
+                                            $identifierField
+                                                ? 1200
+                                                : 1000
+                                        );
+                                } elseif (
+                                    str_starts_with(
+                                        $value,
+                                        $needle
+                                    )
+                                ) {
+                                    $score =
+                                        max(
+                                            $score,
+                                            $identifierField
+                                                ? 900
+                                                : 800
+                                        );
+                                } else {
+                                    $score =
+                                        max(
+                                            $score,
+                                            $identifierField
+                                                ? 600
+                                                : 500
+                                        );
+                                }
+                            }
+
+                            if (! $found) {
+                                return null;
+                            }
+
+                            return [
+                                'product' =>
+                                    $product,
+
+                                'score' =>
+                                    $score,
+                            ];
+                        }
+                    )
+                    ->filter()
+                    ->sortByDesc(
+                        'score'
+                    )
+                    ->take(
+                        40
+                    )
+                    ->values();
+
+            $products =
+                $matched
+                    ->pluck(
+                        'product'
+                    )
+                    ->values();
+
+            /*
+             * Solo despues de encontrar coincidencias calculamos
+             * stock y precio.
+             *
+             * Nunca recorremos todo el catalogo calculando stock.
+             */
+            $stockByProduct =
+                collect();
+
+            if (
+                $products->isNotEmpty()
+                && method_exists(
+                    $this,
+                    'v5828b5BulkStockForProducts'
+                )
+            ) {
+                $stockByProduct =
+                    $this->v5828b5BulkStockForProducts(
+                        $products,
+                        $pos
+                    );
+            }
+
+            $results =
+                $products
+                    ->map(
+                        function (
+                            object $product
+                        ) use (
+                            $displayName,
+                            $priceData,
+                            $stockByProduct
+                        ): array {
+                            $price =
+                                $priceData(
+                                    $product
+                                );
+
+                            $available =
+                                round(
+                                    (float) (
+                                        $stockByProduct->get(
+                                            (int) $product->id
+                                        )
+                                        ?? 0
+                                    ),
+                                    4
+                                );
+
+                            return [
+                                'id' =>
+                                    (int) $product->id,
+
+                                'name' =>
+                                    $displayName(
+                                        $product
+                                    ),
+
+                                'base_name' =>
+                                    (string) (
+                                        $product->name
+                                        ?? ''
+                                    ),
+
+                                'variant_name' =>
+                                    (string) (
+                                        $product->variant_name
+                                        ?? ''
+                                    ),
+
+                                'sku' =>
+                                    (string) (
+                                        $product->sku
+                                        ?? ''
+                                    ),
+
+                                'barcode' =>
+                                    (string) (
+                                        $product->barcode
+                                        ?? ''
+                                    ),
+
+                                'internal_reference' =>
+                                    (string) (
+                                        $product->internal_reference
+                                        ?? ''
+                                    ),
+
+                                'model' =>
+                                    (string) (
+                                        $product->model
+                                        ?? ''
+                                    ),
+
+                                'brand' =>
+                                    (string) (
+                                        $product->brand
+                                        ?? ''
+                                    ),
+
+                                'product_type' =>
+                                    (string) (
+                                        $product->product_type
+                                        ?? 'stockable'
+                                    ),
+
+                                'can_be_sold' =>
+                                    isset(
+                                        $product->can_be_sold
+                                    )
+                                        ? (bool) $product->can_be_sold
+                                        : true,
+
+                                'available_in_pos' =>
+                                    isset(
+                                        $product->available_in_pos
+                                    )
+                                        ? (bool) $product->available_in_pos
+                                        : true,
+
+                                'available_current_pos' =>
+                                    $available,
+
+                                ...$price,
+                            ];
+                        }
+                    )
+                    ->values();
+
+            return response()->json([
+                'ok' =>
+                    true,
+
+                'mode' =>
+                    'search',
+
+                'query' =>
+                    $term,
+
+                'selected_price_list_id' =>
+                    $selectedPriceListId,
+
+                'selected_price_list_name' =>
+                    $priceListName,
+
+                'catalog_count' =>
+                    $catalogRows->count(),
+
+                'count' =>
+                    $results->count(),
+
+                'results' =>
+                    $results,
+            ]);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | MODO DETALLE
+        |--------------------------------------------------------------------------
+        */
+
+        $product =
+            $currentCompanyProducts()
+                ->where(
+                    'p.id',
+                    $requestedProductId
+                )
+                ->select($productSelect)
+                ->first();
+
+        if (! $product) {
+            return response()->json([
+                'ok' => false,
+                'message' =>
+                    'Producto no encontrado dentro del catalogo permitido.',
+            ], 404);
+        }
+
+        $currentStock = 0.0;
+
+        if (
+            method_exists(
+                $this,
+                'v5828b5BulkStockForProducts'
+            )
+        ) {
+            $currentStockCollection =
+                $this->v5828b5BulkStockForProducts(
+                    collect([$product]),
+                    $pos
+                );
+
+            $currentStock =
+                round(
+                    (float) (
+                        $currentStockCollection->get(
+                            (int) $product->id
+                        )
+                        ?? 0
+                    ),
+                    4
+                );
+        }
+
+        $company =
+            \Illuminate\Support\Facades\DB::table('companies')
+                ->where('id', $companyId)
+                ->first();
+
+        if (! $company) {
+            return response()->json([
+                'ok' => false,
+                'message' =>
+                    'No se encontro la empresa de la sesion PDV.',
+            ], 422);
+        }
+
+        $groupId =
+            (int) ($company->company_group_id ?? 0);
+
+        $groupName =
+            trim((string) ($company->name ?? ''));
+
+        if (
+            $groupId > 0
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'company_groups'
+            )
+        ) {
+            $groupRow =
+                \Illuminate\Support\Facades\DB::table(
+                    'company_groups'
+                )
+                    ->where('id', $groupId)
+                    ->first();
+
+            if ($groupRow) {
+                $groupName =
+                    (string) (
+                        $groupRow->name
+                        ?? $groupName
+                    );
+            }
+        }
+
+        $companyQuery =
+            \Illuminate\Support\Facades\DB::table(
+                'companies'
+            );
+
+        if ($groupId > 0) {
+            $companyQuery->where(
+                'company_group_id',
+                $groupId
+            );
+        } else {
+            $companyQuery->where(
+                'id',
+                $companyId
+            );
+        }
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasColumn(
+                'companies',
+                'active'
+            )
+        ) {
+            $companyQuery->where(
+                'active',
+                true
+            );
+        }
+
+        $groupCompanies =
+            $companyQuery
+                ->orderBy('name')
+                ->get([
+                    'id',
+                    'name',
+                    'company_group_id',
+                ]);
+
+        if (
+            ! $groupCompanies->contains(
+                'id',
+                $companyId
+            )
+        ) {
+            $groupCompanies->push($company);
+        }
+
+        $groupCompanyIds =
+            $groupCompanies
+                ->pluck('id')
+                ->map(
+                    static fn ($id): int =>
+                        (int) $id
+                )
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+        $companyNames =
+            $groupCompanies
+                ->mapWithKeys(
+                    static fn ($row): array => [
+                        (int) $row->id =>
+                            (string) ($row->name ?? ''),
+                    ]
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | IDENTIDAD ENTRE EMPRESAS
+        |--------------------------------------------------------------------------
+        |
+        | Prioridad:
+        | 1. odoo_product_id
+        | 2. barcode
+        | 3. internal_reference
+        | 4. sku
+        |
+        | Si una llave solo existe en la empresa actual pero otra llave encuentra
+        | equivalencias en varias empresas, se usa la primera llave confiable que
+        | realmente cruza al menos dos empresas.
+        |
+        */
+
+        $identityDefinitions = [];
+
+        if (
+            $hasProductColumn('odoo_product_id')
+            && (int) ($product->odoo_product_id ?? 0) > 0
+        ) {
+            $identityDefinitions[] = [
+                'method' => 'odoo_product_id',
+                'column' => 'odoo_product_id',
+                'value' =>
+                    (int) $product->odoo_product_id,
+                'numeric' => true,
+            ];
+        }
+
+        foreach ([
+            ['barcode', 'barcode'],
+            ['internal_reference', 'internal_reference'],
+            ['sku', 'sku'],
+        ] as [$method, $column]) {
+            if (! $hasProductColumn($column)) {
+                continue;
+            }
+
+            $value =
+                trim((string) ($product->{$column} ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $identityDefinitions[] = [
+                'method' => $method,
+                'column' => $column,
+                'value' => $value,
+                'numeric' => false,
+            ];
+        }
+
+        $candidateBase = function () use (
+            $groupCompanyIds,
+            $applyActiveScope
+        ) {
+            $query =
+                \Illuminate\Support\Facades\DB::table(
+                    'products as p'
+                )
+                    ->whereIn(
+                        'p.company_id',
+                        $groupCompanyIds
+                    );
+
+            return $applyActiveScope($query);
+        };
+
+        $firstIdentityMatch = null;
+        $chosenIdentityMatch = null;
+
+        foreach ($identityDefinitions as $identity) {
+            $candidateQuery =
+                $candidateBase();
+
+            if ($identity['numeric']) {
+                $candidateQuery->where(
+                    'p.' . $identity['column'],
+                    $identity['value']
+                );
+            } else {
+                $candidateQuery->whereRaw(
+                    "LOWER(TRIM(CAST(p.{$identity['column']} AS TEXT))) = ?",
+                    [
+                        mb_strtolower(
+                            trim(
+                                (string) $identity['value']
+                            ),
+                            'UTF-8'
+                        ),
+                    ]
+                );
+            }
+
+            $rows =
+                $candidateQuery
+                    ->select($productSelect)
+                    ->limit(250)
+                    ->get();
+
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
+            $evaluation = [
+                'method' =>
+                    $identity['method'],
+
+                'value' =>
+                    $identity['value'],
+
+                'rows' =>
+                    $rows,
+
+                'company_count' =>
+                    $rows
+                        ->pluck('company_id')
+                        ->filter()
+                        ->unique()
+                        ->count(),
+            ];
+
+            if ($firstIdentityMatch === null) {
+                $firstIdentityMatch =
+                    $evaluation;
+            }
+
+            if (
+                $evaluation['company_count'] >= 2
+            ) {
+                $chosenIdentityMatch =
+                    $evaluation;
+                break;
+            }
+        }
+
+        if ($chosenIdentityMatch === null) {
+            $chosenIdentityMatch =
+                $firstIdentityMatch;
+        }
+
+        $candidateRows =
+            $chosenIdentityMatch
+                ? $chosenIdentityMatch['rows']
+                : collect();
+
+        $identityMethod =
+            $chosenIdentityMatch['method']
+            ?? 'none';
+
+        $identityValue =
+            $chosenIdentityMatch['value']
+            ?? null;
+
+        /*
+         * Si hay mas de un producto con la misma llave en una empresa,
+         * elegimos el que mas se parece al producto seleccionado.
+         * Se reporta tambien la ambiguedad.
+         */
+        $similarityScore =
+            static function (
+                object $candidate,
+                object $reference
+            ): int {
+                $score = 0;
+
+                if (
+                    (int) ($candidate->id ?? 0)
+                    === (int) ($reference->id ?? 0)
+                ) {
+                    $score += 10000;
+                }
+
+                foreach ([
+                    'odoo_product_id' => 2000,
+                    'barcode' => 1000,
+                    'internal_reference' => 800,
+                    'sku' => 600,
+                    'variant_name' => 300,
+                    'name' => 200,
+                ] as $column => $weight) {
+                    $candidateValue =
+                        mb_strtolower(
+                            trim(
+                                (string) (
+                                    $candidate->{$column}
+                                    ?? ''
+                                )
+                            ),
+                            'UTF-8'
+                        );
+
+                    $referenceValue =
+                        mb_strtolower(
+                            trim(
+                                (string) (
+                                    $reference->{$column}
+                                    ?? ''
+                                )
+                            ),
+                            'UTF-8'
+                        );
+
+                    if (
+                        $candidateValue !== ''
+                        && $candidateValue ===
+                            $referenceValue
+                    ) {
+                        $score += $weight;
+                    }
+                }
+
+                return $score;
+            };
+
+        $candidateByCompany = [];
+        $identityAmbiguities = 0;
+
+        foreach (
+            $candidateRows->groupBy('company_id')
+            as $candidateCompanyId => $rows
+        ) {
+            $candidateCompanyId =
+                (int) $candidateCompanyId;
+
+            if ($candidateCompanyId <= 0) {
+                continue;
+            }
+
+            if ($rows->count() > 1) {
+                $identityAmbiguities +=
+                    $rows->count() - 1;
+            }
+
+            $best =
+                $rows
+                    ->sortByDesc(
+                        fn (object $candidate): int =>
+                            $similarityScore(
+                                $candidate,
+                                $product
+                            )
+                    )
+                    ->first();
+
+            if ($best) {
+                $candidateByCompany[
+                    $candidateCompanyId
+                ] = $best;
+            }
+        }
+
+        /*
+         * La empresa actual SIEMPRE usa exactamente el producto que
+         * selecciono el cajero, independientemente de equivalencias.
+         */
+        $candidateByCompany[$companyId] =
+            $product;
+
+        /*
+         * Producto global sin company_id:
+         * puede consultar el mismo ID contra todas las empresas del grupo.
+         */
+        if (
+            empty($product->company_id)
+            && $hasProductColumn('company_id')
+        ) {
+            foreach ($groupCompanyIds as $candidateCompanyId) {
+                if (
+                    ! isset(
+                        $candidateByCompany[
+                            $candidateCompanyId
+                        ]
+                    )
+                ) {
+                    $candidateByCompany[
+                        $candidateCompanyId
+                    ] = $product;
+                }
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | PREPARAR SPECS DE STOCK POR EMPRESA
+        |--------------------------------------------------------------------------
+        */
+
+        $parentIds = [];
+
+        foreach ($candidateByCompany as $candidate) {
+            $parentId =
+                (int) (
+                    $candidate->parent_product_id
+                    ?? 0
+                );
+
+            if ($parentId > 0) {
+                $parentIds[] =
+                    $parentId;
+            }
+        }
+
+        $parentTracking =
+            collect();
+
+        if (
+            $parentIds !== []
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'products'
+            )
+        ) {
+            $parentTracking =
+                \Illuminate\Support\Facades\DB::table(
+                    'products'
+                )
+                    ->whereIn(
+                        'id',
+                        array_values(
+                            array_unique($parentIds)
+                        )
+                    )
+                    ->get([
+                        'id',
+                        ...array_values(
+                            array_filter(
+                                [
+                                    $hasProductColumn('tracking')
+                                        ? 'tracking'
+                                        : null,
+                                    $hasProductColumn(
+                                        'advanced_tracking_mode'
+                                    )
+                                        ? 'advanced_tracking_mode'
+                                        : null,
+                                ]
+                            )
+                        ),
+                    ])
+                    ->keyBy('id');
+        }
+
+        $usesSerialTracking =
+            static function (
+                object $candidate,
+                $parentTracking
+            ): bool {
+                foreach ([
+                    'tracking',
+                    'advanced_tracking_mode',
+                ] as $column) {
+                    $value =
+                        mb_strtolower(
+                            trim(
+                                (string) (
+                                    $candidate->{$column}
+                                    ?? ''
+                                )
+                            ),
+                            'UTF-8'
+                        );
+
+                    if (
+                        $value !== ''
+                        && (
+                            str_contains($value, 'serial')
+                            || str_contains($value, 'serie')
+                        )
+                    ) {
+                        return true;
+                    }
+                }
+
+                $parentId =
+                    (int) (
+                        $candidate->parent_product_id
+                        ?? 0
+                    );
+
+                if (
+                    $parentId > 0
+                    && $parentTracking->has(
+                        $parentId
+                    )
+                ) {
+                    $parent =
+                        $parentTracking->get(
+                            $parentId
+                        );
+
+                    foreach ([
+                        'tracking',
+                        'advanced_tracking_mode',
+                    ] as $column) {
+                        $value =
+                            mb_strtolower(
+                                trim(
+                                    (string) (
+                                        $parent->{$column}
+                                        ?? ''
+                                    )
+                                ),
+                                'UTF-8'
+                            );
+
+                        if (
+                            $value !== ''
+                            && (
+                                str_contains(
+                                    $value,
+                                    'serial'
+                                )
+                                || str_contains(
+                                    $value,
+                                    'serie'
+                                )
+                            )
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            };
+
+        $stockSpecs = [];
+
+        foreach (
+            $candidateByCompany
+            as $candidateCompanyId => $candidate
+        ) {
+            $candidateCompanyId =
+                (int) $candidateCompanyId;
+
+            $candidateId =
+                (int) $candidate->id;
+
+            $parentId =
+                (int) (
+                    $candidate->parent_product_id
+                    ?? 0
+                );
+
+            $variantId =
+                $parentId > 0
+                    ? $candidateId
+                    : null;
+
+            $stockSpecs[$candidateCompanyId] = [
+                'candidate' =>
+                    $candidate,
+
+                'product_id' =>
+                    $candidateId,
+
+                'stock_product_id' =>
+                    $parentId > 0
+                        ? $parentId
+                        : $candidateId,
+
+                'variant_id' =>
+                    $variantId,
+
+                'aggregate_variants' =>
+                    $variantId === null
+                    && (bool) (
+                        $candidate->has_variants
+                        ?? false
+                    ),
+
+                'serial' =>
+                    $usesSerialTracking(
+                        $candidate,
+                        $parentTracking
+                    ),
+            ];
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | ALMACENES DEL GRUPO
+        |--------------------------------------------------------------------------
+        */
+
+        $warehouses =
+            collect();
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable(
+                'warehouses'
+            )
+        ) {
+            $warehouseQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'warehouses'
+                )
+                    ->whereIn(
+                        'company_id',
+                        $groupCompanyIds
+                    );
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn(
+                    'warehouses',
+                    'is_active'
+                )
+            ) {
+                $warehouseQuery->where(
+                    'is_active',
+                    true
+                );
+            }
+
+            $warehouseSelect = [
+                'id',
+                'company_id',
+            ];
+
+            foreach (['code', 'name'] as $column) {
+                if (
+                    \Illuminate\Support\Facades\Schema::hasColumn(
+                        'warehouses',
+                        $column
+                    )
+                ) {
+                    $warehouseSelect[] =
+                        $column;
+                }
+            }
+
+            $warehouses =
+                $warehouseQuery
+                    ->select($warehouseSelect)
+                    ->orderBy('company_id')
+                    ->orderBy('name')
+                    ->get();
+        }
+
+        $availability = [];
+
+        foreach ($warehouses as $warehouse) {
+            $warehouseId =
+                (int) $warehouse->id;
+
+            $warehouseCompanyId =
+                (int) $warehouse->company_id;
+
+            $spec =
+                $stockSpecs[
+                    $warehouseCompanyId
+                ]
+                ?? null;
+
+            $availability[
+                'w_' . $warehouseId
+            ] = [
+                'company_id' =>
+                    $warehouseCompanyId,
+
+                'company_name' =>
+                    (string) (
+                        $companyNames->get(
+                            $warehouseCompanyId
+                        )
+                        ?? ''
+                    ),
+
+                'warehouse_id' =>
+                    $warehouseId,
+
+                'warehouse_code' =>
+                    (string) (
+                        $warehouse->code
+                        ?? ''
+                    ),
+
+                'warehouse_name' =>
+                    (string) (
+                        $warehouse->name
+                        ?? (
+                            'Almacen #'
+                            . $warehouseId
+                        )
+                    ),
+
+                'matched' =>
+                    $spec !== null,
+
+                'matched_product_id' =>
+                    $spec
+                        ? (int) $spec['product_id']
+                        : null,
+
+                'matched_product_name' =>
+                    $spec
+                        ? $displayName(
+                            $spec['candidate']
+                        )
+                        : null,
+
+                'serial_tracking' =>
+                    $spec
+                        ? (bool) $spec['serial']
+                        : false,
+
+                'quantity' =>
+                    $spec ? 0.0 : null,
+
+                'quant_reserved' =>
+                    0.0,
+
+                'reservation_reserved' =>
+                    0.0,
+
+                'reserved' =>
+                    $spec ? 0.0 : null,
+
+                'available' =>
+                    $spec ? 0.0 : null,
+
+                'is_current_warehouse' =>
+                    $warehouseCompanyId
+                        === $companyId
+                    && $warehouseId
+                        === (int) (
+                            $pos->warehouse_id
+                            ?? 0
+                        ),
+
+                'stock_source' =>
+                    $spec
+                        ? (
+                            $spec['serial']
+                                ? 'serials'
+                                : 'quants'
+                        )
+                        : 'no_match',
+            ];
+        }
+
+        $ensureUnassignedRow =
+            function (
+                int $rowCompanyId,
+                array $spec
+            ) use (
+                &$availability,
+                $companyNames,
+                $displayName
+            ): string {
+                $key =
+                    'u_' . $rowCompanyId;
+
+                if (
+                    ! isset(
+                        $availability[$key]
+                    )
+                ) {
+                    $availability[$key] = [
+                        'company_id' =>
+                            $rowCompanyId,
+
+                        'company_name' =>
+                            (string) (
+                                $companyNames->get(
+                                    $rowCompanyId
+                                )
+                                ?? ''
+                            ),
+
+                        'warehouse_id' =>
+                            0,
+
+                        'warehouse_code' =>
+                            '',
+
+                        'warehouse_name' =>
+                            'Sin almacen asignado',
+
+                        'matched' =>
+                            true,
+
+                        'matched_product_id' =>
+                            (int) $spec['product_id'],
+
+                        'matched_product_name' =>
+                            $displayName(
+                                $spec['candidate']
+                            ),
+
+                        'serial_tracking' =>
+                            (bool) $spec['serial'],
+
+                        'quantity' =>
+                            0.0,
+
+                        'quant_reserved' =>
+                            0.0,
+
+                        'reservation_reserved' =>
+                            0.0,
+
+                        'reserved' =>
+                            0.0,
+
+                        'available' =>
+                            0.0,
+
+                        'is_current_warehouse' =>
+                            false,
+
+                        'stock_source' =>
+                            $spec['serial']
+                                ? 'serials'
+                                : 'quants',
+                    ];
+                }
+
+                return $key;
+            };
+
+        $matchesSpec =
+            static function (
+                object $row,
+                array $spec
+            ): bool {
+                if (
+                    (int) ($row->product_id ?? 0)
+                    !==
+                    (int) $spec['stock_product_id']
+                ) {
+                    return false;
+                }
+
+                $rowVariantId =
+                    (int) (
+                        $row->product_variant_id
+                        ?? 0
+                    );
+
+                if (
+                    ! empty($spec['variant_id'])
+                ) {
+                    return $rowVariantId
+                        === (int) $spec['variant_id'];
+                }
+
+                if (
+                    ! empty(
+                        $spec[
+                            'aggregate_variants'
+                        ]
+                    )
+                ) {
+                    return true;
+                }
+
+                return $rowVariantId <= 0;
+            };
+
+        /*
+        |--------------------------------------------------------------------------
+        | STOCK NORMAL: QUANTS
+        |--------------------------------------------------------------------------
+        */
+
+        $nonSerialSpecs =
+            array_filter(
+                $stockSpecs,
+                static fn (array $spec): bool =>
+                    ! $spec['serial']
+            );
+
+        if (
+            $nonSerialSpecs !== []
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'stock_quants'
+            )
+        ) {
+            $quantCompanyIds =
+                array_map(
+                    'intval',
+                    array_keys(
+                        $nonSerialSpecs
+                    )
+                );
+
+            $quantProductIds =
+                array_values(
+                    array_unique(
+                        array_map(
+                            static fn (array $spec): int =>
+                                (int) $spec[
+                                    'stock_product_id'
+                                ],
+                            $nonSerialSpecs
+                        )
+                    )
+                );
+
+            $quantQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'stock_quants'
+                )
+                    ->whereIn(
+                        'company_id',
+                        $quantCompanyIds
+                    )
+                    ->whereIn(
+                        'product_id',
+                        $quantProductIds
+                    );
+
+            foreach (
+                $quantQuery->get()
+                as $quant
+            ) {
+                $quantCompanyId =
+                    (int) (
+                        $quant->company_id
+                        ?? 0
+                    );
+
+                $spec =
+                    $nonSerialSpecs[
+                        $quantCompanyId
+                    ]
+                    ?? null;
+
+                if (
+                    ! $spec
+                    || ! $matchesSpec(
+                        $quant,
+                        $spec
+                    )
+                ) {
+                    continue;
+                }
+
+                $warehouseId =
+                    (int) (
+                        $quant->warehouse_id
+                        ?? 0
+                    );
+
+                $key =
+                    $warehouseId > 0
+                        ? (
+                            'w_'
+                            . $warehouseId
+                        )
+                        : $ensureUnassignedRow(
+                            $quantCompanyId,
+                            $spec
+                        );
+
+                if (
+                    ! isset(
+                        $availability[$key]
+                    )
+                ) {
+                    continue;
+                }
+
+                $availability[$key][
+                    'quantity'
+                ] +=
+                    (float) (
+                        $quant->quantity
+                        ?? 0
+                    );
+
+                $availability[$key][
+                    'quant_reserved'
+                ] +=
+                    (float) (
+                        $quant->reserved_quantity
+                        ?? 0
+                    );
+            }
+
+            /*
+             * Reservas activas adicionales.
+             * stockForProduct() usa max(reserved quant, active reservations);
+             * repetimos esa misma regla por almacen.
+             */
+            if (
+                \Illuminate\Support\Facades\Schema::hasTable(
+                    'stock_reservations'
+                )
+                && \Illuminate\Support\Facades\Schema::hasColumn(
+                    'stock_reservations',
+                    'product_id'
+                )
+            ) {
+                $reservationQuery =
+                    \Illuminate\Support\Facades\DB::table(
+                        'stock_reservations'
+                    )
+                        ->whereIn(
+                            'company_id',
+                            $quantCompanyIds
+                        )
+                        ->whereIn(
+                            'product_id',
+                            $quantProductIds
+                        );
+
+                if (
+                    \Illuminate\Support\Facades\Schema::hasColumn(
+                        'stock_reservations',
+                        'status'
+                    )
+                ) {
+                    $reservationQuery->where(
+                        'status',
+                        'active'
+                    );
+                }
+
+                foreach (
+                    $reservationQuery->get()
+                    as $reservation
+                ) {
+                    $reservationCompanyId =
+                        (int) (
+                            $reservation->company_id
+                            ?? 0
+                        );
+
+                    $spec =
+                        $nonSerialSpecs[
+                            $reservationCompanyId
+                        ]
+                        ?? null;
+
+                    if (
+                        ! $spec
+                        || ! $matchesSpec(
+                            $reservation,
+                            $spec
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    $warehouseId =
+                        (int) (
+                            $reservation->warehouse_id
+                            ?? 0
+                        );
+
+                    $key =
+                        $warehouseId > 0
+                            ? (
+                                'w_'
+                                . $warehouseId
+                            )
+                            : $ensureUnassignedRow(
+                                $reservationCompanyId,
+                                $spec
+                            );
+
+                    if (
+                        ! isset(
+                            $availability[$key]
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    $availability[$key][
+                        'reservation_reserved'
+                    ] +=
+                        (float) (
+                            $reservation->quantity
+                            ?? 0
+                        );
+                }
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUCTOS SERIALIZADOS
+        |--------------------------------------------------------------------------
+        */
+
+        $serialSpecs =
+            array_filter(
+                $stockSpecs,
+                static fn (array $spec): bool =>
+                    $spec['serial']
+            );
+
+        if (
+            $serialSpecs !== []
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'stock_serial_numbers'
+            )
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'stock_serial_numbers',
+                'product_id'
+            )
+        ) {
+            $serialColumns =
+                \Illuminate\Support\Facades\Schema::getColumnListing(
+                    'stock_serial_numbers'
+                );
+
+            $serialWarehouseColumn =
+                in_array(
+                    'current_warehouse_id',
+                    $serialColumns,
+                    true
+                )
+                    ? 'current_warehouse_id'
+                    : (
+                        in_array(
+                            'warehouse_id',
+                            $serialColumns,
+                            true
+                        )
+                            ? 'warehouse_id'
+                            : null
+                    );
+
+            $serialCompanyIds =
+                array_map(
+                    'intval',
+                    array_keys(
+                        $serialSpecs
+                    )
+                );
+
+            $serialProductIds =
+                array_values(
+                    array_unique(
+                        array_map(
+                            static fn (array $spec): int =>
+                                (int) $spec[
+                                    'stock_product_id'
+                                ],
+                            $serialSpecs
+                        )
+                    )
+                );
+
+            $serialQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'stock_serial_numbers'
+                )
+                    ->whereIn(
+                        'company_id',
+                        $serialCompanyIds
+                    )
+                    ->whereIn(
+                        'product_id',
+                        $serialProductIds
+                    );
+
+            foreach (
+                $serialQuery->get()
+                as $serial
+            ) {
+                $serialCompanyId =
+                    (int) (
+                        $serial->company_id
+                        ?? 0
+                    );
+
+                $spec =
+                    $serialSpecs[
+                        $serialCompanyId
+                    ]
+                    ?? null;
+
+                if (
+                    ! $spec
+                    || ! $matchesSpec(
+                        $serial,
+                        $spec
+                    )
+                ) {
+                    continue;
+                }
+
+                $status =
+                    mb_strtolower(
+                        trim(
+                            (string) (
+                                $serial->status
+                                ?? ''
+                            )
+                        ),
+                        'UTF-8'
+                    );
+
+                if (
+                    ! in_array(
+                        $status,
+                        [
+                            'available',
+                            'reserved',
+                            'reservado',
+                        ],
+                        true
+                    )
+                ) {
+                    continue;
+                }
+
+                $warehouseId =
+                    $serialWarehouseColumn
+                        ? (int) (
+                            $serial->{
+                                $serialWarehouseColumn
+                            }
+                            ?? 0
+                        )
+                        : 0;
+
+                $key =
+                    $warehouseId > 0
+                        ? (
+                            'w_'
+                            . $warehouseId
+                        )
+                        : $ensureUnassignedRow(
+                            $serialCompanyId,
+                            $spec
+                        );
+
+                if (
+                    ! isset(
+                        $availability[$key]
+                    )
+                ) {
+                    continue;
+                }
+
+                $availability[$key][
+                    'quantity'
+                ] += 1;
+
+                if ($status === 'available') {
+                    $availability[$key][
+                        'available'
+                    ] += 1;
+                } else {
+                    $availability[$key][
+                        'reserved'
+                    ] += 1;
+                }
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | FINALIZAR CANTIDADES
+        |--------------------------------------------------------------------------
+        */
+
+        foreach (
+            $availability
+            as $key => &$row
+        ) {
+            if (! $row['matched']) {
+                $row['quantity'] = null;
+                $row['reserved'] = null;
+                $row['available'] = null;
+                continue;
+            }
+
+            if ($row['serial_tracking']) {
+                $row['quantity'] =
+                    round(
+                        (float) $row['quantity'],
+                        4
+                    );
+
+                $row['reserved'] =
+                    round(
+                        (float) $row['reserved'],
+                        4
+                    );
+
+                $row['available'] =
+                    round(
+                        (float) $row['available'],
+                        4
+                    );
+
+                continue;
+            }
+
+            $reserved =
+                max(
+                    (float) (
+                        $row['quant_reserved']
+                        ?? 0
+                    ),
+                    (float) (
+                        $row[
+                            'reservation_reserved'
+                        ]
+                        ?? 0
+                    )
+                );
+
+            $quantity =
+                (float) (
+                    $row['quantity']
+                    ?? 0
+                );
+
+            $row['quantity'] =
+                round($quantity, 4);
+
+            $row['reserved'] =
+                round($reserved, 4);
+
+            $row['available'] =
+                round(
+                    max(
+                        0,
+                        $quantity - $reserved
+                    ),
+                    4
+                );
+        }
+
+        unset($row);
+
+        $availabilityRows =
+            array_values($availability);
+
+        usort(
+            $availabilityRows,
+            static function (
+                array $a,
+                array $b
+            ): int {
+                $aCurrent =
+                    ! empty(
+                        $a[
+                            'is_current_warehouse'
+                        ]
+                    )
+                        ? 0
+                        : 1;
+
+                $bCurrent =
+                    ! empty(
+                        $b[
+                            'is_current_warehouse'
+                        ]
+                    )
+                        ? 0
+                        : 1;
+
+                if ($aCurrent !== $bCurrent) {
+                    return $aCurrent <=> $bCurrent;
+                }
+
+                $aPositive =
+                    (
+                        $a['matched']
+                        && (float) (
+                            $a['available']
+                            ?? 0
+                        ) > 0
+                    )
+                        ? 0
+                        : 1;
+
+                $bPositive =
+                    (
+                        $b['matched']
+                        && (float) (
+                            $b['available']
+                            ?? 0
+                        ) > 0
+                    )
+                        ? 0
+                        : 1;
+
+                if ($aPositive !== $bPositive) {
+                    return $aPositive <=> $bPositive;
+                }
+
+                $aMatched =
+                    $a['matched']
+                        ? 0
+                        : 1;
+
+                $bMatched =
+                    $b['matched']
+                        ? 0
+                        : 1;
+
+                if ($aMatched !== $bMatched) {
+                    return $aMatched <=> $bMatched;
+                }
+
+                $availableCompare =
+                    (float) (
+                        $b['available']
+                        ?? 0
+                    )
+                    <=>
+                    (float) (
+                        $a['available']
+                        ?? 0
+                    );
+
+                if ($availableCompare !== 0) {
+                    return $availableCompare;
+                }
+
+                $companyCompare =
+                    strcasecmp(
+                        (string) (
+                            $a['company_name']
+                            ?? ''
+                        ),
+                        (string) (
+                            $b['company_name']
+                            ?? ''
+                        )
+                    );
+
+                if ($companyCompare !== 0) {
+                    return $companyCompare;
+                }
+
+                return strcasecmp(
+                    (string) (
+                        $a['warehouse_name']
+                        ?? ''
+                    ),
+                    (string) (
+                        $b['warehouse_name']
+                        ?? ''
+                    )
+                );
+            }
+        );
+
+
+        /*
+         * BEXIA_V5835B6_LOCATION_AVAILABILITY
+         *
+         * Regla de consulta operativa:
+         *
+         * - Solo empresas del MISMO company_group_id.
+         * - Solo empresas donde exista equivalencia segura del producto.
+         * - Desglose por stock_location.
+         * - Mantener ubicaciones con cantidad 0.
+         * - La ubicacion actual del PDV aparece primero.
+         */
+
+        $v5835b6MatchedCompanyIds =
+            array_values(
+                array_unique(
+                    array_filter(
+                        array_map(
+                            'intval',
+                            array_keys($stockSpecs)
+                        )
+                    )
+                )
+            );
+
+        $v5835b6CurrentWarehouseId =
+            (int) (
+                $pos->warehouse_id
+                ?? 0
+            );
+
+        $v5835b6CurrentLocationId =
+            (int) (
+                $this->configuredStockLocationId(
+                    $pos
+                )
+                ?? 0
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | ALMACENES ACTIVOS DE EMPRESAS CON PRODUCTO EQUIVALENTE
+        |--------------------------------------------------------------------------
+        */
+
+        $v5835b6Warehouses =
+            collect();
+
+        if (
+            $v5835b6MatchedCompanyIds !== []
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'warehouses'
+            )
+        ) {
+            $v5835b6WarehouseQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'warehouses'
+                )
+                    ->whereIn(
+                        'company_id',
+                        $v5835b6MatchedCompanyIds
+                    );
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn(
+                    'warehouses',
+                    'is_active'
+                )
+            ) {
+                $v5835b6WarehouseQuery->where(
+                    'is_active',
+                    true
+                );
+            }
+
+            $v5835b6WarehouseSelect = [
+                'id',
+                'company_id',
+            ];
+
+            foreach (
+                [
+                    'code',
+                    'name',
+                ]
+                as $column
+            ) {
+                if (
+                    \Illuminate\Support\Facades\Schema::hasColumn(
+                        'warehouses',
+                        $column
+                    )
+                ) {
+                    $v5835b6WarehouseSelect[] =
+                        $column;
+                }
+            }
+
+            $v5835b6Warehouses =
+                $v5835b6WarehouseQuery
+                    ->select(
+                        $v5835b6WarehouseSelect
+                    )
+                    ->orderBy(
+                        'company_id'
+                    )
+                    ->orderBy(
+                        'name'
+                    )
+                    ->get();
+        }
+
+        $v5835b6WarehousesById =
+            $v5835b6Warehouses
+                ->keyBy('id');
+
+        $v5835b6WarehouseIds =
+            $v5835b6Warehouses
+                ->pluck('id')
+                ->map(
+                    static fn ($id): int =>
+                        (int) $id
+                )
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+        /*
+        |--------------------------------------------------------------------------
+        | UBICACIONES ACTIVAS
+        |--------------------------------------------------------------------------
+        */
+
+        $v5835b6Locations =
+            collect();
+
+        if (
+            $v5835b6MatchedCompanyIds !== []
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'stock_locations'
+            )
+        ) {
+            $v5835b6LocationQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'stock_locations as sl'
+                )
+                    ->whereIn(
+                        'sl.company_id',
+                        $v5835b6MatchedCompanyIds
+                    );
+
+            if (
+                $v5835b6WarehouseIds !== []
+                && \Illuminate\Support\Facades\Schema::hasColumn(
+                    'stock_locations',
+                    'warehouse_id'
+                )
+            ) {
+                $v5835b6LocationQuery->whereIn(
+                    'sl.warehouse_id',
+                    $v5835b6WarehouseIds
+                );
+            }
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn(
+                    'stock_locations',
+                    'is_active'
+                )
+            ) {
+                $v5835b6LocationQuery->where(
+                    'sl.is_active',
+                    true
+                );
+            }
+
+            /*
+             * Si existe tipificacion de ubicaciones, mostrar
+             * ubicaciones internas. Las ubicaciones sin tipo
+             * permanecen permitidas por compatibilidad.
+             */
+            if (
+                \Illuminate\Support\Facades\Schema::hasTable(
+                    'stock_location_types'
+                )
+                && \Illuminate\Support\Facades\Schema::hasColumn(
+                    'stock_locations',
+                    'stock_location_type_id'
+                )
+                && \Illuminate\Support\Facades\Schema::hasColumn(
+                    'stock_location_types',
+                    'is_internal'
+                )
+            ) {
+                $v5835b6LocationQuery
+                    ->leftJoin(
+                        'stock_location_types as slt',
+                        'slt.id',
+                        '=',
+                        'sl.stock_location_type_id'
+                    )
+                    ->where(
+                        function ($query): void {
+                            $query
+                                ->whereNull(
+                                    'sl.stock_location_type_id'
+                                )
+                                ->orWhere(
+                                    'slt.is_internal',
+                                    true
+                                );
+                        }
+                    );
+            }
+
+            $v5835b6LocationSelect = [
+                'sl.id',
+                'sl.company_id',
+                'sl.warehouse_id',
+            ];
+
+            foreach (
+                [
+                    'code',
+                    'name',
+                    'parent_id',
+                ]
+                as $column
+            ) {
+                if (
+                    \Illuminate\Support\Facades\Schema::hasColumn(
+                        'stock_locations',
+                        $column
+                    )
+                ) {
+                    $v5835b6LocationSelect[] =
+                        'sl.' . $column;
+                }
+            }
+
+            $v5835b6Locations =
+                $v5835b6LocationQuery
+                    ->select(
+                        $v5835b6LocationSelect
+                    )
+                    ->orderBy(
+                        'sl.company_id'
+                    )
+                    ->orderBy(
+                        'sl.warehouse_id'
+                    )
+                    ->orderBy(
+                        'sl.name'
+                    )
+                    ->get();
+        }
+
+        $v5835b6LocationsById =
+            $v5835b6Locations
+                ->keyBy('id');
+
+        /*
+        |--------------------------------------------------------------------------
+        | CREAR FILAS BASE
+        |--------------------------------------------------------------------------
+        */
+
+        $v5835b6Rows = [];
+
+        $v5835b6LocationLabel =
+            static function (
+                ?object $location,
+                int $locationId
+            ): string {
+                if (! $location) {
+                    return $locationId > 0
+                        ? (
+                            'Ubicacion #'
+                            . $locationId
+                        )
+                        : 'Sin ubicacion asignada';
+                }
+
+                $name =
+                    trim(
+                        (string) (
+                            $location->name
+                            ?? ''
+                        )
+                    );
+
+                $code =
+                    trim(
+                        (string) (
+                            $location->code
+                            ?? ''
+                        )
+                    );
+
+                if (
+                    $code !== ''
+                    && $name !== ''
+                    && ! str_contains(
+                        mb_strtolower(
+                            $name,
+                            'UTF-8'
+                        ),
+                        mb_strtolower(
+                            $code,
+                            'UTF-8'
+                        )
+                    )
+                ) {
+                    return $name
+                        . ' - '
+                        . $code;
+                }
+
+                if ($name !== '') {
+                    return $name;
+                }
+
+                if ($code !== '') {
+                    return $code;
+                }
+
+                return 'Ubicacion #'
+                    . $locationId;
+            };
+
+        foreach (
+            $v5835b6Locations
+            as $location
+        ) {
+            $locationCompanyId =
+                (int) (
+                    $location->company_id
+                    ?? 0
+                );
+
+            if (
+                ! isset(
+                    $stockSpecs[
+                        $locationCompanyId
+                    ]
+                )
+            ) {
+                continue;
+            }
+
+            $spec =
+                $stockSpecs[
+                    $locationCompanyId
+                ];
+
+            $warehouseId =
+                (int) (
+                    $location->warehouse_id
+                    ?? 0
+                );
+
+            $warehouse =
+                $v5835b6WarehousesById->get(
+                    $warehouseId
+                );
+
+            if (
+                ! $warehouse
+                && $warehouseId > 0
+            ) {
+                continue;
+            }
+
+            $locationId =
+                (int) $location->id;
+
+            $key =
+                'l_'
+                . $locationId;
+
+            $v5835b6Rows[$key] = [
+                'company_id' =>
+                    $locationCompanyId,
+
+                'company_name' =>
+                    (string) (
+                        $companyNames->get(
+                            $locationCompanyId
+                        )
+                        ?? ''
+                    ),
+
+                'warehouse_id' =>
+                    $warehouseId,
+
+                'warehouse_code' =>
+                    (string) (
+                        $warehouse->code
+                        ?? ''
+                    ),
+
+                'warehouse_name' =>
+                    (string) (
+                        $warehouse->name
+                        ?? (
+                            $warehouseId > 0
+                                ? (
+                                    'Almacen #'
+                                    . $warehouseId
+                                )
+                                : 'Sin almacen'
+                        )
+                    ),
+
+                'location_id' =>
+                    $locationId,
+
+                'location_code' =>
+                    (string) (
+                        $location->code
+                        ?? ''
+                    ),
+
+                'location_name' =>
+                    $v5835b6LocationLabel(
+                        $location,
+                        $locationId
+                    ),
+
+                'matched' =>
+                    true,
+
+                'matched_product_id' =>
+                    (int) $spec[
+                        'product_id'
+                    ],
+
+                'matched_product_name' =>
+                    $displayName(
+                        $spec[
+                            'candidate'
+                        ]
+                    ),
+
+                'serial_tracking' =>
+                    (bool) $spec[
+                        'serial'
+                    ],
+
+                'quantity' =>
+                    0.0,
+
+                'quant_reserved' =>
+                    0.0,
+
+                'reservation_reserved' =>
+                    0.0,
+
+                'reserved' =>
+                    0.0,
+
+                'available' =>
+                    0.0,
+
+                'is_current_warehouse' =>
+                    $locationCompanyId
+                        === $companyId
+                    && $warehouseId
+                        === $v5835b6CurrentWarehouseId,
+
+                'is_current_location' =>
+                    $locationCompanyId
+                        === $companyId
+                    && $warehouseId
+                        === $v5835b6CurrentWarehouseId
+                    && $locationId
+                        === $v5835b6CurrentLocationId,
+
+                'stock_source' =>
+                    $spec['serial']
+                        ? 'serials'
+                        : 'quants',
+            ];
+        }
+
+        /*
+         * Un almacen con producto equivalente debe poder verse
+         * incluso si aun no tiene ubicaciones configuradas.
+         */
+        foreach (
+            $v5835b6Warehouses
+            as $warehouse
+        ) {
+            $warehouseCompanyId =
+                (int) (
+                    $warehouse->company_id
+                    ?? 0
+                );
+
+            $spec =
+                $stockSpecs[
+                    $warehouseCompanyId
+                ]
+                ?? null;
+
+            if (! $spec) {
+                continue;
+            }
+
+            $warehouseId =
+                (int) $warehouse->id;
+
+            $hasLocation =
+                collect(
+                    $v5835b6Rows
+                )
+                    ->contains(
+                        static function (
+                            array $row
+                        ) use (
+                            $warehouseId
+                        ): bool {
+                            return (int) (
+                                $row[
+                                    'warehouse_id'
+                                ]
+                                ?? 0
+                            ) === $warehouseId;
+                        }
+                    );
+
+            if ($hasLocation) {
+                continue;
+            }
+
+            $key =
+                'w_'
+                . $warehouseId
+                . '_no_location';
+
+            $v5835b6Rows[$key] = [
+                'company_id' =>
+                    $warehouseCompanyId,
+
+                'company_name' =>
+                    (string) (
+                        $companyNames->get(
+                            $warehouseCompanyId
+                        )
+                        ?? ''
+                    ),
+
+                'warehouse_id' =>
+                    $warehouseId,
+
+                'warehouse_code' =>
+                    (string) (
+                        $warehouse->code
+                        ?? ''
+                    ),
+
+                'warehouse_name' =>
+                    (string) (
+                        $warehouse->name
+                        ?? (
+                            'Almacen #'
+                            . $warehouseId
+                        )
+                    ),
+
+                'location_id' =>
+                    0,
+
+                'location_code' =>
+                    '',
+
+                'location_name' =>
+                    'Sin ubicacion configurada',
+
+                'matched' =>
+                    true,
+
+                'matched_product_id' =>
+                    (int) $spec[
+                        'product_id'
+                    ],
+
+                'matched_product_name' =>
+                    $displayName(
+                        $spec[
+                            'candidate'
+                        ]
+                    ),
+
+                'serial_tracking' =>
+                    (bool) $spec[
+                        'serial'
+                    ],
+
+                'quantity' =>
+                    0.0,
+
+                'quant_reserved' =>
+                    0.0,
+
+                'reservation_reserved' =>
+                    0.0,
+
+                'reserved' =>
+                    0.0,
+
+                'available' =>
+                    0.0,
+
+                'is_current_warehouse' =>
+                    $warehouseCompanyId
+                        === $companyId
+                    && $warehouseId
+                        === $v5835b6CurrentWarehouseId,
+
+                'is_current_location' =>
+                    false,
+
+                'stock_source' =>
+                    $spec['serial']
+                        ? 'serials'
+                        : 'quants',
+            ];
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | HELPER PARA FILAS NO PRECREADAS
+        |--------------------------------------------------------------------------
+        */
+
+        $v5835b6EnsureRow =
+            function (
+                int $rowCompanyId,
+                int $warehouseId,
+                int $locationId,
+                array $spec
+            ) use (
+                &$v5835b6Rows,
+                $v5835b6WarehousesById,
+                $v5835b6LocationsById,
+                $companyNames,
+                $displayName,
+                $v5835b6LocationLabel,
+                $companyId,
+                $v5835b6CurrentWarehouseId,
+                $v5835b6CurrentLocationId
+            ): string {
+                $key =
+                    $locationId > 0
+                        ? (
+                            'l_'
+                            . $locationId
+                        )
+                        : (
+                            'w_'
+                            . $warehouseId
+                            . '_no_location'
+                        );
+
+                if (
+                    isset(
+                        $v5835b6Rows[
+                            $key
+                        ]
+                    )
+                ) {
+                    return $key;
+                }
+
+                $warehouse =
+                    $v5835b6WarehousesById->get(
+                        $warehouseId
+                    );
+
+                $location =
+                    $v5835b6LocationsById->get(
+                        $locationId
+                    );
+
+                $v5835b6Rows[$key] = [
+                    'company_id' =>
+                        $rowCompanyId,
+
+                    'company_name' =>
+                        (string) (
+                            $companyNames->get(
+                                $rowCompanyId
+                            )
+                            ?? ''
+                        ),
+
+                    'warehouse_id' =>
+                        $warehouseId,
+
+                    'warehouse_code' =>
+                        (string) (
+                            $warehouse->code
+                            ?? ''
+                        ),
+
+                    'warehouse_name' =>
+                        (string) (
+                            $warehouse->name
+                            ?? (
+                                $warehouseId > 0
+                                    ? (
+                                        'Almacen #'
+                                        . $warehouseId
+                                    )
+                                    : 'Sin almacen'
+                            )
+                        ),
+
+                    'location_id' =>
+                        $locationId,
+
+                    'location_code' =>
+                        (string) (
+                            $location->code
+                            ?? ''
+                        ),
+
+                    'location_name' =>
+                        $v5835b6LocationLabel(
+                            $location,
+                            $locationId
+                        ),
+
+                    'matched' =>
+                        true,
+
+                    'matched_product_id' =>
+                        (int) $spec[
+                            'product_id'
+                        ],
+
+                    'matched_product_name' =>
+                        $displayName(
+                            $spec[
+                                'candidate'
+                            ]
+                        ),
+
+                    'serial_tracking' =>
+                        (bool) $spec[
+                            'serial'
+                        ],
+
+                    'quantity' =>
+                        0.0,
+
+                    'quant_reserved' =>
+                        0.0,
+
+                    'reservation_reserved' =>
+                        0.0,
+
+                    'reserved' =>
+                        0.0,
+
+                    'available' =>
+                        0.0,
+
+                    'is_current_warehouse' =>
+                        $rowCompanyId
+                            === $companyId
+                        && $warehouseId
+                            === $v5835b6CurrentWarehouseId,
+
+                    'is_current_location' =>
+                        $rowCompanyId
+                            === $companyId
+                        && $warehouseId
+                            === $v5835b6CurrentWarehouseId
+                        && $locationId
+                            === $v5835b6CurrentLocationId,
+
+                    'stock_source' =>
+                        $spec['serial']
+                            ? 'serials'
+                            : 'quants',
+                ];
+
+                return $key;
+            };
+
+        /*
+        |--------------------------------------------------------------------------
+        | QUANTS POR UBICACION
+        |--------------------------------------------------------------------------
+        */
+
+        $v5835b6NonSerialSpecs =
+            array_filter(
+                $stockSpecs,
+                static fn (
+                    array $spec
+                ): bool =>
+                    ! $spec[
+                        'serial'
+                    ]
+            );
+
+        if (
+            $v5835b6NonSerialSpecs !== []
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'stock_quants'
+            )
+        ) {
+            $productIds =
+                array_values(
+                    array_unique(
+                        array_map(
+                            static fn (
+                                array $spec
+                            ): int =>
+                                (int) $spec[
+                                    'stock_product_id'
+                                ],
+                            $v5835b6NonSerialSpecs
+                        )
+                    )
+                );
+
+            $quantQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'stock_quants'
+                )
+                    ->whereIn(
+                        'company_id',
+                        array_keys(
+                            $v5835b6NonSerialSpecs
+                        )
+                    )
+                    ->whereIn(
+                        'product_id',
+                        $productIds
+                    );
+
+            foreach (
+                $quantQuery->get()
+                as $quant
+            ) {
+                $rowCompanyId =
+                    (int) (
+                        $quant->company_id
+                        ?? 0
+                    );
+
+                $spec =
+                    $v5835b6NonSerialSpecs[
+                        $rowCompanyId
+                    ]
+                    ?? null;
+
+                if (
+                    ! $spec
+                    || ! $matchesSpec(
+                        $quant,
+                        $spec
+                    )
+                ) {
+                    continue;
+                }
+
+                $warehouseId =
+                    (int) (
+                        $quant->warehouse_id
+                        ?? 0
+                    );
+
+                /*
+                 * Solo almacenes activos que pertenecen
+                 * a las empresas equivalentes del grupo.
+                 */
+                if (
+                    $warehouseId > 0
+                    && ! $v5835b6WarehousesById->has(
+                        $warehouseId
+                    )
+                ) {
+                    continue;
+                }
+
+                $locationId =
+                    (int) (
+                        $quant->location_id
+                        ?? 0
+                    );
+
+                $key =
+                    $v5835b6EnsureRow(
+                        $rowCompanyId,
+                        $warehouseId,
+                        $locationId,
+                        $spec
+                    );
+
+                $v5835b6Rows[$key][
+                    'quantity'
+                ] +=
+                    (float) (
+                        $quant->quantity
+                        ?? 0
+                    );
+
+                $v5835b6Rows[$key][
+                    'quant_reserved'
+                ] +=
+                    (float) (
+                        $quant->reserved_quantity
+                        ?? 0
+                    );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | RESERVAS ACTIVAS POR UBICACION
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasTable(
+                    'stock_reservations'
+                )
+                && \Illuminate\Support\Facades\Schema::hasColumn(
+                    'stock_reservations',
+                    'product_id'
+                )
+            ) {
+                $reservationQuery =
+                    \Illuminate\Support\Facades\DB::table(
+                        'stock_reservations'
+                    )
+                        ->whereIn(
+                            'company_id',
+                            array_keys(
+                                $v5835b6NonSerialSpecs
+                            )
+                        )
+                        ->whereIn(
+                            'product_id',
+                            $productIds
+                        );
+
+                if (
+                    \Illuminate\Support\Facades\Schema::hasColumn(
+                        'stock_reservations',
+                        'status'
+                    )
+                ) {
+                    $reservationQuery->where(
+                        'status',
+                        'active'
+                    );
+                }
+
+                foreach (
+                    $reservationQuery->get()
+                    as $reservation
+                ) {
+                    $rowCompanyId =
+                        (int) (
+                            $reservation->company_id
+                            ?? 0
+                        );
+
+                    $spec =
+                        $v5835b6NonSerialSpecs[
+                            $rowCompanyId
+                        ]
+                        ?? null;
+
+                    if (
+                        ! $spec
+                        || ! $matchesSpec(
+                            $reservation,
+                            $spec
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    $warehouseId =
+                        (int) (
+                            $reservation->warehouse_id
+                            ?? 0
+                        );
+
+                    if (
+                        $warehouseId > 0
+                        && ! $v5835b6WarehousesById->has(
+                            $warehouseId
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    $locationId =
+                        (int) (
+                            $reservation->location_id
+                            ?? 0
+                        );
+
+                    $key =
+                        $v5835b6EnsureRow(
+                            $rowCompanyId,
+                            $warehouseId,
+                            $locationId,
+                            $spec
+                        );
+
+                    $v5835b6Rows[$key][
+                        'reservation_reserved'
+                    ] +=
+                        (float) (
+                            $reservation->quantity
+                            ?? 0
+                        );
+                }
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | SERIES POR UBICACION
+        |--------------------------------------------------------------------------
+        */
+
+        $v5835b6SerialSpecs =
+            array_filter(
+                $stockSpecs,
+                static fn (
+                    array $spec
+                ): bool =>
+                    $spec[
+                        'serial'
+                    ]
+            );
+
+        if (
+            $v5835b6SerialSpecs !== []
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'stock_serial_numbers'
+            )
+        ) {
+            $serialColumns =
+                \Illuminate\Support\Facades\Schema::getColumnListing(
+                    'stock_serial_numbers'
+                );
+
+            $warehouseColumn =
+                in_array(
+                    'current_warehouse_id',
+                    $serialColumns,
+                    true
+                )
+                    ? 'current_warehouse_id'
+                    : (
+                        in_array(
+                            'warehouse_id',
+                            $serialColumns,
+                            true
+                        )
+                            ? 'warehouse_id'
+                            : null
+                    );
+
+            $locationColumn =
+                in_array(
+                    'current_location_id',
+                    $serialColumns,
+                    true
+                )
+                    ? 'current_location_id'
+                    : (
+                        in_array(
+                            'location_id',
+                            $serialColumns,
+                            true
+                        )
+                            ? 'location_id'
+                            : null
+                    );
+
+            $serialProductIds =
+                array_values(
+                    array_unique(
+                        array_map(
+                            static fn (
+                                array $spec
+                            ): int =>
+                                (int) $spec[
+                                    'stock_product_id'
+                                ],
+                            $v5835b6SerialSpecs
+                        )
+                    )
+                );
+
+            $serialQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'stock_serial_numbers'
+                )
+                    ->whereIn(
+                        'company_id',
+                        array_keys(
+                            $v5835b6SerialSpecs
+                        )
+                    )
+                    ->whereIn(
+                        'product_id',
+                        $serialProductIds
+                    );
+
+            foreach (
+                $serialQuery->get()
+                as $serial
+            ) {
+                $rowCompanyId =
+                    (int) (
+                        $serial->company_id
+                        ?? 0
+                    );
+
+                $spec =
+                    $v5835b6SerialSpecs[
+                        $rowCompanyId
+                    ]
+                    ?? null;
+
+                if (
+                    ! $spec
+                    || ! $matchesSpec(
+                        $serial,
+                        $spec
+                    )
+                ) {
+                    continue;
+                }
+
+                $status =
+                    mb_strtolower(
+                        trim(
+                            (string) (
+                                $serial->status
+                                ?? ''
+                            )
+                        ),
+                        'UTF-8'
+                    );
+
+                if (
+                    ! in_array(
+                        $status,
+                        [
+                            'available',
+                            'reserved',
+                            'reservado',
+                        ],
+                        true
+                    )
+                ) {
+                    continue;
+                }
+
+                $warehouseId =
+                    $warehouseColumn
+                        ? (int) (
+                            $serial->{
+                                $warehouseColumn
+                            }
+                            ?? 0
+                        )
+                        : 0;
+
+                if (
+                    $warehouseId > 0
+                    && ! $v5835b6WarehousesById->has(
+                        $warehouseId
+                    )
+                ) {
+                    continue;
+                }
+
+                $locationId =
+                    $locationColumn
+                        ? (int) (
+                            $serial->{
+                                $locationColumn
+                            }
+                            ?? 0
+                        )
+                        : 0;
+
+                $key =
+                    $v5835b6EnsureRow(
+                        $rowCompanyId,
+                        $warehouseId,
+                        $locationId,
+                        $spec
+                    );
+
+                $v5835b6Rows[$key][
+                    'quantity'
+                ] += 1;
+
+                if (
+                    $status
+                    === 'available'
+                ) {
+                    $v5835b6Rows[$key][
+                        'available'
+                    ] += 1;
+                } else {
+                    $v5835b6Rows[$key][
+                        'reserved'
+                    ] += 1;
+                }
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CALCULAR DISPONIBLE FINAL
+        |--------------------------------------------------------------------------
+        */
+
+        foreach (
+            $v5835b6Rows
+            as &$row
+        ) {
+            if (
+                $row[
+                    'serial_tracking'
+                ]
+            ) {
+                $row['quantity'] =
+                    round(
+                        (float) $row[
+                            'quantity'
+                        ],
+                        4
+                    );
+
+                $row['reserved'] =
+                    round(
+                        (float) $row[
+                            'reserved'
+                        ],
+                        4
+                    );
+
+                $row['available'] =
+                    round(
+                        (float) $row[
+                            'available'
+                        ],
+                        4
+                    );
+
+                continue;
+            }
+
+            $reserved =
+                max(
+                    (float) (
+                        $row[
+                            'quant_reserved'
+                        ]
+                        ?? 0
+                    ),
+                    (float) (
+                        $row[
+                            'reservation_reserved'
+                        ]
+                        ?? 0
+                    )
+                );
+
+            $quantity =
+                (float) (
+                    $row[
+                        'quantity'
+                    ]
+                    ?? 0
+                );
+
+            $row['quantity'] =
+                round(
+                    $quantity,
+                    4
+                );
+
+            $row['reserved'] =
+                round(
+                    $reserved,
+                    4
+                );
+
+            $row['available'] =
+                round(
+                    max(
+                        0,
+                        $quantity
+                        - $reserved
+                    ),
+                    4
+                );
+        }
+
+        unset($row);
+
+        $availabilityRows =
+            array_values(
+                $v5835b6Rows
+            );
+
+        usort(
+            $availabilityRows,
+            static function (
+                array $a,
+                array $b
+            ): int {
+                /*
+                 * 1. Ubicacion actual.
+                 */
+                $aCurrent =
+                    ! empty(
+                        $a[
+                            'is_current_location'
+                        ]
+                    )
+                        ? 0
+                        : 1;
+
+                $bCurrent =
+                    ! empty(
+                        $b[
+                            'is_current_location'
+                        ]
+                    )
+                        ? 0
+                        : 1;
+
+                if (
+                    $aCurrent
+                    !== $bCurrent
+                ) {
+                    return $aCurrent
+                        <=> $bCurrent;
+                }
+
+                /*
+                 * 2. Ubicaciones con stock.
+                 */
+                $aPositive =
+                    (float) (
+                        $a[
+                            'available'
+                        ]
+                        ?? 0
+                    ) > 0
+                        ? 0
+                        : 1;
+
+                $bPositive =
+                    (float) (
+                        $b[
+                            'available'
+                        ]
+                        ?? 0
+                    ) > 0
+                        ? 0
+                        : 1;
+
+                if (
+                    $aPositive
+                    !== $bPositive
+                ) {
+                    return $aPositive
+                        <=> $bPositive;
+                }
+
+                /*
+                 * 3. Empresa.
+                 */
+                $companyCompare =
+                    strcasecmp(
+                        (string) (
+                            $a[
+                                'company_name'
+                            ]
+                            ?? ''
+                        ),
+                        (string) (
+                            $b[
+                                'company_name'
+                            ]
+                            ?? ''
+                        )
+                    );
+
+                if (
+                    $companyCompare !== 0
+                ) {
+                    return $companyCompare;
+                }
+
+                /*
+                 * 4. Almacen.
+                 */
+                $warehouseCompare =
+                    strcasecmp(
+                        (string) (
+                            $a[
+                                'warehouse_name'
+                            ]
+                            ?? ''
+                        ),
+                        (string) (
+                            $b[
+                                'warehouse_name'
+                            ]
+                            ?? ''
+                        )
+                    );
+
+                if (
+                    $warehouseCompare !== 0
+                ) {
+                    return $warehouseCompare;
+                }
+
+                /*
+                 * 5. Ubicacion.
+                 */
+                return strcasecmp(
+                    (string) (
+                        $a[
+                            'location_name'
+                        ]
+                        ?? ''
+                    ),
+                    (string) (
+                        $b[
+                            'location_name'
+                        ]
+                        ?? ''
+                    )
+                );
+            }
+        );
+
+        $groupAvailable =
+            round(
+                array_reduce(
+                    $availabilityRows,
+                    static function (
+                        float $carry,
+                        array $row
+                    ): float {
+                        if (! $row['matched']) {
+                            return $carry;
+                        }
+
+                        return $carry
+                            + (float) (
+                                $row['available']
+                                ?? 0
+                            );
+                    },
+                    0.0
+                ),
+                4
+            );
+
+        $matchedCompanies =
+            collect($stockSpecs)
+                ->keys()
+                ->map(
+                    static fn ($id): int =>
+                        (int) $id
+                )
+                ->unique()
+                ->count();
+
+        $productPrice =
+            $priceData($product);
+
+        return response()->json([
+            'ok' =>
+                true,
+
+            'mode' =>
+                'detail',
+
+            'session_id' =>
+                (int) $sessionRow->id,
+
+            'pos_point_id' =>
+                (int) $sessionRow->pos_point_id,
+
+            'company_id' =>
+                $companyId,
+
+            'current_warehouse_id' =>
+                (int) ($pos->warehouse_id ?? 0),
+
+            'selected_price_list_id' =>
+                $selectedPriceListId,
+
+            'selected_price_list_name' =>
+                $priceListName,
+
+            'product' => [
+                'id' =>
+                    (int) $product->id,
+
+                'name' =>
+                    $displayName($product),
+
+                'base_name' =>
+                    (string) ($product->name ?? ''),
+
+                'variant_name' =>
+                    (string) (
+                        $product->variant_name ?? ''
+                    ),
+
+                'sku' =>
+                    (string) ($product->sku ?? ''),
+
+                'barcode' =>
+                    (string) ($product->barcode ?? ''),
+
+                'internal_reference' =>
+                    (string) (
+                        $product->internal_reference ?? ''
+                    ),
+
+                'brand' =>
+                    (string) ($product->brand ?? ''),
+
+                'model' =>
+                    (string) ($product->model ?? ''),
+
+                'product_type' =>
+                    (string) (
+                        $product->product_type
+                        ?? 'stockable'
+                    ),
+
+                'available_current_pos' =>
+                    $currentStock,
+
+                ...$productPrice,
+            ],
+
+            'group' => [
+                'id' =>
+                    $groupId ?: null,
+
+                'name' =>
+                    $groupName,
+
+                /*
+                 * BEXIA_V5835B6_GROUP_DISPLAY_SCOPE
+                 *
+                 * En pantalla contamos solamente empresas del grupo
+                 * donde existe una equivalencia segura del producto.
+                 */
+                'companies_count' =>
+                    $matchedCompanies,
+
+                'matched_companies_count' =>
+                    $matchedCompanies,
+
+                'group_companies_count' =>
+                    count($groupCompanyIds),
+
+                'identity_method' =>
+                    $identityMethod,
+
+                'identity_value' =>
+                    $identityValue,
+
+                'identity_ambiguities' =>
+                    $identityAmbiguities,
+
+                'available_total' =>
+                    $groupAvailable,
+            ],
+
+            'warehouses' =>
+                $availabilityRows,
+
+            'generated_at' =>
+                now()->toDateTimeString(),
         ]);
     }
 

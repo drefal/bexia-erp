@@ -636,6 +636,13 @@
             <div class="search">
                 <input id="v5490b-product-search" type="search" placeholder="Buscar por nombre, código, SKU o código de barras" autocomplete="off" inputmode="search">
                 <button class="btn" id="v5490b-code-button" type="button" style="display:none;">Código</button>
+                {{-- BEXIA_V5835B_PRODUCT_GROUP_CONSULT_UI --}}
+                <button
+                    class="btn"
+                    id="v5835b-product-consult-button"
+                    type="button"
+                    title="Consultar precio y existencias en el grupo empresarial"
+                >🔎 Consultar producto</button>
                 <button class="btn" id="v5490b-clear-search" type="button">Limpiar</button>
             </div>
 @if($canCreateTicket && ! $canCharge)
@@ -13402,6 +13409,1986 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+
+
+
+{{-- BEXIA_V5835B_PRODUCT_GROUP_CONSULT_UI --}}
+{{-- BEXIA_V5835B6_LOCATION_TABLE_UI --}}
+<style id="bexia-v5835b-product-group-consult-style">
+    .v5835b-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 2147483500;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, .62);
+        backdrop-filter: blur(3px);
+    }
+
+    .v5835b-modal.is-open {
+        display: flex;
+    }
+
+    .v5835b-card {
+        width: min(1050px, 100%);
+        max-height: min(92vh, 900px);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border-radius: 22px;
+        background: #fff;
+        box-shadow: 0 30px 80px rgba(15, 23, 42, .34);
+    }
+
+    .v5835b-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .v5835b-title {
+        font-size: 20px;
+        line-height: 1.15;
+        font-weight: 950;
+        color: #0f172a;
+    }
+
+    .v5835b-subtitle {
+        margin-top: 4px;
+        font-size: 12px;
+        color: #64748b;
+    }
+
+    .v5835b-close {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+        border: 0;
+        border-radius: 999px;
+        background: #f1f5f9;
+        color: #334155;
+        font-size: 25px;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .v5835b-body {
+        min-height: 0;
+        overflow: auto;
+        padding: 18px 20px 22px;
+    }
+
+    .v5835b-search-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+    }
+
+    .v5835b-search-input {
+        width: 100%;
+        min-height: 48px;
+        border: 1px solid #cbd5e1;
+        border-radius: 14px;
+        padding: 11px 14px;
+        background: #fff;
+        color: #0f172a;
+        font-size: 15px;
+        outline: none;
+    }
+
+    .v5835b-search-input:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
+    }
+
+    .v5835b-search-action {
+        min-width: 110px;
+        border: 0;
+        border-radius: 14px;
+        padding: 11px 16px;
+        background: #2563eb;
+        color: #fff;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .v5835b-message {
+        margin-top: 12px;
+        border: 1px solid #dbeafe;
+        border-radius: 13px;
+        padding: 10px 12px;
+        background: #eff6ff;
+        color: #1e40af;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .v5835b-message.is-error {
+        border-color: #fecaca;
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+
+    .v5835b-results {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .v5835b-result {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 14px;
+        align-items: center;
+        border: 1px solid #e2e8f0;
+        border-radius: 15px;
+        padding: 12px 14px;
+        background: #fff;
+        color: #0f172a;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .v5835b-result:hover {
+        border-color: #93c5fd;
+        background: #f8fbff;
+    }
+
+    .v5835b-result-name {
+        font-size: 14px;
+        font-weight: 950;
+    }
+
+    .v5835b-result-meta {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #64748b;
+    }
+
+    .v5835b-result-price {
+        font-size: 15px;
+        font-weight: 950;
+        color: #2563eb;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .v5835b-result-stock {
+        margin-top: 3px;
+        font-size: 11px;
+        color: #475569;
+        text-align: right;
+    }
+
+    .v5835b-detail {
+        display: none;
+        margin-top: 14px;
+    }
+
+    .v5835b-detail.is-visible {
+        display: block;
+    }
+
+    .v5835b-back {
+        border: 0;
+        padding: 0;
+        background: transparent;
+        color: #2563eb;
+        font-size: 12px;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .v5835b-product-name {
+        margin-top: 10px;
+        font-size: 21px;
+        line-height: 1.2;
+        font-weight: 950;
+        color: #0f172a;
+    }
+
+    .v5835b-product-meta {
+        margin-top: 5px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .v5835b-kpis {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+    }
+
+    .v5835b-kpi {
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 13px 14px;
+        background: #f8fafc;
+    }
+
+    .v5835b-kpi-label {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 800;
+    }
+
+    .v5835b-kpi-value {
+        margin-top: 5px;
+        font-size: 20px;
+        line-height: 1.1;
+        font-weight: 950;
+        color: #0f172a;
+    }
+
+    .v5835b-kpi-price .v5835b-kpi-value {
+        color: #2563eb;
+    }
+
+    .v5835b-context {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+    }
+
+    .v5835b-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 27px;
+        border: 1px solid #dbe3ef;
+        border-radius: 999px;
+        padding: 4px 9px;
+        background: #fff;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 850;
+    }
+
+    .v5835b-table-wrap {
+        margin-top: 14px;
+        max-height: 410px;
+        overflow: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+    }
+
+    .v5835b-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+    .v5835b-table th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding: 10px 11px;
+        border-bottom: 1px solid #cbd5e1;
+        background: #f8fafc;
+        color: #475569;
+        text-align: left;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: .35px;
+    }
+
+    .v5835b-table td {
+        padding: 10px 11px;
+        border-bottom: 1px solid #eef2f7;
+        vertical-align: middle;
+    }
+
+    .v5835b-table tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .v5835b-table tr.is-current {
+        background: #eff6ff;
+    }
+
+    .v5835b-table tr.has-stock {
+        background: #f0fdf4;
+    }
+
+    .v5835b-number {
+        text-align: right !important;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .v5835b-available-positive {
+        color: #166534;
+        font-weight: 950;
+    }
+
+    .v5835b-zero {
+        color: #64748b;
+    }
+
+    .v5835b-no-match {
+        color: #b45309;
+        font-size: 10px;
+        font-weight: 850;
+    }
+
+    .v5835b-table-note {
+        margin-top: 9px;
+        font-size: 10px;
+        color: #64748b;
+        line-height: 1.45;
+    }
+
+    @media (max-width: 760px) {
+        #v5835b-product-consult-button {
+            white-space: nowrap;
+        }
+
+        .v5835b-modal {
+            padding: 8px;
+        }
+
+        .v5835b-card {
+            max-height: 96vh;
+            border-radius: 16px;
+        }
+
+        .v5835b-header {
+            padding: 14px;
+        }
+
+        .v5835b-body {
+            padding: 14px;
+        }
+
+        .v5835b-search-row {
+            grid-template-columns: 1fr;
+        }
+
+        .v5835b-kpis {
+            grid-template-columns: 1fr;
+        }
+
+        .v5835b-result {
+            grid-template-columns: 1fr;
+        }
+
+        .v5835b-result-price,
+        .v5835b-result-stock {
+            text-align: left;
+        }
+
+        .v5835b-table {
+            min-width: 840px;
+        }
+    }
+</style>
+
+<div
+    id="v5835b-product-consult-modal"
+    class="v5835b-modal"
+    aria-hidden="true"
+>
+    <div
+        class="v5835b-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="v5835b-product-consult-title"
+    >
+        <div class="v5835b-header">
+            <div>
+                <div
+                    id="v5835b-product-consult-title"
+                    class="v5835b-title"
+                >Consultar precio y existencias</div>
+
+                <div class="v5835b-subtitle">
+                    Consulta informativa. No agrega productos al carrito ni modifica inventario.
+                </div>
+            </div>
+
+            <button
+                id="v5835b-product-consult-close"
+                class="v5835b-close"
+                type="button"
+                aria-label="Cerrar"
+            >×</button>
+        </div>
+
+        <div class="v5835b-body">
+            <div id="v5835b-search-panel">
+                <div class="v5835b-search-row">
+                    <input
+                        id="v5835b-product-consult-search"
+                        class="v5835b-search-input"
+                        type="search"
+                        placeholder="Nombre, referencia, SKU o código de barras"
+                        autocomplete="off"
+                        inputmode="search"
+                    >
+
+                    <button
+                        id="v5835b-product-consult-search-button"
+                        class="v5835b-search-action"
+                        type="button"
+                    >Buscar</button>
+                </div>
+
+                <div
+                    id="v5835b-product-consult-message"
+                    class="v5835b-message"
+                >
+                    Puedes consultar productos aunque tengan existencia cero.
+                </div>
+
+                <div
+                    id="v5835b-product-consult-results"
+                    class="v5835b-results"
+                ></div>
+            </div>
+
+            <div
+                id="v5835b-product-consult-detail"
+                class="v5835b-detail"
+            ></div>
+        </div>
+    </div>
+</div>
+
+<script id="bexia-v5835b-product-group-consult-script">
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.BEXIA_V5835B_PRODUCT_GROUP_CONSULT_READY) {
+        return;
+    }
+
+    window.BEXIA_V5835B_PRODUCT_GROUP_CONSULT_READY = true;
+
+    const endpoint = @json(
+        url('/pos/sessions/' . (int) $session->id . '/products-refresh')
+    );
+
+    const defaultPriceListId = @json(
+        (int) ($pos->default_price_list_id ?? 0)
+    );
+
+    const modal =
+        document.getElementById(
+            'v5835b-product-consult-modal'
+        );
+
+    const openButton =
+        document.getElementById(
+            'v5835b-product-consult-button'
+        );
+
+    const closeButton =
+        document.getElementById(
+            'v5835b-product-consult-close'
+        );
+
+    const searchInput =
+        document.getElementById(
+            'v5835b-product-consult-search'
+        );
+
+    const searchButton =
+        document.getElementById(
+            'v5835b-product-consult-search-button'
+        );
+
+    const message =
+        document.getElementById(
+            'v5835b-product-consult-message'
+        );
+
+    const resultsBox =
+        document.getElementById(
+            'v5835b-product-consult-results'
+        );
+
+    const searchPanel =
+        document.getElementById(
+            'v5835b-search-panel'
+        );
+
+    const detailBox =
+        document.getElementById(
+            'v5835b-product-consult-detail'
+        );
+
+    if (
+        !modal
+        || !openButton
+        || !searchInput
+        || !resultsBox
+        || !detailBox
+    ) {
+        return;
+    }
+
+    const formatter =
+        new Intl.NumberFormat(
+            'es-MX',
+            {
+                style: 'currency',
+                currency: 'MXN',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }
+        );
+
+    const qtyFormatter =
+        new Intl.NumberFormat(
+            'es-MX',
+            {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 4,
+            }
+        );
+
+    let debounceTimer = null;
+    let requestSerial = 0;
+    let lastResults = [];
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    function money(value) {
+        return formatter.format(
+            Number(value || 0)
+        );
+    }
+
+    function qty(value) {
+        if (
+            value === null
+            || typeof value === 'undefined'
+        ) {
+            return '—';
+        }
+
+        return qtyFormatter.format(
+            Number(value || 0)
+        );
+    }
+
+    function currentPriceListId() {
+        const value =
+            Number(
+                window.BEXIA_POS_SELECTED_PRICE_LIST_ID
+                || defaultPriceListId
+                || 0
+            );
+
+        return Number.isFinite(value)
+            ? value
+            : 0;
+    }
+
+    function setMessage(text, isError = false) {
+        if (!message) {
+            return;
+        }
+
+        message.textContent = text || '';
+
+        message.classList.toggle(
+            'is-error',
+            !!isError
+        );
+
+        message.style.display =
+            text ? 'block' : 'none';
+    }
+
+    function openModal() {
+        modal.classList.add('is-open');
+
+        modal.setAttribute(
+            'aria-hidden',
+            'false'
+        );
+
+        detailBox.classList.remove(
+            'is-visible'
+        );
+
+        detailBox.innerHTML = '';
+
+        searchPanel.style.display = '';
+
+        window.setTimeout(
+            function () {
+                searchInput.focus();
+                searchInput.select();
+            },
+            70
+        );
+    }
+
+    function closeModal() {
+        modal.classList.remove('is-open');
+
+        modal.setAttribute(
+            'aria-hidden',
+            'true'
+        );
+    }
+
+    async function fetchJson(url) {
+        const response =
+            await fetch(
+                url,
+                {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With':
+                            'XMLHttpRequest',
+                    },
+                }
+            );
+
+        const data =
+            await response.json()
+                .catch(
+                    function () {
+                        return {};
+                    }
+                );
+
+        if (
+            !response.ok
+            || data.ok === false
+        ) {
+            throw new Error(
+                data.message
+                || 'No se pudo completar la consulta.'
+            );
+        }
+
+        return data;
+    }
+
+    function productIdentifiers(product) {
+        const parts = [];
+
+        if (product.internal_reference) {
+            parts.push(
+                'Ref: '
+                + product.internal_reference
+            );
+        }
+
+        if (product.sku) {
+            parts.push(
+                'SKU: '
+                + product.sku
+            );
+        }
+
+        if (product.barcode) {
+            parts.push(
+                'Código: '
+                + product.barcode
+            );
+        }
+
+        if (product.brand) {
+            parts.push(
+                product.brand
+            );
+        }
+
+        if (product.model) {
+            parts.push(
+                product.model
+            );
+        }
+
+        return parts.join(' · ');
+    }
+
+    function renderResults(data) {
+        lastResults =
+            Array.isArray(data.results)
+                ? data.results
+                : [];
+
+        resultsBox.innerHTML = '';
+
+        if (!lastResults.length) {
+            setMessage(
+                'No se encontraron productos activos con esa búsqueda.',
+                false
+            );
+
+            return;
+        }
+
+        setMessage(
+            lastResults.length
+            + (
+                lastResults.length === 1
+                    ? ' producto encontrado.'
+                    : ' productos encontrados.'
+            )
+            + ' Lista: '
+            + (
+                data.selected_price_list_name
+                || 'Precio público'
+            )
+        );
+
+        lastResults.forEach(
+            function (product) {
+                const button =
+                    document.createElement(
+                        'button'
+                    );
+
+                button.type = 'button';
+
+                button.className =
+                    'v5835b-result';
+
+                const info =
+                    document.createElement(
+                        'div'
+                    );
+
+                const name =
+                    document.createElement(
+                        'div'
+                    );
+
+                name.className =
+                    'v5835b-result-name';
+
+                name.textContent =
+                    product.name
+                    || (
+                        'Producto #'
+                        + product.id
+                    );
+
+                const meta =
+                    document.createElement(
+                        'div'
+                    );
+
+                meta.className =
+                    'v5835b-result-meta';
+
+                meta.textContent =
+                    productIdentifiers(
+                        product
+                    )
+                    || 'Sin referencia adicional';
+
+                info.appendChild(name);
+                info.appendChild(meta);
+
+                const right =
+                    document.createElement(
+                        'div'
+                    );
+
+                const price =
+                    document.createElement(
+                        'div'
+                    );
+
+                price.className =
+                    'v5835b-result-price';
+
+                price.textContent =
+                    money(product.price);
+
+                const stock =
+                    document.createElement(
+                        'div'
+                    );
+
+                stock.className =
+                    'v5835b-result-stock';
+
+                if (
+                    product.product_type
+                    === 'service'
+                ) {
+                    stock.textContent =
+                        'Servicio';
+                } else {
+                    stock.textContent =
+                        'Disponible PDV: '
+                        + qty(
+                            product.available_current_pos
+                        );
+                }
+
+                right.appendChild(price);
+                right.appendChild(stock);
+
+                button.appendChild(info);
+                button.appendChild(right);
+
+                button.addEventListener(
+                    'click',
+                    function () {
+                        loadDetail(
+                            product.id
+                        );
+                    }
+                );
+
+                resultsBox.appendChild(
+                    button
+                );
+            }
+        );
+    }
+
+    async function searchProducts() {
+        const query =
+            String(
+                searchInput.value || ''
+            ).trim();
+
+        if (query.length < 2) {
+            resultsBox.innerHTML = '';
+
+            setMessage(
+                'Escribe al menos 2 caracteres. Puedes buscar aunque el producto tenga existencia cero.'
+            );
+
+            return;
+        }
+
+        const myRequest =
+            ++requestSerial;
+
+        setMessage(
+            'Buscando producto...'
+        );
+
+        resultsBox.innerHTML = '';
+
+        try {
+            const params =
+                new URLSearchParams();
+
+            params.set(
+                'v5835b_consult',
+                '1'
+            );
+
+            params.set(
+                'q',
+                query
+            );
+
+            params.set(
+                'price_list_id',
+                String(
+                    currentPriceListId()
+                )
+            );
+
+            const data =
+                await fetchJson(
+                    endpoint
+                    + '?'
+                    + params.toString()
+                );
+
+            if (
+                myRequest !==
+                requestSerial
+            ) {
+                return;
+            }
+
+            renderResults(data);
+        } catch (error) {
+            if (
+                myRequest !==
+                requestSerial
+            ) {
+                return;
+            }
+
+            setMessage(
+                error.message
+                || 'No se pudo buscar el producto.',
+                true
+            );
+        }
+    }
+
+    function identityLabel(method) {
+        switch (method) {
+            case 'odoo_product_id':
+                return 'ID de origen Odoo';
+
+            case 'barcode':
+                return 'Código de barras';
+
+            case 'internal_reference':
+                return 'Referencia interna';
+
+            case 'sku':
+                return 'SKU';
+
+            default:
+                return 'Solo producto de la empresa actual';
+        }
+    }
+
+    function renderDetail(data) {
+        const product =
+            data.product || {};
+
+        const group =
+            data.group || {};
+
+        const rows =
+            Array.isArray(
+                data.warehouses
+            )
+                ? data.warehouses
+                : [];
+
+        searchPanel.style.display =
+            'none';
+
+        detailBox.innerHTML = '';
+
+        detailBox.classList.add(
+            'is-visible'
+        );
+
+        const meta =
+            productIdentifiers(
+                product
+            );
+
+        const taxPercent =
+            Number(
+                product.tax_rate || 0
+            ) * 100;
+
+        const tableRows =
+            rows.map(
+                function (row) {
+                    const classes = [];
+
+                    if (
+                        row.is_current_warehouse
+                    ) {
+                        classes.push(
+                            'is-current'
+                        );
+                    } else if (
+                        row.matched
+                        && Number(
+                            row.available || 0
+                        ) > 0
+                    ) {
+                        classes.push(
+                            'has-stock'
+                        );
+                    }
+
+                    let availableHtml = '';
+                    let quantityHtml = '';
+                    let reservedHtml = '';
+
+                    if (!row.matched) {
+                        quantityHtml =
+                            '<span class="v5835b-no-match">—</span>';
+
+                        reservedHtml =
+                            '<span class="v5835b-no-match">—</span>';
+
+                        availableHtml =
+                            '<span class="v5835b-no-match">Sin producto equivalente</span>';
+                    } else {
+                        quantityHtml =
+                            escapeHtml(
+                                qty(
+                                    row.quantity
+                                )
+                            );
+
+                        reservedHtml =
+                            escapeHtml(
+                                qty(
+                                    row.reserved
+                                )
+                            );
+
+                        const available =
+                            Number(
+                                row.available || 0
+                            );
+
+                        availableHtml =
+                            '<span class="'
+                            + (
+                                available > 0
+                                    ? 'v5835b-available-positive'
+                                    : 'v5835b-zero'
+                            )
+                            + '">'
+                            + escapeHtml(
+                                qty(available)
+                            )
+                            + '</span>';
+                    }
+
+                    const currentLabel =
+                        row.is_current_warehouse
+                            ? ' <span class="v5835b-pill">PDV actual</span>'
+                            : '';
+
+                    return (
+                        '<tr class="'
+                        + classes.join(' ')
+                        + '">'
+                        + '<td>'
+                        + escapeHtml(
+                            row.company_name || ''
+                        )
+                        + '</td>'
+                        + '<td>'
+                        + escapeHtml(
+                            row.warehouse_name || ''
+                        )
+                        + (
+                            row.is_current_warehouse
+                                ? ' <span class="v5835b-pill">Almacén PDV</span>'
+                                : ''
+                        )
+                        + '</td>'
+                        + '<td>'
+                        + escapeHtml(
+                            row.location_name || 'Sin ubicación'
+                        )
+                        + (
+                            row.is_current_location
+                                ? ' <span class="v5835b-pill">PDV actual</span>'
+                                : ''
+                        )
+                        + '</td>'
+                        + '<td class="v5835b-number">'
+                        + quantityHtml
+                        + '</td>'
+                        + '<td class="v5835b-number">'
+                        + reservedHtml
+                        + '</td>'
+                        + '<td class="v5835b-number">'
+                        + availableHtml
+                        + '</td>'
+                        + '</tr>'
+                    );
+                }
+            ).join('');
+
+        const unmatchedCompanies =
+            Math.max(
+                0,
+                Number(
+                    group.companies_count || 0
+                )
+                - Number(
+                    group.matched_companies_count || 0
+                )
+            );
+
+        detailBox.innerHTML =
+            '<button type="button" class="v5835b-back" id="v5835b-back-to-results">'
+            + '← Regresar a resultados'
+            + '</button>'
+
+            + '<div class="v5835b-product-name">'
+            + escapeHtml(
+                product.name
+                || (
+                    'Producto #'
+                    + product.id
+                )
+            )
+            + '</div>'
+
+            + '<div class="v5835b-product-meta">'
+            + escapeHtml(
+                meta
+                || 'Sin referencia adicional'
+            )
+            + '</div>'
+
+            + '<div class="v5835b-kpis">'
+
+            + '<div class="v5835b-kpi v5835b-kpi-price">'
+            + '<div class="v5835b-kpi-label">Precio actual PDV</div>'
+            + '<div class="v5835b-kpi-value">'
+            + escapeHtml(
+                money(product.price)
+            )
+            + '</div>'
+            + '<div class="v5835b-result-meta">'
+            + escapeHtml(
+                data.selected_price_list_name
+                || 'Precio público'
+            )
+            + ' · IVA '
+            + escapeHtml(
+                taxPercent.toFixed(2)
+            )
+            + '%'
+            + '</div>'
+            + '</div>'
+
+            + '<div class="v5835b-kpi">'
+            + '<div class="v5835b-kpi-label">Disponible en este PDV</div>'
+            + '<div class="v5835b-kpi-value">'
+            + (
+                product.product_type === 'service'
+                    ? 'Servicio'
+                    : escapeHtml(
+                        qty(
+                            product.available_current_pos
+                        )
+                    )
+            )
+            + '</div>'
+            + '</div>'
+
+            + '<div class="v5835b-kpi">'
+            + '<div class="v5835b-kpi-label">Disponible en el grupo</div>'
+            + '<div class="v5835b-kpi-value">'
+            + escapeHtml(
+                qty(
+                    group.available_total
+                )
+            )
+            + '</div>'
+            + '</div>'
+
+            + '</div>'
+
+            + '<div class="v5835b-context">'
+            + '<span class="v5835b-pill">'
+            + escapeHtml(
+                group.name
+                || 'Empresa actual'
+            )
+            + '</span>'
+            + '<span class="v5835b-pill">'
+            + escapeHtml(
+                String(
+                    group.companies_count || 1
+                )
+            )
+            + ' empresa(s)</span>'
+            + '<span class="v5835b-pill">Equivalencia: '
+            + escapeHtml(
+                identityLabel(
+                    group.identity_method
+                )
+            )
+            + '</span>'
+            + (
+                unmatchedCompanies > 0
+                    ? (
+                        '<span class="v5835b-pill">'
+                        + unmatchedCompanies
+                        + ' empresa(s) sin equivalencia de catálogo'
+                        + '</span>'
+                    )
+                    : ''
+            )
+            + '</div>'
+
+            + '<div class="v5835b-table-wrap">'
+            + '<table class="v5835b-table">'
+            + '<thead><tr>'
+            + '<th>Empresa</th>'
+            + '<th>Almacén</th>'
+            + '<th>Ubicación</th>'
+            + '<th class="v5835b-number">Existencia</th>'
+            + '<th class="v5835b-number">Reservado</th>'
+            + '<th class="v5835b-number">Disponible</th>'
+            + '</tr></thead>'
+            + '<tbody>'
+            + (
+                tableRows
+                || (
+                    '<tr><td colspan="6">'
+                    + 'No hay almacenes activos configurados.'
+                    + '</td></tr>'
+                )
+            )
+            + '</tbody>'
+            + '</table>'
+            + '</div>'
+
+            + '<div class="v5835b-table-note">'
+            + 'Se muestran únicamente empresas del mismo grupo donde Bexia encontró '
+            + 'una equivalencia segura del producto. El desglose es por ubicación y '
+            + 'las ubicaciones pueden aparecer con existencia 0.'
+            + '</div>';
+
+        document.getElementById(
+            'v5835b-back-to-results'
+        )?.addEventListener(
+            'click',
+            function () {
+                detailBox.classList.remove(
+                    'is-visible'
+                );
+
+                detailBox.innerHTML = '';
+
+                searchPanel.style.display =
+                    '';
+            }
+        );
+    }
+
+    async function loadDetail(productId) {
+        if (!productId) {
+            return;
+        }
+
+        searchPanel.style.display =
+            'none';
+
+        detailBox.classList.add(
+            'is-visible'
+        );
+
+        detailBox.innerHTML =
+            '<div class="v5835b-message">'
+            + 'Consultando precio y almacenes del grupo...'
+            + '</div>';
+
+        try {
+            const params =
+                new URLSearchParams();
+
+            params.set(
+                'v5835b_consult',
+                '1'
+            );
+
+            params.set(
+                'product_id',
+                String(productId)
+            );
+
+            params.set(
+                'price_list_id',
+                String(
+                    currentPriceListId()
+                )
+            );
+
+            const data =
+                await fetchJson(
+                    endpoint
+                    + '?'
+                    + params.toString()
+                );
+
+            renderDetail(data);
+        } catch (error) {
+            detailBox.innerHTML =
+                '<button type="button" class="v5835b-back" id="v5835b-back-error">'
+                + '← Regresar'
+                + '</button>'
+                + '<div class="v5835b-message is-error">'
+                + escapeHtml(
+                    error.message
+                    || 'No se pudo consultar el producto.'
+                )
+                + '</div>';
+
+            document.getElementById(
+                'v5835b-back-error'
+            )?.addEventListener(
+                'click',
+                function () {
+                    detailBox.classList.remove(
+                        'is-visible'
+                    );
+
+                    detailBox.innerHTML = '';
+
+                    searchPanel.style.display =
+                        '';
+                }
+            );
+        }
+    }
+
+    openButton.addEventListener(
+        'click',
+        function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            openModal();
+        }
+    );
+
+    closeButton?.addEventListener(
+        'click',
+        closeModal
+    );
+
+    modal.addEventListener(
+        'click',
+        function (event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+    );
+
+    searchButton?.addEventListener(
+        'click',
+        searchProducts
+    );
+
+    searchInput.addEventListener(
+        'input',
+        function () {
+            window.clearTimeout(
+                debounceTimer
+            );
+
+            debounceTimer =
+                window.setTimeout(
+                    searchProducts,
+                    280
+                );
+        }
+    );
+
+    searchInput.addEventListener(
+        'keydown',
+        function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (
+                    lastResults.length === 1
+                ) {
+                    loadDetail(
+                        lastResults[0].id
+                    );
+
+                    return;
+                }
+
+                searchProducts();
+            }
+
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeModal();
+            }
+        }
+    );
+
+    document.addEventListener(
+        'keydown',
+        function (event) {
+            if (
+                event.key === 'Escape'
+                && modal.classList.contains(
+                    'is-open'
+                )
+            ) {
+                closeModal();
+            }
+        }
+    );
+});
+</script>
+
+
+{{-- BEXIA_V5835B3_SESSION_UI_FIX --}}
+<script id="bexia-v5835b3-session-ui-fix">
+(function () {
+    if (window.BEXIA_V5835B3_SESSION_UI_FIX_READY) {
+        return;
+    }
+
+    window.BEXIA_V5835B3_SESSION_UI_FIX_READY = true;
+
+    /*
+     * V5.83.5B3
+     *
+     * 1. Coloca "Consultar producto" despues de
+     *    "Actualizar productos".
+     *
+     * 2. Intercepta exclusivamente las consultas
+     *    V5.83.5B del modal.
+     *
+     * 3. Devuelve mensajes claros para sesiones
+     *    vencidas y evita espera indefinida.
+     */
+
+    function normalizeText(value) {
+        return String(value || '')
+            .trim()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function repositionConsultButton() {
+        const consultButton =
+            document.getElementById(
+                'v5835b-product-consult-button'
+            );
+
+        if (!consultButton) {
+            return;
+        }
+
+        const buttons =
+            Array.from(
+                document.querySelectorAll(
+                    'button, a'
+                )
+            );
+
+        const updateButton =
+            buttons.find(
+                function (button) {
+                    const text =
+                        normalizeText(
+                            button.textContent
+                        );
+
+                    return text.includes(
+                        'actualizar productos'
+                    );
+                }
+            );
+
+        if (
+            !updateButton
+            || !updateButton.parentNode
+        ) {
+            return;
+        }
+
+        updateButton.insertAdjacentElement(
+            'afterend',
+            consultButton
+        );
+
+        consultButton.style.whiteSpace =
+            'nowrap';
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener(
+            'DOMContentLoaded',
+            repositionConsultButton
+        );
+    } else {
+        repositionConsultButton();
+    }
+
+    /*
+     * Patch controlado de fetch.
+     *
+     * Solo afecta:
+     *
+     *   /pos/sessions/.../products-refresh
+     *   ?v5835b_consult=1
+     */
+    const originalFetch =
+        window.fetch.bind(window);
+
+    window.fetch = function (input, init) {
+        let url = '';
+
+        try {
+            url =
+                typeof input === 'string'
+                    ? input
+                    : (
+                        input
+                        && input.url
+                            ? input.url
+                            : ''
+                    );
+        } catch (error) {
+            url = '';
+        }
+
+        const isV5835bConsult =
+            url.includes(
+                '/products-refresh'
+            )
+            && url.includes(
+                'v5835b_consult=1'
+            );
+
+        if (!isV5835bConsult) {
+            return originalFetch(
+                input,
+                init
+            );
+        }
+
+        const controller =
+            new AbortController();
+
+        const incomingSignal =
+            init && init.signal
+                ? init.signal
+                : null;
+
+        if (incomingSignal) {
+            if (incomingSignal.aborted) {
+                controller.abort();
+            } else {
+                incomingSignal.addEventListener(
+                    'abort',
+                    function () {
+                        controller.abort();
+                    },
+                    {
+                        once: true
+                    }
+                );
+            }
+        }
+
+        const timeout =
+            window.setTimeout(
+                function () {
+                    controller.abort();
+                },
+                15000
+            );
+
+        const patchedInit = {
+            ...(init || {}),
+            signal: controller.signal,
+        };
+
+        return originalFetch(
+            input,
+            patchedInit
+        )
+            .then(
+                async function (response) {
+                    window.clearTimeout(
+                        timeout
+                    );
+
+                    /*
+                     * Convertimos respuestas comunes
+                     * en JSON consistente para que
+                     * el modal pueda mostrarlas.
+                     */
+                    if (
+                        response.status === 404
+                    ) {
+                        return new Response(
+                            JSON.stringify({
+                                ok: false,
+                                message:
+                                    'La sesión del PDV ya no existe o venció. '
+                                    + 'Cierra esta pantalla y vuelve a abrir el PDV.'
+                            }),
+                            {
+                                status: 404,
+                                headers: {
+                                    'Content-Type':
+                                        'application/json'
+                                }
+                            }
+                        );
+                    }
+
+                    if (
+                        response.status === 419
+                    ) {
+                        return new Response(
+                            JSON.stringify({
+                                ok: false,
+                                message:
+                                    'La sesión web venció. '
+                                    + 'Recarga Bexia e ingresa nuevamente al PDV.'
+                            }),
+                            {
+                                status: 419,
+                                headers: {
+                                    'Content-Type':
+                                        'application/json'
+                                }
+                            }
+                        );
+                    }
+
+                    if (
+                        response.status === 401
+                        || response.status === 403
+                    ) {
+                        return new Response(
+                            JSON.stringify({
+                                ok: false,
+                                message:
+                                    'La sesión ya no tiene autorización para consultar este PDV. '
+                                    + 'Vuelve a abrir el punto de venta.'
+                            }),
+                            {
+                                status:
+                                    response.status,
+                                headers: {
+                                    'Content-Type':
+                                        'application/json'
+                                }
+                            }
+                        );
+                    }
+
+                    return response;
+                }
+            )
+            .catch(
+                function (error) {
+                    window.clearTimeout(
+                        timeout
+                    );
+
+                    if (
+                        error
+                        && error.name
+                            === 'AbortError'
+                    ) {
+                        throw new Error(
+                            'La consulta tardó más de 15 segundos. '
+                            + 'No se modificó el carrito ni el inventario. '
+                            + 'Vuelve a intentar o recarga el PDV.'
+                        );
+                    }
+
+                    throw error;
+                }
+            );
+    };
+})();
+</script>
+
+
+{{-- BEXIA_V5835C2A_COMPACT_PRICE_UI --}}
+<style id="bexia-v5835c2a-compact-price-style">
+    /*
+     * C2A
+     *
+     * El precio que ya entrega el backend es el precio publico
+     * utilizado por el PDV, incluyendo el impuesto correspondiente.
+     *
+     * Solo reorganizamos la presentacion.
+     */
+
+    .v5835c2a-inline-price {
+        margin-top: 8px;
+        margin-bottom: 5px;
+    }
+
+    .v5835c2a-inline-price-main {
+        color: #2563eb;
+        font-size: 24px;
+        line-height: 1.05;
+        font-weight: 950;
+    }
+
+    .v5835c2a-inline-price-caption {
+        margin-top: 3px;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    /*
+     * Evitar los huecos verticales que se ven actualmente.
+     */
+    #v5835b-product-consult-detail
+    .v5835b-product-name {
+        margin-top: 8px !important;
+        margin-bottom: 0 !important;
+        min-height: 0 !important;
+    }
+
+    #v5835b-product-consult-detail
+    .v5835b-product-meta {
+        margin-top: 7px !important;
+        margin-bottom: 0 !important;
+        min-height: 0 !important;
+    }
+
+    #v5835b-product-consult-detail
+    .v5835b-kpis {
+        margin-top: 12px !important;
+    }
+
+    /*
+     * La tarjeta de precio original se oculta porque ahora
+     * el precio se presenta directamente debajo del producto.
+     */
+    #v5835b-product-consult-detail
+    .v5835b-kpi-price {
+        display: none !important;
+    }
+
+    /*
+     * Quedan dos indicadores:
+     *   - este PDV
+     *   - grupo
+     */
+    #v5835b-product-consult-detail
+    .v5835b-kpis.v5835c2a-two-kpis {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    @media (max-width: 760px) {
+        #v5835b-product-consult-detail
+        .v5835b-kpis.v5835c2a-two-kpis {
+            grid-template-columns:
+                1fr !important;
+        }
+
+        .v5835c2a-inline-price-main {
+            font-size: 21px;
+        }
+    }
+</style>
+
+<script id="bexia-v5835c2a-compact-price-script">
+(function () {
+    if (
+        window.BEXIA_V5835C2A_COMPACT_PRICE_READY
+    ) {
+        return;
+    }
+
+    window.BEXIA_V5835C2A_COMPACT_PRICE_READY = true;
+
+    function applyCompactPrice() {
+        const detail =
+            document.getElementById(
+                'v5835b-product-consult-detail'
+            );
+
+        if (!detail) {
+            return;
+        }
+
+        const productName =
+            detail.querySelector(
+                '.v5835b-product-name'
+            );
+
+        const priceCard =
+            detail.querySelector(
+                '.v5835b-kpi-price'
+            );
+
+        const kpis =
+            detail.querySelector(
+                '.v5835b-kpis'
+            );
+
+        if (
+            !productName
+            || !priceCard
+            || !kpis
+        ) {
+            return;
+        }
+
+        /*
+         * Si este render ya fue corregido, no repetir.
+         * Cuando se seleccione otro producto el innerHTML
+         * del detalle se reconstruye y este nodo desaparece,
+         * por lo que se aplicara de nuevo correctamente.
+         */
+        if (
+            detail.querySelector(
+                '.v5835c2a-inline-price'
+            )
+        ) {
+            return;
+        }
+
+        const valueNode =
+            priceCard.querySelector(
+                '.v5835b-kpi-value'
+            );
+
+        const contextNode =
+            priceCard.querySelector(
+                '.v5835b-result-meta'
+            );
+
+        const priceText =
+            valueNode
+                ? String(
+                    valueNode.textContent || ''
+                ).trim()
+                : '';
+
+        const contextText =
+            contextNode
+                ? String(
+                    contextNode.textContent || ''
+                ).trim()
+                : '';
+
+        const inline =
+            document.createElement(
+                'div'
+            );
+
+        inline.className =
+            'v5835c2a-inline-price';
+
+        const main =
+            document.createElement(
+                'div'
+            );
+
+        main.className =
+            'v5835c2a-inline-price-main';
+
+        main.textContent =
+            priceText !== ''
+                ? priceText + ' MXN'
+                : '—';
+
+        const caption =
+            document.createElement(
+                'div'
+            );
+
+        caption.className =
+            'v5835c2a-inline-price-caption';
+
+        /*
+         * El precio principal ya incluye IVA.
+         * Conservamos la tasa que ya muestra el PDV.
+         */
+        let taxText = '';
+
+        const taxMatch =
+            contextText.match(
+                /IVA\s+([0-9.,]+)%/i
+            );
+
+        if (
+            taxMatch
+            && taxMatch[1]
+        ) {
+            taxText =
+                ' · IVA '
+                + taxMatch[1]
+                + '%';
+        }
+
+        caption.textContent =
+            'Precio con IVA'
+            + taxText;
+
+        inline.appendChild(main);
+        inline.appendChild(caption);
+
+        productName.insertAdjacentElement(
+            'afterend',
+            inline
+        );
+
+        /*
+         * Ocultamos la tarjeta duplicada del precio
+         * y dejamos dos KPI.
+         */
+        priceCard.style.display =
+            'none';
+
+        kpis.classList.add(
+            'v5835c2a-two-kpis'
+        );
+    }
+
+    function startObserver() {
+        const modal =
+            document.getElementById(
+                'v5835b-product-consult-modal'
+            );
+
+        if (!modal) {
+            return;
+        }
+
+        const observer =
+            new MutationObserver(
+                function () {
+                    applyCompactPrice();
+                }
+            );
+
+        observer.observe(
+            modal,
+            {
+                childList: true,
+                subtree: true,
+            }
+        );
+
+        applyCompactPrice();
+    }
+
+    if (
+        document.readyState
+        === 'loading'
+    ) {
+        document.addEventListener(
+            'DOMContentLoaded',
+            startObserver
+        );
+    } else {
+        startObserver();
+    }
+})();
+</script>
 
 </body>
 </html>
