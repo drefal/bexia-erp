@@ -522,6 +522,31 @@ Route::get('/asistencia/empleado/{token}', [PublicEmployeeAttendanceController::
 Route::post('/asistencia/empleado/{token}/registrar', [PublicEmployeeAttendanceController::class, 'store'])
     ->name('attendance.employee.store');
 
+// V5.83.4C-ATTENDANCE-KIOSK-PAIRING-START
+// Kiosco publico: la tablet NO usa login de usuario.
+// La vinculacion se autoriza desde RRHH > Terminales de asistencia.
+Route::get('/asistencia/kiosco', [\App\Http\Controllers\Attendance\AttendanceKioskPairingController::class, 'show'])
+    ->middleware('throttle:60,1')
+    ->name('attendance.kiosk.show');
+
+Route::post('/asistencia/kiosco/vinculacion/solicitar', [\App\Http\Controllers\Attendance\AttendanceKioskPairingController::class, 'requestPairing'])
+    ->middleware('throttle:10,1')
+    ->name('attendance.kiosk.pair.request');
+
+Route::post('/asistencia/kiosco/vinculacion/estado', [\App\Http\Controllers\Attendance\AttendanceKioskPairingController::class, 'pairingStatus'])
+    ->middleware('throttle:120,1')
+    ->name('attendance.kiosk.pair.status');
+
+Route::post('/asistencia/kiosco/terminal/estado', [\App\Http\Controllers\Attendance\AttendanceKioskPairingController::class, 'terminalStatus'])
+    ->middleware('throttle:120,1')
+    ->name('attendance.kiosk.terminal.status');
+// V5.83.4D-ATTENDANCE-KIOSK-CLOCK
+Route::post('/asistencia/kiosco/registrar', [\App\Http\Controllers\Attendance\AttendanceKioskClockController::class, 'store'])
+    ->name('attendance.kiosk.clock.store');
+
+// V5.83.4C-ATTENDANCE-KIOSK-PAIRING-END
+
+
 Route::middleware(['auth'])->group(function () {
     Route::get('/inventario/kardex-producto/imprimir', [InventoryProductKardexExportController::class, 'print'])
         ->name('inventory.kardex.print');

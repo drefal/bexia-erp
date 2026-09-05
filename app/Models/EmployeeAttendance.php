@@ -17,6 +17,10 @@ class EmployeeAttendance extends Model
         'expected_end_at',
         'clock_in_at',
         'clock_out_at',
+        'clock_in_attendance_terminal_id',
+        'clock_out_attendance_terminal_id',
+        'clock_in_photo_path',
+        'clock_out_photo_path',
         'break_minutes',
         'expected_hours',
         'worked_minutes',
@@ -117,6 +121,17 @@ class EmployeeAttendance extends Model
     public function clockOutAttendanceLocation()
     {
         return $this->belongsTo(\App\Models\HrAttendanceLocation::class, 'clock_out_hr_attendance_location_id');
+    }
+
+
+    public function clockInAttendanceTerminal()
+    {
+        return $this->belongsTo(\App\Models\AttendanceTerminal::class, 'clock_in_attendance_terminal_id');
+    }
+
+    public function clockOutAttendanceTerminal()
+    {
+        return $this->belongsTo(\App\Models\AttendanceTerminal::class, 'clock_out_attendance_terminal_id');
     }
 
     public function mobileReviewedBy()
