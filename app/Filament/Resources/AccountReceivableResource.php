@@ -14,6 +14,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class AccountReceivableResource extends Resource
 {
@@ -245,25 +246,502 @@ class AccountReceivableResource extends Resource
                     ]),
 
                 Section::make('Conexión contable')
-                    ->extraAttributes(['class' => 'bexia-arcv-section bexia-arcv-section-acctg'])
-                    ->description('CxC es un módulo separado. Estos campos mostrarán la póliza generada cuando se contabilice.')
+                    ->extraAttributes([
+                        'class' =>
+                            'bexia-arcv-section bexia-arcv-section-acctg',
+                    ])
+                    ->description(
+                        'El documento CxC y sus cobros se contabilizan por separado. '
+                        . 'La primera fila corresponde al documento y la segunda '
+                        . 'muestra la contabilización real de los cobros.'
+                    )
                     ->columns(3)
                     ->schema([
-                        TextEntry::make('accounting_status')
-                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-acctgstate'])
-                            ->label('Estado contable')
+                        /*
+                         * DOCUMENTO CxC
+                         */
+                        TextEntry::make(
+                            'accounting_status'
+                        )
+                            ->extraAttributes([
+                                'class' =>
+                                    'bexia-arcv-item bexia-arcv-item-acctgstate',
+                            ])
+                            ->label(
+                                'Documento CxC · Estado'
+                            )
                             ->badge()
-                            ->formatStateUsing(fn (?string $state): string => static::accountingStatusLabel($state))
-                            ->color(fn (?string $state): string => static::accountingStatusColor($state)),
+                            ->formatStateUsing(
+                                fn (?string $state): string =>
+                                    static::
+                                        accountingStatusLabel(
+                                            $state
+                                        )
+                            )
+                            ->color(
+                                fn (?string $state): string =>
+                                    static::
+                                        accountingStatusColor(
+                                            $state
+                                        )
+                            ),
 
-                        TextEntry::make('accounting_entry_id')->label('Póliza')->placeholder('Sin póliza')
-                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-pol']),
-                        TextEntry::make('accounting_posted_at')->label('Contabilizado')->dateTime()->placeholder('Pendiente')
-                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-acctgdt']),
-                        TextEntry::make('accounting_error_message')->label('Error contable')->columnSpanFull()->placeholder('Sin error')
-                            ->extraAttributes(['class' => 'bexia-arcv-item bexia-arcv-item-acctgerr']),
+                        TextEntry::make(
+                            'accounting_entry_id'
+                        )
+                            ->label(
+                                'Documento CxC · Póliza'
+                            )
+                            ->placeholder(
+                                'Sin póliza del documento'
+                            )
+                            ->extraAttributes([
+                                'class' =>
+                                    'bexia-arcv-item bexia-arcv-item-pol',
+                            ]),
+
+                        TextEntry::make(
+                            'accounting_posted_at'
+                        )
+                            ->label(
+                                'Documento CxC · Contabilizado'
+                            )
+                            ->dateTime(
+                                'd/m/Y H:i'
+                            )
+                            ->placeholder(
+                                'Pendiente'
+                            )
+                            ->extraAttributes([
+                                'class' =>
+                                    'bexia-arcv-item bexia-arcv-item-acctgdt',
+                            ]),
+
+                        /*
+                         * COBROS
+                         */
+                        TextEntry::make(
+                            'payment_accounting_status'
+                        )
+                            ->label(
+                                'Cobros · Estado'
+                            )
+                            ->state(
+                                fn (
+                                    AccountReceivable $record
+                                ): string =>
+                                    static::
+                                        paymentAccountingSummary(
+                                            $record
+                                        )[
+                                            'status_label'
+                                        ]
+                            )
+                            ->badge()
+                            ->color(
+                                fn (
+                                    AccountReceivable $record
+                                ): string =>
+                                    static::
+                                        paymentAccountingSummary(
+                                            $record
+                                        )[
+                                            'status_color'
+                                        ]
+                            ),
+
+                        TextEntry::make(
+                            'payment_accounting_entries'
+                        )
+                            ->label(
+                                'Cobros · Póliza(s)'
+                            )
+                            ->state(
+                                fn (
+                                    AccountReceivable $record
+                                ): string =>
+                                    static::
+                                        paymentAccountingSummary(
+                                            $record
+                                        )[
+                                            'entries'
+                                        ]
+                            )
+                            ->placeholder(
+                                'Sin póliza de cobro'
+                            ),
+
+                        TextEntry::make(
+                            'payment_accounting_amount'
+                        )
+                            ->label(
+                                'Cobros · Importe contabilizado'
+                            )
+                            ->state(
+                                fn (
+                                    AccountReceivable $record
+                                ): string =>
+                                    '$'
+                                    . number_format(
+                                        (float)
+                                            static::
+                                                paymentAccountingSummary(
+                                                    $record
+                                                )[
+                                                    'accounted_amount'
+                                                ],
+                                        2
+                                    )
+                                    . ' '
+                                    . (
+                                        $record->currency
+                                        ?: 'MXN'
+                                    )
+                            ),
+
+                        TextEntry::make(
+                            'payment_accounting_accounts'
+                        )
+                            ->label(
+                                'Cobros · Caja / Banco'
+                            )
+                            ->state(
+                                fn (
+                                    AccountReceivable $record
+                                ): string =>
+                                    static::
+                                        paymentAccountingSummary(
+                                            $record
+                                        )[
+                                            'accounts'
+                                        ]
+                            )
+                            ->placeholder(
+                                'Sin cuenta'
+                            ),
+
+                        TextEntry::make(
+                            'payment_accounting_count'
+                        )
+                            ->label(
+                                'Cobros contabilizados'
+                            )
+                            ->state(
+                                fn (
+                                    AccountReceivable $record
+                                ): string =>
+                                    static::
+                                        paymentAccountingSummary(
+                                            $record
+                                        )[
+                                            'accounted_count'
+                                        ]
+                                    . ' de '
+                                    . static::
+                                        paymentAccountingSummary(
+                                            $record
+                                        )[
+                                            'posted_count'
+                                        ]
+                            ),
+
+                        TextEntry::make(
+                            'payment_accounting_posted_at'
+                        )
+                            ->label(
+                                'Última contabilización de cobro'
+                            )
+                            ->state(
+                                function (
+                                    AccountReceivable $record
+                                ): string {
+                                    $value =
+                                        static::
+                                            paymentAccountingSummary(
+                                                $record
+                                            )[
+                                                'last_posted_at'
+                                            ];
+
+                                    if (
+                                        blank(
+                                            $value
+                                        )
+                                    ) {
+                                        return 'Pendiente';
+                                    }
+
+                                    return
+                                        \Illuminate\Support\Carbon::
+                                            parse(
+                                                $value
+                                            )
+                                            ->format(
+                                                'd/m/Y H:i'
+                                            );
+                                }
+                            ),
+
+                        TextEntry::make(
+                            'accounting_error_message'
+                        )
+                            ->label(
+                                'Error contable del documento'
+                            )
+                            ->columnSpanFull()
+                            ->placeholder(
+                                'Sin error'
+                            )
+                            ->extraAttributes([
+                                'class' =>
+                                    'bexia-arcv-item bexia-arcv-item-acctgerr',
+                            ]),
                     ]),
             ]);
+    }
+
+    /*
+     * BEXIA_CXC_PAYMENT_ACCOUNTING_SUMMARY_V5_83_4C5G14C1
+     *
+     * SOLO LECTURA.
+     *
+     * account_receivables.accounting_* representa
+     * la contabilidad DEL DOCUMENTO CxC.
+     *
+     * account_receivable_payments.accounting_entry_id
+     * representa la contabilidad DE CADA COBRO.
+     */
+    protected static function paymentAccountingSummary(
+        AccountReceivable $record
+    ): array {
+        static $cache = [];
+
+        $cacheKey =
+            (int) $record->getKey()
+            . '|'
+            . (string) (
+                $record->updated_at
+                ?? ''
+            );
+
+        if (
+            array_key_exists(
+                $cacheKey,
+                $cache
+            )
+        ) {
+            return $cache[
+                $cacheKey
+            ];
+        }
+
+        $rows =
+            DB::table(
+                'account_receivable_payments as p'
+            )
+                ->leftJoin(
+                    'accounting_entries as ae',
+                    'ae.id',
+                    '=',
+                    'p.accounting_entry_id'
+                )
+                ->leftJoin(
+                    'treasury_accounts as ta',
+                    'ta.id',
+                    '=',
+                    'p.treasury_account_id'
+                )
+                ->where(
+                    'p.company_id',
+                    (int) $record->company_id
+                )
+                ->where(
+                    'p.account_receivable_id',
+                    (int) $record->getKey()
+                )
+                ->where(
+                    'p.status',
+                    'posted'
+                )
+                ->orderBy(
+                    'p.id'
+                )
+                ->get([
+                    'p.id as payment_id',
+                    'p.amount as payment_amount',
+                    'p.posted_at as payment_posted_at',
+                    'p.accounting_entry_id',
+                    'p.treasury_account_id',
+                    'ae.entry_number',
+                    'ae.status as accounting_entry_status',
+                    'ae.posted_at as accounting_entry_posted_at',
+                    'ta.name as treasury_account_name',
+                ]);
+
+        $postedCount =
+            $rows->count();
+
+        $accounted =
+            $rows
+                ->filter(
+                    fn ($row): bool =>
+                        ! empty(
+                            $row->accounting_entry_id
+                        )
+                        && (
+                            (string) (
+                                $row->
+                                    accounting_entry_status
+                                ?? ''
+                            )
+                            === 'posted'
+                        )
+                )
+                ->values();
+
+        $accountedCount =
+            $accounted->count();
+
+        if ($postedCount === 0) {
+            $statusLabel =
+                'Sin cobros';
+
+            $statusColor =
+                'gray';
+        } elseif (
+            $accountedCount
+            === $postedCount
+        ) {
+            $statusLabel =
+                'Contabilizado';
+
+            $statusColor =
+                'success';
+        } elseif (
+            $accountedCount > 0
+        ) {
+            $statusLabel =
+                'Parcialmente contabilizado';
+
+            $statusColor =
+                'warning';
+        } else {
+            $statusLabel =
+                'Pendiente';
+
+            $statusColor =
+                'warning';
+        }
+
+        $accountedAmount =
+            round(
+                (float) $accounted->sum(
+                    fn ($row): float =>
+                        (float) (
+                            $row->
+                                payment_amount
+                            ?? 0
+                        )
+                ),
+                2
+            );
+
+        $entries =
+            $accounted
+                ->map(
+                    function ($row): string {
+                        $number =
+                            trim(
+                                (string) (
+                                    $row->
+                                        entry_number
+                                    ?? ''
+                                )
+                            );
+
+                        if ($number !== '') {
+                            return $number;
+                        }
+
+                        $id =
+                            (int) (
+                                $row->
+                                    accounting_entry_id
+                                ?? 0
+                            );
+
+                        return
+                            $id > 0
+                                ? 'Póliza #'
+                                    . $id
+                                : '';
+                    }
+                )
+                ->filter()
+                ->unique()
+                ->values()
+                ->implode(', ');
+
+        $accounts =
+            $accounted
+                ->map(
+                    fn ($row): string =>
+                        trim(
+                            (string) (
+                                $row->
+                                    treasury_account_name
+                                ?? ''
+                            )
+                        )
+                )
+                ->filter()
+                ->unique()
+                ->values()
+                ->implode(', ');
+
+        $lastPostedAt =
+            $accounted
+                ->map(
+                    fn ($row) =>
+                        $row->
+                            accounting_entry_posted_at
+                        ?: $row->
+                            payment_posted_at
+                )
+                ->filter()
+                ->sortDesc()
+                ->first();
+
+        $result = [
+            'status_label' =>
+                $statusLabel,
+
+            'status_color' =>
+                $statusColor,
+
+            'posted_count' =>
+                $postedCount,
+
+            'accounted_count' =>
+                $accountedCount,
+
+            'accounted_amount' =>
+                $accountedAmount,
+
+            'entries' =>
+                $entries,
+
+            'accounts' =>
+                $accounts,
+
+            'last_posted_at' =>
+                $lastPostedAt,
+        ];
+
+        $cache[$cacheKey] =
+            $result;
+
+        return $result;
     }
 
     public static function getEloquentQuery(): Builder

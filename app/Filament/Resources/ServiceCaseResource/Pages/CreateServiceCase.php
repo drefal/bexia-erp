@@ -54,7 +54,7 @@ class CreateServiceCase extends CreateRecord
             serviceCaseId: $this->record->id,
             repairOrderId: null,
             files: $this->uploadedAttachments,
-            stage: 'ticket'
+            stage: 'ticket_opening'
         );
     }
 }

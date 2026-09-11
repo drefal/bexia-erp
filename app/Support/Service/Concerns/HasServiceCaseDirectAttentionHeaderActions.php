@@ -22,7 +22,7 @@ trait HasServiceCaseDirectAttentionHeaderActions
                 ->icon('heroicon-o-chat-bubble-left-right')
                 ->color('primary')
                 ->modalHeading('Registrar respuesta al cliente')
-                ->modalSubmitActionLabel('Guardar respuesta')
+                ->modalSubmitActionLabel('Registrar y resolver')
                 ->form([
                     Forms\Components\Textarea::make(
                         'response_notes'
@@ -31,21 +31,19 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         ->rows(5)
                         ->required(),
 
-                    // BEXIA_ATC_DIRECT_RESPONSE_IMAGE_V5_82_P7H32A2
                     Forms\Components\FileUpload::make(
-                        'response_image'
+                        'response_files'
                     )
                         ->label(
-                            'Imagen de evidencia (opcional)'
+                            'Imágenes / evidencias de resolución'
                         )
                         ->helperText(
-                            'Puedes adjuntar una fotografía relacionada con la respuesta proporcionada.'
+                            'Puedes adjuntar una o varias fotografías o documentos que respalden la resolución.'
                         )
+                        ->multiple()
                         ->acceptedFileTypes([
-                            'image/jpeg',
-                            'image/png',
-                            'image/webp',
-                            'image/gif',
+                            'image/*',
+                            'application/pdf',
                         ])
                         ->disk('public')
                         ->directory(
@@ -55,11 +53,12 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         ->openable()
                         ->previewable()
                         ->imagePreviewHeight('160')
-                        ->maxSize(10240)
+                        ->maxSize(20480)
                         ->columnSpanFull(),
                 ])
                 ->visible(fn (): bool =>
                     $this->isDirectAttentionOpen()
+                    && (string) ($this->record->status ?? '') !== 'resuelto'
                     && ServiceAccess::canRespondToDirectServiceCase(
                         $this->record
                     )
@@ -72,15 +71,15 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         (string) (
                             $data['response_notes'] ?? ''
                         ),
-                        $data['response_image'] ?? null
+                        $data['response_files'] ?? null
                     );
 
                     $this->record->refresh();
 
                     Notification::make()
-                        ->title('Respuesta registrada')
+                        ->title('Ticket resuelto')
                         ->body(
-                            'La respuesta quedó registrada en la bitácora del ticket.'
+                            'La respuesta quedó registrada y el ticket quedó marcado como Resuelto.'
                         )
                         ->success()
                         ->send();
@@ -88,6 +87,10 @@ trait HasServiceCaseDirectAttentionHeaderActions
 
             Action::make('direct_attention_wait_customer')
                 ->label('Esperando cliente')
+                ->hidden(
+                    fn (): bool =>
+                        ServiceAccess::isRestrictedServiceTechnician()
+                )
                 ->icon('heroicon-o-clock')
                 ->color('warning')
                 ->modalHeading(
@@ -130,72 +133,28 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         ->send();
                 }),
 
-            Action::make(
-                'direct_attention_validate_response'
-            )
-                ->label('Validar respuesta')
-                ->icon('heroicon-o-shield-check')
-                ->color('info')
-                ->modalHeading(
-                    'Validar respuesta del técnico'
-                )
-                ->modalDescription(
-                    'Confirma que la respuesta proporcionada por el técnico es correcta antes de permitir el cierre del ticket.'
-                )
-                ->modalSubmitActionLabel(
-                    'Validar respuesta'
-                )
-                ->form([
-                    Forms\Components\Textarea::make(
-                        'validation_notes'
-                    )
-                        ->label(
-                            'Observaciones de validación'
-                        )
-                        ->helperText(
-                            'Opcional. Puedes agregar una observación sobre la respuesta revisada.'
-                        )
-                        ->rows(3),
-                ])
-                ->visible(fn (): bool =>
-                    $this->isDirectAttentionOpen()
-                    && $this->hasDirectAttentionResponse()
-                    && ! $this->latestDirectAttentionResponseValidated()
-                    && ServiceAccess::canValidateDirectServiceCaseResponse(
-                        $this->record
-                    )
-                )
-                ->action(function (array $data): void {
-                    app(
-                        ServiceCaseDirectAttentionService::class
-                    )->validateLatestResponse(
-                        $this->record,
-                        (string) (
-                            $data['validation_notes']
-                            ?? ''
-                        )
-                    );
-
-                    $this->record->refresh();
-
-                    Notification::make()
-                        ->title('Respuesta validada')
-                        ->body(
-                            'La respuesta fue aprobada. El ticket ya puede resolverse y cerrarse.'
-                        )
-                        ->success()
-                        ->send();
-                }),
+            /*
+             * V5.83.4b:
+             * La validación obligatoria de la respuesta se retira
+             * del flujo normal. Los eventos históricos se conservan.
+             */
 
             // BEXIA_ATC_DIRECT_SOLUTION_PRINT_ACTION_V5_82_P7H32D
             Action::make('direct_attention_print_solution')
                 ->label('Imprimir solución')
+                ->hidden(
+                    fn (): bool =>
+                        ServiceAccess::isRestrictedServiceTechnician()
+                )
                 ->icon('heroicon-o-printer')
                 ->color('gray')
                 ->visible(fn (): bool =>
                     (string) ($this->record->attention_route ?? '') === 'non_repair'
-                    && (string) ($this->record->status ?? '') === 'cerrado'
-                    && $this->latestDirectAttentionResponseValidated()
+                    && in_array(
+                        (string) ($this->record->status ?? ''),
+                        ['resuelto', 'cerrado'],
+                        true
+                    )
                 )
                 ->url(fn (): string => route(
                     'service.service-cases.solution.print',
@@ -208,17 +167,18 @@ trait HasServiceCaseDirectAttentionHeaderActions
                 ->openUrlInNewTab(),
 
             Action::make('direct_attention_resolve')
-                ->label('Resolver y cerrar')
+                ->label('Resolver ticket')
+                ->hidden()
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
                 ->modalHeading(
-                    'Resolver atención sin reparación'
+                    'Resolver atención / gestión'
                 )
                 ->modalDescription(
-                    'Registra la solución final proporcionada al cliente.'
+                    'Registra la solución. El ticket quedará Resuelto y podrá cerrarse después.'
                 )
                 ->modalSubmitActionLabel(
-                    'Resolver y cerrar'
+                    'Resolver ticket'
                 )
                 ->form([
                     Forms\Components\Select::make(
@@ -237,26 +197,46 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         ->label('Solución proporcionada')
                         ->rows(5)
                         ->required(),
+
+                    Forms\Components\FileUpload::make(
+                        'resolution_files'
+                    )
+                        ->label(
+                            'Imágenes / evidencias de resolución'
+                        )
+                        ->multiple()
+                        ->acceptedFileTypes([
+                            'image/*',
+                            'application/pdf',
+                        ])
+                        ->disk('public')
+                        ->directory(
+                            'service-attachments/resolution'
+                        )
+                        ->downloadable()
+                        ->openable()
+                        ->previewable()
+                        ->maxSize(20480)
+                        ->columnSpanFull(),
                 ])
                 ->visible(fn (): bool =>
                     $this->isDirectAttentionOpen()
-                    && $this->hasDirectAttentionResponse()
-                    && $this->latestDirectAttentionResponseValidated()
-                    && ServiceAccess::canCloseDirectServiceCase(
+                    && ServiceAccess::canRespondToDirectServiceCase(
                         $this->record
                     )
                 )
                 ->action(function (array $data): void {
                     app(
                         ServiceCaseDirectAttentionService::class
-                    )->resolveAndClose(
+                    )->resolve(
                         $this->record,
                         (string) (
                             $data['resolution_type'] ?? ''
                         ),
                         (string) (
                             $data['resolution_notes'] ?? ''
-                        )
+                        ),
+                        $data['resolution_files'] ?? null
                     );
 
                     $this->record->refresh();
@@ -264,80 +244,227 @@ trait HasServiceCaseDirectAttentionHeaderActions
                     Notification::make()
                         ->title('Ticket resuelto')
                         ->body(
-                            'La atención quedó cerrada sin generar reparación.'
+                            'La atención quedó Resuelta. El cierre se realiza como paso separado.'
                         )
                         ->success()
                         ->send();
                 }),
 
-            Action::make('direct_attention_convert_repair')
-                ->label('Convertir a reparación')
-                ->icon('heroicon-o-wrench-screwdriver')
+            Action::make('direct_attention_close')
+                ->label('Cerrar ticket')
+                ->hidden(
+                    fn (): bool =>
+                        ServiceAccess::isRestrictedServiceTechnician()
+                )
+                ->icon('heroicon-o-lock-closed')
+                ->color('success')
+                ->modalHeading('Cerrar ticket')
+                ->modalDescription(
+                    'Confirma el cierre final del expediente.'
+                )
+                ->modalSubmitActionLabel('Cerrar ticket')
+                ->form([
+                    Forms\Components\Select::make(
+                        'customer_conformity'
+                    )
+                        ->label('¿Cliente conforme?')
+                        ->options([
+                            'yes' => 'Sí',
+                            'no' => 'No',
+                            'not_asked' => 'No se preguntó',
+                        ])
+                        ->default('not_asked')
+                        ->native(false)
+                        ->required(),
+
+                    Forms\Components\Textarea::make(
+                        'final_comment'
+                    )
+                        ->label('Nota de cierre')
+                        ->rows(4),
+
+                    Forms\Components\FileUpload::make(
+                        'closure_files'
+                    )
+                        ->label(
+                            'Imágenes / evidencias de cierre'
+                        )
+                        ->multiple()
+                        ->acceptedFileTypes([
+                            'image/*',
+                            'application/pdf',
+                        ])
+                        ->disk('public')
+                        ->directory(
+                            'service-attachments/closure'
+                        )
+                        ->downloadable()
+                        ->openable()
+                        ->previewable()
+                        ->maxSize(20480)
+                        ->columnSpanFull(),
+                ])
+                ->visible(fn (): bool =>
+                    (string) (
+                        $this->record->attention_route
+                        ?? ''
+                    ) === 'non_repair'
+                    && (string) (
+                        $this->record->status
+                        ?? ''
+                    ) === 'resuelto'
+                    && ServiceAccess::can(
+                        'service.cases.update'
+                    )
+                )
+                ->action(function (array $data): void {
+                    app(
+                        ServiceCaseDirectAttentionService::class
+                    )->close(
+                        $this->record,
+                        (string) (
+                            $data['final_comment'] ?? ''
+                        ),
+                        isset($data['customer_conformity'])
+                            ? (string) $data['customer_conformity']
+                            : null,
+                        $data['closure_files'] ?? null
+                    );
+
+                    $this->record->refresh();
+
+                    Notification::make()
+                        ->title('Ticket cerrado')
+                        ->body(
+                            'El expediente quedó cerrado.'
+                        )
+                        ->success()
+                        ->send();
+                }),
+
+            /*
+             * BEXIA_ATC_CONVERT_REPAIR_FULL_ROUTE_V5_83_4C5G3
+             *
+             * Convertir una atención a reparación ahora
+             * prepara la recepción física.
+             *
+             * NO crea RepairOrder en este paso.
+             */
+            Action::make(
+                'direct_attention_convert_repair'
+            )
+                ->label(
+                    'Convertir a reparación'
+                )
+                ->hidden(
+                    fn (): bool =>
+                        ServiceAccess::
+                            isRestrictedServiceTechnician()
+                )
+                ->icon(
+                    'heroicon-o-wrench-screwdriver'
+                )
                 ->color('danger')
                 ->modalHeading(
                     'Convertir atención a reparación'
                 )
                 ->modalDescription(
-                    'El ticket se conserva y se creará una orden de reparación vinculada.'
+                    'El ticket se conservará y entrará al flujo normal de recepción. La orden técnica se creará únicamente cuando el equipo sea recibido físicamente.'
                 )
                 ->modalSubmitActionLabel(
-                    'Crear reparación'
+                    'Preparar recepción'
                 )
                 ->form([
                     Forms\Components\Select::make(
                         'assigned_employee_id'
                     )
-                        ->label('Técnico responsable')
+                        /*
+                         * BEXIA_ATC_CONVERT_REPAIR_VALID_TECH_DEFAULT_V5_83_4C5G7F
+                         *
+                         * El responsable de una Gestion puede ser
+                         * Carolina, Nestor u otro responsable ATC.
+                         *
+                         * Al pasar a Reparacion solo conservamos el
+                         * responsable si realmente pertenece a la
+                         * lista tecnica. De lo contrario el campo
+                         * inicia vacio y obliga a elegir tecnico.
+                         */
+                        ->label(
+                            'Técnico responsable'
+                        )
                         ->options(
-                            ServiceAccess::technicianEmployeeOptions()
+                            ServiceAccess::
+                                technicianEmployeeOptions()
                         )
                         ->searchable()
                         ->preload()
                         ->native(false)
                         ->default(
-                            fn (): mixed =>
-                                $this->record
-                                    ->assigned_employee_id
-                        )
-                        ->required(),
+                            function (): ?int {
+                                $currentEmployeeId =
+                                    (int) (
+                                        $this->record
+                                            ->assigned_employee_id
+                                        ?? 0
+                                    );
 
-                    Forms\Components\Textarea::make(
-                        'initial_diagnosis'
-                    )
-                        ->label('Diagnóstico preliminar')
-                        ->rows(4)
-                        ->required(),
+                                if (
+                                    $currentEmployeeId <= 0
+                                ) {
+                                    return null;
+                                }
 
-                    Forms\Components\DateTimePicker::make(
-                        'promised_at'
-                    )
-                        ->label(
-                            'Fecha compromiso de reparación'
+                                $technicians =
+                                    ServiceAccess::
+                                        technicianEmployeeOptions();
+
+                                return array_key_exists(
+                                    $currentEmployeeId,
+                                    $technicians
+                                )
+                                    ? $currentEmployeeId
+                                    : null;
+                            }
                         )
-                        ->default(
-                            fn (): mixed =>
-                                $this->record->due_at
+                        ->helperText(
+                            'Selecciona quién será responsable técnico de la reparación. Si el responsable actual sólo atiende Gestión, no se conserva automáticamente.'
                         )
                         ->required(),
 
                     Forms\Components\Select::make(
-                        'warranty_status'
+                        'repair_arrival_method'
                     )
-                        ->label('Garantía')
-                        ->options(
-                            RepairOrder::WARRANTY_STATUSES
+                        ->label(
+                            '¿Cómo llegará el equipo?'
                         )
-                        ->default('no_aplica')
+                        ->options(
+                            \App\Models\ServiceCase::
+                                REPAIR_ARRIVAL_METHODS
+                        )
                         ->native(false)
                         ->required(),
 
-                    Forms\Components\Toggle::make(
-                        'requires_quote'
+                    Forms\Components\TextInput::make(
+                        'repair_reception_place'
                     )
                         ->label(
-                            'Requiere cotización al cliente'
+                            'Lugar de recepción'
                         )
-                        ->default(true),
+                        ->placeholder(
+                            'Ej. CEDIS, Calle 2, domicilio del cliente'
+                        )
+                        ->required()
+                        ->maxLength(255),
+
+                    Forms\Components\DateTimePicker::make(
+                        'planned_reception_at'
+                    )
+                        ->label(
+                            'Fecha prevista de recepción'
+                        )
+                        ->helperText(
+                            'Opcional. No es todavía la fecha compromiso de reparación.'
+                        ),
 
                     Forms\Components\Textarea::make(
                         'conversion_notes'
@@ -347,43 +474,108 @@ trait HasServiceCaseDirectAttentionHeaderActions
                         )
                         ->rows(4)
                         ->required(),
+
+                    \Filament\Forms\Components\FileUpload::
+                        make(
+                            'conversion_files'
+                        )
+                        ->label(
+                            'Evidencia previa a recepción'
+                        )
+                        ->helperText(
+                            'Opcional. Fotos o PDF relacionados con la conversión.'
+                        )
+                        ->disk('public')
+                        ->directory(
+                            'service/pre-reception'
+                        )
+                        ->acceptedFileTypes([
+                            'image/jpeg',
+                            'image/png',
+                            'application/pdf',
+                        ])
+                        ->maxSize(10240)
+                        ->multiple(),
                 ])
-                ->visible(fn (): bool =>
-                    $this->isDirectAttentionOpen()
-                    && ServiceAccess::can(
-                        'service.cases.classify'
-                    )
+                ->visible(
+                    fn (): bool =>
+                        $this->isDirectAttentionOpen()
+                        && ServiceAccess::can(
+                            'service.cases.classify'
+                        )
                 )
-                ->action(function (array $data): void {
-                    $repair = app(
-                        ServiceCaseClassificationService::class
-                    )->convertNonRepairToRepair(
-                        $this->record,
-                        $data
-                    );
+                ->action(
+                    function (array $data): void {
+                        app(
+                            ServiceCaseClassificationService::
+                                class
+                        )->convertNonRepairToRepair(
+                            $this->record,
+                            $data
+                        );
 
-                    Notification::make()
-                        ->title(
-                            'Ticket convertido a reparación'
-                        )
-                        ->body(
-                            'Se creó la orden '
-                            . $repair->folio
-                            . '.'
-                        )
-                        ->success()
-                        ->send();
+                        /*
+                         * Las evidencias siguen perteneciendo
+                         * a la etapa pre_reception porque
+                         * todavía NO existe RepairOrder.
+                         */
+                        ServiceAccess::
+                            saveUploadedAttachments(
+                                companyId:
+                                    $this->record
+                                        ->company_id,
 
-                    $this->redirect(
-                        RepairOrderResource::getUrl(
-                            'edit',
-                            ['record' => $repair]
-                        )
-                    );
-                }),
+                                serviceCaseId:
+                                    $this->record
+                                        ->id,
+
+                                repairOrderId:
+                                    null,
+
+                                files:
+                                    $data[
+                                        'conversion_files'
+                                    ]
+                                    ?? null,
+
+                                stage:
+                                    'pre_reception',
+
+                                isCustomerVisible:
+                                    false
+                            );
+
+                        $this->record->refresh();
+
+                        Notification::make()
+                            ->title(
+                                'Recepción preparada'
+                            )
+                            ->body(
+                                'El ticket fue convertido a reparación y quedó en espera del equipo. La orden técnica se creará al registrar la recepción física.'
+                            )
+                            ->success()
+                            ->send();
+
+                        $this->redirect(
+                            ServiceCaseResource::
+                                getUrl(
+                                    'edit',
+                                    [
+                                        'record' =>
+                                            $this->record,
+                                    ]
+                                )
+                        );
+                    }
+                ),
 
             Action::make('direct_attention_reopen')
                 ->label('Reabrir atención')
+                ->hidden(
+                    fn (): bool =>
+                        ServiceAccess::isRestrictedServiceTechnician()
+                )
                 ->icon('heroicon-o-arrow-path')
                 ->color('warning')
                 ->modalHeading(
@@ -499,6 +691,7 @@ trait HasServiceCaseDirectAttentionHeaderActions
                     'rechazado',
                     'cancelado',
                     'entregado',
+                    'resuelto',
                 ],
                 true
             )

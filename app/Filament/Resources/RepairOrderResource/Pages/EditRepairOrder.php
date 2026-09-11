@@ -28,6 +28,49 @@ class EditRepairOrder extends EditRecord
 
     protected mixed $uploadedAttachments = [];
 
+    /*
+     * BEXIA_ATC_TECHNICIAN_NO_GENERAL_SAVE_V5_83_4C5B
+     *
+     * El técnico no guarda el formulario administrativo.
+     * Toda su escritura pasa por una acción específica.
+     */
+    protected function getFormActions(): array
+    {
+
+        if (
+            $this->
+                isReceptionRepairReadOnlyUser()
+        ) {
+            return [];
+        }
+
+
+        /*
+         * BEXIA_ATC_MANAGER_REVIEW_NO_SAVE_V5_83_4C5C2A1
+         *
+         * El Encargado usa acciones de etapa.
+         * No debe existir Guardar general en esta vista.
+         */
+        if (
+            ServiceAccess::hasServiceRole(
+                'Servicio - Encargado de Técnicos'
+            )
+            && ! ServiceAccess::hasServiceRole(
+                'Servicio - Supervisor'
+            )
+        ) {
+            return [];
+        }
+
+        if (
+            ServiceAccess::isRestrictedServiceTechnician()
+        ) {
+            return [];
+        }
+
+        return parent::getFormActions();
+    }
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $this->oldStatus = $this->record->status;
@@ -38,6 +81,35 @@ class EditRepairOrder extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+
+        if (
+            $this->
+                isReceptionRepairReadOnlyUser()
+        ) {
+            throw
+                \Illuminate\Validation\ValidationException::
+                    withMessages([
+                        'repair' =>
+                            'Recepción puede consultar la reparación, pero no modificar sus datos técnicos, presupuesto o costos.',
+                    ]);
+        }
+
+        /*
+         * BEXIA_ATC_TECHNICIAN_GENERAL_SAVE_GUARD_V5_83_4C5B
+         *
+         * Aunque alguien intente forzar el submit del formulario
+         * Livewire, un Servicio - Técnico restringido no puede
+         * modificar la orden por el Save administrativo.
+         */
+        if (
+            ServiceAccess::isRestrictedServiceTechnician()
+        ) {
+            throw new
+                \Illuminate\Auth\Access\AuthorizationException(
+                    'El técnico sólo puede registrar su trabajo mediante la acción Finalizar trabajo técnico.'
+                );
+        }
+
         $this->uploadedAttachments = $data['uploaded_attachments'] ?? [];
         unset($data['uploaded_attachments']);
 
@@ -116,10 +188,5546 @@ class EditRepairOrder extends EditRecord
         );
     }
 
+    /*
+     * BEXIA_ATC_TECHNICIAN_WORK_ACTION_V5_83_4C5B
+     *
+     * Única escritura operativa disponible para el técnico.
+     *
+     * Guarda:
+     * - diagnóstico técnico;
+     * - trabajo realizado;
+     * - refacciones y cantidades;
+     * - pruebas / observaciones;
+     * - evidencia.
+     *
+     * NO guarda:
+     * - costo;
+     * - precio;
+     * - mano de obra económica;
+     * - garantía;
+     * - cotización;
+     * - total al cliente.
+     *
+     * El workflow_stage se conserva para que el Encargado de
+     * Técnicos costee después usando el flujo administrativo.
+     *
+     * BEXIA_ATC_TECHNICIAN_STRING_CAST_FIX_V5_83_4C5B4
+     * Corrige cast runtime de technical_work.status.
+     */
+    protected function finalizeTechnicalWorkAction(): Action
+    {
+        return Action::make(
+            'finalize_technical_work'
+        )
+            ->label(
+                'Finalizar trabajo técnico'
+            )
+            ->icon(
+                'heroicon-o-wrench-screwdriver'
+            )
+            ->color('success')
+            ->modalHeading(
+                'Finalizar trabajo técnico'
+            )
+            ->modalDescription(
+                'Registra qué encontraste, qué hiciste y las refacciones utilizadas. No se capturan costos ni precios; el Encargado de Técnicos realizará después el costeo y cobro.'
+            )
+            ->modalSubmitActionLabel(
+                'Finalizar trabajo técnico'
+            )
+            ->visible(
+                fn (): bool =>
+                    ServiceAccess::
+                        isRestrictedServiceTechnician()
+                    && ServiceAccess::
+                        isAssignedRepairTechnician(
+                            $this->record
+                        )
+                    && ServiceAccess::
+                        canWorkRepair(
+                            $this->record
+                        )
+                    && ! $this->
+                        technicalWorkCompleted()
+                    && ! $this->
+                        repairIsFinalForTechnician()
+            )
+            ->form([
+                \Filament\Forms\Components\Textarea::make(
+                    'technical_diagnosis'
+                )
+                    ->label('Diagnóstico técnico')
+                    ->helperText(
+                        'Describe la falla encontrada y el diagnóstico realizado.'
+                    )
+                    ->default(
+                        fn (): ?string =>
+                            $this->record
+                                ? (
+                                    $this->record->
+                                        technical_diagnosis
+                                    ?: null
+                                )
+                                : null
+                    )
+                    ->rows(5)
+                    ->required()
+                    ->maxLength(5000)
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\Textarea::make(
+                    'work_performed'
+                )
+                    ->label(
+                        'Trabajo realizado'
+                    )
+                    ->helperText(
+                        'Describe con claridad qué se reparó, ajustó, sustituyó o corrigió.'
+                    )
+                    ->default(
+                        fn (): ?string =>
+                            $this->record
+                                ? (
+                                    $this->record->
+                                        resolution
+                                    ?: null
+                                )
+                                : null
+                    )
+                    ->rows(5)
+                    ->required()
+                    ->maxLength(5000)
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\Repeater::make(
+                    'technical_parts'
+                )
+                    ->label(
+                        'Refacciones / materiales utilizados'
+                    )
+                    ->helperText(
+                        'Registra únicamente refacción/material y cantidad. No se muestran ni capturan costos o precios. Si no utilizaste refacciones, deja esta sección vacía.'
+                    )
+                    ->defaultItems(0)
+                    ->addActionLabel(
+                        'Agregar refacción o material'
+                    )
+                    ->collapsible()
+                    ->columns(12)
+                    ->schema([
+                        \Filament\Forms\Components\Select::make(
+                            'source_type'
+                        )
+                            ->label('Origen')
+                            ->options([
+                                'catalog' =>
+                                    'Catálogo / almacén',
+                                'manual' =>
+                                    'Captura manual',
+                            ])
+                            ->default('catalog')
+                            ->native(false)
+                            ->required()
+                            ->live()
+                            ->columnSpan(3),
+
+                        \Filament\Forms\Components\Select::make(
+                            'product_id'
+                        )
+                            ->label(
+                                'Refacción / material'
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->options(
+                                fn (): array =>
+                                    ServiceAccess::
+                                        productOptions()
+                            )
+                            ->getSearchResultsUsing(
+                                fn (
+                                    string $search
+                                ): array =>
+                                    ServiceAccess::
+                                        productOptions(
+                                            $search
+                                        )
+                            )
+                            ->getOptionLabelUsing(
+                                fn (
+                                    $value
+                                ): ?string =>
+                                    $value
+                                        ? ServiceAccess::
+                                            productLabel(
+                                                (int)
+                                                $value
+                                            )
+                                        : null
+                            )
+                            ->required(
+                                fn (
+                                    \Filament\Forms\Get
+                                    $get
+                                ): bool =>
+                                    (
+                                        $get(
+                                            'source_type'
+                                        )
+                                        ?: 'catalog'
+                                    ) === 'catalog'
+                            )
+                            ->visible(
+                                fn (
+                                    \Filament\Forms\Get
+                                    $get
+                                ): bool =>
+                                    (
+                                        $get(
+                                            'source_type'
+                                        )
+                                        ?: 'catalog'
+                                    ) === 'catalog'
+                            )
+                            ->columnSpan(5),
+
+                        \Filament\Forms\Components\TextInput::make(
+                            'product_name'
+                        )
+                            ->label(
+                                'Refacción / material'
+                            )
+                            ->helperText(
+                                'Úsalo sólo cuando la refacción no exista en catálogo.'
+                            )
+                            ->required(
+                                fn (
+                                    \Filament\Forms\Get
+                                    $get
+                                ): bool =>
+                                    $get(
+                                        'source_type'
+                                    ) === 'manual'
+                            )
+                            ->visible(
+                                fn (
+                                    \Filament\Forms\Get
+                                    $get
+                                ): bool =>
+                                    $get(
+                                        'source_type'
+                                    ) === 'manual'
+                            )
+                            ->maxLength(255)
+                            ->columnSpan(5),
+
+                        \Filament\Forms\Components\TextInput::make(
+                            'quantity'
+                        )
+                            ->label('Cantidad')
+                            ->numeric()
+                            ->default(1)
+                            ->minValue(0.01)
+                            ->step('0.01')
+                            ->required()
+                            ->columnSpan(2),
+
+                        \Filament\Forms\Components\Textarea::make(
+                            'notes'
+                        )
+                            ->label(
+                                'Observaciones'
+                            )
+                            ->helperText(
+                                'Opcional: ubicación, lado, medida o cualquier detalle útil.'
+                            )
+                            ->rows(2)
+                            ->maxLength(1000)
+                            ->columnSpanFull(),
+                    ]),
+
+                \Filament\Forms\Components\Textarea::make(
+                    'tests_notes'
+                )
+                    ->label(
+                        'Pruebas / observaciones finales'
+                    )
+                    ->helperText(
+                        'Opcional. Indica las pruebas realizadas o cualquier observación después de la reparación.'
+                    )
+                    ->rows(3)
+                    ->maxLength(3000)
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\FileUpload::make(
+                    'technical_files'
+                )
+                    ->label(
+                        'Evidencia del trabajo'
+                    )
+                    ->helperText(
+                        'Obligatorio: agrega al menos una foto o documento que muestre el trabajo realizado.'
+                    )
+                    ->required()
+                    ->minFiles(1)
+                    ->validationMessages([
+                        'required' =>
+                            'Agrega al menos una evidencia del trabajo técnico.',
+                        'min' =>
+                            'Agrega al menos una evidencia del trabajo técnico.',
+                    ])
+                    ->acceptedFileTypes([
+                        'image/jpeg',
+                        'image/png',
+                        'image/webp',
+                        'image/gif',
+                        'application/pdf',
+                        'text/plain',
+                        'text/csv',
+                        'application/msword',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'application/vnd.ms-excel',
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    ])
+                    ->disk('public')
+                    ->directory(
+                        'service/repair-result-files'
+                    )
+                    ->multiple()
+                    ->reorderable()
+                    ->downloadable()
+                    ->openable()
+                    ->imagePreviewHeight('120')
+                    ->maxFiles(10)
+                    ->maxSize(10240)
+                    ->columnSpanFull(),
+            ])
+            ->action(
+                function (
+                    array $data
+                ): void {
+                    $record =
+                        $this->record;
+
+                    if (
+                        ! $record
+                        || ! ServiceAccess::
+                            isRestrictedServiceTechnician()
+                        || ! ServiceAccess::
+                            isAssignedRepairTechnician(
+                                $record
+                            )
+                        || ! ServiceAccess::
+                            canWorkRepair(
+                                $record
+                            )
+                    ) {
+                        throw new
+                            \Illuminate\Auth\Access\AuthorizationException(
+                                'No tienes autorización para finalizar esta reparación.'
+                            );
+                    }
+
+                    if (
+                        $this->
+                            repairIsFinalForTechnician()
+                    ) {
+                        throw
+                            \Illuminate\Validation\ValidationException::
+                                withMessages([
+                                    'technical_diagnosis' =>
+                                        'La reparación ya está en un estado final y no puede modificarse.',
+                                ]);
+                    }
+
+                    $diagnosis =
+                        trim(
+                            (string) (
+                                $data[
+                                    'technical_diagnosis'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    $workPerformed =
+                        trim(
+                            (string) (
+                                $data[
+                                    'work_performed'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    $testsNotes =
+                        trim(
+                            (string) (
+                                $data[
+                                    'tests_notes'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    $parts =
+                        array_values(
+                            array_filter(
+                                (array) (
+                                    $data[
+                                        'technical_parts'
+                                    ]
+                                    ?? []
+                                ),
+                                fn ($part): bool =>
+                                    is_array($part)
+                            )
+                        );
+
+                    $paths =
+                        array_values(
+                            array_filter(
+                                (array) (
+                                    $data[
+                                        'technical_files'
+                                    ]
+                                    ?? []
+                                ),
+                                fn ($path): bool =>
+                                    is_string($path)
+                                    && trim($path) !== ''
+                            )
+                        );
+
+                    if ($diagnosis === '') {
+                        throw
+                            \Illuminate\Validation\ValidationException::
+                                withMessages([
+                                    'technical_diagnosis' =>
+                                        'Captura el diagnóstico técnico.',
+                                ]);
+                    }
+
+                    if ($workPerformed === '') {
+                        throw
+                            \Illuminate\Validation\ValidationException::
+                                withMessages([
+                                    'work_performed' =>
+                                        'Captura el trabajo realizado.',
+                                ]);
+                    }
+
+                    if ($paths === []) {
+                        throw
+                            \Illuminate\Validation\ValidationException::
+                                withMessages([
+                                    'technical_files' =>
+                                        'Agrega al menos una evidencia del trabajo técnico.',
+                                ]);
+                    }
+
+                    \Illuminate\Support\Facades\DB::
+                        transaction(
+                            function () use (
+                                $record,
+                                $diagnosis,
+                                $workPerformed,
+                                $testsNotes,
+                                $parts,
+                                $paths
+                            ): void {
+                                $repair =
+                                    \App\Models\RepairOrder::
+                                        query()
+                                        ->lockForUpdate()
+                                        ->find(
+                                            $record->
+                                                getKey()
+                                        );
+
+                                if (! $repair) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'technical_diagnosis' =>
+                                                    'La orden técnica ya no está disponible.',
+                                            ]);
+                                }
+
+                                if (
+                                    ! ServiceAccess::
+                                        isAssignedRepairTechnician(
+                                            $repair
+                                        )
+                                    || ! ServiceAccess::
+                                        canWorkRepair(
+                                            $repair
+                                        )
+                                ) {
+                                    throw new
+                                        \Illuminate\Auth\Access\AuthorizationException(
+                                            'Ya no tienes asignada esta reparación.'
+                                        );
+                                }
+
+                                $metadata =
+                                    $repair->metadata
+                                    ?? [];
+
+                                if (
+                                    is_string(
+                                        $metadata
+                                    )
+                                ) {
+                                    $decoded =
+                                        json_decode(
+                                            $metadata,
+                                            true
+                                        );
+
+                                    $metadata =
+                                        is_array(
+                                            $decoded
+                                        )
+                                            ? $decoded
+                                            : [];
+                                }
+
+                                if (
+                                    ! is_array(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata = [];
+                                }
+
+                                $existingWork =
+                                    $metadata[
+                                        'technical_work'
+                                    ]
+                                    ?? [];
+
+                                if (
+                                    is_array(
+                                        $existingWork
+                                    )
+                                    && (string) (
+                                        $existingWork[
+                                            'status'
+                                        ]
+                                        ?? ''
+                                    ) === 'completed'
+                                ) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'technical_diagnosis' =>
+                                                    'El trabajo técnico ya fue finalizado anteriormente.',
+                                            ]);
+                                }
+
+                                /*
+                                 * No se reemplazan líneas que ya existan.
+                                 * Si alguien administrativo ya capturó
+                                 * refacciones, se detiene para evitar
+                                 * borrar/cambiar costeo o inventario.
+                                 */
+                                $existingPartsCount =
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'repair_order_parts'
+                                        )
+                                        ->where(
+                                            'repair_order_id',
+                                            $repair->id
+                                        )
+                                        ->count();
+
+                                if (
+                                    $existingPartsCount > 0
+                                ) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'technical_parts' =>
+                                                    'Esta orden ya tiene refacciones registradas. El Encargado de Técnicos debe revisarlas antes de finalizar el trabajo.',
+                                            ]);
+                                }
+
+                                $now = now();
+
+                                $partSummaries = [];
+
+                                foreach (
+                                    $parts
+                                    as $index => $part
+                                ) {
+                                    $sourceType =
+                                        (string) (
+                                            $part[
+                                                'source_type'
+                                            ]
+                                            ?? 'catalog'
+                                        );
+
+                                    if (
+                                        ! in_array(
+                                            $sourceType,
+                                            [
+                                                'catalog',
+                                                'manual',
+                                            ],
+                                            true
+                                        )
+                                    ) {
+                                        throw
+                                            \Illuminate\Validation\ValidationException::
+                                                withMessages([
+                                                    'technical_parts' =>
+                                                        'Origen de refacción inválido en la línea '
+                                                        . (
+                                                            $index
+                                                            + 1
+                                                        )
+                                                        . '.',
+                                                ]);
+                                    }
+
+                                    $quantity =
+                                        (float) (
+                                            $part[
+                                                'quantity'
+                                            ]
+                                            ?? 0
+                                        );
+
+                                    if (
+                                        $quantity <= 0
+                                    ) {
+                                        throw
+                                            \Illuminate\Validation\ValidationException::
+                                                withMessages([
+                                                    'technical_parts' =>
+                                                        'La cantidad debe ser mayor que cero en la línea '
+                                                        . (
+                                                            $index
+                                                            + 1
+                                                        )
+                                                        . '.',
+                                                ]);
+                                    }
+
+                                    $productId = null;
+                                    $productName = '';
+                                    $sku = null;
+
+                                    if (
+                                        $sourceType
+                                        === 'catalog'
+                                    ) {
+                                        $productId =
+                                            (int) (
+                                                $part[
+                                                    'product_id'
+                                                ]
+                                                ?? 0
+                                            );
+
+                                        if (
+                                            $productId <= 0
+                                        ) {
+                                            throw
+                                                \Illuminate\Validation\ValidationException::
+                                                    withMessages([
+                                                        'technical_parts' =>
+                                                            'Selecciona la refacción de catálogo en la línea '
+                                                            . (
+                                                                $index
+                                                                + 1
+                                                            )
+                                                            . '.',
+                                                    ]);
+                                        }
+
+                                        $productQuery =
+                                            \Illuminate\Support\Facades\DB::
+                                                table(
+                                                    'products'
+                                                )
+                                                ->where(
+                                                    'id',
+                                                    $productId
+                                                );
+
+                                        if (
+                                            \Illuminate\Support\Facades\Schema::
+                                                hasColumn(
+                                                    'products',
+                                                    'company_id'
+                                                )
+                                        ) {
+                                            $companyId =
+                                                (int) (
+                                                    $repair->
+                                                        company_id
+                                                    ?? 0
+                                                );
+
+                                            $productQuery->
+                                                where(
+                                                    function (
+                                                        $query
+                                                    ) use (
+                                                        $companyId
+                                                    ): void {
+                                                        $query->
+                                                            where(
+                                                                'company_id',
+                                                                $companyId
+                                                            )
+                                                            ->orWhereNull(
+                                                                'company_id'
+                                                            );
+                                                    }
+                                                );
+                                        }
+
+                                        $product =
+                                            $productQuery->
+                                                first();
+
+                                        if (
+                                            ! $product
+                                        ) {
+                                            throw
+                                                \Illuminate\Validation\ValidationException::
+                                                    withMessages([
+                                                        'technical_parts' =>
+                                                            'La refacción seleccionada no pertenece al catálogo disponible de esta empresa.',
+                                                    ]);
+                                        }
+
+                                        $productName =
+                                            trim(
+                                                (string) (
+                                                    ServiceAccess::
+                                                        productLabel(
+                                                            $productId
+                                                        )
+                                                    ?? ''
+                                                )
+                                            );
+
+                                        if (
+                                            property_exists(
+                                                $product,
+                                                'sku'
+                                            )
+                                            && filled(
+                                                $product->sku
+                                            )
+                                        ) {
+                                            $sku =
+                                                mb_substr(
+                                                    trim(
+                                                        (string)
+                                                        $product->sku
+                                                    ),
+                                                    0,
+                                                    255
+                                                );
+                                        }
+                                    } else {
+                                        $productName =
+                                            trim(
+                                                (string) (
+                                                    $part[
+                                                        'product_name'
+                                                    ]
+                                                    ?? ''
+                                                )
+                                            );
+
+                                        if (
+                                            $productName === ''
+                                        ) {
+                                            throw
+                                                \Illuminate\Validation\ValidationException::
+                                                    withMessages([
+                                                        'technical_parts' =>
+                                                            'Captura la refacción o material manual en la línea '
+                                                            . (
+                                                                $index
+                                                                + 1
+                                                            )
+                                                            . '.',
+                                                    ]);
+                                        }
+                                    }
+
+                                    if (
+                                        $productName === ''
+                                    ) {
+                                        $productName =
+                                            'Refacción';
+                                    }
+
+                                    $productName =
+                                        mb_substr(
+                                            $productName,
+                                            0,
+                                            255
+                                        );
+
+                                    $notes =
+                                        trim(
+                                            (string) (
+                                                $part[
+                                                    'notes'
+                                                ]
+                                                ?? ''
+                                            )
+                                        );
+
+                                    /*
+                                     * IMPORTANTE:
+                                     * El técnico NO captura costo/precio.
+                                     *
+                                     * unit_cost / total_cost se guardan
+                                     * en 0 porque la tabla los exige.
+                                     *
+                                     * unit_price / total_price quedan
+                                     * NULL para que el Encargado los
+                                     * complete posteriormente.
+                                     */
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'repair_order_parts'
+                                        )
+                                        ->insert([
+                                            'company_id' =>
+                                                $repair->
+                                                    company_id,
+
+                                            'repair_order_id' =>
+                                                $repair->id,
+
+                                            'product_id' =>
+                                                $productId,
+
+                                            'sku' =>
+                                                $sku,
+
+                                            'description' =>
+                                                $productName,
+
+                                            'quantity' =>
+                                                $quantity,
+
+                                            'unit_cost' =>
+                                                0,
+
+                                            'total_cost' =>
+                                                0,
+
+                                            'notes' =>
+                                                $notes !== ''
+                                                    ? $notes
+                                                    : null,
+
+                                            'source_type' =>
+                                                $sourceType,
+
+                                            'product_name' =>
+                                                $productName,
+
+                                            'unit_price' =>
+                                                null,
+
+                                            'total_price' =>
+                                                null,
+
+                                            'created_at' =>
+                                                $now,
+
+                                            'updated_at' =>
+                                                $now,
+                                        ]);
+
+                                    $partSummaries[] = [
+                                        'source_type' =>
+                                            $sourceType,
+
+                                        'product_id' =>
+                                            $productId,
+
+                                        'product_name' =>
+                                            $productName,
+
+                                        'quantity' =>
+                                            $quantity,
+
+                                        'notes' =>
+                                            $notes !== ''
+                                                ? $notes
+                                                : null,
+                                    ];
+                                }
+
+                                $metadata[
+                                    'technical_work'
+                                ] = [
+                                    'status' =>
+                                        'completed',
+
+                                    'technical_diagnosis' =>
+                                        $diagnosis,
+
+                                    'work_performed' =>
+                                        $workPerformed,
+
+                                    'tests_notes' =>
+                                        $testsNotes !== ''
+                                            ? $testsNotes
+                                            : null,
+
+                                    'parts' =>
+                                        $partSummaries,
+
+                                    'parts_count' =>
+                                        count(
+                                            $partSummaries
+                                        ),
+
+                                    'evidence_count' =>
+                                        count(
+                                            $paths
+                                        ),
+
+                                    'completed_at' =>
+                                        $now->
+                                            toDateTimeString(),
+
+                                    'completed_by_user_id' =>
+                                        auth()->id(),
+
+                                    'assigned_employee_id' =>
+                                        $repair->
+                                            assigned_employee_id,
+
+                                    'workflow_stage_preserved' =>
+                                        $repair->
+                                            workflow_stage,
+
+                                    'source' =>
+                                        'technician_finalize_action',
+                                ];
+
+                                /*
+                                 * Se conservan workflow_stage,
+                                 * status, garantía y cotización.
+                                 *
+                                 * Así el Encargado de Técnicos
+                                 * puede hacer el costeo después.
+                                 */
+                                \Illuminate\Support\Facades\DB::
+                                    table(
+                                        'repair_orders'
+                                    )
+                                    ->where(
+                                        'id',
+                                        $repair->id
+                                    )
+                                    ->update([
+                                        'technical_diagnosis' =>
+                                            $diagnosis,
+
+                                        'resolution' =>
+                                            $workPerformed,
+
+                                        'metadata' =>
+                                            json_encode(
+                                                $metadata,
+                                                JSON_UNESCAPED_UNICODE
+                                                | JSON_UNESCAPED_SLASHES
+                                                | JSON_THROW_ON_ERROR
+                                            ),
+
+                                        'updated_at' =>
+                                            $now,
+                                    ]);
+
+                                ServiceAccess::
+                                    saveUploadedAttachments(
+                                        companyId:
+                                            $repair->
+                                                company_id,
+
+                                        serviceCaseId:
+                                            $repair->
+                                                service_case_id,
+
+                                        repairOrderId:
+                                            $repair->id,
+
+                                        files:
+                                            $paths,
+
+                                        stage:
+                                            'repair_result',
+
+                                        isCustomerVisible:
+                                            false
+                                    );
+
+                                foreach (
+                                    $paths
+                                    as $path
+                                ) {
+                                    $attachmentExists =
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'service_attachments'
+                                            )
+                                            ->where(
+                                                'repair_order_id',
+                                                $repair->id
+                                            )
+                                            ->where(
+                                                'stage',
+                                                'repair_result'
+                                            )
+                                            ->where(
+                                                'file_path',
+                                                $path
+                                            )
+                                            ->exists();
+
+                                    if (
+                                        ! $attachmentExists
+                                    ) {
+                                        throw
+                                            \Illuminate\Validation\ValidationException::
+                                                withMessages([
+                                                    'technical_files' =>
+                                                        'No fue posible registrar toda la evidencia del trabajo técnico.',
+                                                ]);
+                                    }
+                                }
+
+                                $repair->refresh();
+
+                                RepairOrderResource::
+                                    logEvent(
+                                        $repair,
+                                        'technical_work_completed',
+                                        (string) (
+                                            $repair->status
+                                            ?? ''
+                                        ),
+                                        (string) (
+                                            $repair->status
+                                            ?? ''
+                                        ),
+                                        'El técnico finalizó su trabajo. Diagnóstico, trabajo realizado, refacciones y evidencia quedaron registrados. Pendiente de revisión y costeo por el Encargado de Técnicos.'
+                                    );
+                            }
+                        );
+
+                    $this->record->
+                        refresh();
+
+                    \Filament\Notifications\Notification::
+                        make()
+                        ->title(
+                            'Trabajo técnico finalizado'
+                        )
+                        ->body(
+                            'El trabajo quedó bloqueado para el técnico. El siguiente paso corresponde al Encargado de Técnicos para revisión, costeo y cobro.'
+                        )
+                        ->success()
+                        ->send();
+
+                    $this->redirect(
+                        $this->
+                            getResource()::
+                            getUrl(
+                                'edit',
+                                [
+                                    'record' =>
+                                        $this->
+                                            record,
+                                ]
+                            )
+                    );
+                }
+            );
+    }
+
+    protected function technicalWorkMetadata(): array
+    {
+        $record =
+            $this->record
+            ?? null;
+
+        if (! $record) {
+            return [];
+        }
+
+        $metadata =
+            $record->metadata
+            ?? [];
+
+        if (is_string($metadata)) {
+            $decoded =
+                json_decode(
+                    $metadata,
+                    true
+                );
+
+            $metadata =
+                is_array($decoded)
+                    ? $decoded
+                    : [];
+        }
+
+        if (! is_array($metadata)) {
+            return [];
+        }
+
+        $work =
+            $metadata[
+                'technical_work'
+            ]
+            ?? [];
+
+        return
+            is_array($work)
+                ? $work
+                : [];
+    }
+
+    protected function technicalWorkCompleted(): bool
+    {
+        $work =
+            $this->
+                technicalWorkMetadata();
+
+        return
+            (string) (
+                $work['status']
+                ?? ''
+            ) === 'completed';
+    }
+
+    protected function repairIsFinalForTechnician(): bool
+    {
+        $record =
+            $this->record
+            ?? null;
+
+        if (! $record) {
+            return true;
+        }
+
+        return
+            in_array(
+                (string) (
+                    $record->
+                        workflow_stage
+                    ?? ''
+                ),
+                [
+                    'ready_for_delivery',
+                    'delivered',
+                    'cancelled',
+                    'finished',
+                ],
+                true
+            )
+            || in_array(
+                (string) (
+                    $record->status
+                    ?? ''
+                ),
+                [
+                    'ready_for_delivery',
+                    'delivered',
+                    'entregado',
+                    'cerrado',
+                    'rechazado',
+                    'cancelled',
+                    'cancelado',
+                ],
+                true
+            );
+    }
+
+
+    /*
+     * BEXIA_ATC_MANAGER_COST_ACTION_V5_83_4C5C2B
+     *
+     * Unica accion economica operativa del
+     * Encargado de Tecnicos despues de que el
+     * tecnico finaliza el trabajo.
+     *
+     * NO permite cambiar:
+     * - diagnostico;
+     * - trabajo realizado;
+     * - refaccion;
+     * - cantidad tecnica;
+     * - producto / serie;
+     * - tecnico asignado.
+     *
+     * Si permite:
+     * - decision comercial;
+     * - costo de refaccion;
+     * - precio de venta;
+     * - mano de obra;
+     * - otros cargos;
+     * - Vo.Bo. del cliente;
+     * - notas.
+     */
+    protected function managerReviewCostingAction(): Action
+    {
+        return Action::make(
+            'manager_review_costing'
+        )
+            ->label(
+                'Revisar y costear'
+            )
+            ->icon(
+                'heroicon-o-calculator'
+            )
+            ->color('success')
+            ->modalHeading(
+                'Revisar y costear'
+            )
+            ->modalDescription(
+                'Revisa el trabajo técnico y registra '
+                . 'únicamente la decisión económica. '
+                . 'El diagnóstico, trabajo realizado, '
+                . 'refacciones y cantidades técnicas '
+                . 'permanecen bloqueados.'
+            )
+            ->modalWidth('6xl')
+            ->modalSubmitActionLabel(
+                'Guardar revisión y costeo'
+            )
+            ->visible(
+                fn (): bool =>
+                    $this->
+                        managerReviewCostingPending()
+            )
+            ->form([
+                \Filament\Forms\Components\Radio::make(
+                    'decision'
+                )
+                    ->label(
+                        'Decisión'
+                    )
+                    ->options([
+                        'cobrable' =>
+                            'Servicio cobrable / no garantía',
+
+                        'garantia' =>
+                            'Garantía aceptada / sin cargo',
+
+                        'garantia_rechazada' =>
+                            'Garantía rechazada / cobrable',
+
+                        'cortesia' =>
+                            'Cortesía / sin cargo',
+                    ])
+                    ->default(
+                        'cobrable'
+                    )
+                    ->live()
+                    ->required(),
+
+                \Filament\Forms\Components\Repeater::make(
+                    'parts'
+                )
+                    ->label(
+                        'Refacciones / materiales '
+                        . 'reportados por el técnico'
+                    )
+                    ->helperText(
+                        'La refacción y su cantidad están '
+                        . 'bloqueadas. El Encargado captura '
+                        . 'únicamente costo y precio.'
+                    )
+                    ->default(
+                        function (): array {
+                            if (
+                                ! $this->record
+                            ) {
+                                return [];
+                            }
+
+                            return
+                                \Illuminate\Support\Facades\DB::
+                                    table(
+                                        'repair_order_parts'
+                                    )
+                                    ->where(
+                                        'repair_order_id',
+                                        $this->record
+                                            ->getKey()
+                                    )
+                                    ->orderBy('id')
+                                    ->get()
+                                    ->map(
+                                        function (
+                                            $row
+                                        ): array {
+                                            return [
+                                                'part_id' =>
+                                                    (int) $row->id,
+
+                                                'part_name' =>
+                                                    trim(
+                                                        (string) (
+                                                            $row->
+                                                                product_name
+                                                            ?: $row->
+                                                                description
+                                                            ?: (
+                                                                'Refacción #'
+                                                                . $row->id
+                                                            )
+                                                        )
+                                                    ),
+
+                                                'quantity' =>
+                                                    (float) (
+                                                        $row->
+                                                            quantity
+                                                        ?? 0
+                                                    ),
+
+                                                'unit_cost' =>
+                                                    (float) (
+                                                        $row->
+                                                            unit_cost
+                                                        ?? 0
+                                                    ),
+
+                                                'unit_price' =>
+                                                    $row->
+                                                        unit_price
+                                                    !== null
+                                                        ? (float)
+                                                            $row->
+                                                                unit_price
+                                                        : 0,
+                                            ];
+                                        }
+                                    )
+                                    ->all();
+                        }
+                    )
+                    ->addable(false)
+                    ->deletable(false)
+                    ->reorderable(false)
+                    ->columns(12)
+                    ->schema([
+                        \Filament\Forms\Components\Hidden::make(
+                            'part_id'
+                        )
+                            ->required(),
+
+                        \Filament\Forms\Components\TextInput::make(
+                            'part_name'
+                        )
+                            ->label(
+                                'Refacción / material'
+                            )
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->columnSpan(4),
+
+                        \Filament\Forms\Components\TextInput::make(
+                            'quantity'
+                        )
+                            ->label(
+                                'Cantidad técnica'
+                            )
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->columnSpan(2),
+
+                        \Filament\Forms\Components\TextInput::make(
+                            'unit_cost'
+                        )
+                            ->label(
+                                'Costo unitario'
+                            )
+                            ->prefix('$')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step('0.01')
+                            ->default(0)
+                            ->required()
+                            ->columnSpan(3),
+
+                        \Filament\Forms\Components\TextInput::make(
+                            'unit_price'
+                        )
+                            ->label(
+                                'Precio venta unitario'
+                            )
+                            ->prefix('$')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step('0.01')
+                            ->default(0)
+                            ->live(
+                                debounce: 300
+                            )
+                            ->helperText(
+                                'En garantía o cortesía '
+                                . 'el backend lo dejará en $0.'
+                            )
+                            ->required()
+                            ->columnSpan(3),
+                    ])
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\TextInput::make(
+                    'labor_amount'
+                )
+                    ->label(
+                        'Mano de obra a cobrar'
+                    )
+                    ->prefix('$')
+                    ->numeric()
+                    ->minValue(0)
+                    ->step('0.01')
+                    ->default(0)
+                    ->live(
+                        debounce: 300
+                    )
+                    ->helperText(
+                        'Importe de mano de obra de esta '
+                        . 'reparación. No es el costo '
+                        . 'interno por hora.'
+                    ),
+
+                \Filament\Forms\Components\TextInput::make(
+                    'other_amount'
+                )
+                    ->label(
+                        'Otros cargos'
+                    )
+                    ->prefix('$')
+                    ->numeric()
+                    ->minValue(0)
+                    ->step('0.01')
+                    ->default(0)
+                    ->live(
+                        debounce: 300
+                    ),
+
+                \Filament\Forms\Components\Placeholder::make(
+                    'calculated_customer_total'
+                )
+                    ->label(
+                        'Total al cliente'
+                    )
+                    ->content(
+                        function (
+                            \Filament\Forms\Get $get
+                        ): string {
+                            $decision =
+                                (string) (
+                                    $get(
+                                        'decision'
+                                    )
+                                    ?? ''
+                                );
+
+                            $chargeable =
+                                in_array(
+                                    $decision,
+                                    [
+                                        'cobrable',
+                                        'garantia_rechazada',
+                                    ],
+                                    true
+                                );
+
+                            if (! $chargeable) {
+                                return
+                                    '$0.00 · Sin cargo';
+                            }
+
+                            $total = 0.0;
+
+                            foreach (
+                                (array) (
+                                    $get('parts')
+                                    ?? []
+                                )
+                                as $part
+                            ) {
+                                $qty =
+                                    (float) (
+                                        $part[
+                                            'quantity'
+                                        ]
+                                        ?? 0
+                                    );
+
+                                $price =
+                                    (float) (
+                                        $part[
+                                            'unit_price'
+                                        ]
+                                        ?? 0
+                                    );
+
+                                $total +=
+                                    $qty
+                                    * $price;
+                            }
+
+                            $total +=
+                                (float) (
+                                    $get(
+                                        'labor_amount'
+                                    )
+                                    ?? 0
+                                );
+
+                            $total +=
+                                (float) (
+                                    $get(
+                                        'other_amount'
+                                    )
+                                    ?? 0
+                                );
+
+                            return
+                                '$'
+                                . number_format(
+                                    $total,
+                                    2
+                                );
+                        }
+                    ),
+
+                \Filament\Forms\Components\Toggle::make(
+                    'requires_customer_approval'
+                )
+                    ->label(
+                        'Requiere Vo.Bo. del cliente'
+                    )
+                    ->default(true)
+                    ->helperText(
+                        'Actívalo cuando el importe deba '
+                        . 'ser aceptado por el cliente antes '
+                        . 'de continuar.'
+                    )
+                    ->visible(
+                        fn (
+                            \Filament\Forms\Get
+                            $get
+                        ): bool =>
+                            in_array(
+                                (string) (
+                                    $get(
+                                        'decision'
+                                    )
+                                    ?? ''
+                                ),
+                                [
+                                    'cobrable',
+                                    'garantia_rechazada',
+                                ],
+                                true
+                            )
+                    ),
+
+                \Filament\Forms\Components\Textarea::make(
+                    'manager_notes'
+                )
+                    ->label(
+                        'Observaciones del Encargado'
+                    )
+                    ->helperText(
+                        'Explica la decisión, costeo '
+                        . 'o cualquier consideración '
+                        . 'para el siguiente paso.'
+                    )
+                    ->rows(4)
+                    ->maxLength(3000)
+                    ->required()
+                    ->columnSpanFull(),
+            ])
+            ->action(
+                function (
+                    array $data
+                ): void {
+                    if (
+                        ! \App\Support\Service\ServiceAccess::
+                            hasServiceRole(
+                                'Servicio - Encargado de Técnicos'
+                            )
+                        || \App\Support\Service\ServiceAccess::
+                            hasServiceRole(
+                                'Servicio - Supervisor'
+                            )
+                    ) {
+                        throw new
+                            \Illuminate\Auth\Access\AuthorizationException(
+                                'Sólo el Encargado de Técnicos '
+                                . 'puede registrar esta revisión.'
+                            );
+                    }
+
+                    $repairId =
+                        (int) (
+                            $this->record
+                                ?->getKey()
+                            ?? 0
+                        );
+
+                    if ($repairId <= 0) {
+                        throw
+                            \Illuminate\Validation\ValidationException::
+                                withMessages([
+                                    'decision' =>
+                                        'No se encontró la reparación.',
+                                ]);
+                    }
+
+                    \Illuminate\Support\Facades\DB::
+                        transaction(
+                            function () use (
+                                $repairId,
+                                $data
+                            ): void {
+                                $repair =
+                                    \App\Models\RepairOrder::
+                                        query()
+                                        ->whereKey(
+                                            $repairId
+                                        )
+                                        ->lockForUpdate()
+                                        ->firstOrFail();
+
+                                $metadata =
+                                    $repair->metadata
+                                    ?? [];
+
+                                if (
+                                    is_string(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata =
+                                        json_decode(
+                                            $metadata,
+                                            true
+                                        )
+                                        ?: [];
+                                }
+
+                                if (
+                                    ! is_array(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata = [];
+                                }
+
+                                $technical =
+                                    $metadata[
+                                        'technical_work'
+                                    ]
+                                    ?? [];
+
+                                if (
+                                    ! is_array(
+                                        $technical
+                                    )
+                                    || (
+                                        $technical[
+                                            'status'
+                                        ]
+                                        ?? null
+                                    ) !== 'completed'
+                                ) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'decision' =>
+                                                    'El técnico todavía no '
+                                                    . 'ha finalizado '
+                                                    . 'el trabajo.',
+                                            ]);
+                                }
+
+                                $existingReview =
+                                    $metadata[
+                                        'manager_review'
+                                    ]
+                                    ?? [];
+
+                                if (
+                                    is_array(
+                                        $existingReview
+                                    )
+                                    && (
+                                        $existingReview[
+                                            'status'
+                                        ]
+                                        ?? null
+                                    ) === 'completed'
+                                ) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'decision' =>
+                                                    'La revisión y costeo '
+                                                    . 'ya fueron '
+                                                    . 'registrados.',
+                                            ]);
+                                }
+
+                                if (
+                                    (string) (
+                                        $repair->
+                                            workflow_stage
+                                        ?? ''
+                                    ) !== 'quote_draft'
+                                    || (string) (
+                                        $repair->status
+                                        ?? ''
+                                    ) !== 'recibido'
+                                ) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'decision' =>
+                                                    'La reparación cambió '
+                                                    . 'de etapa. Recarga '
+                                                    . 'antes de continuar.',
+                                            ]);
+                                }
+
+                                $decision =
+                                    (string) (
+                                        $data[
+                                            'decision'
+                                        ]
+                                        ?? ''
+                                    );
+
+                                $allowed = [
+                                    'cobrable',
+                                    'garantia',
+                                    'garantia_rechazada',
+                                    'cortesia',
+                                ];
+
+                                if (
+                                    ! in_array(
+                                        $decision,
+                                        $allowed,
+                                        true
+                                    )
+                                ) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'decision' =>
+                                                    'Selecciona una '
+                                                    . 'decisión válida.',
+                                            ]);
+                                }
+
+                                $chargeable =
+                                    in_array(
+                                        $decision,
+                                        [
+                                            'cobrable',
+                                            'garantia_rechazada',
+                                        ],
+                                        true
+                                    );
+
+                                $dbParts =
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'repair_order_parts'
+                                        )
+                                        ->where(
+                                            'repair_order_id',
+                                            $repairId
+                                        )
+                                        ->orderBy('id')
+                                        ->lockForUpdate()
+                                        ->get();
+
+                                $submitted =
+                                    collect(
+                                        (array) (
+                                            $data[
+                                                'parts'
+                                            ]
+                                            ?? []
+                                        )
+                                    )
+                                    ->keyBy(
+                                        fn (
+                                            array $row
+                                        ): int =>
+                                            (int) (
+                                                $row[
+                                                    'part_id'
+                                                ]
+                                                ?? 0
+                                            )
+                                    );
+
+                                $dbIds =
+                                    $dbParts
+                                        ->pluck('id')
+                                        ->map(
+                                            fn (
+                                                $id
+                                            ): int =>
+                                                (int) $id
+                                        )
+                                        ->sort()
+                                        ->values()
+                                        ->all();
+
+                                $submittedIds =
+                                    $submitted
+                                        ->keys()
+                                        ->map(
+                                            fn (
+                                                $id
+                                            ): int =>
+                                                (int) $id
+                                        )
+                                        ->filter(
+                                            fn (
+                                                int $id
+                                            ): bool =>
+                                                $id > 0
+                                        )
+                                        ->sort()
+                                        ->values()
+                                        ->all();
+
+                                if (
+                                    $dbIds
+                                    !== $submittedIds
+                                ) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'parts' =>
+                                                    'Las refacciones '
+                                                    . 'cambiaron desde '
+                                                    . 'que abriste el '
+                                                    . 'modal. Recarga '
+                                                    . 'la página.',
+                                            ]);
+                                }
+
+                                $partsCostTotal =
+                                    0.0;
+
+                                $partsSaleTotal =
+                                    0.0;
+
+                                $partSummary = [];
+
+                                foreach (
+                                    $dbParts
+                                    as $part
+                                ) {
+                                    $partId =
+                                        (int) $part->id;
+
+                                    $input =
+                                        (array) (
+                                            $submitted[
+                                                $partId
+                                            ]
+                                            ?? []
+                                        );
+
+                                    $quantity =
+                                        (float) (
+                                            $part->
+                                                quantity
+                                            ?? 0
+                                        );
+
+                                    $unitCost =
+                                        round(
+                                            max(
+                                                0,
+                                                (float) (
+                                                    $input[
+                                                        'unit_cost'
+                                                    ]
+                                                    ?? 0
+                                                )
+                                            ),
+                                            2
+                                        );
+
+                                    $unitPrice =
+                                        $chargeable
+                                            ? round(
+                                                max(
+                                                    0,
+                                                    (float) (
+                                                        $input[
+                                                            'unit_price'
+                                                        ]
+                                                        ?? 0
+                                                    )
+                                                ),
+                                                2
+                                            )
+                                            : 0.0;
+
+                                    $totalCost =
+                                        round(
+                                            $quantity
+                                            * $unitCost,
+                                            2
+                                        );
+
+                                    $totalPrice =
+                                        round(
+                                            $quantity
+                                            * $unitPrice,
+                                            2
+                                        );
+
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'repair_order_parts'
+                                        )
+                                        ->where(
+                                            'id',
+                                            $partId
+                                        )
+                                        ->where(
+                                            'repair_order_id',
+                                            $repairId
+                                        )
+                                        ->update([
+                                            'unit_cost' =>
+                                                $unitCost,
+
+                                            'total_cost' =>
+                                                $totalCost,
+
+                                            'unit_price' =>
+                                                $unitPrice,
+
+                                            'total_price' =>
+                                                $totalPrice,
+
+                                            'updated_at' =>
+                                                now(),
+                                        ]);
+
+                                    $partsCostTotal +=
+                                        $totalCost;
+
+                                    $partsSaleTotal +=
+                                        $totalPrice;
+
+                                    $partSummary[] = [
+                                        'part_id' =>
+                                            $partId,
+
+                                        'product_name' =>
+                                            (string) (
+                                                $part->
+                                                    product_name
+                                                ?: $part->
+                                                    description
+                                                ?: (
+                                                    'Refacción #'
+                                                    . $partId
+                                                )
+                                            ),
+
+                                        'quantity' =>
+                                            $quantity,
+
+                                        'unit_cost' =>
+                                            $unitCost,
+
+                                        'total_cost' =>
+                                            $totalCost,
+
+                                        'unit_price' =>
+                                            $unitPrice,
+
+                                        'total_price' =>
+                                            $totalPrice,
+                                    ];
+                                }
+
+                                $labor =
+                                    $chargeable
+                                        ? round(
+                                            max(
+                                                0,
+                                                (float) (
+                                                    $data[
+                                                        'labor_amount'
+                                                    ]
+                                                    ?? 0
+                                                )
+                                            ),
+                                            2
+                                        )
+                                        : 0.0;
+
+                                $other =
+                                    $chargeable
+                                        ? round(
+                                            max(
+                                                0,
+                                                (float) (
+                                                    $data[
+                                                        'other_amount'
+                                                    ]
+                                                    ?? 0
+                                                )
+                                            ),
+                                            2
+                                        )
+                                        : 0.0;
+
+                                $quoteTotal =
+                                    $chargeable
+                                        ? round(
+                                            $partsSaleTotal
+                                            + $labor
+                                            + $other,
+                                            2
+                                        )
+                                        : 0.0;
+
+                                if (
+                                    $chargeable
+                                    && $quoteTotal <= 0
+                                ) {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'labor_amount' =>
+                                                    'Un servicio cobrable '
+                                                    . 'debe tener un total '
+                                                    . 'mayor a $0.00.',
+                                            ]);
+                                }
+
+                                $requiresCustomerApproval =
+                                    $chargeable
+                                    && (bool) (
+                                        $data[
+                                            'requires_customer_approval'
+                                        ]
+                                        ?? false
+                                    );
+
+                                $warrantyStatus =
+                                    match (
+                                        $decision
+                                    ) {
+                                        'garantia' =>
+                                            'aceptada',
+
+                                        'garantia_rechazada' =>
+                                            'rechazada',
+
+                                        'cobrable',
+                                        'cortesia' =>
+                                            'no_aplica',
+                                    };
+
+                                $quoteStatus =
+                                    $requiresCustomerApproval
+                                        ? 'pending_customer'
+                                        : 'not_required';
+
+                                $notes =
+                                    trim(
+                                        (string) (
+                                            $data[
+                                                'manager_notes'
+                                            ]
+                                            ?? ''
+                                        )
+                                    );
+
+                                if ($notes === '') {
+                                    throw
+                                        \Illuminate\Validation\ValidationException::
+                                            withMessages([
+                                                'manager_notes' =>
+                                                    'Captura las '
+                                                    . 'observaciones '
+                                                    . 'del Encargado.',
+                                            ]);
+                                }
+
+                                $oldValues = [
+                                    'warranty_status' =>
+                                        $repair->
+                                            warranty_status,
+
+                                    'parts_cost_estimate' =>
+                                        $repair->
+                                            parts_cost_estimate,
+
+                                    'labor_cost_estimate' =>
+                                        $repair->
+                                            labor_cost_estimate,
+
+                                    'other_cost_estimate' =>
+                                        $repair->
+                                            other_cost_estimate,
+
+                                    'quote_total' =>
+                                        $repair->
+                                            quote_total,
+
+                                    'requires_customer_approval' =>
+                                        $repair->
+                                            requires_customer_approval,
+
+                                    'quote_status' =>
+                                        $repair->
+                                            quote_status,
+                                ];
+
+                                $managerReview = [
+                                    'status' =>
+                                        'completed',
+
+                                    'decision' =>
+                                        $decision,
+
+                                    'warranty_status' =>
+                                        $warrantyStatus,
+
+                                    'parts' =>
+                                        $partSummary,
+
+                                    'parts_cost_total' =>
+                                        round(
+                                            $partsCostTotal,
+                                            2
+                                        ),
+
+                                    'parts_sale_total' =>
+                                        round(
+                                            $partsSaleTotal,
+                                            2
+                                        ),
+
+                                    'labor_amount' =>
+                                        $labor,
+
+                                    'other_amount' =>
+                                        $other,
+
+                                    'quote_total' =>
+                                        $quoteTotal,
+
+                                    'requires_customer_approval' =>
+                                        $requiresCustomerApproval,
+
+                                    'notes' =>
+                                        $notes,
+
+                                    'completed_at' =>
+                                        now()
+                                            ->toDateTimeString(),
+
+                                    'completed_by_user_id' =>
+                                        auth()->id(),
+
+                                    'workflow_stage_preserved' =>
+                                        $repair->
+                                            workflow_stage,
+
+                                    'repair_status_preserved' =>
+                                        $repair->
+                                            status,
+
+                                    'source' =>
+                                        'manager_review_costing_action',
+                                ];
+
+                                /*
+
+                                 * BEXIA_ATC_NO_CUSTOMER_APPROVAL_AUTHORIZATION_V5_83_4C5G9C
+
+                                 *
+
+                                 * Si el Encargado determina que una reparación
+
+                                 * cobrable NO requiere Vo.Bo. del cliente,
+
+                                 * su revisión económica constituye la autorización
+
+                                 * del importe final.
+
+                                 *
+
+                                 * NO se crea customer_approval ficticio.
+
+                                 */
+
+                                if (
+
+                                    $chargeable
+
+                                    && ! $requiresCustomerApproval
+
+                                ) {
+
+                                    $managerReview[
+
+                                        'customer_approval_status'
+
+                                    ] = 'not_required';
+
+
+                                    $managerReview[
+
+                                        'authorized_total'
+
+                                    ] = $quoteTotal;
+
+
+                                    $managerReview[
+
+                                        'authorization_satisfied_at'
+
+                                    ] = now()->toDateTimeString();
+
+
+                                    $managerReview[
+
+                                        'authorization_source'
+
+                                    ] =
+
+                                        'manager_review_no_customer_approval_required';
+
+                                }
+
+
+                                $metadata[
+                                    'manager_review'
+                                ] =
+                                    $managerReview;
+
+                                \Illuminate\Support\Facades\DB::
+                                    table(
+                                        'repair_orders'
+                                    )
+                                    ->where(
+                                        'id',
+                                        $repairId
+                                    )
+                                    ->update([
+                                        'warranty_status' =>
+                                            $warrantyStatus,
+
+                                        'parts_cost_estimate' =>
+                                            round(
+                                                $partsCostTotal,
+                                                2
+                                            ),
+
+                                        'labor_cost_estimate' =>
+                                            $labor,
+
+                                        'other_cost_estimate' =>
+                                            $other,
+
+                                        'quote_total' =>
+                                            $quoteTotal,
+
+                                        'approved_total_snapshot' =>
+                                            $chargeable
+                                            && ! $requiresCustomerApproval
+                                                ? $quoteTotal
+                                                : null,
+
+                                        'requires_internal_approval' =>
+                                            false,
+
+                                        'requires_customer_approval' =>
+                                            $requiresCustomerApproval,
+
+                                        'quote_status' =>
+                                            $quoteStatus,
+
+                                        'quote_notes' =>
+                                            $notes,
+
+                                        'metadata' =>
+                                            json_encode(
+                                                $metadata,
+                                                JSON_UNESCAPED_UNICODE
+                                                | JSON_UNESCAPED_SLASHES
+                                            ),
+
+                                        'updated_at' =>
+                                            now(),
+                                    ]);
+
+                                $eventColumns =
+                                    \Illuminate\Support\Facades\Schema::
+                                        getColumnListing(
+                                            'service_case_events'
+                                        );
+
+                                $event = [
+                                    'company_id' =>
+                                        $repair->
+                                            company_id,
+
+                                    'service_case_id' =>
+                                        $repair->
+                                            service_case_id,
+
+                                    'repair_order_id' =>
+                                        $repairId,
+
+                                    'event_type' =>
+                                        'manager_review_costed',
+
+                                    'from_status' =>
+                                        $repair->status,
+
+                                    'to_status' =>
+                                        $repair->status,
+
+                                    'performed_by' =>
+                                        auth()->id(),
+
+                                    'performed_at' =>
+                                        now(),
+
+                                    'notes' =>
+                                        $notes,
+
+                                    'old_values' =>
+                                        json_encode(
+                                            $oldValues,
+                                            JSON_UNESCAPED_UNICODE
+                                            | JSON_UNESCAPED_SLASHES
+                                        ),
+
+                                    'new_values' =>
+                                        json_encode(
+                                            [
+                                                'decision' =>
+                                                    $decision,
+
+                                                'warranty_status' =>
+                                                    $warrantyStatus,
+
+                                                'parts_cost_total' =>
+                                                    round(
+                                                        $partsCostTotal,
+                                                        2
+                                                    ),
+
+                                                'parts_sale_total' =>
+                                                    round(
+                                                        $partsSaleTotal,
+                                                        2
+                                                    ),
+
+                                                'labor_amount' =>
+                                                    $labor,
+
+                                                'other_amount' =>
+                                                    $other,
+
+                                                'quote_total' =>
+                                                    $quoteTotal,
+
+                                                'requires_customer_approval' =>
+                                                    $requiresCustomerApproval,
+
+                                                'quote_status' =>
+                                                    $quoteStatus,
+                                            ],
+                                            JSON_UNESCAPED_UNICODE
+                                            | JSON_UNESCAPED_SLASHES
+                                        ),
+
+                                    'metadata' =>
+                                        json_encode(
+                                            [
+                                                'source' =>
+                                                    'manager_review_costing_action',
+                                            ],
+                                            JSON_UNESCAPED_UNICODE
+                                            | JSON_UNESCAPED_SLASHES
+                                        ),
+
+                                    'ip_address' =>
+                                        request()?->ip(),
+
+                                    'user_agent' =>
+                                        request()
+                                            ?->userAgent(),
+
+                                    'created_at' =>
+                                        now(),
+
+                                    'updated_at' =>
+                                        now(),
+                                ];
+
+                                $event =
+                                    array_intersect_key(
+                                        $event,
+                                        array_flip(
+                                            $eventColumns
+                                        )
+                                    );
+
+                                \Illuminate\Support\Facades\DB::
+                                    table(
+                                        'service_case_events'
+                                    )
+                                    ->insert(
+                                        $event
+                                    );
+                            }
+                        );
+
+                    $this->record
+                        ->refresh();
+
+                    \Filament\Notifications\Notification::make()
+                        ->title(
+                            'Revisión y costeo registrados'
+                        )
+                        ->body(
+                            'El trabajo técnico quedó '
+                            . 'revisado. El siguiente paso '
+                            . 'dependerá de si requiere '
+                            . 'Vo.Bo. del cliente o si puede '
+                            . 'pasar directamente a entrega.'
+                        )
+                        ->success()
+                        ->send();
+
+                    $this->redirect(
+                        $this->getResource()::
+                            getUrl(
+                                'edit',
+                                [
+                                    'record' =>
+                                        $this->
+                                            record,
+                                ]
+                            )
+                    );
+                }
+            );
+    }
+
+
+    /*
+     * BEXIA_ATC_POST_REPAIR_CUSTOMER_APPROVAL_ACTION_V5_83_4C5D2
+     *
+     * Vo.Bo. solicitado DESPUES del trabajo tecnico
+     * y DESPUES del costeo del Encargado.
+     *
+     * No permite modificar importe ni componentes
+     * economicos.
+     */
+    protected function postRepairCustomerApprovalAction(): Action
+    {
+        return Action::make(
+            'post_repair_customer_approval'
+        )
+            ->label(
+                'Registrar Vo.Bo. del cliente'
+            )
+            ->icon(
+                'heroicon-o-check-badge'
+            )
+            ->color('success')
+            ->modalHeading(
+                'Registrar Vo.Bo. del cliente'
+            )
+            ->modalDescription(
+                'La reparación ya fue realizada. '
+                . 'Registra únicamente si el cliente '
+                . 'autoriza o rechaza el importe '
+                . 'calculado por el Encargado.'
+            )
+            ->modalWidth('5xl')
+            ->modalSubmitActionLabel(
+                'Registrar respuesta'
+            )
+            ->visible(
+                fn (): bool =>
+                    \App\Support\Service\ServiceAccess::
+                        canRecordPostRepairCustomerDecision(
+                            $this->record
+                        )
+            )
+            ->form([
+                \Filament\Forms\Components\Section::make(
+                    'Importe presentado al cliente'
+                )
+                    ->columns(2)
+                    ->schema([
+                        \Filament\Forms\Components\Placeholder::make(
+                            'customer_approval_parts'
+                        )
+                            ->label(
+                                'Refacciones / materiales'
+                            )
+                            ->content(
+                                function (): \Illuminate\Support\HtmlString {
+                                    $metadata =
+                                        $this->record
+                                            ?->metadata
+                                        ?? [];
+
+                                    if (
+                                        is_string(
+                                            $metadata
+                                        )
+                                    ) {
+                                        $metadata =
+                                            json_decode(
+                                                $metadata,
+                                                true
+                                            )
+                                            ?: [];
+                                    }
+
+                                    if (
+                                        ! is_array(
+                                            $metadata
+                                        )
+                                    ) {
+                                        $metadata = [];
+                                    }
+
+                                    $parts =
+                                        $metadata[
+                                            'manager_review'
+                                        ][
+                                            'parts'
+                                        ]
+                                        ?? [];
+
+                                    if (
+                                        ! is_array(
+                                            $parts
+                                        )
+                                        || $parts === []
+                                    ) {
+                                        return new
+                                            \Illuminate\Support\HtmlString(
+                                                'Sin refacciones'
+                                            );
+                                    }
+
+                                    $lines = [];
+
+                                    foreach (
+                                        $parts
+                                        as $part
+                                    ) {
+                                        $name =
+                                            e(
+                                                (string) (
+                                                    $part[
+                                                        'product_name'
+                                                    ]
+                                                    ?? 'Refacción'
+                                                )
+                                            );
+
+                                        $qty =
+                                            (float) (
+                                                $part[
+                                                    'quantity'
+                                                ]
+                                                ?? 0
+                                            );
+
+                                        $total =
+                                            (float) (
+                                                $part[
+                                                    'total_price'
+                                                ]
+                                                ?? 0
+                                            );
+
+                                        $lines[] =
+                                            '<div>'
+                                            . $name
+                                            . ' × '
+                                            . number_format(
+                                                $qty,
+                                                2
+                                            )
+                                            . ' = <strong>$'
+                                            . number_format(
+                                                $total,
+                                                2
+                                            )
+                                            . '</strong></div>';
+                                    }
+
+                                    return new
+                                        \Illuminate\Support\HtmlString(
+                                            implode(
+                                                '',
+                                                $lines
+                                            )
+                                        );
+                                }
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'customer_approval_labor'
+                        )
+                            ->label(
+                                'Mano de obra'
+                            )
+                            ->content(
+                                function (): string {
+                                    $metadata =
+                                        $this->record
+                                            ?->metadata
+                                        ?? [];
+
+                                    if (
+                                        is_string(
+                                            $metadata
+                                        )
+                                    ) {
+                                        $metadata =
+                                            json_decode(
+                                                $metadata,
+                                                true
+                                            )
+                                            ?: [];
+                                    }
+
+                                    $amount =
+                                        (float) (
+                                            $metadata[
+                                                'manager_review'
+                                            ][
+                                                'labor_amount'
+                                            ]
+                                            ?? 0
+                                        );
+
+                                    return
+                                        '$'
+                                        . number_format(
+                                            $amount,
+                                            2
+                                        );
+                                }
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'customer_approval_other'
+                        )
+                            ->label(
+                                'Otros cargos'
+                            )
+                            ->content(
+                                function (): string {
+                                    $metadata =
+                                        $this->record
+                                            ?->metadata
+                                        ?? [];
+
+                                    if (
+                                        is_string(
+                                            $metadata
+                                        )
+                                    ) {
+                                        $metadata =
+                                            json_decode(
+                                                $metadata,
+                                                true
+                                            )
+                                            ?: [];
+                                    }
+
+                                    $amount =
+                                        (float) (
+                                            $metadata[
+                                                'manager_review'
+                                            ][
+                                                'other_amount'
+                                            ]
+                                            ?? 0
+                                        );
+
+                                    return
+                                        '$'
+                                        . number_format(
+                                            $amount,
+                                            2
+                                        );
+                                }
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'customer_approval_total'
+                        )
+                            ->label(
+                                'TOTAL A AUTORIZAR'
+                            )
+                            ->content(
+                                fn (): string =>
+                                    '$'
+                                    . number_format(
+                                        (float) (
+                                            $this->record
+                                                ?->quote_total
+                                            ?? 0
+                                        ),
+                                        2
+                                    )
+                            ),
+                    ]),
+
+                \Filament\Forms\Components\Radio::make(
+                    'customer_decision'
+                )
+                    ->label(
+                        'Respuesta del cliente'
+                    )
+                    ->options(
+                        \App\Support\Service\ServiceRepairCustomerDecisionService::
+                            DECISIONS
+                    )
+                    ->required()
+                    ->live(),
+
+                \Filament\Forms\Components\Select::make(
+                    'customer_decision_channel'
+                )
+                    ->label(
+                        'Medio de confirmación'
+                    )
+                    ->options(
+                        \App\Support\Service\ServiceRepairCustomerDecisionService::
+                            CHANNELS
+                    )
+                    ->default(
+                        'whatsapp'
+                    )
+                    ->native(false)
+                    ->required(),
+
+                \Filament\Forms\Components\DateTimePicker::make(
+                    'customer_decision_at'
+                )
+                    ->label(
+                        'Fecha y hora de respuesta'
+                    )
+                    ->default(now())
+                    ->seconds(false)
+                    ->required(),
+
+                \Filament\Forms\Components\Textarea::make(
+                    'customer_decision_notes'
+                )
+                    ->label(
+                        'Observaciones'
+                    )
+                    ->helperText(
+                        'Ejemplo: Cliente confirma '
+                        . 'por WhatsApp que autoriza '
+                        . 'el importe total de $900.'
+                    )
+                    ->rows(4)
+                    ->required()
+                    ->maxLength(3000)
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\FileUpload::make(
+                    'customer_decision_files'
+                )
+                    ->label(
+                        'Evidencia de la respuesta '
+                        . '(opcional)'
+                    )
+                    ->helperText(
+                        'Captura de WhatsApp, correo, '
+                        . 'foto o documento.'
+                    )
+                    ->acceptedFileTypes([
+                        'image/jpeg',
+                        'image/png',
+                        'image/webp',
+                        'image/gif',
+                        'application/pdf',
+                        'text/plain',
+                    ])
+                    ->disk('public')
+                    ->directory(
+                        'service/customer-quote-decisions'
+                    )
+                    ->multiple()
+                    ->reorderable()
+                    ->downloadable()
+                    ->openable()
+                    ->imagePreviewHeight('120')
+                    ->maxFiles(5)
+                    ->maxSize(10240)
+                    ->columnSpanFull(),
+            ])
+            ->action(
+                function (
+                    array $data
+                ): void {
+                    $record =
+                        $this->record;
+
+                    $decision =
+                        (string) (
+                            $data[
+                                'customer_decision'
+                            ]
+                            ?? ''
+                        );
+
+                    $channel =
+                        (string) (
+                            $data[
+                                'customer_decision_channel'
+                            ]
+                            ?? ''
+                        );
+
+                    $notes =
+                        trim(
+                            (string) (
+                                $data[
+                                    'customer_decision_notes'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    $files =
+                        (array) (
+                            $data[
+                                'customer_decision_files'
+                            ]
+                            ?? []
+                        );
+
+                    try {
+                        $record =
+                            app(
+                                \App\Support\Service\ServiceRepairCustomerDecisionService::class
+                            )
+                                ->recordPostRepairDecision(
+                                    $record,
+                                    $data
+                                );
+                    } catch (
+                        \Throwable $exception
+                    ) {
+                        /*
+                         * Evitar archivos huerfanos
+                         * si la validacion/backend falla.
+                         */
+                        foreach (
+                            $files
+                            as $path
+                        ) {
+                            if (
+                                is_string(
+                                    $path
+                                )
+                                && $path !== ''
+                            ) {
+                                \Illuminate\Support\Facades\Storage::
+                                    disk('public')
+                                    ->delete(
+                                        $path
+                                    );
+                            }
+                        }
+
+                        throw $exception;
+                    }
+
+                    if (
+                        $files !== []
+                    ) {
+                        $approved =
+                            $decision
+                            === 'approved';
+
+                        $channelLabel =
+                            \App\Support\Service\ServiceRepairCustomerDecisionService::
+                                CHANNELS[
+                                    $channel
+                                ]
+                            ?? $channel;
+
+                        $this->
+                            saveServiceStageFilesForRepair(
+                                record:
+                                    $record,
+
+                                paths:
+                                    $files,
+
+                                stage:
+                                    $approved
+                                        ? 'customer_post_repair_approval'
+                                        : 'customer_post_repair_rejection',
+
+                                notes:
+                                    (
+                                        $approved
+                                            ? 'Evidencia Vo.Bo. post-reparación'
+                                            : 'Evidencia rechazo post-reparación'
+                                    )
+                                    . ' - '
+                                    . $channelLabel
+                                    . ' - '
+                                    . $notes,
+
+                                eventType:
+                                    'customer_post_repair_decision_evidence_uploaded',
+
+                                eventDescription:
+                                    'Se agregó evidencia de '
+                                    . 'la respuesta del cliente '
+                                    . 'al importe post-reparación.'
+                            );
+                    }
+
+                    if (
+                        $decision
+                        === 'approved'
+                    ) {
+                        \Filament\Notifications\Notification::
+                            make()
+                            ->title(
+                                'Vo.Bo. del cliente registrado'
+                            )
+                            ->body(
+                                'El cliente autorizó $'
+                                . number_format(
+                                    (float) (
+                                        $record->
+                                            approved_total_snapshot
+                                        ?? $record->
+                                            quote_total
+                                        ?? 0
+                                    ),
+                                    2
+                                )
+                                . '. El siguiente paso '
+                                . 'es preparar cobro '
+                                . 'y entrega.'
+                            )
+                            ->success()
+                            ->send();
+                    } else {
+                        \Filament\Notifications\Notification::
+                            make()
+                            ->title(
+                                'Cliente no autorizó el importe'
+                            )
+                            ->body(
+                                'El costeo original se '
+                                . 'conservó y la revisión '
+                                . 'económica quedó reabierta '
+                                . 'para el Encargado.'
+                            )
+                            ->warning()
+                            ->send();
+                    }
+
+                    $this->redirect(
+                        $this->getResource()::
+                            getUrl(
+                                'edit',
+                                [
+                                    'record' =>
+                                        $record,
+                                ]
+                            )
+                    );
+                }
+            );
+    }
+
+
+
+    /*
+     * BEXIA_ATC_POST_REPAIR_COLLECTION_DELIVERY_ACTION_V5_83_4C5E2
+     *
+     * Puente posterior a:
+     * - trabajo tecnico terminado;
+     * - revision/costeo terminado;
+     * - Vo.Bo. cliente satisfecho.
+     *
+     * Objetivo:
+     * - conservar exactamente el total autorizado;
+     * - preparar economia para CxC;
+     * - crear CxC nativa de Bexia;
+     * - NO registrar pago aqui;
+     * - marcar fisicamente listo para entrega;
+     * - registrar politica de cobro;
+     * - dejar a ServiceRepairReceivableSyncer
+     *   como fuente de verdad del pago.
+     *
+     * No usa ServiceEconomicClosureCalculator porque
+     * el flujo post-repair nuevo trata quote_total /
+     * approved_total_snapshot como TOTAL FINAL
+     * autorizado por el cliente.
+     */
+
+    /*
+     * BEXIA_ATC_POST_REPAIR_NO_CHARGE_DELIVERY_V5_83_4C5F4
+     *
+     * Puente exclusivo para:
+     * - garantia aceptada;
+     * - cortesia.
+     *
+     * Reglas:
+     * - total cliente = 0;
+     * - NO crea CxC;
+     * - NO registra pago;
+     * - conserva costos internos ya capturados;
+     * - deja el equipo listo para entrega;
+     * - la entrega fisica sigue pasando por C5E8,
+     *   con evidencia y firma obligatorias.
+     */
+    protected function preparePostRepairNoChargeDeliveryAction(): Action
+    {
+        return Action::make(
+            'prepare_post_repair_no_charge_delivery'
+        )
+            ->label(
+                'Preparar entrega sin cobro'
+            )
+            ->icon(
+                'heroicon-o-gift'
+            )
+            ->color('success')
+            ->modalHeading(
+                'Preparar entrega sin cobro'
+            )
+            ->modalDescription(
+                'Esta reparación quedó autorizada como garantía '
+                . 'o cortesía. El cliente pagará $0.00. '
+                . 'No se creará cuenta por cobrar ni pago.'
+            )
+            ->modalSubmitActionLabel(
+                'Preparar entrega'
+            )
+            ->visible(
+                fn (): bool =>
+                    $this->
+                        canPreparePostRepairNoChargeDelivery()
+            )
+            ->form([
+                \Filament\Forms\Components\Placeholder::
+                    make(
+                        'c5f4_repair_folio'
+                    )
+                    ->label('Orden técnica')
+                    ->content(
+                        fn (): string =>
+                            (string) (
+                                $this->record->
+                                    folio
+                                ?? (
+                                    '#'
+                                    . $this->record->
+                                        getKey()
+                                )
+                            )
+                    ),
+
+                \Filament\Forms\Components\Placeholder::
+                    make(
+                        'c5f4_decision'
+                    )
+                    ->label('Decisión')
+                    ->content(
+                        function (): string {
+                            $metadata =
+                                $this->
+                                    postRepairMetadataArray(
+                                        $this->record->
+                                            metadata
+                                        ?? null
+                                    );
+
+                            $decision =
+                                (string) data_get(
+                                    $metadata,
+                                    'manager_review.decision',
+                                    ''
+                                );
+
+                            return match (
+                                $decision
+                            ) {
+                                'garantia' =>
+                                    'Garantía aceptada / sin cargo',
+
+                                'cortesia' =>
+                                    'Cortesía / sin cargo',
+
+                                default =>
+                                    'No aplica',
+                            };
+                        }
+                    ),
+
+                \Filament\Forms\Components\Placeholder::
+                    make(
+                        'c5f4_customer_total'
+                    )
+                    ->label('Total al cliente')
+                    ->content(
+                        '$0.00 · Sin cargo'
+                    ),
+
+                \Filament\Forms\Components\Placeholder::
+                    make(
+                        'c5f4_cxc'
+                    )
+                    ->label('Cuenta por cobrar')
+                    ->content(
+                        'No se creará CxC ni se registrará pago.'
+                    ),
+
+                \Filament\Forms\Components\Textarea::
+                    make(
+                        'no_charge_notes'
+                    )
+                    ->label(
+                        'Observaciones para la entrega'
+                    )
+                    ->helperText(
+                        'Deja constancia de por qué el equipo '
+                        . 'se entrega sin cobro.'
+                    )
+                    ->rows(4)
+                    ->maxLength(3000)
+                    ->required()
+                    ->columnSpanFull(),
+            ])
+            ->action(
+                function (
+                    array $data
+                ): void {
+                    if (
+                        ! auth()->check()
+                        || ! ServiceAccess::
+                            hasServiceRole([
+                                'Servicio - Encargado de Técnicos',
+                                'Servicio - Supervisor',
+                            ])
+                        || ! ServiceAccess::can(
+                            'service.repairs.update'
+                        )
+                    ) {
+                        throw new
+                            \Illuminate\Auth\Access\AuthorizationException(
+                                'No tienes permiso para preparar '
+                                . 'una entrega sin cobro.'
+                            );
+                    }
+
+                    $repairId =
+                        (int) (
+                            $this->record
+                                ?->getKey()
+                            ?? 0
+                        );
+
+                    if ($repairId <= 0) {
+                        throw
+                            \Illuminate\Validation\ValidationException::
+                                withMessages([
+                                    'repair' =>
+                                        'No se encontró la reparación.',
+                                ]);
+                    }
+
+                    $notes =
+                        trim(
+                            (string) (
+                                $data[
+                                    'no_charge_notes'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    if ($notes === '') {
+                        throw
+                            \Illuminate\Validation\ValidationException::
+                                withMessages([
+                                    'no_charge_notes' =>
+                                        'Captura las observaciones '
+                                        . 'de la entrega sin cobro.',
+                                ]);
+                    }
+
+                    $result =
+                        \Illuminate\Support\Facades\DB::
+                            transaction(
+                                function () use (
+                                    $repairId,
+                                    $notes
+                                ): array {
+                                    $repair =
+                                        \App\Models\RepairOrder::
+                                            query()
+                                            ->whereKey(
+                                                $repairId
+                                            )
+                                            ->lockForUpdate()
+                                            ->firstOrFail();
+
+                                    $metadata =
+                                        $this->
+                                            postRepairMetadataArray(
+                                                $repair->
+                                                    metadata
+                                                ?? null
+                                            );
+
+                                    $technicalWork =
+                                        data_get(
+                                            $metadata,
+                                            'technical_work',
+                                            []
+                                        );
+
+                                    $managerReview =
+                                        data_get(
+                                            $metadata,
+                                            'manager_review',
+                                            []
+                                        );
+
+                                    $decision =
+                                        (string) (
+                                            $managerReview[
+                                                'decision'
+                                            ]
+                                            ?? ''
+                                        );
+
+                                    $quoteTotal =
+                                        round(
+                                            (float) (
+                                                $repair->
+                                                    quote_total
+                                                ?? 0
+                                            ),
+                                            2
+                                        );
+
+                                    $managerTotal =
+                                        round(
+                                            (float) (
+                                                $managerReview[
+                                                    'quote_total'
+                                                ]
+                                                ?? 0
+                                            ),
+                                            2
+                                        );
+
+                                    $snapshot =
+                                        $repair->
+                                            approved_total_snapshot;
+
+                                    $snapshotNonZero =
+                                        $snapshot !== null
+                                        && abs(
+                                            (float) $snapshot
+                                        ) > 0.009;
+
+                                    $expectedWarranty =
+                                        $decision === 'garantia'
+                                            ? 'aceptada'
+                                            : 'no_aplica';
+
+                                    if (
+                                        (string) (
+                                            $repair->status
+                                            ?? ''
+                                        ) !== 'recibido'
+                                        || (string) (
+                                            $repair->
+                                                workflow_stage
+                                            ?? ''
+                                        ) !== 'quote_draft'
+                                        || (string) (
+                                            $repair->
+                                                quote_status
+                                            ?? ''
+                                        ) !== 'not_required'
+                                        || (bool) (
+                                            $repair->
+                                                requires_customer_approval
+                                            ?? false
+                                        )
+                                        || ! empty(
+                                            $repair->
+                                                account_receivable_id
+                                        )
+                                        || ! empty(
+                                            $repair->
+                                                ready_for_delivery_at
+                                        )
+                                        || ! empty(
+                                            $repair->
+                                                delivered_at
+                                        )
+                                        || ! empty(
+                                            $repair->
+                                                economic_closed_at
+                                        )
+                                        || trim(
+                                            (string) (
+                                                $repair->
+                                                    economic_status
+                                                ?? ''
+                                            )
+                                        ) !== ''
+                                        || data_get(
+                                            $metadata,
+                                            'post_repair_collection_delivery'
+                                        ) !== null
+                                        || (
+                                            $technicalWork[
+                                                'status'
+                                            ]
+                                            ?? null
+                                        ) !== 'completed'
+                                        || (
+                                            $managerReview[
+                                                'status'
+                                            ]
+                                            ?? null
+                                        ) !== 'completed'
+                                        || ! in_array(
+                                            $decision,
+                                            [
+                                                'garantia',
+                                                'cortesia',
+                                            ],
+                                            true
+                                        )
+                                        || abs(
+                                            $quoteTotal
+                                        ) > 0.009
+                                        || abs(
+                                            $managerTotal
+                                        ) > 0.009
+                                        || $snapshotNonZero
+                                        || (string) (
+                                            $repair->
+                                                warranty_status
+                                            ?? ''
+                                        ) !== $expectedWarranty
+                                    ) {
+                                        throw
+                                            \Illuminate\Validation\ValidationException::
+                                                withMessages([
+                                                    'repair' =>
+                                                        'La reparación ya no '
+                                                        . 'cumple las reglas '
+                                                        . 'de garantía/cortesía '
+                                                        . 'sin cargo. '
+                                                        . 'Actualiza la página '
+                                                        . 'y vuelve a revisar.',
+                                                ]);
+                                    }
+
+                                    if (
+                                        ! \Illuminate\Support\Facades\Schema::
+                                            hasTable(
+                                                'account_receivables'
+                                            )
+                                    ) {
+                                        throw new
+                                            \RuntimeException(
+                                                'No existe la tabla '
+                                                . 'account_receivables.'
+                                            );
+                                    }
+
+                                    $receivableExists =
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'account_receivables'
+                                            )
+                                            ->where(
+                                                'source_type',
+                                                'service_repair_order'
+                                            )
+                                            ->where(
+                                                'source_id',
+                                                $repairId
+                                            )
+                                            ->exists();
+
+                                    if ($receivableExists) {
+                                        throw
+                                            \Illuminate\Validation\ValidationException::
+                                                withMessages([
+                                                    'repair' =>
+                                                        'Ya existe una cuenta '
+                                                        . 'por cobrar vinculada '
+                                                        . 'a esta reparación. '
+                                                        . 'No puede prepararse '
+                                                        . 'como sin cobro.',
+                                                ]);
+                                    }
+
+                                    $now = now();
+
+                                    $metadata[
+                                        'post_repair_collection_delivery'
+                                    ] = [
+                                        'status' =>
+                                            'prepared',
+
+                                        'collection_policy' =>
+                                            'no_charge',
+
+                                        'authorized_total' =>
+                                            0.0,
+
+                                        'final_amount' =>
+                                            0.0,
+
+                                        'account_receivable_id' =>
+                                            null,
+
+                                        'account_receivable_number' =>
+                                            null,
+
+                                        'payment_recorded_here' =>
+                                            false,
+
+                                        'tax_recalculated' =>
+                                            false,
+
+                                        'tax_handling' =>
+                                            'no_charge',
+
+                                        'no_charge_decision' =>
+                                            $decision,
+
+                                        'customer_approval_required' =>
+                                            false,
+
+                                        'prepared_at' =>
+                                            $now->
+                                                toDateTimeString(),
+
+                                        'prepared_by_user_id' =>
+                                            auth()->id(),
+
+                                        'notes' =>
+                                            $notes,
+
+                                        'source' =>
+                                            'post_repair_no_charge_delivery_bridge',
+                                    ];
+
+                                    $oldStatus =
+                                        (string) (
+                                            $repair->status
+                                            ?? ''
+                                        );
+
+                                    $repair->
+                                        forceFill([
+                                            'status' =>
+                                                'ready_for_delivery',
+
+                                            'workflow_stage' =>
+                                                'ready_for_delivery',
+
+                                            'ready_for_delivery_at' =>
+                                                $now,
+
+                                            'approved_total_snapshot' =>
+                                                0,
+
+                                            'economic_subtotal' =>
+                                                0,
+
+                                            'economic_tax' =>
+                                                0,
+
+                                            'economic_total' =>
+                                                0,
+
+                                            'total_amount' =>
+                                                0,
+
+                                            'metadata' =>
+                                                $metadata,
+                                        ])
+                                        ->save();
+
+                                    if (
+                                        ! empty(
+                                            $repair->
+                                                service_case_id
+                                        )
+                                        && \Illuminate\Support\Facades\Schema::
+                                            hasTable(
+                                                'service_cases'
+                                            )
+                                    ) {
+                                        $caseQuery =
+                                            \Illuminate\Support\Facades\DB::
+                                                table(
+                                                    'service_cases'
+                                                )
+                                                ->where(
+                                                    'id',
+                                                    (int) $repair->
+                                                        service_case_id
+                                                );
+
+                                        if (
+                                            \Illuminate\Support\Facades\Schema::
+                                                hasColumn(
+                                                    'service_cases',
+                                                    'company_id'
+                                                )
+                                            && ! empty(
+                                                $repair->
+                                                    company_id
+                                            )
+                                        ) {
+                                            $caseQuery->
+                                                where(
+                                                    'company_id',
+                                                    (int) $repair->
+                                                        company_id
+                                                );
+                                        }
+
+                                        $caseQuery->
+                                            update([
+                                                'status' =>
+                                                    'listo_entrega',
+
+                                                'updated_at' =>
+                                                    $now,
+                                            ]);
+                                    }
+
+                                    $repair->refresh();
+
+                                    \App\Filament\Resources\RepairOrderResource::
+                                        logEvent(
+                                            $repair,
+                                            'post_repair_no_charge_delivery_prepared',
+                                            $oldStatus,
+                                            'ready_for_delivery',
+                                            $notes
+                                        );
+
+                                    return [
+                                        'decision' =>
+                                            $decision,
+
+                                        'folio' =>
+                                            (string) (
+                                                $repair->folio
+                                                ?? (
+                                                    '#'
+                                                    . $repair->
+                                                        getKey()
+                                                )
+                                            ),
+                                    ];
+                                }
+                            );
+
+                    $decisionLabel =
+                        (
+                            $result[
+                                'decision'
+                            ]
+                            ?? ''
+                        ) === 'garantia'
+                            ? 'Garantía aceptada'
+                            : 'Cortesía';
+
+                    $this->record->refresh();
+
+                    \Filament\Notifications\Notification::
+                        make()
+                        ->title(
+                            'Entrega sin cobro preparada'
+                        )
+                        ->body(
+                            $decisionLabel
+                            . '. Cliente: $0.00. '
+                            . 'No se creó CxC ni pago. '
+                            . 'El equipo ya puede pasar '
+                            . 'a la entrega física.'
+                        )
+                        ->success()
+                        ->send();
+
+                    /*
+                     * C5G12_NO_CHARGE_REDIRECT_TO_TICKET
+                     *
+                     * Una vez preparado el puente económico,
+                     * Reparaciones termina su etapa operativa.
+                     *
+                     * Salida, impresión y entrega continúan
+                     * desde el ticket ATC.
+                     */
+                    $caseId =
+                        (int) (
+                            $this->record->
+                                service_case_id
+                            ?? 0
+                        );
+
+                    if ($caseId > 0) {
+                        $this->redirect(
+                            \App\Filament\Resources\ServiceCaseResource::
+                                getUrl(
+                                    'edit',
+                                    [
+                                        'record' =>
+                                            $caseId,
+                                    ]
+                                )
+                        );
+
+                        return;
+                    }
+
+
+                    $this->redirect(
+                        $this->
+                            getResource()::
+                            getUrl(
+                                'edit',
+                                [
+                                    'record' =>
+                                        $this->record,
+                                ]
+                            )
+                    );
+                }
+            );
+    }
+
+
+    protected function preparePostRepairCollectionDeliveryAction(): Action
+    {
+        return Action::make(
+            'prepare_post_repair_collection_delivery'
+        )
+            ->label(
+                'Preparar cobro y entrega'
+            )
+            ->icon(
+                'heroicon-o-banknotes'
+            )
+            ->color('success')
+            ->modalHeading(
+                'Preparar cobro y entrega'
+            )
+            ->modalDescription(
+                'Se creará una cuenta por cobrar por el total autorizado y el equipo quedará listo para entrega. Esta acción NO registra un pago.'
+            )
+            ->modalSubmitActionLabel(
+                'Preparar cobro y entrega'
+            )
+            ->visible(
+                fn (): bool =>
+                    $this->
+                        canPreparePostRepairCollectionDelivery()
+            )
+            ->form([
+                \Filament\Forms\Components\Placeholder::
+                    make(
+                        'c5e2_repair_folio'
+                    )
+                    ->label('Orden técnica')
+                    ->content(
+                        fn (): string =>
+                            (string) (
+                                $this->record->
+                                    folio
+                                ?? '—'
+                            )
+                    ),
+
+                \Filament\Forms\Components\Placeholder::
+                    make(
+                        'c5e2_customer'
+                    )
+                    ->label('Cliente')
+                    ->content(
+                        function (): string {
+                            $caseId =
+                                (int) (
+                                    $this->record->
+                                        service_case_id
+                                    ?? 0
+                                );
+
+                            if ($caseId <= 0) {
+                                return '—';
+                            }
+
+                            return
+                                (string) (
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'service_cases'
+                                        )
+                                        ->where(
+                                            'id',
+                                            $caseId
+                                        )
+                                        ->value(
+                                            'contact_name'
+                                        )
+                                    ?: '—'
+                                );
+                        }
+                    ),
+
+                \Filament\Forms\Components\Placeholder::
+                    make(
+                        'c5e2_authorized_total'
+                    )
+                    ->label(
+                        'Total autorizado'
+                    )
+                    ->content(
+                        fn (): string =>
+                            '$'
+                            . number_format(
+                                $this->
+                                    postRepairAuthorizedTotal(),
+                                2
+                            )
+                            . ' MXN'
+                    ),
+
+                \Filament\Forms\Components\Placeholder::
+                    make(
+                        'c5e2_notice'
+                    )
+                    ->label(
+                        'Qué hará esta acción'
+                    )
+                    ->content(
+                        '1) Creará la CxC nativa de Bexia. '
+                        . '2) No se registrará ningún pago. '
+                        . '3) Cobrar antes de salir: la salida y la entrega esperan el pago. '
+                        . '4) Cobrar al entregar: permite generar la SAL-ATC para salir a entregar, pero la entrega final exige registrar primero el pago. '
+                        . '5) Crédito autorizado: permite entregar con saldo pendiente.'
+                    )
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\Radio::
+                    make(
+                        'collection_policy'
+                    )
+                    ->label(
+                        'Condición para entregar'
+                    )
+                    /*
+                     * BEXIA_ATC_SPLIT_PAYMENT_TIMING_V5_83_4C5G10
+                     *
+                     * Antes de entrega y al momento de entrega
+                     * son operaciones distintas.
+                     */
+                    ->options([
+                        'payment_before_delivery' =>
+                            'Cobrar antes de salir a entrega',
+
+                        'payment_on_delivery' =>
+                            'Cobrar al momento de entregar',
+
+                        'credit_allowed' =>
+                            'Crédito autorizado / permitir entrega con saldo pendiente',
+                    ])
+                    ->default(
+                        'payment_before_delivery'
+                    )
+                    ->required()
+                    ->columns(1)
+                    ->helperText(
+                        'El pago siempre se registra en Cuentas por cobrar. La opción seleccionada define si la SAL-ATC puede generarse antes del pago y si la entrega final puede realizarse con saldo pendiente.'
+                    )
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\Textarea::
+                    make(
+                        'preparation_notes'
+                    )
+                    ->label(
+                        'Observaciones'
+                    )
+                    ->rows(3)
+                    ->required()
+                    ->maxLength(2000)
+                    ->helperText(
+                        'Indica la condición acordada de cobro o cualquier instrucción necesaria antes de entregar.'
+                    )
+                    ->columnSpanFull(),
+            ])
+            ->action(
+                function (array $data): void {
+                    $repairId =
+                        (int) (
+                            $this->record->
+                                getKey()
+                        );
+
+                    $policy =
+                        trim(
+                            (string) (
+                                $data[
+                                    'collection_policy'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    $notes =
+                        trim(
+                            (string) (
+                                $data[
+                                    'preparation_notes'
+                                ]
+                                ?? ''
+                            )
+                        );
+
+                    if (
+                        ! in_array(
+                            $policy,
+                            [
+                                'payment_before_delivery',
+                                'payment_on_delivery',
+                                'credit_allowed',
+                            ],
+                            true
+                        )
+                    ) {
+                        throw new \RuntimeException(
+                            'La condición de cobro no es válida.'
+                        );
+                    }
+
+                    if ($notes === '') {
+                        throw new \RuntimeException(
+                            'Las observaciones son obligatorias.'
+                        );
+                    }
+
+                    $result =
+                        \Illuminate\Support\Facades\DB::
+                            transaction(
+                                function () use (
+                                    $repairId,
+                                    $policy,
+                                    $notes
+                                ): array {
+                                    $repair =
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'repair_orders'
+                                            )
+                                            ->where(
+                                                'id',
+                                                $repairId
+                                            )
+                                            ->lockForUpdate()
+                                            ->first();
+
+                                    if (! $repair) {
+                                        throw new \RuntimeException(
+                                            'No se encontró la reparación.'
+                                        );
+                                    }
+
+                                    if (
+                                        (string) (
+                                            $repair->status
+                                            ?? ''
+                                        ) !== 'recibido'
+                                        || (string) (
+                                            $repair->
+                                                workflow_stage
+                                            ?? ''
+                                        ) !== 'quote_draft'
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'La reparación ya no está en el estado esperado.'
+                                        );
+                                    }
+
+                                    /*
+                                     * BEXIA_ATC_COLLECTION_RUNTIME_NO_VOBO_V5_83_4C5G9C
+                                     *
+                                     * Un Vo.Bo. pendiente sigue bloqueando.
+                                     * Si el Encargado indicó que NO se
+                                     * requiere Vo.Bo., la validación completa
+                                     * se realiza después con el helper común.
+                                     */
+                                    if (
+                                        (bool) (
+                                            $repair->
+                                                requires_customer_approval
+                                            ?? false
+                                        )
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'La autorización post-reparación todavía está pendiente.'
+                                        );
+                                    }
+
+                                    if (
+                                        ! empty(
+                                            $repair->
+                                                account_receivable_id
+                                        )
+                                        || ! empty(
+                                            $repair->
+                                                ready_for_delivery_at
+                                        )
+                                        || ! empty(
+                                            $repair->
+                                                delivered_at
+                                        )
+                                        || ! empty(
+                                            $repair->
+                                                economic_closed_at
+                                        )
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'Cobro o entrega ya fueron preparados previamente.'
+                                        );
+                                    }
+
+                                    $existingCxc =
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'account_receivables'
+                                            )
+                                            ->where(
+                                                'source_type',
+                                                'service_repair_order'
+                                            )
+                                            ->where(
+                                                'source_id',
+                                                $repairId
+                                            )
+                                            ->exists();
+
+                                    if ($existingCxc) {
+                                        throw new \RuntimeException(
+                                            'Ya existe una CxC para esta reparación.'
+                                        );
+                                    }
+
+                                    $metadata =
+                                        $this->
+                                            postRepairMetadataArray(
+                                                $repair->
+                                                    metadata
+                                                ?? null
+                                            );
+
+                                    $authorization =
+                                        $this->
+                                            postRepairCollectionAuthorizationForRecord(
+                                                $repair,
+                                                $metadata
+                                            );
+
+                                    if (
+                                        ! (
+                                            $authorization[
+                                                'ok'
+                                            ]
+                                            ?? false
+                                        )
+                                    ) {
+                                        throw new \RuntimeException(
+                                            (string) (
+                                                $authorization[
+                                                    'reason'
+                                                ]
+                                                ?? 'La autorización post-reparación no está completa.'
+                                            )
+                                        );
+                                    }
+
+                                    if (
+                                        data_get(
+                                            $metadata,
+                                            'post_repair_collection_delivery'
+                                        ) !== null
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'El puente de cobro y entrega ya fue registrado.'
+                                        );
+                                    }
+
+                                    $quoteTotal =
+                                        round(
+                                            (float) (
+                                                $repair->
+                                                    quote_total
+                                                ?? 0
+                                            ),
+                                            2
+                                        );
+
+                                    $approvedSnapshot =
+                                        round(
+                                            (float) (
+                                                $repair->
+                                                    approved_total_snapshot
+                                                ?? 0
+                                            ),
+                                            2
+                                        );
+
+                                    $customerAuthorized =
+                                        (
+                                            (
+                                                $authorization[
+                                                    'branch'
+                                                ]
+                                                ?? ''
+                                            )
+                                            ===
+                                            'manager_no_customer_approval'
+                                        )
+                                            ? $quoteTotal
+                                            : round(
+                                                (float) data_get(
+                                                    $metadata,
+                                                    'customer_approval.authorized_amount',
+                                                    0
+                                                ),
+                                                2
+                                            );
+
+                                    $managerAuthorized =
+                                        round(
+                                            (float) data_get(
+                                                $metadata,
+                                                'manager_review.authorized_total',
+                                                0
+                                            ),
+                                            2
+                                        );
+
+                                    if (
+                                        $quoteTotal <= 0
+                                        || abs(
+                                            $quoteTotal
+                                            - $approvedSnapshot
+                                        ) > 0.009
+                                        || abs(
+                                            $quoteTotal
+                                            - $customerAuthorized
+                                        ) > 0.009
+                                        || abs(
+                                            $quoteTotal
+                                            - $managerAuthorized
+                                        ) > 0.009
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'Los importes de costeo y autorización no coinciden.'
+                                        );
+                                    }
+
+                                    $partsCost =
+                                        round(
+                                            (float) data_get(
+                                                $metadata,
+                                                'manager_review.parts_cost_total',
+                                                0
+                                            ),
+                                            2
+                                        );
+
+                                    $partsSale =
+                                        round(
+                                            (float) data_get(
+                                                $metadata,
+                                                'manager_review.parts_sale_total',
+                                                0
+                                            ),
+                                            2
+                                        );
+
+                                    $laborSale =
+                                        round(
+                                            (float) data_get(
+                                                $metadata,
+                                                'manager_review.labor_amount',
+                                                0
+                                            ),
+                                            2
+                                        );
+
+                                    $otherAmount =
+                                        round(
+                                            (float) data_get(
+                                                $metadata,
+                                                'manager_review.other_amount',
+                                                0
+                                            ),
+                                            2
+                                        );
+
+                                    $managerComponents =
+                                        round(
+                                            $partsSale
+                                            + $laborSale
+                                            + $otherAmount,
+                                            2
+                                        );
+
+                                    if (
+                                        abs(
+                                            $managerComponents
+                                            - $quoteTotal
+                                        ) > 0.009
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'La suma de refacciones, mano de obra y otros cargos no coincide con el total autorizado.'
+                                        );
+                                    }
+
+                                    $evidenceCount =
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'service_attachments'
+                                            )
+                                            ->where(
+                                                'repair_order_id',
+                                                $repairId
+                                            )
+                                            ->where(
+                                                'stage',
+                                                'repair_result'
+                                            )
+                                            ->count();
+
+                                    if ($evidenceCount < 1) {
+                                        throw new \RuntimeException(
+                                            'Falta evidencia técnica repair_result.'
+                                        );
+                                    }
+
+                                    $now = now();
+
+                                    /*
+                                     * IMPORTANTE:
+                                     * $quoteTotal ya es TOTAL FINAL
+                                     * autorizado por cliente.
+                                     *
+                                     * No se vuelve a sumar 16%.
+                                     * El desglose fiscal posterior
+                                     * corresponde al flujo fiscal.
+                                     */
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'repair_orders'
+                                        )
+                                        ->where(
+                                            'id',
+                                            $repairId
+                                        )
+                                        ->update([
+                                            'parts_cost_total' =>
+                                                $partsCost,
+
+                                            'parts_sale_total' =>
+                                                $partsSale,
+
+                                            'labor_sale_total' =>
+                                                $laborSale,
+
+                                            'economic_subtotal' =>
+                                                $quoteTotal,
+
+                                            'economic_tax' =>
+                                                0,
+
+                                            'economic_total' =>
+                                                $quoteTotal,
+
+                                            'total_amount' =>
+                                                $quoteTotal,
+
+                                            'economic_status' =>
+                                                'ready_to_charge',
+
+                                            'economic_requires_approval' =>
+                                                false,
+
+                                            'ready_to_charge_at' =>
+                                                $now,
+
+                                            'economic_notes' =>
+                                                $notes,
+
+                                            'updated_at' =>
+                                                $now,
+                                        ]);
+
+                                    $receivableResult =
+                                        ServiceReceivableCreator::
+                                            createForRepairOrder(
+                                                $repairId,
+                                                [
+                                                    'created_by' =>
+                                                        auth()->id(),
+                                                ]
+                                            );
+
+                                    $receivableId =
+                                        (int) (
+                                            $receivableResult[
+                                                'account_receivable_id'
+                                            ]
+                                            ?? $receivableResult[
+                                                'id'
+                                            ]
+                                            ?? 0
+                                        );
+
+                                    if ($receivableId <= 0) {
+                                        $linkedId =
+                                            \Illuminate\Support\Facades\DB::
+                                                table(
+                                                    'repair_orders'
+                                                )
+                                                ->where(
+                                                    'id',
+                                                    $repairId
+                                                )
+                                                ->value(
+                                                    'account_receivable_id'
+                                                );
+
+                                        $receivableId =
+                                            (int) (
+                                                $linkedId
+                                                ?? 0
+                                            );
+                                    }
+
+                                    if ($receivableId <= 0) {
+                                        throw new \RuntimeException(
+                                            'La CxC no pudo enlazarse a la reparación.'
+                                        );
+                                    }
+
+                                    $receivable =
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'account_receivables'
+                                            )
+                                            ->where(
+                                                'id',
+                                                $receivableId
+                                            )
+                                            ->lockForUpdate()
+                                            ->first();
+
+                                    if (! $receivable) {
+                                        throw new \RuntimeException(
+                                            'La CxC creada no existe.'
+                                        );
+                                    }
+
+                                    if (
+                                        (string) (
+                                            $receivable->
+                                                source_type
+                                            ?? ''
+                                        )
+                                        !==
+                                        'service_repair_order'
+                                        || (int) (
+                                            $receivable->
+                                                source_id
+                                            ?? 0
+                                        ) !== $repairId
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'La CxC no corresponde a esta reparación.'
+                                        );
+                                    }
+
+                                    if (
+                                        abs(
+                                            round(
+                                                (float) (
+                                                    $receivable->
+                                                        total
+                                                    ?? 0
+                                                ),
+                                                2
+                                            )
+                                            - $quoteTotal
+                                        ) > 0.009
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'El total de la CxC no coincide con el autorizado.'
+                                        );
+                                    }
+
+                                    if (
+                                        abs(
+                                            round(
+                                                (float) (
+                                                    $receivable->
+                                                        collected_total
+                                                    ?? 0
+                                                ),
+                                                2
+                                            )
+                                        ) > 0.009
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'La CxC recién creada no debe tener cobros.'
+                                        );
+                                    }
+
+                                    if (
+                                        abs(
+                                            round(
+                                                (float) (
+                                                    $receivable->
+                                                        balance_total
+                                                    ?? 0
+                                                ),
+                                                2
+                                            )
+                                            - $quoteTotal
+                                        ) > 0.009
+                                    ) {
+                                        throw new \RuntimeException(
+                                            'El saldo de la CxC no coincide con el autorizado.'
+                                        );
+                                    }
+
+                                    $paymentCount =
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'account_receivable_payments'
+                                            )
+                                            ->where(
+                                                'account_receivable_id',
+                                                $receivableId
+                                            )
+                                            ->count();
+
+                                    if ($paymentCount !== 0) {
+                                        throw new \RuntimeException(
+                                            'No debe existir ningún pago al preparar la CxC.'
+                                        );
+                                    }
+
+                                    $postCreatorRepair =
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'repair_orders'
+                                            )
+                                            ->where(
+                                                'id',
+                                                $repairId
+                                            )
+                                            ->lockForUpdate()
+                                            ->first();
+
+                                    if (! $postCreatorRepair) {
+                                        throw new \RuntimeException(
+                                            'No se pudo recargar la reparación.'
+                                        );
+                                    }
+
+                                    $freshMetadata =
+                                        $this->
+                                            postRepairMetadataArray(
+                                                $postCreatorRepair->
+                                                    metadata
+                                                ?? null
+                                            );
+
+                                    $freshMetadata[
+                                        'post_repair_collection_delivery'
+                                    ] = [
+                                        'status' =>
+                                            'prepared',
+
+                                        'collection_policy' =>
+                                            $policy,
+
+                                        'authorized_total' =>
+                                            $quoteTotal,
+
+                                        'final_amount' =>
+                                            $quoteTotal,
+
+                                        'account_receivable_id' =>
+                                            $receivableId,
+
+                                        'account_receivable_number' =>
+                                            (string) (
+                                                $receivable->
+                                                    number
+                                                ?? ''
+                                            ),
+
+                                        'payment_recorded_here' =>
+                                            false,
+
+                                        'tax_recalculated' =>
+                                            false,
+
+                                        'tax_handling' =>
+                                            'approved_total_preserved_as_final_amount',
+
+                                        'prepared_at' =>
+                                            $now->
+                                                toDateTimeString(),
+
+                                        'prepared_by_user_id' =>
+                                            auth()->id(),
+
+                                        'notes' =>
+                                            $notes,
+
+                                        'source' =>
+                                            'post_repair_collection_delivery_bridge',
+                                    ];
+
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'repair_orders'
+                                        )
+                                        ->where(
+                                            'id',
+                                            $repairId
+                                        )
+                                        ->update([
+                                            'status' =>
+                                                'ready_for_delivery',
+
+                                            'workflow_stage' =>
+                                                'ready_for_delivery',
+
+                                            'ready_for_delivery_at' =>
+                                                $now,
+
+                                            'metadata' =>
+                                                json_encode(
+                                                    $freshMetadata,
+                                                    JSON_UNESCAPED_UNICODE
+                                                    | JSON_UNESCAPED_SLASHES
+                                                ),
+
+                                            'updated_at' =>
+                                                $now,
+                                        ]);
+
+                                    if (
+                                        ! empty(
+                                            $postCreatorRepair->
+                                                service_case_id
+                                        )
+                                    ) {
+                                        \Illuminate\Support\Facades\DB::
+                                            table(
+                                                'service_cases'
+                                            )
+                                            ->where(
+                                                'id',
+                                                (int) (
+                                                    $postCreatorRepair->
+                                                        service_case_id
+                                                )
+                                            )
+                                            ->update([
+                                                'status' =>
+                                                    'listo_entrega',
+
+                                                'updated_at' =>
+                                                    $now,
+                                            ]);
+                                    }
+
+                                    $eventRecord =
+                                        \App\Models\RepairOrder::
+                                            query()
+                                            ->find(
+                                                $repairId
+                                            );
+
+                                    if (! $eventRecord) {
+                                        throw new \RuntimeException(
+                                            'No se pudo crear la auditoría de transición.'
+                                        );
+                                    }
+
+                                    RepairOrderResource::
+                                        logEvent(
+                                            $eventRecord,
+                                            'post_repair_collection_delivery_prepared',
+                                            'recibido',
+                                            'ready_for_delivery',
+                                            'Cobro y entrega preparados. '
+                                            . 'CxC '
+                                            . (
+                                                $receivable->
+                                                    number
+                                                ?? (
+                                                    '#'
+                                                    . $receivableId
+                                                )
+                                            )
+                                            . '. Política: '
+                                            . $policy
+                                            . '. No se registró pago.'
+                                        );
+
+                                    return [
+                                        'receivable_id' =>
+                                            $receivableId,
+
+                                        'receivable_number' =>
+                                            (string) (
+                                                $receivable->
+                                                    number
+                                                ?? (
+                                                    '#'
+                                                    . $receivableId
+                                                )
+                                            ),
+
+                                        'total' =>
+                                            $quoteTotal,
+
+                                        'policy' =>
+                                            $policy,
+                                    ];
+                                }
+                            );
+
+                    $this->record->refresh();
+
+                    $body =
+                        ($result[
+                            'receivable_number'
+                        ] ?? 'CxC')
+                        . ' por $'
+                        . number_format(
+                            (float) (
+                                $result[
+                                    'total'
+                                ]
+                                ?? 0
+                            ),
+                            2
+                        )
+                        . '. ';
+
+                    if (
+                        (
+                            $result[
+                                'policy'
+                            ]
+                            ?? ''
+                        )
+                        ===
+                        'payment_required'
+                    ) {
+                        $body .=
+                            'El equipo está listo, pero la entrega permanecerá bloqueada hasta que la CxC esté pagada.';
+                    } else {
+                        $body .=
+                            'El equipo está listo y la entrega puede continuar con saldo pendiente por crédito autorizado.';
+                    }
+
+                    \Filament\Notifications\Notification::
+                        make()
+                        ->title(
+                            'Cobro y entrega preparados'
+                        )
+                        ->body($body)
+                        ->success()
+                        ->send();
+
+                    /*
+                     * C5G12_COLLECTION_REDIRECT_TO_TICKET
+                     *
+                     * Una vez preparado el puente económico,
+                     * Reparaciones termina su etapa operativa.
+                     *
+                     * Salida, impresión y entrega continúan
+                     * desde el ticket ATC.
+                     */
+                    $caseId =
+                        (int) (
+                            $this->record->
+                                service_case_id
+                            ?? 0
+                        );
+
+                    if ($caseId > 0) {
+                        $this->redirect(
+                            \App\Filament\Resources\ServiceCaseResource::
+                                getUrl(
+                                    'edit',
+                                    [
+                                        'record' =>
+                                            $caseId,
+                                    ]
+                                )
+                        );
+
+                        return;
+                    }
+
+
+                    $this->redirect(
+                        $this->
+                            getResource()::
+                            getUrl(
+                                'edit',
+                                [
+                                    'record' =>
+                                        $this->record,
+                                ]
+                            )
+                    );
+                }
+            );
+    }
+
+    protected function postRepairMetadataArray(
+        mixed $raw
+    ): array {
+        if (is_array($raw)) {
+            return $raw;
+        }
+
+        if (
+            $raw instanceof
+            \Illuminate\Contracts\Support\Arrayable
+        ) {
+            return $raw->toArray();
+        }
+
+        if (is_object($raw)) {
+            return (array) $raw;
+        }
+
+        if (
+            is_string($raw)
+            && trim($raw) !== ''
+        ) {
+            $decoded =
+                json_decode(
+                    $raw,
+                    true
+                );
+
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
+    }
+
+    protected function postRepairAuthorizedTotal(): float
+    {
+        return round(
+            (float) (
+                $this->record->
+                    approved_total_snapshot
+                ?? $this->record->
+                    quote_total
+                ?? 0
+            ),
+            2
+        );
+    }
+
+
+    protected function canPreparePostRepairNoChargeDelivery(): bool
+    {
+        $record =
+            $this->record
+            ?? null;
+
+        if (
+            ! $record
+            || ! auth()->check()
+        ) {
+            return false;
+        }
+
+        if (
+            ! ServiceAccess::hasServiceRole([
+                'Servicio - Encargado de Técnicos',
+                'Servicio - Supervisor',
+            ])
+            || ! ServiceAccess::can(
+                'service.repairs.update'
+            )
+        ) {
+            return false;
+        }
+
+        if (
+            (string) (
+                $record->status
+                ?? ''
+            ) !== 'recibido'
+            || (string) (
+                $record->workflow_stage
+                ?? ''
+            ) !== 'quote_draft'
+            || (string) (
+                $record->quote_status
+                ?? ''
+            ) !== 'not_required'
+            || (bool) (
+                $record->
+                    requires_customer_approval
+                ?? false
+            )
+        ) {
+            return false;
+        }
+
+        if (
+            ! empty(
+                $record->
+                    account_receivable_id
+            )
+            || ! empty(
+                $record->
+                    ready_for_delivery_at
+            )
+            || ! empty(
+                $record->
+                    delivered_at
+            )
+            || ! empty(
+                $record->
+                    economic_closed_at
+            )
+            || trim(
+                (string) (
+                    $record->
+                        economic_status
+                    ?? ''
+                )
+            ) !== ''
+        ) {
+            return false;
+        }
+
+        $metadata =
+            $this->
+                postRepairMetadataArray(
+                    $record->metadata
+                    ?? null
+                );
+
+        if (
+            data_get(
+                $metadata,
+                'post_repair_collection_delivery'
+            ) !== null
+        ) {
+            return false;
+        }
+
+        if (
+            data_get(
+                $metadata,
+                'technical_work.status'
+            ) !== 'completed'
+            || data_get(
+                $metadata,
+                'manager_review.status'
+            ) !== 'completed'
+        ) {
+            return false;
+        }
+
+        $decision =
+            (string) data_get(
+                $metadata,
+                'manager_review.decision',
+                ''
+            );
+
+        if (
+            ! in_array(
+                $decision,
+                [
+                    'garantia',
+                    'cortesia',
+                ],
+                true
+            )
+        ) {
+            return false;
+        }
+
+        $quoteTotal =
+            round(
+                (float) (
+                    $record->
+                        quote_total
+                    ?? 0
+                ),
+                2
+            );
+
+        $managerTotal =
+            round(
+                (float) data_get(
+                    $metadata,
+                    'manager_review.quote_total',
+                    0
+                ),
+                2
+            );
+
+        if (
+            abs(
+                $quoteTotal
+            ) > 0.009
+            || abs(
+                $managerTotal
+            ) > 0.009
+        ) {
+            return false;
+        }
+
+        if (
+            $record->
+                approved_total_snapshot
+            !== null
+            && abs(
+                (float) $record->
+                    approved_total_snapshot
+            ) > 0.009
+        ) {
+            return false;
+        }
+
+        $expectedWarranty =
+            $decision === 'garantia'
+                ? 'aceptada'
+                : 'no_aplica';
+
+        if (
+            (string) (
+                $record->
+                    warranty_status
+                ?? ''
+            ) !== $expectedWarranty
+        ) {
+            return false;
+        }
+
+        if (
+            ! \Illuminate\Support\Facades\Schema::
+                hasTable(
+                    'account_receivables'
+                )
+        ) {
+            return false;
+        }
+
+        return
+            ! \Illuminate\Support\Facades\DB::
+                table(
+                    'account_receivables'
+                )
+                ->where(
+                    'source_type',
+                    'service_repair_order'
+                )
+                ->where(
+                    'source_id',
+                    (int) $record->
+                        getKey()
+                )
+                ->exists();
+    }
+
+
+
+    /*
+     * BEXIA_ATC_POST_REPAIR_AUTHORIZATION_HELPER_V5_83_4C5G9C
+     *
+     * Existen dos caminos válidos para servicio cobrable:
+     *
+     * 1. Vo.Bo. requerido:
+     *    customer_approval.status=approved
+     *    y todos los importes autorizados coinciden.
+     *
+     * 2. Vo.Bo. NO requerido:
+     *    quote_status=not_required
+     *    y la revisión económica del Encargado
+     *    constituye la autorización final.
+     *
+     * Nunca se fabrica una aprobación del cliente.
+     */
+    protected function postRepairCollectionAuthorizationForRecord(
+        object $record,
+        ?array $metadata = null
+    ): array {
+        $metadata =
+            $metadata
+            ?? $this->
+                postRepairMetadataArray(
+                    $record->metadata
+                    ?? null
+                );
+
+        if (
+            data_get(
+                $metadata,
+                'technical_work.status'
+            ) !== 'completed'
+        ) {
+            return [
+                'ok' => false,
+                'reason' =>
+                    'El trabajo técnico todavía no está terminado.',
+            ];
+        }
+
+        if (
+            data_get(
+                $metadata,
+                'manager_review.status'
+            ) !== 'completed'
+        ) {
+            return [
+                'ok' => false,
+                'reason' =>
+                    'La revisión y costeo todavía no están terminados.',
+            ];
+        }
+
+        $decision =
+            (string) data_get(
+                $metadata,
+                'manager_review.decision',
+                ''
+            );
+
+        if (
+            ! in_array(
+                $decision,
+                [
+                    'cobrable',
+                    'garantia_rechazada',
+                ],
+                true
+            )
+        ) {
+            return [
+                'ok' => false,
+                'reason' =>
+                    'La reparación no corresponde al flujo cobrable.',
+            ];
+        }
+
+        $quoteTotal =
+            round(
+                (float) (
+                    $record->quote_total
+                    ?? 0
+                ),
+                2
+            );
+
+        $managerTotal =
+            round(
+                (float) data_get(
+                    $metadata,
+                    'manager_review.quote_total',
+                    0
+                ),
+                2
+            );
+
+        if (
+            $quoteTotal <= 0
+            || abs(
+                $quoteTotal
+                - $managerTotal
+            ) > 0.009
+        ) {
+            return [
+                'ok' => false,
+                'reason' =>
+                    'El importe final no coincide con la revisión del Encargado.',
+            ];
+        }
+
+        if (
+            (bool) (
+                $record->
+                    requires_customer_approval
+                ?? false
+            )
+        ) {
+            return [
+                'ok' => false,
+                'reason' =>
+                    'Todavía está pendiente el Vo.Bo. del cliente.',
+            ];
+        }
+
+        $quoteStatus =
+            (string) (
+                $record->quote_status
+                ?? ''
+            );
+
+        $snapshot =
+            round(
+                (float) (
+                    $record->
+                        approved_total_snapshot
+                    ?? 0
+                ),
+                2
+            );
+
+        $managerAuthorized =
+            round(
+                (float) data_get(
+                    $metadata,
+                    'manager_review.authorized_total',
+                    0
+                ),
+                2
+            );
+
+        if (
+            $quoteStatus
+            === 'customer_approved'
+        ) {
+            $customerStatus =
+                (string) data_get(
+                    $metadata,
+                    'customer_approval.status',
+                    ''
+                );
+
+            $customerAuthorized =
+                round(
+                    (float) data_get(
+                        $metadata,
+                        'customer_approval.authorized_amount',
+                        0
+                    ),
+                    2
+                );
+
+            if (
+                $customerStatus !== 'approved'
+                || abs(
+                    $quoteTotal
+                    - $snapshot
+                ) > 0.009
+                || abs(
+                    $quoteTotal
+                    - $customerAuthorized
+                ) > 0.009
+                || abs(
+                    $quoteTotal
+                    - $managerAuthorized
+                ) > 0.009
+            ) {
+                return [
+                    'ok' => false,
+                    'reason' =>
+                        'La autorización del cliente no es consistente con el importe final.',
+                ];
+            }
+
+            return [
+                'ok' => true,
+                'branch' =>
+                    'customer_approved',
+                'authorized_total' =>
+                    $quoteTotal,
+            ];
+        }
+
+        if (
+            $quoteStatus
+            === 'not_required'
+        ) {
+            $managerRequiresCustomer =
+                (bool) data_get(
+                    $metadata,
+                    'manager_review.requires_customer_approval',
+                    false
+                );
+
+            $managerApprovalStatus =
+                (string) data_get(
+                    $metadata,
+                    'manager_review.customer_approval_status',
+                    ''
+                );
+
+            $authorizationSource =
+                (string) data_get(
+                    $metadata,
+                    'manager_review.authorization_source',
+                    ''
+                );
+
+            if (
+                $managerRequiresCustomer
+                || $managerApprovalStatus
+                    !== 'not_required'
+                || $authorizationSource
+                    !==
+                    'manager_review_no_customer_approval_required'
+                || abs(
+                    $quoteTotal
+                    - $snapshot
+                ) > 0.009
+                || abs(
+                    $quoteTotal
+                    - $managerAuthorized
+                ) > 0.009
+            ) {
+                return [
+                    'ok' => false,
+                    'reason' =>
+                        'La autorización del Encargado sin Vo.Bo. no está completa.',
+                ];
+            }
+
+            return [
+                'ok' => true,
+                'branch' =>
+                    'manager_no_customer_approval',
+                'authorized_total' =>
+                    $quoteTotal,
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'reason' =>
+                'El estado de autorización post-reparación no es válido.',
+        ];
+    }
+
+
+    protected function canPreparePostRepairCollectionDelivery(): bool
+    {
+        $record =
+            $this->record
+            ?? null;
+
+        if (
+            ! $record
+            || ! auth()->check()
+        ) {
+            return false;
+        }
+
+        if (
+            ! ServiceAccess::hasServiceRole([
+                'Servicio - Encargado de Técnicos',
+                'Servicio - Supervisor',
+            ])
+        ) {
+            return false;
+        }
+
+        if (
+            ! ServiceAccess::can(
+                'service.repairs.update'
+            )
+        ) {
+            return false;
+        }
+
+        if (
+            (string) (
+                $record->status
+                ?? ''
+            ) !== 'recibido'
+            || (string) (
+                $record->workflow_stage
+                ?? ''
+            ) !== 'quote_draft'
+        ) {
+            return false;
+        }
+
+        if (
+            ! empty(
+                $record->
+                    account_receivable_id
+            )
+            || ! empty(
+                $record->
+                    ready_for_delivery_at
+            )
+            || ! empty(
+                $record->
+                    delivered_at
+            )
+            || ! empty(
+                $record->
+                    economic_closed_at
+            )
+        ) {
+            return false;
+        }
+
+        $economicStatus =
+            trim(
+                (string) (
+                    $record->
+                        economic_status
+                    ?? ''
+                )
+            );
+
+        if ($economicStatus !== '') {
+            return false;
+        }
+
+        $metadata =
+            $this->
+                postRepairMetadataArray(
+                    $record->
+                        metadata
+                    ?? null
+                );
+
+        if (
+            data_get(
+                $metadata,
+                'post_repair_collection_delivery'
+            ) !== null
+        ) {
+            return false;
+        }
+
+        $authorization =
+            $this->
+                postRepairCollectionAuthorizationForRecord(
+                    $record,
+                    $metadata
+                );
+
+        if (
+            ! (
+                $authorization[
+                    'ok'
+                ]
+                ?? false
+            )
+        ) {
+            return false;
+        }
+
+        if (
+            ! \Illuminate\Support\Facades\Schema::
+                hasTable(
+                    'account_receivables'
+                )
+        ) {
+            return false;
+        }
+
+        return
+            ! \Illuminate\Support\Facades\DB::
+                table(
+                    'account_receivables'
+                )
+                ->where(
+                    'source_type',
+                    'service_repair_order'
+                )
+                ->where(
+                    'source_id',
+                    (int) $record->getKey()
+                )
+                ->exists();
+    }
+
+
+    protected function managerReviewCostingPending(): bool
+    {
+        $record =
+            $this->record;
+
+        if (
+            ! $record
+            || ! \App\Support\Service\ServiceAccess::
+                hasServiceRole(
+                    'Servicio - Encargado de Técnicos'
+                )
+            || \App\Support\Service\ServiceAccess::
+                hasServiceRole(
+                    'Servicio - Supervisor'
+                )
+        ) {
+            return false;
+        }
+
+        if (
+            (string) (
+                $record->
+                    workflow_stage
+                ?? ''
+            ) !== 'quote_draft'
+            || (string) (
+                $record->status
+                ?? ''
+            ) !== 'recibido'
+        ) {
+            return false;
+        }
+
+        $metadata =
+            $record->metadata
+            ?? [];
+
+        if (
+            is_string(
+                $metadata
+            )
+        ) {
+            $metadata =
+                json_decode(
+                    $metadata,
+                    true
+                )
+                ?: [];
+        }
+
+        if (
+            ! is_array(
+                $metadata
+            )
+        ) {
+            return false;
+        }
+
+        $technical =
+            $metadata[
+                'technical_work'
+            ]
+            ?? [];
+
+        if (
+            ! is_array(
+                $technical
+            )
+            || (
+                $technical[
+                    'status'
+                ]
+                ?? null
+            ) !== 'completed'
+        ) {
+            return false;
+        }
+
+        $review =
+            $metadata[
+                'manager_review'
+            ]
+            ?? [];
+
+        return ! (
+            is_array(
+                $review
+            )
+            && (
+                $review[
+                    'status'
+                ]
+                ?? null
+            ) === 'completed'
+        );
+    }
+
+
+
+    /*
+     * BEXIA_ATC_RECEPTION_REPAIR_READONLY_GUARD_V5_83_4C5E5
+     */
+    protected function isReceptionRepairReadOnlyUser(): bool
+    {
+        return
+            ServiceAccess::hasServiceRole(
+                'Servicio - Recepción'
+            )
+            && ! ServiceAccess::hasServiceRole([
+                'Servicio - Encargado de Técnicos',
+                'Servicio - Supervisor',
+            ]);
+    }
+
     protected function getHeaderActions(): array
     {
+
+        /*
+         * BEXIA_ATC_DELIVERY_FROM_TICKET_V5_83_4C5G12
+         *
+         * La RepairOrder conserva:
+         * - revisión y costeo;
+         * - Vo.Bo.;
+         * - preparación de cobro/entrega.
+         *
+         * Después del puente, la interfaz operativa
+         * de SAL-ATC y entrega vive en ServiceCase.
+         *
+         * Los métodos backend existentes NO se eliminan.
+         */
+
+
+        /*
+         * BEXIA_ATC_MANAGER_REVIEW_ACTIONS_V5_83_4C5C2A1
+         *
+         * C5C2A1 oculta temporalmente todas las acciones
+         * legacy del Encargado.
+         *
+         * C5C2B agregara:
+         * Revisar y costear.
+         */
+        if (
+            ServiceAccess::hasServiceRole(
+                'Servicio - Encargado de Técnicos'
+            )
+            && ! ServiceAccess::hasServiceRole(
+                'Servicio - Supervisor'
+            )
+        ) {
+            return [
+                $this->managerReviewCostingAction(),
+                $this->postRepairCustomerApprovalAction(),
+                $this->preparePostRepairNoChargeDeliveryAction(),
+                $this->preparePostRepairCollectionDeliveryAction(),
+                $this->atcReceivableStatusAction(),
+
+                // BEXIA_ATC_MANAGER_DELIVERY_ACTION_V5_83_4C5E7
+                // El Encargado debe poder continuar con la
+                // entrega una vez satisfecho canDeliverRepair().
+                $this->viewAccountReceivableAction(),
+            ];
+        }
+
+        /*
+         * BEXIA_ATC_TECHNICIAN_HEADER_ONLY_V5_83_4C5B
+         *
+         * No mostrar al técnico:
+         * - cotización;
+         * - aprobaciones;
+         * - cierre económico;
+         * - CxC;
+         * - entrega;
+         * - recepción;
+         * - tracking;
+         * - acciones administrativas.
+         */
+        if (
+            ServiceAccess::isRestrictedServiceTechnician()
+        ) {
+            return [
+                $this->
+                    finalizeTechnicalWorkAction(),
+            ];
+        }
+
         return [
-                        ...$this->repairQuoteApprovalHeaderActions(),
+                        $this->postRepairCustomerApprovalAction(),
+            $this->preparePostRepairNoChargeDeliveryAction(),
+                $this->preparePostRepairCollectionDeliveryAction(),
+            ...$this->repairQuoteApprovalHeaderActions(),
+$this->atcReceivableStatusAction(),
 $this->viewAccountReceivableAction(),
             $this->createAccountReceivableAction(),
             $this->viewEconomicSummaryAction(),
@@ -262,8 +5870,22 @@ $this->viewAccountReceivableAction(),
                 ->color('primary')
                 ->modalHeading('Firma digital de recepción')
                 ->modalSubmitActionLabel('Guardar firma de recepción')
-                ->visible(fn (): bool => ServiceAccess::canCaptureRepairReception()
-                    && ! $this->repairHasAttachmentStage($this->record, 'reception_signature'))
+                // BEXIA_ATC_RECEPTION_SIGNATURE_LIFECYCLE_V5_83_4C5E6
+                //
+                // La firma de recepción solamente pertenece a la
+                // etapa de recepción física.
+                //
+                // Si RepairOrder.received_at ya existe, el equipo
+                // ya fue recibido y esta acción no debe reaparecer
+                // aunque la firma utilizada provenga de recolección.
+                ->visible(fn (): bool =>
+                    ServiceAccess::canCaptureRepairReception()
+                    && blank($this->record?->received_at)
+                    && ! $this->repairHasAttachmentStage(
+                        $this->record,
+                        'reception_signature'
+                    )
+                )
                 ->form([
                     \Filament\Forms\Components\TextInput::make('received_from')
                         ->label('Nombre de quien entrega')
@@ -410,71 +6032,6 @@ $this->viewAccountReceivableAction(),
 
 
 
-\Filament\Actions\Action::make('deliver_to_customer')
-                ->label('Entregar al cliente')
-                ->icon('heroicon-o-truck')
-                ->color('success')
-                ->modalHeading('Entregar al cliente')
-                ->modalSubmitActionLabel('Confirmar entrega')
-                ->visible(fn (): bool => ServiceAccess::canDeliverRepair($this->record))
-                ->form([
-                    \Filament\Forms\Components\TextInput::make('delivered_to')
-                        ->label('Nombre de quien recibe')
-                        ->required()
-                        ->maxLength(255),
-
-                    \Filament\Forms\Components\Textarea::make('delivery_notes')
-                        ->label('Observaciones de entrega')
-                        ->rows(4)
-                        ->columnSpanFull(),
-
-                    \Filament\Forms\Components\FileUpload::make('delivery_files')
-                        ->label('Evidencia obligatoria de entrega')
-                        ->required()
-                        ->minFiles(1)
-                        ->validationMessages([
-                            'required' => 'Agrega al menos una foto o archivo de evidencia de entrega.',
-                            'min' => 'Agrega al menos una foto o archivo de evidencia de entrega.',
-                        ])
-                        ->acceptedFileTypes([
-                            'image/jpeg',
-                            'image/png',
-                            'image/webp',
-                            'image/gif',
-                            'application/pdf',
-                            'application/msword',
-                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                            'application/vnd.ms-excel',
-                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                            'text/plain',
-                            'text/csv',
-                        ])
-                        ->helperText('Obligatorio: sube una foto del producto entregado, firma física escaneada, acuse o documento relacionado.')
-                        ->disk('public')
-                        ->directory('service/delivery-files')
-                        ->multiple()
-                        ->reorderable()
-                        ->downloadable()
-                        ->openable()
-                        ->imagePreviewHeight('120')
-                        ->maxFiles(10)
-                        ->maxSize(10240)
-                        ->columnSpanFull(),
-
-                    \Filament\Forms\Components\ViewField::make('delivery_signature_data')
-                        ->label('Firma digital de entrega')
-                        ->view('filament.forms.components.signature-pad')
-                        ->required()
-                        ->dehydrated(true)
-                        ->helperText('Firma después de subir la evidencia para evitar que el upload reinicie el recuadro.')
-                        ->validationMessages([
-                            'required' => 'Captura la firma digital de quien recibe.',
-                        ])
-                        ->columnSpanFull(),
-                ])
-                ->action(function (array $data): void {
-                    $this->deliverRepairToCustomer($data);
-                }),
 
 
 
@@ -1597,6 +7154,332 @@ $this->viewAccountReceivableAction(),
 
 
 
+
+    /*
+     * BEXIA_ATC_MANAGER_DELIVERY_ACTION_V5_83_4C5E7
+     *
+     * Acción única de entrega reutilizada por:
+     * - Encargado de Técnicos;
+     * - flujo administrativo general.
+     *
+     * La visibilidad sigue dependiendo exclusivamente de
+     * ServiceAccess::canDeliverRepair(), incluido el gate
+     * post-reparación de pago C5E2.
+     *
+     * No se relajan permisos ni requisitos:
+     * - nombre de quien recibe;
+     * - evidencia obligatoria;
+     * - firma digital obligatoria.
+     */
+    /*
+     * BEXIA_ATC_REPAIR_EXIT_DOCUMENT_GATE_V5_83_4C5G3
+     *
+     * Autoriza la salida física ANTES de entregar.
+     */
+    protected function prepareRepairExitDocumentAction(): Action
+    {
+        return Action::make(
+            'prepare_repair_exit_document'
+        )
+            ->label(
+                'Generar salida de equipo'
+            )
+            ->icon(
+                'heroicon-o-document-check'
+            )
+            ->color('warning')
+            ->modalHeading(
+                'Generar documento de salida'
+            )
+            ->modalDescription(
+                'Este documento autoriza la salida física del equipo bajo custodia. No descontará inventario.'
+            )
+            ->modalSubmitActionLabel(
+                'Autorizar salida'
+            )
+            ->visible(
+                fn (): bool =>
+                    ServiceAccess::
+                        canPrepareRepairExitDocument(
+                            $this->record
+                        )
+                    && ! ServiceAccess::
+                        hasAuthorizedRepairExitDocument(
+                            $this->record
+                        )
+            )
+            ->form([
+                \Filament\Forms\Components\Select::
+                    make(
+                        'origin_exit_warehouse_id'
+                    )
+                    ->label(
+                        'Ubicación de salida'
+                    )
+                    ->options(
+                        function (): array {
+                            return \App\Models\ExitWarehouse::
+                                query()
+                                ->where(
+                                    'company_id',
+                                    $this->record->
+                                        company_id
+                                )
+                                ->where(
+                                    'is_active',
+                                    true
+                                )
+                                ->whereIn(
+                                    'usage_type',
+                                    [
+                                        'envio',
+                                        'ambos',
+                                    ]
+                                )
+                                ->orderBy(
+                                    'sort_order'
+                                )
+                                ->orderBy(
+                                    'name'
+                                )
+                                ->pluck(
+                                    'name',
+                                    'id'
+                                )
+                                ->all();
+                        }
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->native(false)
+                    ->helperText(
+                        'Selecciona el almacén/ubicación configurado en Salidas. Si no existe para esta empresa, captura la ubicación manual.'
+                    ),
+
+                \Filament\Forms\Components\TextInput::
+                    make(
+                        'origin_location_label'
+                    )
+                    ->label(
+                        'Ubicación manual'
+                    )
+                    ->placeholder(
+                        'Sólo si la ubicación no aparece en el catálogo'
+                    )
+                    ->maxLength(255),
+
+                \Filament\Forms\Components\Textarea::
+                    make(
+                        'exit_document_notes'
+                    )
+                    ->label(
+                        'Observaciones de salida'
+                    )
+                    ->rows(3)
+                    ->maxLength(1000),
+            ])
+            ->action(
+                function (array $data): void {
+                    $repair =
+                        app(
+                            \App\Support\Service\ServiceRepairExitDocumentService::class
+                        )->authorize(
+                            $this->record,
+                            $data
+                        );
+
+                    $this->record =
+                        $repair;
+
+                    $this->record->refresh();
+
+                    $document =
+                        ServiceAccess::
+                            repairExitDocument(
+                                $this->record
+                            );
+
+                    Notification::make()
+                        ->title(
+                            'Salida autorizada'
+                        )
+                        ->body(
+                            'Se generó '
+                            . (
+                                $document[
+                                    'folio'
+                                ]
+                                ?? 'el documento de salida'
+                            )
+                            . '. Ya puede imprimirse y continuar con la entrega.'
+                        )
+                        ->success()
+                        ->send();
+                }
+            );
+    }
+
+    protected function printRepairExitDocumentAction(): Action
+    {
+        return Action::make(
+            'print_repair_exit_document'
+        )
+            ->label(
+                'Imprimir salida'
+            )
+            ->icon(
+                'heroicon-o-printer'
+            )
+            ->color('gray')
+            ->visible(
+                fn (): bool =>
+                    ServiceAccess::
+                        hasAuthorizedRepairExitDocument(
+                            $this->record
+                        )
+            )
+            ->url(
+                fn (): string =>
+                    route(
+                        'service.repair-orders.exit-document',
+                        [
+                            'tenant' =>
+                                $this->record->
+                                    company_id,
+
+                            'record' =>
+                                $this->record->
+                                    getKey(),
+                        ]
+                    )
+            )
+            ->openUrlInNewTab();
+    }
+
+
+    protected function deliverToCustomerAction(): Action
+    {
+        return Action::make(
+            'deliver_to_customer'
+        )
+            ->label(
+                'Entregar al cliente'
+            )
+            ->icon(
+                'heroicon-o-truck'
+            )
+            ->color('success')
+            ->modalHeading(
+                'Entregar al cliente'
+            )
+            ->modalSubmitActionLabel(
+                'Confirmar entrega'
+            )
+            ->visible(
+                fn (): bool =>
+                    ServiceAccess::
+                        canDeliverRepair(
+                            $this->record
+                        )
+            )
+            ->form([
+                \Filament\Forms\Components\TextInput::
+                    make(
+                        'delivered_to'
+                    )
+                    ->label(
+                        'Nombre de quien recibe'
+                    )
+                    ->required()
+                    ->maxLength(255),
+
+                \Filament\Forms\Components\Textarea::
+                    make(
+                        'delivery_notes'
+                    )
+                    ->label(
+                        'Observaciones de entrega'
+                    )
+                    ->rows(4)
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\FileUpload::
+                    make(
+                        'delivery_files'
+                    )
+                    ->label(
+                        'Evidencia obligatoria de entrega'
+                    )
+                    ->required()
+                    ->minFiles(1)
+                    ->validationMessages([
+                        'required' =>
+                            'Agrega al menos una foto o archivo de evidencia de entrega.',
+
+                        'min' =>
+                            'Agrega al menos una foto o archivo de evidencia de entrega.',
+                    ])
+                    ->acceptedFileTypes([
+                        'image/jpeg',
+                        'image/png',
+                        'image/webp',
+                        'image/gif',
+                        'application/pdf',
+                        'application/msword',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'application/vnd.ms-excel',
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        'text/plain',
+                        'text/csv',
+                    ])
+                    ->helperText(
+                        'Obligatorio: sube una foto del producto entregado, firma física escaneada, acuse o documento relacionado.'
+                    )
+                    ->disk('public')
+                    ->directory(
+                        'service/delivery-files'
+                    )
+                    ->multiple()
+                    ->reorderable()
+                    ->downloadable()
+                    ->openable()
+                    ->imagePreviewHeight('120')
+                    ->maxFiles(10)
+                    ->maxSize(10240)
+                    ->columnSpanFull(),
+
+                \Filament\Forms\Components\ViewField::
+                    make(
+                        'delivery_signature_data'
+                    )
+                    ->label(
+                        'Firma digital de entrega'
+                    )
+                    ->view(
+                        'filament.forms.components.signature-pad'
+                    )
+                    ->required()
+                    ->dehydrated(true)
+                    ->helperText(
+                        'Firma después de subir la evidencia para evitar que el upload reinicie el recuadro.'
+                    )
+                    ->validationMessages([
+                        'required' =>
+                            'Captura la firma digital de quien recibe.',
+                    ])
+                    ->columnSpanFull(),
+            ])
+            ->action(
+                function (array $data): void {
+                    $this->
+                        deliverRepairToCustomer(
+                            $data
+                        );
+                }
+            );
+    }
+
+
     protected function markRepairReadyForDelivery(): void
     {
         $record = $this->record;
@@ -1638,44 +7521,66 @@ $this->viewAccountReceivableAction(),
             ->send();
     }
 
-    protected function deliverRepairToCustomer(array $data): void
-    {
-        $record = $this->record;
-        $now = now();
+    /*
+     * BEXIA_ATC_ATOMIC_DELIVERY_V5_83_4C5E8
+     *
+     * La página ya no cambia estados directamente.
+     * Toda la entrega se delega al service transaccional.
+     */
+    protected function deliverRepairToCustomer(
+        array $data
+    ): void {
+        $record =
+            $this->record;
 
-        $payload = $this->repairOrderPayloadForExistingColumns([
-            'status' => 'delivered',
-            'workflow_stage' => 'delivered',
-            'delivered_at' => $now,
-            'delivered_to' => $data['delivered_to'] ?? null,
-            'delivery_notes' => $data['delivery_notes'] ?? null,
-            'updated_at' => $now,
-        ]);
+        if (! $record) {
+            throw
+                \Illuminate\Validation\ValidationException::
+                    withMessages([
+                        'repair' =>
+                            'No se encontró la reparación.',
+                    ]);
+        }
 
-        \Illuminate\Support\Facades\DB::table('repair_orders')
-            ->where('id', $record->getKey())
-            ->update($payload);
+        $delivered =
+            app(
+                \App\Support\Service\ServiceRepairDeliveryService::class
+            )->deliver(
+                $record,
+                $data
+            );
 
-        $this->saveDeliveryFilesForRepair($record, (array) ($data['delivery_files'] ?? []));
-        $this->saveDeliverySignatureForRepair($record, $data['delivery_signature_data'] ?? null);
+        $this->record->refresh();
 
-        $this->createServiceRepairTransitionEvent(
-            $record,
-            'repair_delivered',
-            'La reparación fue entregada al cliente.'
-        );
-
-        $record->refresh();
-
-        // BEXIA_V582_P7H26A_CLOSE_SERVICE_CASE_AFTER_DELIVERY
-        app(
-            \App\Support\Service\ServiceRepairCaseLifecycleService::class
-        )->closeCaseAfterDelivery($record);
-
-        \Filament\Notifications\Notification::make()
-            ->title('Reparación entregada')
+        \Filament\Notifications\Notification::
+            make()
+            ->title(
+                'Reparación entregada'
+            )
+            ->body(
+                'La evidencia y firma quedaron guardadas y el ticket ATC fue cerrado.'
+            )
             ->success()
             ->send();
+
+        /*
+         * BEXIA_ATC_POST_DELIVERY_REDIRECT_V5_83_4C5E10
+         *
+         * delivered es estado final.
+         * RepairOrderResource::canEdit() exige permiso
+         * de reapertura para volver a /edit.
+         *
+         * El usuario que acaba de entregar no necesita
+         * ese permiso para concluir su flujo.
+         *
+         * Regresar al listado de Reparaciones evita un
+         * 403 posterior a una entrega exitosa.
+         */
+        $this->redirect(
+            $this->getResource()::getUrl(
+                'index'
+            )
+        );
     }
 
     protected function repairOrderPayloadForExistingColumns(array $payload): array
@@ -1858,7 +7763,22 @@ $this->viewAccountReceivableAction(),
             ->modalContent(fn () => view('filament.service.repair-order-economic-summary', [
                 'record' => $this->record,
             ]))
-            ->visible(fn (): bool => (float) ($this->record->economic_total ?? $this->record->total_amount ?? 0) > 0);
+            // BEXIA_ATC_ECONOMIC_SUMMARY_PERMISSION_V5_83_4C5E6
+            //
+            // El resumen contiene información económica interna.
+            // Tener acceso a la reparación no concede por sí solo
+            // acceso a esta información.
+            ->visible(
+                fn (): bool =>
+                    ServiceAccess::canManageRepairEconomic(
+                        $this->record
+                    )
+                    && (float) (
+                        $this->record->economic_total
+                        ?? $this->record->total_amount
+                        ?? 0
+                    ) > 0
+            );
     }
 
     protected function createAccountReceivableAction(): Action
@@ -1899,6 +7819,423 @@ $this->viewAccountReceivableAction(),
             });
     }
 
+
+    // BEXIA_ATC_CXC_PERMISSION_BOUNDARY_V5_83_4C5E4
+    //
+    // ATC puede consultar un resumen operativo del cobro sin
+    // abandonar Reparaciones.
+    //
+    // Esta accion es SOLO LECTURA:
+    // - no crea pagos;
+    // - no cambia CxC;
+    // - no cambia RepairOrder;
+    // - no cambia ServiceCase.
+    //
+    // El acceso directo a "Ver CxC" se controla por el permiso
+    // canonico del propio AccountReceivableResource.
+    protected function atcReceivableStatusAction(): Action
+    {
+        return Action::make('atc_receivable_status')
+            ->label(
+                fn (): string =>
+                    'Cobro: '
+                    . $this->atcReceivableSnapshot()['payment_label']
+            )
+            ->icon('heroicon-o-banknotes')
+            ->color('info')
+            ->modalHeading('Cobro y entrega')
+            ->modalDescription(
+                'Resumen operativo de solo lectura para ATC. '
+                . 'El cobro se registra únicamente desde Cuentas por cobrar '
+                . 'por un usuario autorizado.'
+            )
+            ->modalWidth('3xl')
+            ->modalSubmitActionLabel('Cerrar')
+            ->visible(
+                fn (): bool =>
+                    (int) (
+                        $this->record->account_receivable_id
+                        ?? 0
+                    ) > 0
+            )
+            ->form([
+                \Filament\Forms\Components\Section::make(
+                    'Cuenta por cobrar'
+                )
+                    ->description(
+                        'ATC puede consultar el avance del cobro, '
+                        . 'pero no registrar ni modificar pagos desde aquí.'
+                    )
+                    ->schema([
+                        \Filament\Forms\Components\Placeholder::make(
+                            'atc_cxc_number'
+                        )
+                            ->label('CxC')
+                            ->content(
+                                fn (): string =>
+                                    $this->
+                                        atcReceivableSnapshot()[
+                                            'number'
+                                        ]
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'atc_cxc_payment_status'
+                        )
+                            ->label('Estado de cobro')
+                            ->content(
+                                fn (): string =>
+                                    $this->
+                                        atcReceivableSnapshot()[
+                                            'payment_label'
+                                        ]
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'atc_cxc_total'
+                        )
+                            ->label('Total')
+                            ->content(
+                                fn (): string =>
+                                    '$'
+                                    . number_format(
+                                        (float) $this->
+                                            atcReceivableSnapshot()[
+                                                'total'
+                                            ],
+                                        2
+                                    )
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'atc_cxc_collected'
+                        )
+                            ->label('Cobrado')
+                            ->content(
+                                fn (): string =>
+                                    '$'
+                                    . number_format(
+                                        (float) $this->
+                                            atcReceivableSnapshot()[
+                                                'collected'
+                                            ],
+                                        2
+                                    )
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'atc_cxc_balance'
+                        )
+                            ->label('Saldo')
+                            ->content(
+                                fn (): string =>
+                                    '$'
+                                    . number_format(
+                                        (float) $this->
+                                            atcReceivableSnapshot()[
+                                                'balance'
+                                            ],
+                                        2
+                                    )
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'atc_cxc_policy'
+                        )
+                            ->label('Política de entrega')
+                            ->content(
+                                fn (): string =>
+                                    $this->
+                                        atcReceivableSnapshot()[
+                                            'policy_label'
+                                        ]
+                            ),
+                    ])
+                    ->columns(2),
+
+                \Filament\Forms\Components\Section::make(
+                    'Entrega'
+                )
+                    ->schema([
+                        \Filament\Forms\Components\Placeholder::make(
+                            'atc_delivery_status'
+                        )
+                            ->label('Estado')
+                            ->content(
+                                fn (): string =>
+                                    $this->
+                                        atcReceivableSnapshot()[
+                                            'delivery_label'
+                                        ]
+                            ),
+
+                        \Filament\Forms\Components\Placeholder::make(
+                            'atc_delivery_next_step'
+                        )
+                            ->label('Siguiente paso')
+                            ->content(
+                                fn (): string =>
+                                    $this->
+                                        atcReceivableSnapshot()[
+                                            'next_step'
+                                        ]
+                            ),
+                    ]),
+            ])
+            ->action(
+                static function (): void {
+                    // Solo cierra el modal. No modifica datos.
+                }
+            );
+    }
+
+    protected function atcReceivableSnapshot(): array
+    {
+        static $cache = [];
+
+        $record = $this->record ?? null;
+
+        if (! $record) {
+            return [
+                'number' => 'Sin CxC',
+                'payment_label' => 'Sin información',
+                'total' => 0.0,
+                'collected' => 0.0,
+                'balance' => 0.0,
+                'policy_label' => 'No definida',
+                'delivery_label' => 'Pendiente',
+                'next_step' => 'No hay una reparación cargada.',
+            ];
+        }
+
+        $recordId = (int) $record->getKey();
+
+        if (isset($cache[$recordId])) {
+            return $cache[$recordId];
+        }
+
+        $receivableId = (int) (
+            $record->account_receivable_id
+            ?? 0
+        );
+
+        $receivable = null;
+
+        if (
+            $receivableId > 0
+            && \Illuminate\Support\Facades\Schema::
+                hasTable('account_receivables')
+        ) {
+            $query =
+                \Illuminate\Support\Facades\DB::
+                    table('account_receivables')
+                    ->where('id', $receivableId);
+
+            if (
+                \Illuminate\Support\Facades\Schema::
+                    hasColumn(
+                        'account_receivables',
+                        'company_id'
+                    )
+                && (int) ($record->company_id ?? 0) > 0
+            ) {
+                $query->where(
+                    'company_id',
+                    (int) $record->company_id
+                );
+            }
+
+            $receivable = $query->first();
+        }
+
+        $total = (float) (
+            $receivable->total
+            ?? $record->economic_total
+            ?? $record->total_amount
+            ?? 0
+        );
+
+        $collected = (float) (
+            $receivable->collected_total
+            ?? 0
+        );
+
+        $balance = (float) (
+            $receivable->balance_total
+            ?? max(
+                0,
+                $total - $collected
+            )
+        );
+
+        $repairPaymentStatus = (string) (
+            $record->economic_payment_status
+            ?? ''
+        );
+
+        $paymentLabel = 'Pendiente de cobro';
+
+        if ($repairPaymentStatus === 'paid') {
+            $paymentLabel = 'Pagado';
+        } elseif (
+            $repairPaymentStatus === 'partial'
+            || $collected > 0.0001
+        ) {
+            $paymentLabel = 'Cobro parcial';
+        }
+
+        $receivableLooksFullyPaid =
+            $receivable !== null
+            && $total > 0
+            && $balance <= 0.0001
+            && $collected >= ($total - 0.0001);
+
+        if (
+            $repairPaymentStatus !== 'paid'
+            && $receivableLooksFullyPaid
+        ) {
+            $paymentLabel =
+                'Cobro completo · sincronización pendiente';
+        }
+
+        $metadata = $record->metadata ?? [];
+
+        if (is_string($metadata)) {
+            $decoded = json_decode(
+                $metadata,
+                true
+            );
+
+            $metadata =
+                is_array($decoded)
+                ? $decoded
+                : [];
+        }
+
+        $bridge =
+            is_array($metadata)
+            ? (
+                $metadata[
+                    'post_repair_collection_delivery'
+                ]
+                ?? []
+            )
+            : [];
+
+        $policy = (string) (
+            $bridge['collection_policy']
+            ?? ''
+        );
+
+        $policyLabel = match ($policy) {
+            'payment_before_delivery' =>
+                'Cobrar antes de salir a entrega',
+
+            'payment_on_delivery' =>
+                'Cobrar al momento de entregar',
+
+            'credit_allowed' =>
+                'Crédito autorizado / saldo permitido',
+
+            'payment_required' =>
+                'Pago requerido antes de entregar (legacy)',
+
+            default =>
+                'No definida',
+        };
+
+        $delivered =
+            ! empty($record->delivered_at)
+            || in_array(
+                (string) (
+                    $record->workflow_stage
+                    ?? ''
+                ),
+                ['delivered'],
+                true
+            )
+            || in_array(
+                (string) (
+                    $record->status
+                    ?? ''
+                ),
+                ['delivered', 'entregado'],
+                true
+            );
+
+        $deliveryLabel = 'Pendiente';
+
+        if ($delivered) {
+            $deliveryLabel = 'Equipo entregado';
+        } elseif ($policy === 'credit_allowed') {
+            $deliveryLabel =
+                'Habilitada por crédito autorizado';
+        } elseif (
+            $policy === 'payment_required'
+            && $repairPaymentStatus === 'paid'
+        ) {
+            $deliveryLabel =
+                'Habilitada · pago confirmado';
+        } elseif ($policy === 'payment_required') {
+            $deliveryLabel =
+                'Bloqueada hasta recibir el pago';
+        }
+
+        if ($delivered) {
+            $nextStep =
+                'El equipo ya fue entregado. '
+                . 'Continuar con el cierre cuando corresponda.';
+        } elseif ($policy === 'credit_allowed') {
+            $nextStep =
+                'El crédito está autorizado. '
+                . 'ATC puede continuar con la entrega al cliente.';
+        } elseif (
+            $policy === 'payment_required'
+            && $repairPaymentStatus === 'paid'
+        ) {
+            $nextStep =
+                'Pago confirmado. '
+                . 'ATC puede continuar con Entregar al cliente.';
+        } elseif ($receivableLooksFullyPaid) {
+            $nextStep =
+                'La CxC ya muestra cobro completo, '
+                . 'pero ATC todavía espera la sincronización '
+                . 'del estado de pago antes de habilitar la entrega.';
+        } else {
+            $nextStep =
+                'Esperar el cobro por el área autorizada. '
+                . 'ATC no registra el pago y permanece '
+                . 'dentro de Reparaciones.';
+        }
+
+        $number = trim(
+            (string) (
+                $receivable->number
+                ?? ''
+            )
+        );
+
+        if ($number === '' && $receivableId > 0) {
+            $number = 'CxC #' . $receivableId;
+        }
+
+        if ($number === '') {
+            $number = 'Sin CxC';
+        }
+
+        return $cache[$recordId] = [
+            'number' => $number,
+            'payment_label' => $paymentLabel,
+            'total' => $total,
+            'collected' => $collected,
+            'balance' => $balance,
+            'policy_label' => $policyLabel,
+            'delivery_label' => $deliveryLabel,
+            'next_step' => $nextStep,
+        ];
+    }
+
+
     protected function viewAccountReceivableAction(): Action
     {
         return Action::make('view_account_receivable')
@@ -1917,7 +8254,14 @@ $this->viewAccountReceivableAction(),
                 ]);
             })
             ->openUrlInNewTab(false)
-            ->visible(fn (): bool => (int) ($this->record->account_receivable_id ?? 0) > 0);
+            ->visible(
+                fn (): bool =>
+                    (int) (
+                        $this->record->account_receivable_id
+                        ?? 0
+                    ) > 0
+                    && AccountReceivableResource::canViewAny()
+            );
     }
 
     protected function canShowEconomicClosureAction(): bool

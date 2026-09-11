@@ -351,6 +351,169 @@ Route::post('/pos/sessions/{session}/price-list-changes', [\App\Http\Controllers
 |--------------------------------------------------------------------------
 | V5.77.3b - Consulta pública segura por token.
 */
+/*
+|--------------------------------------------------------------------------
+| BEXIA_ATC_PICKUP_LAUNCH_ROUTE_V5_83_4C4B5
+|--------------------------------------------------------------------------
+|
+| Apertura interna firmada.
+| Permite abrir la Orden en otra pestaña
+| sin perder el ticket de origen.
+|
+*/
+Route::middleware([
+    'auth',
+    'signed',
+])->get(
+    '/servicio/recoleccion-interna/{tenant}/{serviceCase}',
+    \App\Http\Controllers\Service\ServicePickupOrderLaunchController::class
+)
+    ->whereNumber('tenant')
+    ->whereNumber('serviceCase')
+    ->name(
+        'service.pickup.launch'
+    );
+
+/*
+|--------------------------------------------------------------------------
+| BEXIA_ATC_PICKUP_ORDER_ROUTES_V5_83_4C4B1
+|--------------------------------------------------------------------------
+|
+| Orden de recoleccion publica mediante token seguro.
+| C4B1 = consulta.
+| C4C agregara POST para el chofer.
+|
+*/
+Route::middleware(['web'])->get(
+    '/servicio/recoleccion/{token}',
+    [
+        \App\Http\Controllers\Service\PublicServicePickupController::class,
+        'show',
+    ]
+)->name(
+    'public.service.pickup.show'
+);
+
+Route::middleware(['web'])->get(
+    '/servicio/recoleccion/{token}/evidencia/{attachment}',
+    [
+        \App\Http\Controllers\Service\PublicServicePickupController::class,
+        'evidence',
+    ]
+)
+    ->whereNumber('attachment')
+    ->name(
+        'public.service.pickup.evidence'
+    );
+
+/*
+|--------------------------------------------------------------------------
+| BEXIA_ATC_PICKUP_PDF_QR_ROUTES_V5_83_4C4B3
+|--------------------------------------------------------------------------
+|
+| PDF una hoja y QR descargable de la Orden de recoleccion.
+|
+*/
+Route::middleware(['web'])->get(
+    '/servicio/recoleccion/{token}/pdf',
+    [
+        \App\Http\Controllers\Service\PublicServicePickupController::class,
+        'pdf',
+    ]
+)->name(
+    'public.service.pickup.pdf'
+);
+
+Route::middleware(['web'])->get(
+    '/servicio/recoleccion/{token}/qr',
+    [
+        \App\Http\Controllers\Service\PublicServicePickupController::class,
+        'qr',
+    ]
+)->name(
+    'public.service.pickup.qr'
+);
+
+/*
+|--------------------------------------------------------------------------
+| BEXIA_ATC_PUBLIC_PICKUP_POST_ROUTE_V5_83_4C4C
+|--------------------------------------------------------------------------
+|
+| Captura publica del chofer.
+| SIN auth.
+| Protegida por token + CSRF + throttle.
+|
+*/
+Route::middleware([
+    'web',
+    'throttle:10,1',
+])->post(
+    '/servicio/recoleccion/{token}',
+    [
+        \App\Http\Controllers\Service\PublicServicePickupController::class,
+        'store',
+    ]
+)->name(
+    'public.service.pickup.store'
+);
+
+/*
+|--------------------------------------------------------------------------
+| BEXIA_ATC_PUBLIC_REPAIR_DELIVERY_ROUTES_V5_83_4C5G13A
+|--------------------------------------------------------------------------
+|
+| Entrega publica para chofer.
+|
+| LAUNCH:
+| - auth
+| - signed
+| - valida actor / tenant / RepairOrder
+|
+| PUBLIC:
+| - SIN login
+| - token seguro
+| - POST con CSRF + throttle
+|
+*/
+Route::middleware([
+    'auth',
+    'signed',
+])->get(
+    '/servicio/entrega-interna/{tenant}/{repairOrder}',
+    \App\Http\Controllers\Service\ServiceRepairDeliveryLaunchController::class
+)
+    ->whereNumber('tenant')
+    ->whereNumber('repairOrder')
+    ->name(
+        'service.repair-delivery.launch'
+    );
+
+Route::middleware([
+    'web',
+])->get(
+    '/servicio/entrega/{token}',
+    [
+        \App\Http\Controllers\Service\PublicServiceRepairDeliveryController::class,
+        'show',
+    ]
+)->name(
+    'public.service.repair-delivery.show'
+);
+
+Route::middleware([
+    'web',
+    'throttle:10,1',
+])->post(
+    '/servicio/entrega/{token}',
+    [
+        \App\Http\Controllers\Service\PublicServiceRepairDeliveryController::class,
+        'store',
+    ]
+)->name(
+    'public.service.repair-delivery.store'
+);
+
+
 Route::middleware(['web'])->get(
     '/servicio/seguimiento/{token}',
     \App\Http\Controllers\Service\PublicRepairTrackingController::class
@@ -616,4 +779,21 @@ Route::post('/admin/{tenant}/dashboard-section-settings/{section}', [\App\Http\C
     ->name('service.service-cases.solution.print');
 
 
-
+/*
+|--------------------------------------------------------------------------
+| BEXIA_ATC_REPAIR_EXIT_DOCUMENT_PDF_V5_83_4C5G3
+|--------------------------------------------------------------------------
+|
+| Documento de custodia para salida física de un equipo del cliente.
+| No genera movimiento de inventario.
+|
+*/
+\Illuminate\Support\Facades\Route::middleware([
+    'web',
+    'auth',
+])->get(
+    '/admin/{tenant}/service/repair-orders/{record}/exit-document',
+    \App\Http\Controllers\Service\ServiceRepairExitDocumentController::class
+)->name(
+    'service.repair-orders.exit-document'
+);

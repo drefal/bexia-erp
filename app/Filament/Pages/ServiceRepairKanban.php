@@ -37,6 +37,21 @@ class ServiceRepairKanban extends Page
 
     public static function shouldRegisterNavigation(): bool
     {
+        /*
+         * BEXIA_ATC_TECH_ONLY_REPAIRS_NAV_V5_83_4C5F6A
+         *
+         * Para un usuario exclusivamente con rol
+         * Servicio - Técnico, esta opción se oculta
+         * del menú. El acceso backend existente se
+         * conserva sin cambios.
+         */
+        if (
+            \App\Support\Service\ServiceAccess::
+                isRestrictedServiceTechnician()
+        ) {
+            return false;
+        }
+
         return static::canAccess();
     }
 

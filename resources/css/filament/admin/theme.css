@@ -1104,3 +1104,157 @@ html.dark .fi-sidebar-item-group-button {
 
 /* === BEXIA LOGIN V5.71.1A END === */
 
+
+/* =========================================
+   BEXIA_MODAL_LAYER_FIX_V5_83_4B5C
+   Los modales deben quedar por encima de la
+   topbar, que usa z-index: 50.
+   ========================================= */
+.fi-modal {
+    z-index: 100 !important;
+}
+
+/* =========================================
+   BEXIA_MODAL_REAL_LAYERS_FIX_V5_83_4B5E
+
+   La topbar de Bexia utiliza z-index: 50.
+   Filament aplica el z-index en las capas
+   internas del modal, no solamente en
+   .fi-modal.
+
+   Backdrop: 90
+   Ventana: 100
+   ========================================= */
+
+.fi-modal-close-overlay {
+    z-index: 90 !important;
+}
+
+.fi-modal-window-ctn {
+    z-index: 100 !important;
+}
+
+.fi-modal-window {
+    position: relative !important;
+    z-index: 101 !important;
+}
+
+/* =========================================
+   BEXIA_MODAL_REAL_CONTAINER_FIX_V5_83_4B5F
+
+   Filament v3 usado por Bexia no tiene
+   .fi-modal-window-ctn.
+
+   Estructura real:
+   - .fi-modal-close-overlay fixed inset-0 z-40
+   - segundo DIV fixed inset-0 z-40
+   - .fi-modal-window
+
+   La topbar usa z-index: 50.
+   ========================================= */
+
+/* Fondo oscuro sobre la topbar */
+.fi-modal .fi-modal-close-overlay {
+    z-index: 90 !important;
+}
+
+/* Contenedor REAL de la ventana */
+.fi-modal > div > div.fixed.inset-0.z-40:not(.fi-modal-close-overlay) {
+    z-index: 100 !important;
+}
+
+/* Ventana visible */
+.fi-modal .fi-modal-window {
+    position: relative !important;
+    z-index: 101 !important;
+}
+
+/* =========================================
+   BEXIA_MODAL_ROUNDED_FIX_V5_83_4B5G
+
+   El modal ya queda correctamente sobre la
+   topbar desde V5.83.4b5f.
+
+   Este ajuste hace que el contenido interno
+   respete realmente las esquinas redondeadas.
+   ========================================= */
+
+.fi-modal .fi-modal-window {
+    border-radius: 20px !important;
+    overflow: hidden !important;
+    isolation: isolate !important;
+}
+
+/*
+ * BEXIA_ATC_MODAL_LAYERS_CACHE_BUST_V5_83_4C5B2_START
+ *
+ * Replica el patron validado en:
+ * - V5.83.4b5e: capas reales del modal
+ * - V5.83.4b5g: esquinas redondeadas
+ *
+ * topbar = 50
+ * overlay = 90
+ * wrapper = 100
+ * window = 101
+ */
+
+/*
+ * Root modal.
+ */
+.fi-modal {
+    z-index: 100 !important;
+}
+
+/*
+ * Fondo oscuro REAL de Filament.
+ * Debe quedar encima de la topbar.
+ */
+.fi-modal.fi-modal-open
+> div
+> .fi-modal-close-overlay {
+    inset: 0 !important;
+    z-index: 90 !important;
+    background-color: rgb(15 23 42 / 0.50) !important;
+}
+
+/*
+ * Wrapper fixed REAL que contiene la ventana.
+ */
+.fi-modal.fi-modal-open
+> div
+> .fi-modal-close-overlay
++ div {
+    z-index: 100 !important;
+}
+
+/*
+ * Ventana.
+ * Mantenerla sobre backdrop/topbar y con el acabado
+ * de 20px ya validado anteriormente.
+ */
+.fi-modal.fi-modal-open
+> div
+> .fi-modal-close-overlay
++ div
+.fi-modal-window {
+    position: relative !important;
+    z-index: 101 !important;
+    border-radius: 20px !important;
+    overflow: hidden !important;
+    isolation: isolate !important;
+}
+
+/*
+ * Header/footer quedan recortados por el mismo radio.
+ */
+.fi-modal-window > .fi-modal-header:first-child {
+    border-top-left-radius: 20px !important;
+    border-top-right-radius: 20px !important;
+}
+
+.fi-modal-window > .fi-modal-footer:last-child {
+    border-bottom-left-radius: 20px !important;
+    border-bottom-right-radius: 20px !important;
+}
+
+/* BEXIA_ATC_MODAL_LAYERS_CACHE_BUST_V5_83_4C5B2_END */

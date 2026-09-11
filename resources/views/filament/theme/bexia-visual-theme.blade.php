@@ -18653,6 +18653,70 @@ html.bexia-repair-order-edit-page .fi-header-actions {
 }
 /* BEXIA_V582_P7H24F3_USER_MENU_OVER_REPAIR_ACTIONS_END */
 
+/*
+ * BEXIA_ATC_REPAIR_MODAL_OVER_TOPBAR_V5_83_4C5B3B
+ *
+ * La pagina repair-orders/edit tiene reglas legacy
+ * deliberadas para mantener el menu de usuario sobre
+ * las acciones del header.
+ *
+ * Esas reglas llegan hasta z-index 2147483500.
+ *
+ * NO se eliminan.
+ *
+ * Cuando Filament abre un modal, el propio modal debe
+ * quedar por encima de esas reglas.
+ *
+ * Se usan valores inferiores al maximo CSS 2147483647.
+ */
+
+html.bexia-repair-order-edit-page .fi-modal {
+    z-index: 2147483600 !important;
+}
+
+html.bexia-repair-order-edit-page
+.fi-modal
+.fi-modal-close-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483601 !important;
+    background-color: rgb(15 23 42 / 0.50) !important;
+}
+
+html.bexia-repair-order-edit-page
+.fi-modal
+> div
+> div.fixed.inset-0.z-40:not(.fi-modal-close-overlay) {
+    z-index: 2147483610 !important;
+}
+
+html.bexia-repair-order-edit-page
+.fi-modal
+.fi-modal-window {
+    position: relative !important;
+    z-index: 2147483611 !important;
+    border-radius: 20px !important;
+    overflow: hidden !important;
+    isolation: isolate !important;
+}
+
+html.bexia-repair-order-edit-page
+.fi-modal-window
+> .fi-modal-header:first-child {
+    border-top-left-radius: 20px !important;
+    border-top-right-radius: 20px !important;
+}
+
+html.bexia-repair-order-edit-page
+.fi-modal-window
+> .fi-modal-footer:last-child {
+    border-bottom-left-radius: 20px !important;
+    border-bottom-right-radius: 20px !important;
+}
+
+/* BEXIA_ATC_REPAIR_MODAL_OVER_TOPBAR_V5_83_4C5B3B_END */
+
+
 /* BEXIA_PAYROLL_PURCHASE_DROPDOWN_FIX_V5_83_5B8_START */
 /* Local fix only for Compras via nomina. */
 .fi-section.bexia-payroll-purchase-section,

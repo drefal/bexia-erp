@@ -71,6 +71,9 @@ class RepairOrder extends Model
         'assigned_by',
         'created_by',
         'metadata',
+
+        // BEXIA_ATC_APPROVED_TOTAL_FILLABLE_V5_83_4C5D4
+        'approved_total_snapshot',
     
         'actual_labor_hours',
         'actual_labor_cost',

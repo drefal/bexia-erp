@@ -21,7 +21,14 @@ class ServiceRepairReceptionChecklistService
 
         'no_verificado' =>
             'No fue posible verificar',
+
+        'otro' =>
+            'Otro',
     ];
+
+    /*
+     * BEXIA_ATC_RECEPTION_CHECKLIST_ALIGNMENT_V5_83_4C4C5B
+     */
 
     public const POWER_STATUSES = [
         'enciende' =>
@@ -50,6 +57,9 @@ class ServiceRepairReceptionChecklistService
         'bateria' =>
             'Batería',
 
+        'llaves' =>
+            'Llaves',
+
         'funda' =>
             'Funda / estuche',
 
@@ -68,7 +78,7 @@ class ServiceRepairReceptionChecklistService
             'Producto, modelo y serie/lote verificados cuando aplica',
 
         'condicion_revisada' =>
-            'Estado físico revisado con el cliente',
+            'Estado físico revisado al momento de la recepción',
 
         'accesorios_revisados' =>
             'Accesorios entregados quedaron documentados',
