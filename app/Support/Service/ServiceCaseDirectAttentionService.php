@@ -92,7 +92,10 @@ class ServiceCaseDirectAttentionService
             $now = now();
 
             $updates = [
-                'status' => 'en_revision',
+                'status' => 'resuelto',
+                'resolution_type' =>
+                    $this->automaticResolutionTypeForCase($case),
+                'resolution_notes' => $notes,
             ];
 
             if (! $case->first_response_at) {
@@ -105,7 +108,7 @@ class ServiceCaseDirectAttentionService
                 case: $case,
                 eventType: self::EVENT_RESPONSE,
                 fromStatus: $oldStatus,
-                toStatus: 'en_revision',
+                toStatus: 'resuelto',
                 actorId: $actorId,
                 notes: $notes,
                 oldValues: [
@@ -117,6 +120,10 @@ class ServiceCaseDirectAttentionService
                 newValues: [
                     'first_response_at' =>
                         $case->fresh()->first_response_at,
+                    'status' => 'resuelto',
+                    'resolution_type' =>
+                        $case->fresh()->resolution_type,
+                    'resolution_notes' => $notes,
                 ]
             );
 
@@ -125,7 +132,7 @@ class ServiceCaseDirectAttentionService
                 serviceCaseId: $case->id,
                 repairOrderId: null,
                 files: $image,
-                stage: 'direct_attention_response',
+                stage: 'resolution',
                 isCustomerVisible: false
             );
 
@@ -165,6 +172,45 @@ class ServiceCaseDirectAttentionService
 
             return $case->fresh();
         });
+    }
+
+    /*
+     * BEXIA_ATC_AUTO_RESOLUTION_V5_83_4B6
+     *
+     * Registrar la respuesta final equivale a resolver el ticket.
+     * El tipo se deriva del tipo de gestión seleccionado al atenderlo.
+     */
+    protected function automaticResolutionTypeForCase(
+        ServiceCase $case
+    ): string {
+        return match (
+            (string) ($case->non_repair_type ?? '')
+        ) {
+            'asesoria' =>
+                'cliente_orientado',
+
+            'soporte_tecnico',
+            'instalacion',
+            'diagnostico_sin_reparacion',
+            'visita_tecnica' =>
+                'soporte_completado',
+
+            'configuracion' =>
+                'configuracion_completada',
+
+            'documentos' =>
+                'informacion_proporcionada',
+
+            'garantia_administrativa',
+            'reclamacion',
+            'devolucion',
+            'seguimiento_venta',
+            'seguimiento_factura' =>
+                'seguimiento_concluido',
+
+            default =>
+                'otro',
+        };
     }
 
     public function latestResponseIsValidated(
@@ -310,12 +356,19 @@ class ServiceCaseDirectAttentionService
         });
     }
 
-    public function resolveAndClose(
+    public function resolve(
         ServiceCase $serviceCase,
         string $resolutionType,
-        string $notes
+        string $notes,
+        mixed $files = null
     ): ServiceCase {
-        $actorId = $this->actorId();
+        $actorId = (int) auth()->id();
+
+        if ($actorId <= 0) {
+            throw new AuthorizationException(
+                'Debes iniciar sesión para resolver el ticket.'
+            );
+        }
 
         if (
             ! array_key_exists(
@@ -342,24 +395,28 @@ class ServiceCaseDirectAttentionService
             $serviceCase,
             $resolutionType,
             $notes,
+            $files,
             $actorId
         ): ServiceCase {
             $case = $this->lockCase($serviceCase);
 
             $this->assertOpenDirectCase($case);
-            $this->assertCanCloseDirectCase($case);
-            $this->assertLatestResponseValidated($case);
+
+            /*
+             * El responsable asignado puede resolver.
+             * Ya no existe validación obligatoria previa de supervisor.
+             */
+            $this->assertCanRegisterResponse($case);
 
             $oldStatus = (string) $case->status;
             $now = now();
 
             $updates = [
-                'status' => 'cerrado',
-                'resolution_type' =>
-                    $resolutionType,
+                'status' => 'resuelto',
+                'resolution_type' => $resolutionType,
                 'resolution_notes' => $notes,
-                'closed_at' => $now,
-                'closed_by' => $actorId,
+                'closed_at' => null,
+                'closed_by' => null,
             ];
 
             if (! $case->first_response_at) {
@@ -368,12 +425,21 @@ class ServiceCaseDirectAttentionService
 
             $case->update($updates);
 
+            ServiceAccess::saveUploadedAttachments(
+                companyId: $case->company_id,
+                serviceCaseId: $case->id,
+                repairOrderId: null,
+                files: $files,
+                stage: 'resolution',
+                isCustomerVisible: false
+            );
+
             $this->logEvent(
                 case: $case,
                 eventType:
                     'ticket_resuelto_sin_reparacion',
                 fromStatus: $oldStatus,
-                toStatus: 'cerrado',
+                toStatus: 'resuelto',
                 actorId: $actorId,
                 notes: $notes,
                 oldValues: [
@@ -387,17 +453,164 @@ class ServiceCaseDirectAttentionService
                         ),
                 ],
                 newValues: [
+                    'status' => 'resuelto',
                     'resolution_type' =>
                         $resolutionType,
                     'resolution_notes' =>
                         $notes,
-                    'closed_at' =>
-                        (string) $case->closed_at,
                 ]
             );
 
             return $case->fresh();
         });
+    }
+
+    public function close(
+        ServiceCase $serviceCase,
+        string $finalComment = '',
+        ?string $customerConformity = null,
+        mixed $files = null
+    ): ServiceCase {
+        $actorId = $this->actorId();
+
+        $finalComment = trim($finalComment);
+
+        $allowedConformity = [
+            'yes',
+            'no',
+            'not_asked',
+        ];
+
+        if (
+            $customerConformity !== null
+            && ! in_array(
+                $customerConformity,
+                $allowedConformity,
+                true
+            )
+        ) {
+            throw ValidationException::withMessages([
+                'customer_conformity' =>
+                    'Selecciona una opción válida.',
+            ]);
+        }
+
+        return DB::transaction(function () use (
+            $serviceCase,
+            $finalComment,
+            $customerConformity,
+            $files,
+            $actorId
+        ): ServiceCase {
+            $case = $this->lockCase($serviceCase);
+
+            if (
+                (string) $case->attention_route
+                    !== 'non_repair'
+            ) {
+                throw ValidationException::withMessages([
+                    'status' =>
+                        'Esta acción sólo aplica a atención / gestión.',
+                ]);
+            }
+
+            if (
+                $case->repairOrders()
+                    ->withTrashed()
+                    ->exists()
+            ) {
+                throw ValidationException::withMessages([
+                    'status' =>
+                        'Este ticket tiene una reparación vinculada.',
+                ]);
+            }
+
+            if ((string) $case->status !== 'resuelto') {
+                throw ValidationException::withMessages([
+                    'status' =>
+                        'Primero debes resolver el ticket.',
+                ]);
+            }
+
+            $now = now();
+
+            $metadata = is_array($case->metadata)
+                ? $case->metadata
+                : [];
+
+            $metadata['last_closure'] = [
+                'customer_conformity' =>
+                    $customerConformity,
+                'final_comment' =>
+                    $finalComment,
+                'closed_at' =>
+                    $now->toIso8601String(),
+                'closed_by' =>
+                    $actorId,
+            ];
+
+            $case->update([
+                'status' => 'cerrado',
+                'closed_at' => $now,
+                'closed_by' => $actorId,
+                'metadata' => $metadata,
+            ]);
+
+            ServiceAccess::saveUploadedAttachments(
+                companyId: $case->company_id,
+                serviceCaseId: $case->id,
+                repairOrderId: null,
+                files: $files,
+                stage: 'closure',
+                isCustomerVisible: false
+            );
+
+            $eventNotes = $finalComment !== ''
+                ? $finalComment
+                : 'Ticket cerrado.';
+
+            $this->logEvent(
+                case: $case,
+                eventType:
+                    'ticket_cerrado_sin_reparacion',
+                fromStatus: 'resuelto',
+                toStatus: 'cerrado',
+                actorId: $actorId,
+                notes: $eventNotes,
+                oldValues: null,
+                newValues: [
+                    'status' => 'cerrado',
+                    'closed_at' =>
+                        $now->toIso8601String(),
+                    'customer_conformity' =>
+                        $customerConformity,
+                ]
+            );
+
+            return $case->fresh();
+        });
+    }
+
+    /*
+     * Compatibilidad con llamadas anteriores.
+     * La interfaz nueva ya no usa este método.
+     */
+    public function resolveAndClose(
+        ServiceCase $serviceCase,
+        string $resolutionType,
+        string $notes
+    ): ServiceCase {
+        $resolved = $this->resolve(
+            $serviceCase,
+            $resolutionType,
+            $notes
+        );
+
+        return $this->close(
+            $resolved,
+            'Cierre por compatibilidad con flujo anterior.',
+            'not_asked'
+        );
     }
 
     public function reopen(
@@ -722,6 +935,7 @@ class ServiceCaseDirectAttentionService
                     'rechazado',
                     'cancelado',
                     'entregado',
+                    'resuelto',
                 ],
                 true
             )

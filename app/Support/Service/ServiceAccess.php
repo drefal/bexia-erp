@@ -10,6 +10,60 @@ use Spatie\Permission\PermissionRegistrar;
 
 class ServiceAccess
 {
+
+    /*
+     * BEXIA_ATC_VERIFIED_PUBLIC_DELIVERY_CONTEXT_V5_83_4C5G13A
+     *
+     * Excepcion EFIMERA solamente para la pagina
+     * publica de entrega previamente validada por token.
+     *
+     * NO persiste.
+     * NO asigna usuario.
+     * NO asigna permisos.
+     *
+     * Sólo permite que canDeliverRepair() omita
+     * los dos gates de ACTOR:
+     *
+     * - service.repairs.delivery
+     * - rol Encargado/Supervisor
+     *
+     * Todos los gates operativos/economicos/SAL
+     * permanecen intactos.
+     */
+    protected static bool
+        $verifiedPublicRepairDeliveryContext =
+            false;
+
+    public static function
+        withVerifiedPublicRepairDeliveryContext(
+            callable $callback
+        ): mixed {
+        $previous =
+            self::
+                $verifiedPublicRepairDeliveryContext;
+
+        self::
+            $verifiedPublicRepairDeliveryContext =
+                true;
+
+        try {
+            return $callback();
+        } finally {
+            self::
+                $verifiedPublicRepairDeliveryContext =
+                    $previous;
+        }
+    }
+
+    public static function
+        hasVerifiedPublicRepairDeliveryContext():
+            bool {
+        return
+            self::
+                $verifiedPublicRepairDeliveryContext;
+    }
+
+
     public static function currentCompanyId(): ?int
     {
         try {
@@ -2077,6 +2131,7 @@ class ServiceAccess
      * Puede registrar una respuesta de atención directa:
      * - Servicio - Supervisor
      * - Servicio - Encargado de Técnicos
+     * - Servicio - Recepción / ATC con permiso de actualización
      * - Servicio - Técnico, únicamente cuando está asignado al ticket
      */
     public static function canRespondToDirectServiceCase(
@@ -2093,7 +2148,9 @@ class ServiceAccess
             self::hasServiceRole([
                 'Servicio - Supervisor',
                 'Servicio - Encargado de Técnicos',
+                'Servicio - Recepción',
             ])
+            && self::can('service.cases.update')
         ) {
             return true;
         }
@@ -2170,6 +2227,32 @@ class ServiceAccess
      * - Servicio - Recepción
      * - Servicio - Cajero Reparaciones
      */
+    /*
+     * BEXIA_ATC_MASTER_DATA_EDIT_V5_83_4B6
+     *
+     * Los datos base de un ticket existente sólo pueden
+     * ser modificados por los roles operativos responsables:
+     * - Servicio - Recepción
+     * - Servicio - Encargado de Técnicos
+     * - Servicio - Supervisor
+     */
+    public static function canEditServiceCaseMasterData(): bool
+    {
+        if (! auth()->check()) {
+            return false;
+        }
+
+        if (! self::can('service.cases.update')) {
+            return false;
+        }
+
+        return self::hasServiceRole([
+            'Servicio - Recepción',
+            'Servicio - Encargado de Técnicos',
+            'Servicio - Supervisor',
+        ]);
+    }
+
     public static function isRestrictedServiceTechnician(): bool
     {
         if (
@@ -2436,6 +2519,180 @@ class ServiceAccess
             );
     }
 
+
+    /*
+     * BEXIA_ATC_POST_REPAIR_CUSTOMER_APPROVAL_ACCESS_V5_83_4C5D2
+     *
+     * Vo.Bo. solicitado DESPUES de que:
+     * - el tecnico termino;
+     * - el Encargado reviso y costeo;
+     * - quote_status quedo pending_customer.
+     *
+     * No usa el flujo legacy pending_approval.
+     */
+    public static function canRecordPostRepairCustomerDecision(
+        ?object $repairOrder
+    ): bool {
+        if (
+            ! $repairOrder
+            || ! auth()->check()
+        ) {
+            return false;
+        }
+
+        if (
+            ! self::hasServiceRole([
+                'Servicio - Encargado de Técnicos',
+                'Servicio - Supervisor',
+            ])
+        ) {
+            return false;
+        }
+
+        if (
+            (string) self::serviceRepairValue(
+                $repairOrder,
+                'status'
+            ) !== 'recibido'
+        ) {
+            return false;
+        }
+
+        if (
+            (string) self::serviceRepairValue(
+                $repairOrder,
+                'workflow_stage'
+            ) !== 'quote_draft'
+        ) {
+            return false;
+        }
+
+        if (
+            (string) self::serviceRepairValue(
+                $repairOrder,
+                'quote_status'
+            ) !== 'pending_customer'
+        ) {
+            return false;
+        }
+
+        if (
+            ! (bool) self::serviceRepairValue(
+                $repairOrder,
+                'requires_customer_approval'
+            )
+        ) {
+            return false;
+        }
+
+        if (
+            (float) self::serviceRepairValue(
+                $repairOrder,
+                'quote_total'
+            ) <= 0
+        ) {
+            return false;
+        }
+
+        $metadata =
+            self::serviceRepairValue(
+                $repairOrder,
+                'metadata'
+            )
+            ?? [];
+
+        if (
+            is_string(
+                $metadata
+            )
+        ) {
+            $metadata =
+                json_decode(
+                    $metadata,
+                    true
+                )
+                ?: [];
+        }
+
+        if (
+            ! is_array(
+                $metadata
+            )
+        ) {
+            return false;
+        }
+
+        $technicalWork =
+            $metadata[
+                'technical_work'
+            ]
+            ?? [];
+
+        if (
+            ! is_array(
+                $technicalWork
+            )
+            || (
+                $technicalWork[
+                    'status'
+                ]
+                ?? null
+            ) !== 'completed'
+        ) {
+            return false;
+        }
+
+        $managerReview =
+            $metadata[
+                'manager_review'
+            ]
+            ?? [];
+
+        if (
+            ! is_array(
+                $managerReview
+            )
+            || (
+                $managerReview[
+                    'status'
+                ]
+                ?? null
+            ) !== 'completed'
+        ) {
+            return false;
+        }
+
+        $customerApproval =
+            $metadata[
+                'customer_approval'
+            ]
+            ?? [];
+
+        if (
+            is_array(
+                $customerApproval
+            )
+            && in_array(
+                (
+                    $customerApproval[
+                        'status'
+                    ]
+                    ?? null
+                ),
+                [
+                    'approved',
+                    'rejected',
+                ],
+                true
+            )
+        ) {
+            return false;
+        }
+
+        return true;
+    }
+
+
     public static function canRecordRepairCustomerDecision(
         ?object $repairOrder
     ): bool {
@@ -2539,15 +2796,752 @@ class ServiceAccess
             );
     }
 
+    /*
+     * BEXIA_ATC_REPAIR_EXIT_DOCUMENT_GATE_V5_83_4C5G3
+     *
+     * Documento de salida ATC.
+     *
+     * Es un documento de CUSTODIA para devolver al cliente
+     * un equipo que estaba físicamente en servicio.
+     *
+     * NO representa:
+     * - entrega de venta;
+     * - salida de inventario comercial;
+     * - stock movement;
+     * - consumo;
+     * - baja de serie.
+     */
+    public static function repairExitDocument(
+        ?object $repairOrder
+    ): ?array {
+        if (! $repairOrder) {
+            return null;
+        }
+
+        $rawMetadata =
+            self::serviceRepairValue(
+                $repairOrder,
+                'metadata'
+            );
+
+        $metadata = [];
+
+        if (is_array($rawMetadata)) {
+            $metadata = $rawMetadata;
+        } elseif (
+            $rawMetadata instanceof
+                \Illuminate\Contracts\Support\Arrayable
+        ) {
+            $metadata =
+                $rawMetadata->toArray();
+        } elseif (is_object($rawMetadata)) {
+            $metadata =
+                (array) $rawMetadata;
+        } elseif (
+            is_string($rawMetadata)
+            && trim($rawMetadata) !== ''
+        ) {
+            $decoded =
+                json_decode(
+                    $rawMetadata,
+                    true
+                );
+
+            if (is_array($decoded)) {
+                $metadata = $decoded;
+            }
+        }
+
+        $document =
+            $metadata[
+                'atc_exit_document'
+            ]
+            ?? null;
+
+        return is_array($document)
+            ? $document
+            : null;
+    }
+
+    public static function hasAuthorizedRepairExitDocument(
+        ?object $repairOrder
+    ): bool {
+        if (! $repairOrder) {
+            return false;
+        }
+
+        $document =
+            self::repairExitDocument(
+                $repairOrder
+            );
+
+        if (! is_array($document)) {
+            return false;
+        }
+
+        $repairId =
+            (int) (
+                self::serviceRepairValue(
+                    $repairOrder,
+                    'id'
+                )
+                ?? 0
+            );
+
+        $companyId =
+            (int) (
+                self::serviceRepairValue(
+                    $repairOrder,
+                    'company_id'
+                )
+                ?? 0
+            );
+
+        return
+            (string) (
+                $document['status']
+                ?? ''
+            ) === 'authorized'
+
+            && (int) (
+                $document[
+                    'repair_order_id'
+                ]
+                ?? 0
+            ) === $repairId
+
+            && (int) (
+                $document[
+                    'company_id'
+                ]
+                ?? 0
+            ) === $companyId
+
+            && trim(
+                (string) (
+                    $document['folio']
+                    ?? ''
+                )
+            ) !== ''
+
+            && trim(
+                (string) (
+                    $document[
+                        'origin_location_label'
+                    ]
+                    ?? ''
+                )
+            ) !== ''
+
+            && (int) (
+                $document[
+                    'authorized_by_user_id'
+                ]
+                ?? 0
+            ) > 0
+
+            && filled(
+                $document[
+                    'authorized_at'
+                ]
+                ?? null
+            )
+
+            && (
+                $document[
+                    'no_stock_movement'
+                ]
+                ?? null
+            ) === true
+
+            && (
+                $document[
+                    'inventory_effect'
+                ]
+                ?? null
+            ) === false;
+    }
+
+    /*
+     * Para saber si podemos GENERAR el documento,
+     * reutilizamos el gate económico completo de entrega.
+     *
+     * Se clona temporalmente la reparación y se agrega
+     * un documento virtual válido. Nada se persiste.
+     *
+     * De esta manera no duplicamos:
+     * - payment_required
+     * - credit_allowed
+     * - no_charge
+     * ni las validaciones fail-closed existentes.
+     */
+    public static function canPrepareRepairExitDocument(
+        ?object $repairOrder
+    ): bool {
+        if (! $repairOrder) {
+            return false;
+        }
+
+        if (
+            self::hasAuthorizedRepairExitDocument(
+                $repairOrder
+            )
+        ) {
+            return false;
+        }
+
+        $repairId =
+            (int) (
+                self::serviceRepairValue(
+                    $repairOrder,
+                    'id'
+                )
+                ?? 0
+            );
+
+        $companyId =
+            (int) (
+                self::serviceRepairValue(
+                    $repairOrder,
+                    'company_id'
+                )
+                ?? 0
+            );
+
+        if (
+            $repairId <= 0
+            || $companyId <= 0
+        ) {
+            return false;
+        }
+
+        $probe =
+            clone $repairOrder;
+
+        $rawMetadata =
+            self::serviceRepairValue(
+                $probe,
+                'metadata'
+            );
+
+        $metadata = [];
+
+        if (is_array($rawMetadata)) {
+            $metadata = $rawMetadata;
+        } elseif (
+            $rawMetadata instanceof
+                \Illuminate\Contracts\Support\Arrayable
+        ) {
+            $metadata =
+                $rawMetadata->toArray();
+        } elseif (is_object($rawMetadata)) {
+            $metadata =
+                (array) $rawMetadata;
+        } elseif (
+            is_string($rawMetadata)
+            && trim($rawMetadata) !== ''
+        ) {
+            $decoded =
+                json_decode(
+                    $rawMetadata,
+                    true
+                );
+
+            if (is_array($decoded)) {
+                $metadata = $decoded;
+            }
+        }
+
+        $metadata[
+            'atc_exit_document'
+        ] = [
+            'status' =>
+                'authorized',
+
+            'folio' =>
+                'C5G3-PROBE',
+
+            'company_id' =>
+                $companyId,
+
+            'repair_order_id' =>
+                $repairId,
+
+            'origin_location_label' =>
+                'C5G3-PROBE',
+
+            'authorized_by_user_id' =>
+                (int) (
+                    auth()->id()
+                    ?: 1
+                ),
+
+            'authorized_at' =>
+                now()
+                    ->toDateTimeString(),
+
+            'no_stock_movement' =>
+                true,
+
+            'inventory_effect' =>
+                false,
+        ];
+
+        /*
+         * BEXIA_ATC_PAYMENT_ON_DELIVERY_EXIT_GATE_V5_83_4C5G10
+         *
+         * Para "cobrar al momento de entregar"
+         * necesitamos permitir la SALIDA fisica antes
+         * de que exista el pago, porque el equipo debe
+         * salir del taller para ir al domicilio/punto
+         * de entrega.
+         *
+         * Esto NO autoriza la entrega final sin pago.
+         *
+         * El probe cambia temporalmente SOLO su politica
+         * a credit_allowed para reutilizar todos los
+         * demás gates de canDeliverRepair():
+         *
+         * - ready_for_delivery
+         * - permiso
+         * - rol
+         * - bridge prepared
+         * - SAL-ATC virtual valida
+         *
+         * Nada se persiste.
+         */
+        $bridge =
+            $metadata[
+                'post_repair_collection_delivery'
+            ]
+            ?? null;
+
+        if (
+            is_array($bridge)
+            && (string) (
+                $bridge[
+                    'collection_policy'
+                ]
+                ?? ''
+            ) === 'payment_on_delivery'
+        ) {
+            $metadata[
+                'post_repair_collection_delivery'
+            ][
+                'collection_policy'
+            ] = 'credit_allowed';
+        }
+
+        if (
+            method_exists(
+                $probe,
+                'setAttribute'
+            )
+        ) {
+            $probe->setAttribute(
+                'metadata',
+                $metadata
+            );
+        } else {
+            $probe->metadata =
+                $metadata;
+        }
+
+        return self::canDeliverRepair(
+            $probe
+        );
+    }
+
+
+    /*
+     * BEXIA_ATC_POST_REPAIR_DELIVERY_PAYMENT_GATE_V5_83_4C5E2
+     *
+     * Legacy:
+     * si no existe metadata del puente C5E2,
+     * conserva el comportamiento anterior.
+     *
+     * Flujo nuevo:
+     * - credit_allowed: permite entrega con saldo.
+     * - payment_required: exige que
+     *   ServiceRepairReceivableSyncer haya dejado
+     *   economic_payment_status=paid.
+     */
     public static function canDeliverRepair(
         ?object $repairOrder
     ): bool {
-        return $repairOrder
-            && (string) self::serviceRepairValue(
+        $verifiedPublicDelivery =
+            self::
+                hasVerifiedPublicRepairDeliveryContext();
+
+        if (
+            ! $repairOrder
+            || (string) self::serviceRepairValue(
                 $repairOrder,
                 'workflow_stage'
-            ) === 'ready_for_delivery'
-            && self::can('service.repairs.delivery');
+            ) !== 'ready_for_delivery'
+            || (
+                ! $verifiedPublicDelivery
+                && ! self::can(
+                    'service.repairs.delivery'
+                )
+            )
+        ) {
+            return false;
+        }
+
+        /*
+         * BEXIA_ATC_DELIVERY_ROLE_GATE_V5_83_4C5F10
+         *
+         * La entrega física es una acción operativa final.
+         * Aunque un usuario posea accidentalmente
+         * service.repairs.delivery, únicamente pueden
+         * ejecutarla:
+         *
+         * - Servicio - Encargado de Técnicos
+         * - Servicio - Supervisor
+         *
+         * Recepción, Cajero y Técnico quedan excluidos.
+         */
+        if (
+            ! $verifiedPublicDelivery
+            && ! self::hasServiceRole([
+                'Servicio - Encargado de Técnicos',
+                'Servicio - Supervisor',
+            ])
+        ) {
+            return false;
+        }
+
+        /*
+         * BEXIA_ATC_REPAIR_EXIT_DOCUMENT_GATE_V5_83_4C5G3
+         *
+         * Incluso con:
+         * - pago completo,
+         * - crédito autorizado,
+         * - garantía/cortesía,
+         *
+         * NO existe entrega física sin una salida ATC
+         * previamente autorizada.
+         */
+        if (
+            ! self::
+                hasAuthorizedRepairExitDocument(
+                    $repairOrder
+                )
+        ) {
+            return false;
+        }
+
+        $rawMetadata =
+            self::serviceRepairValue(
+                $repairOrder,
+                'metadata'
+            );
+
+        $metadata = [];
+
+        if (is_array($rawMetadata)) {
+            $metadata = $rawMetadata;
+        } elseif (
+            $rawMetadata instanceof
+            \Illuminate\Contracts\Support\Arrayable
+        ) {
+            $metadata =
+                $rawMetadata->toArray();
+        } elseif (is_object($rawMetadata)) {
+            $metadata =
+                (array) $rawMetadata;
+        } elseif (
+            is_string($rawMetadata)
+            && trim($rawMetadata) !== ''
+        ) {
+            $decoded =
+                json_decode(
+                    $rawMetadata,
+                    true
+                );
+
+            if (is_array($decoded)) {
+                $metadata = $decoded;
+            }
+        }
+
+        $bridge =
+            $metadata[
+                'post_repair_collection_delivery'
+            ]
+            ?? null;
+
+        /*
+         * Reparaciones legacy:
+         * conservar autorización histórica.
+         */
+        if (! is_array($bridge)) {
+            return true;
+        }
+
+        if (
+            (string) (
+                $bridge['status']
+                ?? ''
+            ) !== 'prepared'
+        ) {
+            return false;
+        }
+
+        $policy =
+            (string) (
+                $bridge[
+                    'collection_policy'
+                ]
+                ?? ''
+            );
+
+        /*
+         * BEXIA_ATC_POST_REPAIR_NO_CHARGE_GATE_V5_83_4C5F4
+         *
+         * no_charge:
+         * - solamente garantia/cortesia;
+         * - total final 0;
+         * - sin CxC;
+         * - sin pago;
+         * - fail closed ante cualquier inconsistencia.
+         */
+        if ($policy === 'no_charge') {
+            $authorizedTotal =
+                round(
+                    (float) (
+                        $bridge[
+                            'authorized_total'
+                        ]
+                        ?? 0
+                    ),
+                    2
+                );
+
+            $finalAmount =
+                round(
+                    (float) (
+                        $bridge[
+                            'final_amount'
+                        ]
+                        ?? 0
+                    ),
+                    2
+                );
+
+            $decision =
+                (string) data_get(
+                    $metadata,
+                    'manager_review.decision',
+                    ''
+                );
+
+            $bridgeDecision =
+                (string) (
+                    $bridge[
+                        'no_charge_decision'
+                    ]
+                    ?? ''
+                );
+
+            $bridgeSource =
+                (string) (
+                    $bridge[
+                        'source'
+                    ]
+                    ?? ''
+                );
+
+            $quoteTotal =
+                round(
+                    (float) self::
+                        serviceRepairValue(
+                            $repairOrder,
+                            'quote_total'
+                        ),
+                    2
+                );
+
+            $repairReceivableId =
+                (int) (
+                    self::
+                        serviceRepairValue(
+                            $repairOrder,
+                            'account_receivable_id'
+                        )
+                    ?? 0
+                );
+
+            $paymentStatus =
+                trim(
+                    (string) (
+                        self::
+                            serviceRepairValue(
+                                $repairOrder,
+                                'economic_payment_status'
+                            )
+                        ?? ''
+                    )
+                );
+
+            if (
+                abs(
+                    $authorizedTotal
+                ) > 0.009
+                || abs(
+                    $finalAmount
+                ) > 0.009
+                || abs(
+                    $quoteTotal
+                ) > 0.009
+                || ! in_array(
+                    $decision,
+                    [
+                        'garantia',
+                        'cortesia',
+                    ],
+                    true
+                )
+                || $bridgeDecision
+                    !== $decision
+                || $bridgeSource
+                    !==
+                    'post_repair_no_charge_delivery_bridge'
+                || $repairReceivableId > 0
+                || $paymentStatus !== ''
+                || (string) (
+                    self::
+                        serviceRepairValue(
+                            $repairOrder,
+                            'quote_status'
+                        )
+                    ?? ''
+                ) !== 'not_required'
+            ) {
+                return false;
+            }
+
+            $repairId =
+                (int) (
+                    self::
+                        serviceRepairValue(
+                            $repairOrder,
+                            'id'
+                        )
+                    ?? 0
+                );
+
+            if ($repairId <= 0) {
+                return false;
+            }
+
+            if (
+                ! \Illuminate\Support\Facades\Schema::
+                    hasTable(
+                        'account_receivables'
+                    )
+                || ! \Illuminate\Support\Facades\Schema::
+                    hasColumn(
+                        'account_receivables',
+                        'source_type'
+                    )
+                || ! \Illuminate\Support\Facades\Schema::
+                    hasColumn(
+                        'account_receivables',
+                        'source_id'
+                    )
+            ) {
+                return false;
+            }
+
+            $receivableExists =
+                \Illuminate\Support\Facades\DB::
+                    table(
+                        'account_receivables'
+                    )
+                    ->where(
+                        'source_type',
+                        'service_repair_order'
+                    )
+                    ->where(
+                        'source_id',
+                        $repairId
+                    )
+                    ->exists();
+
+            return ! $receivableExists;
+        }
+
+        /*
+         * BEXIA_ATC_SPLIT_PAYMENT_DELIVERY_GATE_V5_83_4C5G10
+         *
+         * Entrega FINAL:
+         *
+         * credit_allowed:
+         *   puede entregar con saldo.
+         *
+         * payment_before_delivery:
+         *   exige pago.
+         *
+         * payment_on_delivery:
+         *   tambien exige pago ANTES de confirmar
+         *   la entrega final. Lo unico que puede
+         *   ocurrir antes del pago es generar SAL-ATC.
+         *
+         * payment_required:
+         *   valor legacy; conserva comportamiento
+         *   estricto anterior.
+         */
+
+        /*
+         * BEXIA_ATC_DELIVERY_POLICY_AGAINST_DELIVERY_V5_83_4C5G12H
+         *
+         * La entrega física NO depende de pago previo
+         * cuando:
+         *
+         * - collection_policy = credit_allowed
+         * - collection_policy = payment_on_delivery
+         *
+         * Los gates anteriores se conservan:
+         * SAL autorizada, permiso, rol, bridge preparado,
+         * etapa ready_for_delivery y validaciones
+         * económicas correspondientes.
+         *
+         * ATC NO registra pagos.
+         */
+        if (
+            in_array(
+                $policy,
+                [
+                    'credit_allowed',
+                    'payment_on_delivery',
+                ],
+                true
+            )
+        ) {
+            return true;
+        }
+
+
+        if (
+            ! in_array(
+                $policy,
+                [
+                    'payment_required',
+                    'payment_before_delivery',
+                ],
+                true
+            )
+        ) {
+            return false;
+        }
+
+        return
+            (string) self::serviceRepairValue(
+                $repairOrder,
+                'economic_payment_status'
+            ) === 'paid';
     }
 
     public static function canManageRepairEconomic(
@@ -2571,6 +3565,136 @@ class ServiceAccess
             'Servicio - Encargado de Técnicos',
             'Servicio - Supervisor',
         ]) || self::can('company.update');
+    }
+
+
+    /*
+     * BEXIA_ATC_MANAGEMENT_RESPONSIBLES_V5_83_4C5G7B
+     *
+     * Responsables validos para Respuesta / gestion.
+     *
+     * Conserva todos los tecnicos disponibles y agrega
+     * responsables ATC administrativos expresamente
+     * autorizados para contestar / gestionar tickets.
+     *
+     * IMPORTANTE:
+     * esto NO convierte a estas personas en tecnicos.
+     * Los flujos de reparacion siguen usando
+     * technicianEmployeeOptions().
+     */
+    public static function managementResponsibleEmployeeOptions(): array
+    {
+        $options =
+            self::technicianEmployeeOptions();
+
+        if (
+            ! \Illuminate\Support\Facades\Schema::
+                hasTable('employees')
+        ) {
+            return $options;
+        }
+
+        /*
+         * El selector de ServiceCase guarda employee_id.
+         *
+         * Por eso usamos los registros de empleado
+         * existentes y NO los user_id del login.
+         */
+        $authorizedNames = [
+            'Rocio Carolina Gonzalez Escudero',
+            'Nestor Manuel Salas León',
+        ];
+
+        $companyId = 0;
+
+        try {
+            $tenant =
+                \Filament\Facades\Filament::
+                    getTenant();
+
+            $companyId =
+                (int) (
+                    $tenant?->getKey()
+                    ?? 0
+                );
+        } catch (\Throwable) {
+            /*
+             * En CLI puede no existir tenant activo.
+             * En ese caso no filtramos por empresa;
+             * la consulta sigue limitada a los
+             * nombres autorizados.
+             */
+            $companyId = 0;
+        }
+
+        $query =
+            \Illuminate\Support\Facades\DB::
+                table('employees')
+                ->select([
+                    'id',
+                    'name',
+                ])
+                ->whereIn(
+                    'name',
+                    $authorizedNames
+                );
+
+        if (
+            \Illuminate\Support\Facades\Schema::
+                hasColumn(
+                    'employees',
+                    'active'
+                )
+        ) {
+            $query->where(
+                'active',
+                true
+            );
+        }
+
+        if (
+            $companyId > 0
+            && \Illuminate\Support\Facades\Schema::
+                hasColumn(
+                    'employees',
+                    'company_id'
+                )
+        ) {
+            $query->where(
+                'company_id',
+                $companyId
+            );
+        }
+
+        foreach (
+            $query
+                ->orderBy('name')
+                ->get()
+            as $employee
+        ) {
+            $employeeId =
+                (int) $employee->id;
+
+            /*
+             * Si en el futuro alguno se convierte
+             * formalmente en tecnico, respetar la
+             * etiqueta generada por la lista tecnica.
+             */
+            if (
+                ! array_key_exists(
+                    $employeeId,
+                    $options
+                )
+            ) {
+                $options[$employeeId] =
+                    (string) $employee->name
+                    . ' - ATC';
+            }
+        }
+
+        natcasesort($options);
+
+        return $options;
     }
 
 }

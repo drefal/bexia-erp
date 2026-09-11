@@ -15,6 +15,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
+/* BEXIA_ATC_LABEL_CLEANUP_V5_83_4C5F2 */
 class ServiceCaseResource extends Resource
 {
     protected static ?string $model = ServiceCase::class;
@@ -35,6 +36,21 @@ class ServiceCaseResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
+        /*
+         * BEXIA_ATC_TECH_ONLY_REPAIRS_NAV_V5_83_4C5F6A
+         *
+         * Para un usuario exclusivamente con rol
+         * Servicio - Técnico, esta opción se oculta
+         * del menú. El acceso backend existente se
+         * conserva sin cambios.
+         */
+        if (
+            \App\Support\Service\ServiceAccess::
+                isRestrictedServiceTechnician()
+        ) {
+            return false;
+        }
+
         return static::canViewAny();
     }
 
@@ -135,6 +151,13 @@ class ServiceCaseResource extends Resource
      * Visual-only responsive marker.
      */
 
+    /*
+     * BEXIA_ATC_TECH_MASTER_READONLY_V5_83_4B6
+     *
+     * El técnico y cualquier rol que no sea Recepción,
+     * Encargado de Técnicos o Supervisor ve los datos
+     * maestros del ticket en modo sólo lectura.
+     */
     public static function form(Form $form): Form
     {
         return $form
@@ -142,9 +165,9 @@ class ServiceCaseResource extends Resource
                 Forms\Components\Hidden::make('company_id')
                     ->default(fn (): ?int => ServiceAccess::currentCompanyId()),
 
-                Forms\Components\Section::make('Clasificación de atención')
+                Forms\Components\Section::make('Atención asignada')
                     ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-classification'])
-                    ->description('La ruta la determina el Encargado de Técnicos o el Supervisor.')
+                    ->description('El Encargado de Técnicos o el Supervisor define cómo se atenderá el ticket y asigna al responsable correspondiente.')
                     ->columns(4)
                     ->schema([
                         Forms\Components\Placeholder::make('attention_route_display')
@@ -154,16 +177,1268 @@ class ServiceCaseResource extends Resource
                                 : 'Pendiente'),
 
                         Forms\Components\Placeholder::make('non_repair_type_display')
-                            ->label('Tipo sin reparación')
+                            ->label('Tipo de gestión')
                             ->content(fn ($record): string => $record
                                 ? (ServiceCase::NON_REPAIR_TYPES[(string) ($record->non_repair_type ?? '')] ?? 'No aplica')
                                 : 'No aplica'),
 
                         Forms\Components\Placeholder::make('classified_at_display')
-                            ->label('Clasificado')
+                            ->label('Atendido / asignado')
                             ->content(fn ($record): string => filled($record?->classified_at)
                                 ? (string) $record->classified_at
                                 : 'Pendiente'),
+
+                        /*
+                         * BEXIA_ATC_TICKET_REPAIR_OPERATIONAL_SUMMARY_V5_83_4C5G9C
+                         *
+                         * El ticket conserva su status técnico interno,
+                         * pero muestra al usuario la etapa operativa real
+                         * de la reparación vinculada.
+                         */
+                        Forms\Components\Placeholder::make(
+                            'repair_operational_summary'
+                        )
+                            ->label(
+                                'Estado actual de la reparación'
+                            )
+                            ->content(
+                                function ($record): \Illuminate\Support\HtmlString {
+                                    $repair =
+                                        $record
+                                            ?->repairOrders()
+                                            ->orderByDesc('id')
+                                            ->first();
+
+                                    if (! $repair) {
+                                        return new \Illuminate\Support\HtmlString(
+                                            '<div style="padding:12px;border:1px solid #e5e7eb;border-radius:10px;">'
+                                            . 'Aún no existe una orden de reparación.'
+                                            . '</div>'
+                                        );
+                                    }
+
+                                    $metadata =
+                                        $repair->metadata
+                                        ?? [];
+
+                                    if (
+                                        is_string(
+                                            $metadata
+                                        )
+                                    ) {
+                                        $metadata =
+                                            json_decode(
+                                                $metadata,
+                                                true
+                                            )
+                                            ?: [];
+                                    }
+
+                                    if (
+                                        ! is_array(
+                                            $metadata
+                                        )
+                                    ) {
+                                        $metadata = [];
+                                    }
+
+                                    $technical =
+                                        data_get(
+                                            $metadata,
+                                            'technical_work',
+                                            []
+                                        );
+
+                                    $manager =
+                                        data_get(
+                                            $metadata,
+                                            'manager_review',
+                                            []
+                                        );
+
+                                    $customer =
+                                        data_get(
+                                            $metadata,
+                                            'customer_approval',
+                                            []
+                                        );
+
+                                    $bridge =
+                                        data_get(
+                                            $metadata,
+                                            'post_repair_collection_delivery'
+                                        );
+
+                                    $stage =
+                                        (string) (
+                                            $repair->
+                                                workflow_stage
+                                            ?? ''
+                                        );
+
+                                    $decision =
+                                        (string) (
+                                            $manager[
+                                                'decision'
+                                            ]
+                                            ?? ''
+                                        );
+
+                                    $state =
+                                        'Reparación en proceso';
+
+                                    $next =
+                                        'Continuar reparación';
+
+                                    if (
+                                        $stage
+                                        === 'delivered'
+                                    ) {
+                                        $state =
+                                            'Equipo entregado';
+
+                                        $next =
+                                            'Expediente de reparación terminado';
+                                    } elseif (
+                                        is_array(
+                                            $bridge
+                                        )
+                                        && (
+                                            $bridge[
+                                                'status'
+                                            ]
+                                            ?? null
+                                        ) === 'prepared'
+                                    ) {
+                                        $state =
+                                            'Cobro y entrega preparados';
+
+                                        $next =
+                                            'Continuar con cobro / entrega';
+                                    } elseif (
+                                        (
+                                            $manager[
+                                                'status'
+                                            ]
+                                            ?? null
+                                        ) === 'completed'
+                                    ) {
+                                        $state =
+                                            'Reparación terminada';
+
+                                        if (
+                                            in_array(
+                                                $decision,
+                                                [
+                                                    'garantia',
+                                                    'cortesia',
+                                                ],
+                                                true
+                                            )
+                                        ) {
+                                            $next =
+                                                'Preparar entrega sin cobro';
+                                        } elseif (
+                                            in_array(
+                                                $decision,
+                                                [
+                                                    'cobrable',
+                                                    'garantia_rechazada',
+                                                ],
+                                                true
+                                            )
+                                        ) {
+                                            $requiresCustomer =
+                                                (bool) (
+                                                    $manager[
+                                                        'requires_customer_approval'
+                                                    ]
+                                                    ?? (
+                                                        $repair->
+                                                            requires_customer_approval
+                                                        ?? false
+                                                    )
+                                                );
+
+                                            $customerApproved =
+                                                (
+                                                    $customer[
+                                                        'status'
+                                                    ]
+                                                    ?? null
+                                                ) === 'approved';
+
+                                            $next =
+                                                $requiresCustomer
+                                                && ! $customerApproved
+                                                    ? 'Registrar Vo.Bo. del cliente'
+                                                    : 'Preparar cobro y entrega';
+                                        }
+                                    } elseif (
+                                        (
+                                            $technical[
+                                                'status'
+                                            ]
+                                            ?? null
+                                        ) === 'completed'
+                                    ) {
+                                        $state =
+                                            'Trabajo técnico terminado';
+
+                                        $next =
+                                            'Revisar y costear';
+                                    }
+
+                                    $diagnosis =
+                                        trim(
+                                            (string) (
+                                                $technical[
+                                                    'technical_diagnosis'
+                                                ]
+                                                ?? ''
+                                            )
+                                        );
+
+                                    if ($diagnosis === '') {
+                                        $diagnosis =
+                                            'Pendiente';
+                                    }
+
+                                    $parts = [];
+
+                                    foreach (
+                                        (
+                                            $technical[
+                                                'parts'
+                                            ]
+                                            ?? []
+                                        )
+                                        as $part
+                                    ) {
+                                        if (
+                                            ! is_array(
+                                                $part
+                                            )
+                                        ) {
+                                            continue;
+                                        }
+
+                                        $name =
+                                            trim(
+                                                (string) (
+                                                    $part[
+                                                        'product_name'
+                                                    ]
+                                                    ?? ''
+                                                )
+                                            );
+
+                                        if ($name === '') {
+                                            continue;
+                                        }
+
+                                        $qty =
+                                            (float) (
+                                                $part[
+                                                    'quantity'
+                                                ]
+                                                ?? 0
+                                            );
+
+                                        $qtyLabel =
+                                            abs(
+                                                $qty
+                                                - round($qty)
+                                            ) < 0.0001
+                                                ? (string) (
+                                                    (int) round(
+                                                        $qty
+                                                    )
+                                                )
+                                                : number_format(
+                                                    $qty,
+                                                    2
+                                                );
+
+                                        $parts[] =
+                                            $name
+                                            . ' ×'
+                                            . $qtyLabel;
+                                    }
+
+                                    $partsLabel =
+                                        $parts !== []
+                                            ? implode(
+                                                ', ',
+                                                $parts
+                                            )
+                                            : 'Sin refacciones registradas';
+
+                                    $total =
+                                        number_format(
+                                            (float) (
+                                                $repair->
+                                                    quote_total
+                                                ?? 0
+                                            ),
+                                            2
+                                        );
+
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div style="padding:14px 16px;border:1px solid #dbe3ef;border-radius:12px;background:#f8fafc;">'
+                                        . '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;">'
+
+                                        . '<div>'
+                                        . '<div style="font-size:12px;color:#64748b;">Estado del servicio</div>'
+                                        . '<div style="font-weight:700;">'
+                                        . e($state)
+                                        . '</div>'
+                                        . '</div>'
+
+                                        . '<div>'
+                                        . '<div style="font-size:12px;color:#64748b;">Resultado técnico</div>'
+                                        . '<div style="font-weight:700;">'
+                                        . e($diagnosis)
+                                        . '</div>'
+                                        . '</div>'
+
+                                        . '<div>'
+                                        . '<div style="font-size:12px;color:#64748b;">Total final</div>'
+                                        . '<div style="font-weight:700;">$'
+                                        . e($total)
+                                        . '</div>'
+                                        . '</div>'
+
+                                        . '<div>'
+                                        . '<div style="font-size:12px;color:#64748b;">Siguiente paso</div>'
+                                        . '<div style="font-weight:700;">'
+                                        . e($next)
+                                        . '</div>'
+                                        . '</div>'
+
+                                        . '</div>'
+
+                                        . '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #e2e8f0;">'
+                                        . '<span style="font-size:12px;color:#64748b;">Refacciones: </span>'
+                                        . '<span style="font-weight:600;">'
+                                        . e($partsLabel)
+                                        . '</span>'
+                                        . '</div>'
+
+                                        . '</div>'
+                                    );
+                                }
+                            )
+                            ->visible(
+                                fn ($record): bool =>
+                                    (bool) $record
+                                    && (string) (
+                                        $record->
+                                            attention_route
+                                        ?? ''
+                                    ) === 'repair'
+                                    && $record->
+                                        repairOrders()
+                                        ->exists()
+                            )
+                            ->columnSpanFull(),
+
+                        /*
+                         * BEXIA_ATC_DELIVERY_FROM_TICKET_V5_83_4C5G12
+                         *
+                         * Resumen de sólo lectura.
+                         * ATC no registra pagos aquí.
+                         */
+                        Forms\Components\Placeholder::
+                            make(
+                                'repair_delivery_operational_status'
+                            )
+                            ->label(
+                                'Cobro, salida y entrega'
+                            )
+                            ->content(
+                                function ($record):
+                                    \Illuminate\Support\HtmlString {
+                                    if (! $record) {
+                                        return new
+                                            \Illuminate\Support\HtmlString(
+                                                'Sin reparación vinculada.'
+                                            );
+                                    }
+
+                                    $repair =
+                                        $record->
+                                            repairOrders()
+                                            ->orderByDesc('id')
+                                            ->first();
+
+                                    if (! $repair) {
+                                        return new
+                                            \Illuminate\Support\HtmlString(
+                                                'Sin reparación vinculada.'
+                                            );
+                                    }
+
+                                    $rawMetadata =
+                                        $repair->metadata
+                                        ?? [];
+
+                                    if (
+                                        is_string(
+                                            $rawMetadata
+                                        )
+                                    ) {
+                                        $decoded =
+                                            json_decode(
+                                                $rawMetadata,
+                                                true
+                                            );
+
+                                        $metadata =
+                                            is_array(
+                                                $decoded
+                                            )
+                                                ? $decoded
+                                                : [];
+                                    } elseif (
+                                        is_array(
+                                            $rawMetadata
+                                        )
+                                    ) {
+                                        $metadata =
+                                            $rawMetadata;
+                                    } elseif (
+                                        is_object(
+                                            $rawMetadata
+                                        )
+                                    ) {
+                                        $metadata =
+                                            (array)
+                                                $rawMetadata;
+                                    } else {
+                                        $metadata = [];
+                                    }
+
+                                    $bridge =
+                                        data_get(
+                                            $metadata,
+                                            'post_repair_collection_delivery'
+                                        );
+
+                                    $noChargeBridge =
+                                        data_get(
+                                            $metadata,
+                                            'post_repair_no_charge_delivery_bridge'
+                                        );
+
+                                    $policy =
+                                        trim(
+                                            (string) (
+                                                data_get(
+                                                    $metadata,
+                                                    'post_repair_collection_delivery.collection_policy'
+                                                )
+                                                ?? ''
+                                            )
+                                        );
+
+                                    if (
+                                        $policy === ''
+                                        && is_array(
+                                            $noChargeBridge
+                                        )
+                                    ) {
+                                        $policy =
+                                            'no_charge';
+                                    }
+
+                                    $policyLabels = [
+                                        'payment_required' =>
+                                            'Cobro requerido antes de entrega',
+
+                                        'payment_before_delivery' =>
+                                            'Cobrar antes de salir a entrega',
+
+                                        'payment_on_delivery' =>
+                                            'Cobrar al momento de entregar',
+
+                                        'credit_allowed' =>
+                                            'Crédito autorizado',
+
+                                        'no_charge' =>
+                                            'Sin cobro',
+                                    ];
+
+                                    $policyLabel =
+                                        $policyLabels[
+                                            $policy
+                                        ]
+                                        ?? (
+                                            $policy !== ''
+                                                ? $policy
+                                                : 'Pendiente de definir'
+                                        );
+
+                                    $receivable =
+                                        null;
+
+                                    $receivableId =
+                                        (int) (
+                                            $repair->
+                                                account_receivable_id
+                                            ?? 0
+                                        );
+
+                                    if (
+                                        $receivableId > 0
+                                        && \Illuminate\Support\Facades\Schema::
+                                            hasTable(
+                                                'account_receivables'
+                                            )
+                                    ) {
+                                        $receivable =
+                                            \Illuminate\Support\Facades\DB::
+                                                table(
+                                                    'account_receivables'
+                                                )
+                                                ->where(
+                                                    'id',
+                                                    $receivableId
+                                                )
+                                                ->first();
+                                    }
+
+                                    $total =
+                                        (float) (
+                                            $receivable->total
+                                            ?? $repair->quote_total
+                                            ?? 0
+                                        );
+
+                                    $collected =
+                                        (float) (
+                                            $receivable->
+                                                collected_total
+                                            ?? 0
+                                        );
+
+                                    $balance =
+                                        (float) (
+                                            $receivable->
+                                                balance_total
+                                            ?? $total
+                                        );
+
+                                    $repairPaymentStatus =
+                                        (string) (
+                                            $repair->
+                                                economic_payment_status
+                                            ?? ''
+                                        );
+
+                                    $receivableStatus =
+                                        (string) (
+                                            $receivable->status
+                                            ?? ''
+                                        );
+
+                                    $paid =
+                                        $policy === 'no_charge'
+                                        || $repairPaymentStatus
+                                            === 'paid'
+                                        || $receivableStatus
+                                            === 'paid'
+                                        || (
+                                            $receivable
+                                            && $balance <= 0.009
+                                        );
+
+                                    if (
+                                        $policy === 'no_charge'
+                                    ) {
+                                        $paymentLabel =
+                                            'No aplica · $0.00';
+                                    } elseif ($paid) {
+                                        $paymentLabel =
+                                            'Pagado · $'
+                                            . number_format(
+                                                $total,
+                                                2
+                                            );
+                                    } elseif (
+                                        $collected > 0.009
+                                    ) {
+                                        $paymentLabel =
+                                            'Cobro parcial · $'
+                                            . number_format(
+                                                $collected,
+                                                2
+                                            )
+                                            . ' de $'
+                                            . number_format(
+                                                $total,
+                                                2
+                                            );
+                                    } elseif (
+                                        $policy
+                                        === 'credit_allowed'
+                                    ) {
+                                        $paymentLabel =
+                                            'Saldo pendiente · crédito autorizado';
+                                    } elseif (
+                                        $receivableId > 0
+                                    ) {
+                                        $paymentLabel =
+                                            'Pendiente de cobro · $'
+                                            . number_format(
+                                                max(
+                                                    0,
+                                                    $balance
+                                                ),
+                                                2
+                                            );
+                                    } else {
+                                        $paymentLabel =
+                                            'Pendiente de preparar';
+                                    }
+
+                                    $document =
+                                        \App\Support\Service\ServiceAccess::
+                                            repairExitDocument(
+                                                $repair
+                                            );
+
+                                    $exitAuthorized =
+                                        is_array(
+                                            $document
+                                        )
+                                        && (
+                                            $document[
+                                                'status'
+                                            ]
+                                            ?? null
+                                        ) === 'authorized';
+
+                                    $exitLabel =
+                                        $exitAuthorized
+                                            ? (
+                                                $document[
+                                                    'folio'
+                                                ]
+                                                ?? 'SAL-ATC autorizada'
+                                            )
+                                            : 'Pendiente';
+
+                                    $delivered =
+                                        filled(
+                                            $repair->
+                                                delivered_at
+                                        )
+                                        || (
+                                            (string) (
+                                                $repair->
+                                                    workflow_stage
+                                                ?? ''
+                                            )
+                                            === 'delivered'
+                                        );
+
+                                    /*
+                                     * BEXIA_ATC_TICKET_PAYMENT_STATUS_V5_83_4C5G12B
+                                     *
+                                     * Este estado es solamente operativo/visual.
+                                     * NO modifica ServiceCase.status.
+                                     */
+                                    $repairStatusLabel =
+                                        match (true) {
+                                            $delivered =>
+                                                'Reparación entregada',
+
+                                            $policy === 'no_charge' =>
+                                                'Reparación terminada · sin cobro',
+
+                                            $policy === 'credit_allowed'
+                                            && ! $paid =>
+                                                'Reparación terminada · crédito autorizado',
+
+                                            $collected > 0.009
+                                            && ! $paid =>
+                                                'Reparación terminada · cobro parcial',
+
+                                            $receivableId > 0
+                                            && ! $paid =>
+                                                'Reparación terminada · pendiente de cobro',
+
+                                            $paid =>
+                                                'Reparación terminada · cobro registrado',
+
+                                            default =>
+                                                'Reparación terminada',
+                                        };
+
+                                    if ($delivered) {
+                                        $deliveryLabel =
+                                            'Entregado al cliente';
+
+                                        $nextStep =
+                                            'Servicio concluido';
+                                    } elseif (
+                                        ! $exitAuthorized
+                                    ) {
+                                        if (
+                                            in_array(
+                                                $policy,
+                                                [
+                                                    'payment_required',
+                                                    'payment_before_delivery',
+                                                ],
+                                                true
+                                            )
+                                            && ! $paid
+                                        ) {
+                                            $deliveryLabel =
+                                                'Pendiente de pago';
+
+                                            $nextStep =
+                                                'Esperar pago para generar salida';
+                                        } else {
+                                            $deliveryLabel =
+                                                'Pendiente de salida';
+
+                                            $nextStep =
+                                                'Generar salida de equipo';
+                                        }
+                                     } elseif (
+                                        in_array(
+                                            $policy,
+                                            [
+                                                'payment_required',
+                                                'payment_before_delivery',
+                                            ],
+                                            true
+                                        )
+                                        && ! $paid
+                                    ) {
+                                        $deliveryLabel =
+                                            'Salida autorizada · pendiente de pago';
+
+                                        $nextStep =
+                                            'Esperar registro de pago';
+                                    } elseif (
+                                        $policy === 'payment_on_delivery'
+                                        && ! $paid
+                                    ) {
+                                        /*
+                                         * BEXIA_ATC_PAYMENT_ON_DELIVERY_READY_V5_83_4C5G12H
+                                         *
+                                         * La CxC permanece pendiente,
+                                         * pero la entrega física está permitida
+                                         * porque el cobro ocurre contra entrega.
+                                         */
+                                        $deliveryLabel =
+                                            'Lista para entrega · cobro contra entrega';
+
+                                        $nextStep =
+                                            'Entregar al cliente';
+                                    } else {
+                                        $deliveryLabel =
+                                            'Lista para entrega';
+
+                                        $nextStep =
+                                            'Entregar al cliente';
+                                    }
+
+                                    /*
+                                     * BEXIA_ATC_TICKET_CXC_LINK_V5_83_4C5G12D
+                                     *
+                                     * ATC puede consultar la CxC enlazada.
+                                     * El permiso sigue perteneciendo al
+                                     * AccountReceivableResource.
+                                     */
+                                    /*
+                                     * BEXIA_ATC_TICKET_CXC_MODAL_V5_83_4C5G12F
+                                     *
+                                     * Consulta de CxC EN EL MISMO TICKET.
+                                     *
+                                     * BEXIA_ATC_TICKET_CXC_MODAL_FIX_V5_83_4C5G12G
+                                     *
+                                     * El cierre NO usa un formulario dialog anidado
+                                     * porque esta vista vive dentro del formulario
+                                     * principal de Filament.
+                                     *
+                                     * No hay navegación al módulo general.
+                                     * No hay formulario.
+                                     * No hay acciones de pago.
+                                     *
+                                     * La CxC sigue resolviéndose únicamente
+                                     * desde RepairOrder.account_receivable_id.
+                                     */
+                                    $receivableNumber =
+                                        trim(
+                                            (string) (
+                                                $receivable->number
+                                                ?? ''
+                                            )
+                                        );
+
+                                    if (
+                                        $receivableNumber === ''
+                                        && $receivableId > 0
+                                    ) {
+                                        $receivableNumber =
+                                            'CxC #'
+                                            . $receivableId;
+                                    }
+
+                                    $receivableStatus =
+                                        (string) (
+                                            $receivable->status
+                                            ?? ''
+                                        );
+
+                                    $receivableStatusLabel =
+                                        match (
+                                            $receivableStatus
+                                        ) {
+                                            'draft' =>
+                                                'Borrador',
+
+                                            'open' =>
+                                                'Pendiente',
+
+                                            'partial',
+                                            'partially_paid' =>
+                                                'Cobro parcial',
+
+                                            'paid' =>
+                                                'Pagada',
+
+                                            'closed' =>
+                                                'Cerrada',
+
+                                            'cancelled',
+                                            'canceled' =>
+                                                'Cancelada',
+
+                                            default =>
+                                                $receivableStatus !== ''
+                                                    ? $receivableStatus
+                                                    : 'Sin estado',
+                                        };
+
+                                    $modalId =
+                                        'bexia-cxc-modal-'
+                                        . (int) $record->getKey()
+                                        . '-'
+                                        . $receivableId;
+
+                                    $receivableReferenceHtml =
+                                        '';
+
+                                    if (
+                                        $receivableId > 0
+                                        && $receivable
+                                    ) {
+                                        $customerName =
+                                            trim(
+                                                (string) (
+                                                    $receivable->
+                                                        customer_name
+                                                    ?? $record->
+                                                        contact_name
+                                                    ?? ''
+                                                )
+                                            );
+
+                                        $issueDate =
+                                            (string) (
+                                                $receivable->
+                                                    issue_date
+                                                ?? '-'
+                                            );
+
+                                        $dueDate =
+                                            (string) (
+                                                $receivable->
+                                                    due_date
+                                                ?? '-'
+                                            );
+
+                                        $currency =
+                                            (string) (
+                                                $receivable->
+                                                    currency
+                                                ?? 'MXN'
+                                            );
+
+                                        $ticketFolio =
+                                            (string) (
+                                                $record->folio
+                                                ?? '-'
+                                            );
+
+                                        $repairFolio =
+                                            (string) (
+                                                $repair->folio
+                                                ?? '-'
+                                            );
+
+                                        $receivableReferenceHtml =
+                                            '<div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+
+                                            . '<span style="font-size:11px;color:#64748b;">'
+                                            . e(
+                                                $receivableNumber
+                                            )
+                                            . '</span>'
+
+                                            . '<button '
+                                            . 'type="button" '
+                                            . 'onclick="document.getElementById(\''
+                                            . e($modalId)
+                                            . '\').showModal()" '
+                                            . 'style="'
+                                            . 'display:inline-flex;'
+                                            . 'align-items:center;'
+                                            . 'gap:4px;'
+                                            . 'padding:6px 11px;'
+                                            . 'border:1px solid #1d4ed8;'
+                                            . 'border-radius:7px;'
+                                            . 'background:#2563eb;'
+                                            . 'color:#ffffff;'
+                                            . 'font-size:13px;'
+                                            . 'font-weight:700;'
+                                            . 'line-height:1.2;'
+                                            . 'cursor:pointer;'
+                                            . 'box-shadow:0 1px 2px rgba(15,23,42,.12);'
+                                            . '"'
+                                            . '>'
+                                            . 'Ver cobro · '
+                                            . e(
+                                                $receivableStatusLabel
+                                            )
+                                            . '</button>'
+
+                                            . '</div>'
+
+                                            . '<style>'
+                                            . '#'
+                                            . e($modalId)
+                                            . '::backdrop{'
+                                            . 'background:rgba(15,23,42,.45);'
+                                            . '}'
+                                            . '</style>'
+
+                                            . '<dialog '
+                                            . 'id="'
+                                            . e($modalId)
+                                            . '" '
+                                            . 'onclick="if(event.target===this){this.close();}" '
+                                            . 'style="'
+                                            . 'width:min(620px,calc(100vw - 32px));'
+                                            . 'max-width:620px;'
+                                            . 'padding:0;'
+                                            . 'border:0;'
+                                            . 'border-radius:14px;'
+                                            . 'box-shadow:0 24px 60px rgba(15,23,42,.28);'
+                                            . 'color:#0f172a;'
+                                            . '"'
+                                            . '>'
+
+                                            . '<div style="padding:20px 22px 16px;border-bottom:1px solid #e2e8f0;">'
+                                            . '<div style="font-size:18px;font-weight:800;">'
+                                            . 'Detalle de cobro'
+                                            . '</div>'
+                                            . '<div style="margin-top:3px;font-size:12px;color:#64748b;">'
+                                            . e(
+                                                $receivableNumber
+                                            )
+                                            . ' · Consulta de sólo lectura'
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '<div style="padding:18px 22px;">'
+
+                                            . '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">'
+
+                                            . '<div style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Estado</div>'
+                                            . '<div style="font-weight:700;">'
+                                            . e(
+                                                $receivableStatusLabel
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '<div style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Cliente</div>'
+                                            . '<div style="font-weight:700;">'
+                                            . e(
+                                                $customerName !== ''
+                                                    ? $customerName
+                                                    : '-'
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '<div style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Ticket ATC</div>'
+                                            . '<div style="font-weight:700;">'
+                                            . e(
+                                                $ticketFolio
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '<div style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Orden de reparación</div>'
+                                            . '<div style="font-weight:700;">'
+                                            . e(
+                                                $repairFolio
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '<div style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Fecha de emisión</div>'
+                                            . '<div style="font-weight:600;">'
+                                            . e(
+                                                $issueDate
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '<div style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Fecha de vencimiento</div>'
+                                            . '<div style="font-weight:600;">'
+                                            . e(
+                                                $dueDate
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '</div>'
+
+                                            . '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px;">'
+
+                                            . '<div style="padding:12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Total</div>'
+                                            . '<div style="font-size:17px;font-weight:800;">$'
+                                            . e(
+                                                number_format(
+                                                    $total,
+                                                    2
+                                                )
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '<div style="padding:12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Cobrado</div>'
+                                            . '<div style="font-size:17px;font-weight:800;">$'
+                                            . e(
+                                                number_format(
+                                                    $collected,
+                                                    2
+                                                )
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '<div style="padding:12px;border:1px solid #e2e8f0;border-radius:9px;">'
+                                            . '<div style="font-size:10px;color:#64748b;">Saldo pendiente</div>'
+                                            . '<div style="font-size:17px;font-weight:800;">$'
+                                            . e(
+                                                number_format(
+                                                    $balance,
+                                                    2
+                                                )
+                                            )
+                                            . '</div>'
+                                            . '</div>'
+
+                                            . '</div>'
+
+                                            . '<div style="margin-top:12px;padding:10px 12px;border-radius:9px;background:#f8fafc;color:#475569;font-size:11px;line-height:1.45;">'
+                                            . 'El pago se registra por el área autorizada de Cuentas por cobrar. '
+                                            . 'ATC sólo consulta el estado desde este ticket.'
+                                            . '</div>'
+
+                                            . '<div style="margin-top:8px;font-size:11px;color:#64748b;">'
+                                            . 'Moneda: '
+                                            . e(
+                                                $currency
+                                            )
+                                            . '</div>'
+
+                                            . '</div>'
+
+                                            . '<div style="display:flex;justify-content:flex-end;padding:13px 22px;border-top:1px solid #e2e8f0;background:#f8fafc;">'
+                                            . '<button '
+                                            . 'type="button" '
+                                            . 'onclick="document.getElementById(\''
+                                            . e($modalId)
+                                            . '\').close()" '
+                                            . 'style="'
+                                            . 'padding:7px 14px;'
+                                            . 'border:1px solid #cbd5e1;'
+                                            . 'border-radius:8px;'
+                                            . 'background:#ffffff;'
+                                            . 'font-weight:700;'
+                                            . 'cursor:pointer;'
+                                            . '"'
+                                            . '>'
+                                            . 'Cerrar'
+                                            . '</button>'
+                                            . '</div>'
+
+                                            . '</dialog>';
+                                    }
+
+                                    $html =
+                                        '<div style="'
+                                        . 'display:grid;'
+                                        . 'grid-template-columns:repeat(2,minmax(0,1fr));'
+                                        . 'gap:10px;'
+                                        . 'width:100%;'
+                                        . '">'
+
+                                        . '<div style="grid-column:1/-1;padding:12px 14px;border:1px solid #e5e7eb;border-radius:10px;">'
+                                        . '<div style="font-size:11px;color:#6b7280;">Estado de reparación</div>'
+                                        . '<div style="font-size:15px;font-weight:700;">'
+                                        . e($repairStatusLabel)
+                                        . '</div></div>'
+
+                                        . '<div style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">'
+                                        . '<div style="font-size:11px;color:#6b7280;">Cobro</div>'
+                                        . '<div style="font-weight:600;">'
+                                        . e($paymentLabel)
+                                        . '</div>'
+                                        . $receivableReferenceHtml
+                                        . '</div>'
+
+                                        . '<div style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">'
+                                        . '<div style="font-size:11px;color:#6b7280;">Condición</div>'
+                                        . '<div style="font-weight:600;">'
+                                        . e($policyLabel)
+                                        . '</div></div>'
+
+                                        . '<div style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">'
+                                        . '<div style="font-size:11px;color:#6b7280;">Salida</div>'
+                                        . '<div style="font-weight:600;">'
+                                        . e($exitLabel)
+                                        . '</div></div>'
+
+                                        . '<div style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">'
+                                        . '<div style="font-size:11px;color:#6b7280;">Entrega</div>'
+                                        . '<div style="font-weight:600;">'
+                                        . e($deliveryLabel)
+                                        . '</div></div>'
+
+                                        . '<div style="grid-column:1/-1;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;">'
+                                        . '<div style="font-size:11px;color:#6b7280;">Siguiente paso</div>'
+                                        . '<div style="font-weight:700;">'
+                                        . e($nextStep)
+                                        . '</div></div>'
+
+                                        . '</div>';
+
+                                    return new
+                                        \Illuminate\Support\HtmlString(
+                                            $html
+                                        );
+                                }
+                            )
+                            ->visible(
+                                function ($record):
+                                    bool {
+                                    if (
+                                        ! $record
+                                        || (
+                                            (string) (
+                                                $record->
+                                                    attention_route
+                                                ?? ''
+                                            )
+                                            !== 'repair'
+                                        )
+                                    ) {
+                                        return false;
+                                    }
+
+                                    $repair =
+                                        $record->
+                                            repairOrders()
+                                            ->orderByDesc('id')
+                                            ->first();
+
+                                    if (! $repair) {
+                                        return false;
+                                    }
+
+                                    $raw =
+                                        $repair->metadata
+                                        ?? [];
+
+                                    if (
+                                        is_string($raw)
+                                    ) {
+                                        $raw =
+                                            json_decode(
+                                                $raw,
+                                                true
+                                            )
+                                            ?: [];
+                                    }
+
+                                    if (
+                                        ! is_array($raw)
+                                    ) {
+                                        $raw = [];
+                                    }
+
+                                    return
+                                        in_array(
+                                            (string) (
+                                                $repair->
+                                                    workflow_stage
+                                                ?? ''
+                                            ),
+                                            [
+                                                'ready_for_delivery',
+                                                'delivered',
+                                                'finished',
+                                            ],
+                                            true
+                                        )
+                                        || (
+                                            (int) (
+                                                $repair->
+                                                    account_receivable_id
+                                                ?? 0
+                                            ) > 0
+                                        )
+                                        || is_array(
+                                            data_get(
+                                                $raw,
+                                                'post_repair_collection_delivery'
+                                            )
+                                        )
+                                        || is_array(
+                                            data_get(
+                                                $raw,
+                                                'post_repair_no_charge_delivery_bridge'
+                                            )
+                                        )
+                                        || is_array(
+                                            data_get(
+                                                $raw,
+                                                'atc_exit_document'
+                                            )
+                                        );
+                                }
+                            )
+                            ->columnSpanFull(),
 
                         Forms\Components\Placeholder::make('repair_order_display')
                             ->label('Orden vinculada')
@@ -201,7 +1476,7 @@ class ServiceCaseResource extends Resource
                     ->visible(fn ($record): bool => (bool) $record && filled($record->attention_route))
                     ->collapsible(),
 
-                Forms\Components\Section::make('Atención directa')
+                Forms\Components\Section::make('Resolución del ticket')
                     ->extraAttributes([
                         'class' =>
                             'bexia-svc-section bexia-svc-section-direct-attention',
@@ -283,7 +1558,12 @@ class ServiceCaseResource extends Resource
                         ) === 'non_repair'
                     )
                     ->collapsible(),
-                Forms\Components\Section::make('Datos generales')
+                Forms\Components\Section::make('Solicitud')
+                    ->disabled(
+                        fn ($record): bool =>
+                            (bool) $record
+                            && ! ServiceAccess::canEditServiceCaseMasterData()
+                    )
                     ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-general'])
                     ->columns(3)
                     ->schema([
@@ -293,32 +1573,30 @@ class ServiceCaseResource extends Resource
                             ->disabled()
                             ->dehydrated(false),
 
-                        Forms\Components\Select::make('status')
-                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-status'])
+                        Forms\Components\Placeholder::make('status_display')
                             ->label('Estado')
-                            ->options(ServiceCase::STATUSES)
-                            ->required()
+                            ->content(fn ($record): string => $record
+                                ? $record->visibleStatusLabel()
+                                : 'Nuevo'),
+
+                        Forms\Components\Hidden::make('status')
                             ->default('nuevo'),
 
                         Forms\Components\Select::make('priority')
                             ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-priority'])
                             ->label('Prioridad')
-                            ->options(ServiceCase::PRIORITIES)
+                            ->options(ServiceCase::OPERATIONAL_PRIORITIES)
                             ->required()
                             ->default('media'),
 
                         Forms\Components\Select::make('channel')
                             ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-channel'])
-                            ->label('Canal')
-                            ->options(ServiceCase::CHANNELS)
+                            ->label('Medio de contacto')
+                            ->options(ServiceCase::OPERATIONAL_CHANNELS)
                             ->required()
                             ->default('manual'),
 
-                        Forms\Components\Select::make('case_type')
-                            ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-case-type'])
-                            ->label('Tipo de caso')
-                            ->options(ServiceCase::CASE_TYPES)
-                            ->required()
+                        Forms\Components\Hidden::make('case_type')
                             ->default('general'),
 
                         Forms\Components\Hidden::make('assigned_team')
@@ -327,6 +1605,11 @@ class ServiceCaseResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Cliente / contacto')
+                    ->disabled(
+                        fn ($record): bool =>
+                            (bool) $record
+                            && ! ServiceAccess::canEditServiceCaseMasterData()
+                    )
                     ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-contact'])
                     ->columns(3)
                     ->schema([
@@ -381,6 +1664,10 @@ class ServiceCaseResource extends Resource
 HTML))
                             ->label('Cliente')
                             ->options(ServiceAccess::contactOptions())
+                            ->required(
+                                fn ($record): bool =>
+                                    $record === null
+                            )
                             ->searchable()
                             ->preload()
                             ->native(false)
@@ -411,6 +1698,11 @@ HTML))
                     ]),
 
                 Forms\Components\Section::make('Caso')
+                    ->disabled(
+                        fn ($record): bool =>
+                            (bool) $record
+                            && ! ServiceAccess::canEditServiceCaseMasterData()
+                    )
                     ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-case'])
                     ->schema([
                         Forms\Components\TextInput::make('subject')
@@ -421,13 +1713,17 @@ HTML))
 
                         Forms\Components\Textarea::make('description')
                             ->extraAttributes(['class' => 'bexia-svc-field bexia-svc-field-description'])
-                            ->label('Descripcion')
+                            ->label('Descripción')
+                            ->required(
+                                fn ($record): bool =>
+                                    $record === null
+                            )
                             ->rows(5)
                             ->columnSpanFull(),
 
                         Forms\Components\FileUpload::make('uploaded_attachments')
-                            ->label('Fotos y archivos')
-                            ->helperText('Agrega fotos del producto, evidencia, PDF, documentos o archivos relacionados al ticket.')
+                            ->label('Imágenes / evidencias')
+                            ->helperText('Agrega fotografías, documentos o evidencia correspondiente a este paso del ticket.')
                             ->multiple()
                             ->disk('public')
                             ->directory('service-attachments/tickets')
@@ -447,6 +1743,11 @@ HTML))
                     ]),
 
                 Forms\Components\Section::make('Producto / documento relacionado')
+                    ->disabled(
+                        fn ($record): bool =>
+                            (bool) $record
+                            && ! ServiceAccess::canEditServiceCaseMasterData()
+                    )
                     ->extraAttributes(['class' => 'bexia-svc-section bexia-svc-section-product'])
                     ->description('Opcional. Usa catálogo si existe; si no, captura libremente producto, serie, lote, venta o factura.')
                     ->columns(12)
@@ -545,6 +1846,12 @@ HTML))
                     ->searchable()
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('contact_name')
+                    ->label('Cliente')
+                    ->searchable()
+                    ->limit(35)
+                    ->wrap(),
+
                 Tables\Columns\TextColumn::make('subject')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-subject bexia-svc-col-wrap'])
                     ->extraCellAttributes(['class' => 'bexia-svc-col-subject bexia-svc-col-wrap'])
@@ -557,16 +1864,39 @@ HTML))
                     ->extraCellAttributes(['class' => 'bexia-svc-col-status'])
                     ->label('Estado')
                     ->badge()
+                    ->formatStateUsing(
+                        fn (?string $state, ServiceCase $record): string =>
+                            $record->visibleStatusLabel()
+                    )
+                    ->color(
+                        fn (ServiceCase $record): string =>
+                            match ($record->visibleStatusKey()) {
+                                'nuevo' => 'gray',
+                                'en_atencion' => 'warning',
+                                'resuelto' => 'success',
+                                'cerrado' => 'gray',
+                                default => 'gray',
+                            }
+                    )
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('operational_substatus')
+                    ->label('Subestado')
+                    ->getStateUsing(
+                        fn (ServiceCase $record): string =>
+                            $record->operationalSubstatusLabel()
+                    )
+                    ->badge()
+                    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('attention_route')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-route'])
                     ->extraCellAttributes(['class' => 'bexia-svc-col-route'])
-                    ->label('Ruta')
+                    ->label('Tipo')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'repair' => 'Reparación',
-                        'non_repair' => 'Sin reparación',
+                        'repair' => 'Equipo',
+                        'non_repair' => 'Gestión',
                         default => 'Pendiente',
                     })
                     ->sortable(),
@@ -576,13 +1906,19 @@ HTML))
                     ->extraCellAttributes(['class' => 'bexia-svc-col-priority'])
                     ->label('Prioridad')
                     ->badge()
+                    ->formatStateUsing(
+                        fn (?string $state): string =>
+                            ServiceCase::PRIORITIES[$state]
+                                ?? ($state ?: 'Normal')
+                    )
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('case_type')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-case-type'])
                     ->extraCellAttributes(['class' => 'bexia-svc-col-case-type'])
-                    ->label('Tipo')
-                    ->sortable(),
+                    ->label('Tipo interno')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('product_name')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-product bexia-svc-col-wrap'])
@@ -609,8 +1945,9 @@ HTML))
                 Tables\Columns\TextColumn::make('channel')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-channel'])
                     ->extraCellAttributes(['class' => 'bexia-svc-col-channel'])
-                    ->label('Canal')
-                    ->sortable(),
+                    ->label('Medio')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('assigned_team')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-team bexia-svc-col-wrap'])
@@ -621,7 +1958,7 @@ HTML))
                 Tables\Columns\TextColumn::make('assigned_employee_id')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-technician'])
                     ->extraCellAttributes(['class' => 'bexia-svc-col-technician'])
-                    ->label('Tecnico')
+                    ->label('Responsable')
                     ->formatStateUsing(fn ($state): ?string => filled($state) ? ServiceAccess::employeeLabel((int) $state) : null)
                     ->toggleable(),
 
@@ -639,6 +1976,11 @@ HTML))
                     ->sortable()
                     ->toggleable(),
 
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->label('Última actividad')
+                    ->dateTime()
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->extraHeaderAttributes(['class' => 'bexia-svc-col-created-at'])
                     ->extraCellAttributes(['class' => 'bexia-svc-col-created-at'])
@@ -649,7 +1991,40 @@ HTML))
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Estado')
-                    ->options(ServiceCase::STATUSES),
+                    ->options(ServiceCase::VISIBLE_STATUSES)
+                    ->query(function (Builder $query, array $data): Builder {
+                        $value = $data['value'] ?? null;
+
+                        return match ($value) {
+                            'nuevo' =>
+                                $query->where('status', 'nuevo'),
+
+                            'en_atencion' =>
+                                $query->whereNotIn('status', [
+                                    'nuevo',
+                                    'resuelto',
+                                    'entregado',
+                                    'cerrado',
+                                    'rechazado',
+                                    'cancelado',
+                                ]),
+
+                            'resuelto' =>
+                                $query->whereIn('status', [
+                                    'resuelto',
+                                    'entregado',
+                                ]),
+
+                            'cerrado' =>
+                                $query->whereIn('status', [
+                                    'cerrado',
+                                    'rechazado',
+                                    'cancelado',
+                                ]),
+
+                            default => $query,
+                        };
+                    }),
 
                 Tables\Filters\SelectFilter::make('attention_route')
                     ->label('Ruta de atención')
@@ -665,6 +2040,10 @@ HTML))
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
+                    ->label(
+                        fn (ServiceCase $record): string =>
+                            $record->nextActionLabel()
+                    )
                     ->visible(fn (ServiceCase $record): bool => static::canEdit($record)),
             ])
             ->bulkActions([

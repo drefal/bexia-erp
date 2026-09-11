@@ -19,6 +19,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class RepairOrderResource extends Resource
 {
+    // BEXIA_ATC_CXC_BOUNDARY_TEXTS_V5_83_4C5E4
+    // Los textos tecnicos no deben afirmar que sigue pendiente
+    // revision/costeo cuando el flujo ya avanzo a cobro/entrega.
+
     protected static ?string $model = RepairOrder::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-wrench-screwdriver';
@@ -150,6 +154,89 @@ class RepairOrderResource extends Resource
 
     public static function form(Form $form): Form
     {
+        /*
+         * BEXIA_ATC_TECHNICIAN_REPAIR_VIEW_V5_83_4C5B
+         *
+         * El técnico asignado NO usa el formulario administrativo
+         * de la reparación.
+         *
+         * Para él:
+         * - todos los datos maestros son solo lectura;
+         * - no existen campos económicos;
+         * - no existe cotización;
+         * - no existe garantía editable;
+         * - no existe etapa editable;
+         * - no existe precio/costo de refacciones;
+         * - el trabajo se captura únicamente desde la acción
+         *   "Finalizar trabajo técnico".
+         *
+         * Encargado de Técnicos / Supervisor conservan el
+         * formulario administrativo completo para la siguiente
+         * fase de costeo y cobro.
+         */
+        if (ServiceAccess::isRestrictedServiceTechnician()) {
+            return $form
+                ->schema(
+                    static::technicianFormSchema()
+                );
+        }
+
+        /*
+         * BEXIA_ATC_MANAGER_REVIEW_VIEW_V5_83_4C5C2A1
+         *
+         * Vista exclusiva del Encargado de Tecnicos
+         * durante la etapa posterior al trabajo tecnico.
+         *
+         * Supervisor conserva temporalmente el form legacy.
+         */
+        if (
+            ServiceAccess::hasServiceRole(
+                'Servicio - Encargado de Técnicos'
+            )
+            && ! ServiceAccess::hasServiceRole(
+                'Servicio - Supervisor'
+            )
+        ) {
+            return $form
+                ->schema(
+                    static::managerReviewCostingFormSchema()
+                );
+        }
+
+
+
+        /*
+         * BEXIA_ATC_RECEPTION_REPAIR_READONLY_VIEW_V5_83_4C5E5
+         *
+         * Servicio - Recepcion consulta la reparación,
+         * pero no modifica:
+         * - diagnostico;
+         * - trabajo tecnico;
+         * - presupuesto;
+         * - costos;
+         * - garantia;
+         * - etapa;
+         * - informacion economica.
+         *
+         * Encargado y Supervisor conservan sus vistas propias.
+         */
+        if (
+            ServiceAccess::hasServiceRole(
+                'Servicio - Recepción'
+            )
+            && ! ServiceAccess::hasServiceRole([
+                'Servicio - Encargado de Técnicos',
+                'Servicio - Supervisor',
+            ])
+        ) {
+            return $form
+                ->schema(
+                    static::
+                        receptionRepairReadOnlyFormSchema()
+                );
+        }
+
+
         return $form
             ->schema([
 
@@ -829,6 +916,1936 @@ Forms\Components\Hidden::make('status')
                 
             ]);
     }
+
+
+    /*
+     * BEXIA_ATC_MANAGER_REVIEW_SCHEMA_V5_83_4C5C2A1
+     *
+     * C5C2A1:
+     * vista visual / solo lectura.
+     *
+     * C5C2B agregara la accion real de costeo.
+     */
+    protected static function managerReviewCostingFormSchema(): array
+    {
+        /*
+         * BEXIA_ATC_MANAGER_REVIEW_SCHEMA_V5_83_4C5C2B
+         *
+         * Esta vista sigue siendo solo lectura.
+         * La captura se realiza exclusivamente desde
+         * la accion "Revisar y costear".
+         */
+        $schema =
+            static::technicianFormSchema();
+
+        $schema[] =
+            Forms\Components\Section::make(
+                'Revisión y costeo'
+            )
+                ->description(
+                    'El trabajo técnico ya terminó. '
+                    . 'El Encargado revisa el resultado '
+                    . 'y registra la decisión económica.'
+                )
+                ->columns(2)
+                ->schema([
+                    Forms\Components\Placeholder::make(
+                        'manager_review_status'
+                    )
+                        ->label('Estado')
+                        ->content(
+                            function (
+                                $record
+                            ): string {
+                                if (! $record) {
+                                    return 'Sin orden';
+                                }
+
+                                $metadata =
+                                    $record->metadata
+                                    ?? [];
+
+                                if (
+                                    is_string(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata =
+                                        json_decode(
+                                            $metadata,
+                                            true
+                                        )
+                                        ?: [];
+                                }
+
+                                if (
+                                    ! is_array(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata = [];
+                                }
+
+                                $manager =
+                                    $metadata[
+                                        'manager_review'
+                                    ]
+                                    ?? [];
+
+                                if (
+                                    is_array(
+                                        $manager
+                                    )
+                                    && (
+                                        $manager[
+                                            'status'
+                                        ]
+                                        ?? null
+                                    ) === 'completed'
+                                ) {
+                                    return
+                                        'Revisión y costeo registrados';
+                                }
+
+                                return
+                                    'Pendiente de revisión y costeo';
+                            }
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'manager_review_completed_at'
+                    )
+                        ->label(
+                            'Trabajo técnico finalizado'
+                        )
+                        ->content(
+                            function (
+                                $record
+                            ): string {
+                                if (! $record) {
+                                    return '—';
+                                }
+
+                                $metadata =
+                                    $record->metadata
+                                    ?? [];
+
+                                if (
+                                    is_string(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata =
+                                        json_decode(
+                                            $metadata,
+                                            true
+                                        )
+                                        ?: [];
+                                }
+
+                                if (
+                                    ! is_array(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata = [];
+                                }
+
+                                return (string) (
+                                    $metadata[
+                                        'technical_work'
+                                    ][
+                                        'completed_at'
+                                    ]
+                                    ?? '—'
+                                );
+                            }
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'manager_review_decision'
+                    )
+                        ->label(
+                            'Decisión'
+                        )
+                        ->content(
+                            function (
+                                $record
+                            ): string {
+                                if (! $record) {
+                                    return 'Pendiente';
+                                }
+
+                                $metadata =
+                                    $record->metadata
+                                    ?? [];
+
+                                if (
+                                    is_string(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata =
+                                        json_decode(
+                                            $metadata,
+                                            true
+                                        )
+                                        ?: [];
+                                }
+
+                                if (
+                                    ! is_array(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata = [];
+                                }
+
+                                $decision =
+                                    $metadata[
+                                        'manager_review'
+                                    ][
+                                        'decision'
+                                    ]
+                                    ?? null;
+
+                                return match (
+                                    $decision
+                                ) {
+                                    'cobrable' =>
+                                        'Servicio cobrable',
+
+                                    'garantia' =>
+                                        'Garantía aceptada / sin cargo',
+
+                                    'garantia_rechazada' =>
+                                        'Garantía rechazada / cobrable',
+
+                                    'cortesia' =>
+                                        'Cortesía / sin cargo',
+
+                                    default =>
+                                        'Pendiente',
+                                };
+                            }
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'manager_review_total'
+                    )
+                        ->label(
+                            'Total al cliente'
+                        )
+                        ->content(
+                            function (
+                                $record
+                            ): string {
+                                if (! $record) {
+                                    return '$0.00';
+                                }
+
+                                $metadata =
+                                    $record->metadata
+                                    ?? [];
+
+                                if (
+                                    is_string(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata =
+                                        json_decode(
+                                            $metadata,
+                                            true
+                                        )
+                                        ?: [];
+                                }
+
+                                if (
+                                    ! is_array(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata = [];
+                                }
+
+                                $total =
+                                    (float) (
+                                        $metadata[
+                                            'manager_review'
+                                        ][
+                                            'quote_total'
+                                        ]
+                                        ?? 0
+                                    );
+
+                                return
+                                    '$'
+                                    . number_format(
+                                        $total,
+                                        2
+                                    );
+                            }
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'manager_review_next_step'
+                    )
+                        ->label(
+                            'Siguiente paso'
+                        )
+                        ->content(
+                            function (
+                                $record
+                            ): string {
+                                if (! $record) {
+                                    return 'Pendiente';
+                                }
+
+                                $metadata =
+                                    $record->metadata
+                                    ?? [];
+
+                                if (
+                                    is_string(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata =
+                                        json_decode(
+                                            $metadata,
+                                            true
+                                        )
+                                        ?: [];
+                                }
+
+                                if (
+                                    ! is_array(
+                                        $metadata
+                                    )
+                                ) {
+                                    $metadata = [];
+                                }
+
+                                $review =
+                                    $metadata[
+                                        'manager_review'
+                                    ]
+                                    ?? [];
+
+                                if (
+                                    ! is_array(
+                                        $review
+                                    )
+                                    || (
+                                        $review[
+                                            'status'
+                                        ]
+                                        ?? null
+                                    ) !== 'completed'
+                                ) {
+                                    return
+                                        'Usa el botón '
+                                        . '"Revisar y costear".';
+                                }
+
+                                if (
+                                    (bool) (
+                                        $review[
+                                            'requires_customer_approval'
+                                        ]
+                                        ?? false
+                                    )
+                                ) {
+                                    return
+                                        'Pendiente de Vo.Bo. '
+                                        . 'del cliente.';
+                                }
+
+                                if (
+                                    (float) (
+                                        $review[
+                                            'quote_total'
+                                        ]
+                                        ?? 0
+                                    ) > 0
+                                ) {
+                                    return
+                                        'Costeo listo. '
+                                        . 'Siguiente: cobro '
+                                        . 'y preparación de entrega.';
+                                }
+
+                                return
+                                    'Sin cargo al cliente. '
+                                    . 'Siguiente: preparar entrega.';
+                            }
+                        )
+                        ->columnSpanFull(),
+
+                    Forms\Components\Placeholder::make(
+                        'manager_review_mode'
+                    )
+                        ->label('Captura')
+                        ->content(
+                            'La información técnica permanece '
+                            . 'bloqueada. Costos, precios y '
+                            . 'decisión se registran solamente '
+                            . 'desde la acción '
+                            . '"Revisar y costear".'
+                        )
+                        ->columnSpanFull(),
+                ]);
+
+        return $schema;
+    }
+
+
+
+    /*
+     * BEXIA_ATC_RECEPTION_REPAIR_READONLY_SCHEMA_V5_83_4C5E5
+     *
+     * Vista informativa de Recepcion.
+     * No contiene TextInput, Textarea, Select, Repeater
+     * ni ningun componente editable.
+     */
+    protected static function receptionRepairReadOnlyFormSchema(): array
+    {
+        return [
+            \Filament\Forms\Components\Section::make(
+                'Orden técnica'
+            )
+                ->description(
+                    'Información de referencia de la reparación. '
+                    . 'Recepción puede consultarla, pero no modificarla.'
+                )
+                ->schema([
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_folio'
+                        )
+                        ->label('Folio')
+                        ->content(
+                            fn ($record): string =>
+                                (string) (
+                                    $record?->folio
+                                    ?? '—'
+                                )
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_ticket'
+                        )
+                        ->label('Ticket origen')
+                        ->content(
+                            function ($record): string {
+                                if (
+                                    ! $record
+                                    || empty(
+                                        $record->
+                                            service_case_id
+                                    )
+                                ) {
+                                    return '—';
+                                }
+
+                                $case =
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'service_cases'
+                                        )
+                                        ->where(
+                                            'id',
+                                            (int) $record->
+                                                service_case_id
+                                        )
+                                        ->first();
+
+                                if (! $case) {
+                                    return '—';
+                                }
+
+                                return
+                                    (string) (
+                                        $case->folio
+                                        ?? (
+                                            '#'
+                                            . $case->id
+                                        )
+                                    )
+                                    . (
+                                        filled(
+                                            $case->status
+                                            ?? null
+                                        )
+                                            ? ' · '
+                                                . (string)
+                                                    $case->
+                                                        status
+                                            : ''
+                                    );
+                            }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_product'
+                        )
+                        ->label(
+                            'Producto / modelo'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record?->product_name
+                                )
+                                    ? (string)
+                                        $record->
+                                            product_name
+                                    : '—'
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_serial'
+                        )
+                        ->label('Número de serie')
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record?->serial_number
+                                )
+                                    ? (string)
+                                        $record->
+                                            serial_number
+                                    : '—'
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_received'
+                        )
+                        ->label(
+                            'Fecha de recepción'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record?->received_at
+                                )
+                                    ? (string)
+                                        $record->
+                                            received_at
+                                    : '—'
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_condition'
+                        )
+                        ->label(
+                            'Condición de recepción'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record->
+                                        received_condition
+                                    ?? null
+                                )
+                                    ? (string)
+                                        $record->
+                                            received_condition
+                                    : 'Sin observaciones'
+                        )
+                        ->columnSpanFull(),
+                ])
+                ->columns(3),
+
+            \Filament\Forms\Components\Section::make(
+                'Diagnóstico y trabajo técnico'
+            )
+                ->description(
+                    'Información capturada por el técnico. '
+                    . 'Esta sección es únicamente informativa.'
+                )
+                ->schema([
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_technical_status'
+                        )
+                        ->label('Estado')
+                        ->content(
+                            function ($record): string {
+                                $metadata =
+                                    static::
+                                        receptionRepairMetadata(
+                                            $record?->metadata
+                                            ?? null
+                                        );
+
+                                return
+                                    data_get(
+                                        $metadata,
+                                        'technical_work.status'
+                                    ) === 'completed'
+                                        ? 'Trabajo técnico finalizado'
+                                        : 'Pendiente';
+                            }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_technical_completed'
+                        )
+                        ->label('Finalizado')
+                        ->content(
+                            function ($record): string {
+                                $metadata =
+                                    static::
+                                        receptionRepairMetadata(
+                                            $record?->metadata
+                                            ?? null
+                                        );
+
+                                return
+                                    (string) (
+                                        data_get(
+                                            $metadata,
+                                            'technical_work.completed_at'
+                                        )
+                                        ?: 'Pendiente'
+                                    );
+                            }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_diagnosis'
+                        )
+                        ->label(
+                            'Diagnóstico técnico'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record->
+                                        technical_diagnosis
+                                    ?? null
+                                )
+                                    ? (string)
+                                        $record->
+                                            technical_diagnosis
+                                    : 'Pendiente'
+                        )
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_work'
+                        )
+                        ->label(
+                            'Trabajo realizado'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record->resolution
+                                    ?? null
+                                )
+                                    ? (string)
+                                        $record->
+                                            resolution
+                                    : 'Pendiente'
+                        )
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_tests'
+                        )
+                        ->label(
+                            'Pruebas / observaciones finales'
+                        )
+                        ->content(
+                            function ($record): string {
+                                $metadata =
+                                    static::
+                                        receptionRepairMetadata(
+                                            $record?->metadata
+                                            ?? null
+                                        );
+
+                                return
+                                    (string) (
+                                        data_get(
+                                            $metadata,
+                                            'technical_work.tests_notes'
+                                        )
+                                        ?: 'Sin observaciones'
+                                    );
+                            }
+                        )
+                        ->columnSpanFull(),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_parts'
+                        )
+                        ->label(
+                            'Refacciones utilizadas'
+                        )
+                        ->content(
+                            function ($record):
+                                \Illuminate\Support\HtmlString {
+                                if (! $record) {
+                                    return new
+                                        \Illuminate\Support\HtmlString(
+                                            'Sin refacciones'
+                                        );
+                                }
+
+                                $rows =
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'repair_order_parts'
+                                        )
+                                        ->where(
+                                            'repair_order_id',
+                                            (int) $record->
+                                                getKey()
+                                        )
+                                        ->orderBy('id')
+                                        ->get();
+
+                                if ($rows->isEmpty()) {
+                                    return new
+                                        \Illuminate\Support\HtmlString(
+                                            'Sin refacciones'
+                                        );
+                                }
+
+                                $items = [];
+
+                                foreach ($rows as $row) {
+                                    $name =
+                                        trim(
+                                            (string) (
+                                                $row->
+                                                    product_name
+                                                ?? $row->
+                                                    description
+                                                ?? 'Refacción'
+                                            )
+                                        );
+
+                                    $qty =
+                                        number_format(
+                                            (float) (
+                                                $row->
+                                                    quantity
+                                                ?? 0
+                                            ),
+                                            2
+                                        );
+
+                                    $items[] =
+                                        '<div>'
+                                        . e($name)
+                                        . ' · Cantidad: '
+                                        . e($qty)
+                                        . '</div>';
+                                }
+
+                                return new
+                                    \Illuminate\Support\HtmlString(
+                                        implode(
+                                            '',
+                                            $items
+                                        )
+                                    );
+                            }
+                        )
+                        ->columnSpanFull(),
+                ])
+                ->columns(2),
+
+            \Filament\Forms\Components\Section::make(
+                'Presupuesto y autorización'
+            )
+                ->description(
+                    'Valores definidos por el Encargado de Técnicos '
+                    . 'y autorizaciones posteriores. '
+                    . 'Recepción no puede modificarlos.'
+                )
+                ->schema([
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_decision'
+                        )
+                        ->label(
+                            'Decisión comercial'
+                        )
+                        ->content(
+                            function ($record): string {
+                                $review =
+                                    static::
+                                        receptionManagerReview(
+                                            $record
+                                        );
+
+                                return match (
+                                    (string) (
+                                        $review[
+                                            'decision'
+                                        ]
+                                        ?? ''
+                                    )
+                                ) {
+                                    'cobrable' =>
+                                        'Servicio cobrable',
+
+                                    'garantia' =>
+                                        'Garantía / sin cargo',
+
+                                    'garantia_rechazada' =>
+                                        'Garantía rechazada / cobrable',
+
+                                    'cortesia' =>
+                                        'Cortesía / sin cargo',
+
+                                    default =>
+                                        'Pendiente',
+                                };
+                            }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_warranty'
+                        )
+                        ->label('Garantía')
+                        ->content(
+                            fn ($record): string =>
+                                match (
+                                    (string) (
+                                        $record->
+                                            warranty_status
+                                        ?? ''
+                                    )
+                                ) {
+                                    'no_aplica' =>
+                                        'No aplica',
+
+                                    'approved',
+                                    'aprobada' =>
+                                        'Aprobada',
+
+                                    'rejected',
+                                    'rechazada' =>
+                                        'Rechazada',
+
+                                    'pendiente',
+                                    'pending' =>
+                                        'Pendiente',
+
+                                    default =>
+                                        (string) (
+                                            $record->
+                                                warranty_status
+                                            ?? '—'
+                                        ),
+                                }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_parts_sale'
+                        )
+                        ->label(
+                            'Refacciones'
+                        )
+                        ->content(
+                            function ($record): string {
+                                $review =
+                                    static::
+                                        receptionManagerReview(
+                                            $record
+                                        );
+
+                                return static::
+                                    receptionMoney(
+                                        $review[
+                                            'parts_sale_total'
+                                        ]
+                                        ?? $record->
+                                            parts_sale_total
+                                        ?? 0
+                                    );
+                            }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_labor'
+                        )
+                        ->label('Mano de obra')
+                        ->content(
+                            function ($record): string {
+                                $review =
+                                    static::
+                                        receptionManagerReview(
+                                            $record
+                                        );
+
+                                return static::
+                                    receptionMoney(
+                                        $review[
+                                            'labor_amount'
+                                        ]
+                                        ?? $record->
+                                            labor_sale_total
+                                        ?? 0
+                                    );
+                            }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_other'
+                        )
+                        ->label('Otros cargos')
+                        ->content(
+                            function ($record): string {
+                                $review =
+                                    static::
+                                        receptionManagerReview(
+                                            $record
+                                        );
+
+                                return static::
+                                    receptionMoney(
+                                        $review[
+                                            'other_amount'
+                                        ]
+                                        ?? $record->
+                                            other_cost_estimate
+                                        ?? 0
+                                    );
+                            }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_quote_total'
+                        )
+                        ->label(
+                            'Total presupuesto'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                static::
+                                    receptionMoney(
+                                        $record->
+                                            quote_total
+                                        ?? 0
+                                    )
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_quote_status'
+                        )
+                        ->label(
+                            'Estado presupuesto'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                match (
+                                    (string) (
+                                        $record->
+                                            quote_status
+                                        ?? ''
+                                    )
+                                ) {
+                                    'not_required' =>
+                                        'No requerido',
+
+                                    'draft' =>
+                                        'Borrador',
+
+                                    'pending_internal' =>
+                                        'Pendiente aprobación interna',
+
+                                    'pending_customer' =>
+                                        'Pendiente Vo.Bo. cliente',
+
+                                    'customer_approved' =>
+                                        'Autorizado por cliente',
+
+                                    'customer_rejected' =>
+                                        'Rechazado por cliente',
+
+                                    'cancelled' =>
+                                        'Cancelado',
+
+                                    default =>
+                                        (string) (
+                                            $record->
+                                                quote_status
+                                            ?? '—'
+                                        ),
+                                }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_authorized'
+                        )
+                        ->label(
+                            'Total autorizado'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                static::
+                                    receptionMoney(
+                                        $record->
+                                            approved_total_snapshot
+                                        ?? $record->
+                                            quote_total
+                                        ?? 0
+                                    )
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_customer_approval'
+                        )
+                        ->label(
+                            'Vo.Bo. cliente'
+                        )
+                        ->content(
+                            function ($record): string {
+                                $metadata =
+                                    static::
+                                        receptionRepairMetadata(
+                                            $record?->metadata
+                                            ?? null
+                                        );
+
+                                return match (
+                                    (string) data_get(
+                                        $metadata,
+                                        'customer_approval.status',
+                                        ''
+                                    )
+                                ) {
+                                    'approved' =>
+                                        'Aprobado',
+
+                                    'rejected' =>
+                                        'Rechazado',
+
+                                    default =>
+                                        'No requerido / pendiente',
+                                };
+                            }
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_internal_hour_cost'
+                        )
+                        ->label(
+                            'Costo interno por hora'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record->
+                                        labor_internal_hour_cost
+                                    ?? null
+                                )
+                                    ? static::
+                                        receptionMoney(
+                                            $record->
+                                                labor_internal_hour_cost
+                                        )
+                                    : 'No capturado en el flujo nuevo'
+                        )
+                        ->helperText(
+                            'Dato interno informativo. '
+                            . 'No puede modificarse desde Recepción.'
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_quote_notes'
+                        )
+                        ->label(
+                            'Notas de presupuesto'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record->
+                                        quote_notes
+                                    ?? null
+                                )
+                                    ? (string)
+                                        $record->
+                                            quote_notes
+                                    : 'Sin observaciones'
+                        )
+                        ->columnSpanFull(),
+                ])
+                ->columns(3),
+
+            \Filament\Forms\Components\Section::make(
+                'Cobro y entrega'
+            )
+                ->description(
+                    'Seguimiento informativo. '
+                    . 'Los cobros se registran desde Cuentas por cobrar.'
+                )
+                ->schema([
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_cxc'
+                        )
+                        ->label('CxC')
+                        ->content(
+                            fn ($record): string =>
+                                static::
+                                    receptionReceivableSnapshot(
+                                        $record
+                                    )['number']
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_cxc_status'
+                        )
+                        ->label(
+                            'Estado de cobro'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                static::
+                                    receptionReceivableSnapshot(
+                                        $record
+                                    )['status']
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_cxc_total'
+                        )
+                        ->label('Total')
+                        ->content(
+                            fn ($record): string =>
+                                static::
+                                    receptionMoney(
+                                        static::
+                                            receptionReceivableSnapshot(
+                                                $record
+                                            )['total']
+                                    )
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_cxc_collected'
+                        )
+                        ->label('Cobrado')
+                        ->content(
+                            fn ($record): string =>
+                                static::
+                                    receptionMoney(
+                                        static::
+                                            receptionReceivableSnapshot(
+                                                $record
+                                            )['collected']
+                                    )
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_cxc_balance'
+                        )
+                        ->label('Saldo')
+                        ->content(
+                            fn ($record): string =>
+                                static::
+                                    receptionMoney(
+                                        static::
+                                            receptionReceivableSnapshot(
+                                                $record
+                                            )['balance']
+                                    )
+                        ),
+
+                    \Filament\Forms\Components\Placeholder::
+                        make(
+                            'reception_ro_delivery'
+                        )
+                        ->label(
+                            'Estado de entrega'
+                        )
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record->
+                                        delivered_at
+                                    ?? null
+                                )
+                                    ? 'Entregado'
+                                    : (
+                                        filled(
+                                            $record->
+                                                ready_for_delivery_at
+                                            ?? null
+                                        )
+                                            ? 'Listo para entrega'
+                                            : 'Pendiente'
+                                    )
+                        ),
+                ])
+                ->columns(3),
+        ];
+    }
+
+    protected static function receptionRepairMetadata(
+        mixed $raw
+    ): array {
+        if (is_array($raw)) {
+            return $raw;
+        }
+
+        if (
+            $raw instanceof
+            \Illuminate\Contracts\Support\Arrayable
+        ) {
+            return $raw->toArray();
+        }
+
+        if (is_object($raw)) {
+            return (array) $raw;
+        }
+
+        if (
+            is_string($raw)
+            && trim($raw) !== ''
+        ) {
+            $decoded =
+                json_decode(
+                    $raw,
+                    true
+                );
+
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
+    }
+
+    protected static function receptionManagerReview(
+        mixed $record
+    ): array {
+        if (! $record) {
+            return [];
+        }
+
+        $metadata =
+            static::
+                receptionRepairMetadata(
+                    $record->metadata
+                    ?? null
+                );
+
+        $review =
+            $metadata['manager_review']
+            ?? [];
+
+        return
+            is_array($review)
+                ? $review
+                : [];
+    }
+
+    protected static function receptionMoney(
+        mixed $value
+    ): string {
+        return '$'
+            . number_format(
+                (float) ($value ?? 0),
+                2
+            )
+            . ' MXN';
+    }
+
+    protected static function receptionReceivableSnapshot(
+        mixed $record
+    ): array {
+        $empty = [
+            'number' =>
+                'Sin CxC',
+
+            'status' =>
+                'Sin cuenta por cobrar',
+
+            'total' =>
+                0.0,
+
+            'collected' =>
+                0.0,
+
+            'balance' =>
+                0.0,
+        ];
+
+        if (
+            ! $record
+            || empty(
+                $record->
+                    account_receivable_id
+            )
+            || ! \Illuminate\Support\Facades\Schema::
+                hasTable(
+                    'account_receivables'
+                )
+        ) {
+            return $empty;
+        }
+
+        $query =
+            \Illuminate\Support\Facades\DB::
+                table(
+                    'account_receivables'
+                )
+                ->where(
+                    'id',
+                    (int) $record->
+                        account_receivable_id
+                );
+
+        if (
+            \Illuminate\Support\Facades\Schema::
+                hasColumn(
+                    'account_receivables',
+                    'company_id'
+                )
+            && (int) (
+                $record->company_id
+                ?? 0
+            ) > 0
+        ) {
+            $query->where(
+                'company_id',
+                (int) $record->
+                    company_id
+            );
+        }
+
+        $row =
+            $query->first();
+
+        if (! $row) {
+            return $empty;
+        }
+
+        $total =
+            (float) (
+                $row->total
+                ?? 0
+            );
+
+        $collected =
+            (float) (
+                $row->
+                    collected_total
+                ?? 0
+            );
+
+        $balance =
+            (float) (
+                $row->
+                    balance_total
+                ?? max(
+                    0,
+                    $total
+                    - $collected
+                )
+            );
+
+        $status =
+            match (
+                (string) (
+                    $row->status
+                    ?? ''
+                )
+            ) {
+                'paid' =>
+                    'Cobrada',
+
+                'partial' =>
+                    'Cobro parcial',
+
+                'open' =>
+                    $balance <= 0.0001
+                        ? 'Cobrada'
+                        : (
+                            $collected > 0.0001
+                                ? 'Cobro parcial'
+                                : 'Pendiente de cobro'
+                        ),
+
+                'cancelled' =>
+                    'Cancelada',
+
+                default =>
+                    (string) (
+                        $row->status
+                        ?? 'Pendiente'
+                    ),
+            };
+
+        return [
+            'number' =>
+                (string) (
+                    $row->number
+                    ?? (
+                        'CxC #'
+                        . $row->id
+                    )
+                ),
+
+            'status' =>
+                $status,
+
+            'total' =>
+                $total,
+
+            'collected' =>
+                $collected,
+
+            'balance' =>
+                $balance,
+        ];
+    }
+
+
+
+    /*
+     * BEXIA_ATC_TECHNICIAN_REPAIR_SCHEMA_V5_83_4C5B
+     *
+     * Pantalla operativa mínima del técnico.
+     * Todos los componentes son Placeholder.
+     */
+    protected static function technicianFormSchema(): array
+    {
+        return [
+            Forms\Components\Section::make(
+                'Orden técnica'
+            )
+                ->description(
+                    'Datos de referencia. El técnico puede consultarlos, pero no modificarlos.'
+                )
+                ->columns(3)
+                ->schema([
+                    Forms\Components\Placeholder::make(
+                        'technician_order_folio'
+                    )
+                        ->label('Folio')
+                        ->content(
+                            fn ($record): string =>
+                                filled($record?->folio)
+                                    ? (string) $record->folio
+                                    : '—'
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_service_case'
+                    )
+                        ->label('Ticket origen')
+                        ->content(
+                            fn ($record): string =>
+                                $record && filled(
+                                    $record->service_case_id
+                                )
+                                    ? (
+                                        ServiceAccess::serviceCaseLabel(
+                                            (int) $record->service_case_id
+                                        )
+                                        ?? (
+                                            '#'
+                                            . $record->service_case_id
+                                        )
+                                    )
+                                    : '—'
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_customer'
+                    )
+                        ->label('Cliente')
+                        ->content(
+                            fn ($record): string =>
+                                $record && filled(
+                                    $record->customer_id
+                                )
+                                    ? (
+                                        ServiceAccess::contactLabel(
+                                            (int) $record->customer_id
+                                        )
+                                        ?? (
+                                            '#'
+                                            . $record->customer_id
+                                        )
+                                    )
+                                    : '—'
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_product'
+                    )
+                        ->label('Producto / modelo')
+                        ->content(
+                            function ($record): string {
+                                if (! $record) {
+                                    return '—';
+                                }
+
+                                if (
+                                    filled(
+                                        $record->product_name
+                                    )
+                                ) {
+                                    return (string)
+                                        $record->product_name;
+                                }
+
+                                if (
+                                    filled(
+                                        $record->product_id
+                                    )
+                                ) {
+                                    return ServiceAccess::productLabel(
+                                        (int) $record->product_id
+                                    ) ?? '—';
+                                }
+
+                                return '—';
+                            }
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_serial'
+                    )
+                        ->label('Número de serie')
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record?->serial_number
+                                )
+                                    ? (string)
+                                        $record->serial_number
+                                    : '—'
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_received_at'
+                    )
+                        ->label('Fecha de recepción')
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record?->received_at
+                                )
+                                    ? (string)
+                                        $record->received_at
+                                    : '—'
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_assigned_employee'
+                    )
+                        ->label('Técnico asignado')
+                        ->content(
+                            fn ($record): string =>
+                                $record && filled(
+                                    $record->assigned_employee_id
+                                )
+                                    ? (
+                                        ServiceAccess::employeeLabel(
+                                            (int)
+                                            $record->assigned_employee_id
+                                        )
+                                        ?? (
+                                            '#'
+                                            . $record->assigned_employee_id
+                                        )
+                                    )
+                                    : '—'
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_received_condition'
+                    )
+                        ->label('Condición de recepción')
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record?->received_condition
+                                )
+                                    ? (string)
+                                        $record->received_condition
+                                    : 'Sin observaciones registradas'
+                        )
+                        ->columnSpan(2),
+                ]),
+
+            Forms\Components\Section::make(
+                'Trabajo técnico'
+            )
+                ->description(
+                    'Aquí sólo se muestra el trabajo técnico. Para registrarlo usa el botón "Finalizar trabajo técnico".'
+                )
+                ->columns(2)
+                ->schema([
+                    Forms\Components\Placeholder::make(
+                        'technician_work_status'
+                    )
+                        ->label('Estado')
+                        ->content(
+                            function ($record): string {
+                                $work =
+                                    static::technicianWorkMetadata(
+                                        $record
+                                    );
+
+                                if (
+                                    (string) (
+                                        $work['status']
+                                        ?? ''
+                                    ) === 'completed'
+                                ) {
+                                    return
+                                        'Trabajo técnico finalizado';
+                                }
+
+                                return
+                                    'Pendiente de trabajo técnico';
+                            }
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_work_completed_at'
+                    )
+                        ->label('Finalizado')
+                        ->content(
+                            function ($record): string {
+                                $work =
+                                    static::technicianWorkMetadata(
+                                        $record
+                                    );
+
+                                $completedAt =
+                                    trim(
+                                        (string) (
+                                            $work[
+                                                'completed_at'
+                                            ]
+                                            ?? ''
+                                        )
+                                    );
+
+                                return
+                                    $completedAt !== ''
+                                        ? $completedAt
+                                        : 'Pendiente';
+                            }
+                        ),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_diagnosis_display'
+                    )
+                        ->label('Diagnóstico técnico')
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record?->technical_diagnosis
+                                )
+                                    ? (string)
+                                        $record->technical_diagnosis
+                                    : 'Pendiente'
+                        )
+                        ->columnSpanFull(),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_work_performed_display'
+                    )
+                        ->label('Trabajo realizado')
+                        ->content(
+                            fn ($record): string =>
+                                filled(
+                                    $record?->resolution
+                                )
+                                    ? (string)
+                                        $record->resolution
+                                    : 'Pendiente'
+                        )
+                        ->columnSpanFull(),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_tests_display'
+                    )
+                        ->label(
+                            'Pruebas / observaciones finales'
+                        )
+                        ->content(
+                            function ($record): string {
+                                $work =
+                                    static::technicianWorkMetadata(
+                                        $record
+                                    );
+
+                                $tests =
+                                    trim(
+                                        (string) (
+                                            $work[
+                                                'tests_notes'
+                                            ]
+                                            ?? ''
+                                        )
+                                    );
+
+                                return
+                                    $tests !== ''
+                                        ? $tests
+                                        : 'Sin observaciones registradas';
+                            }
+                        )
+                        ->columnSpanFull(),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_parts_display'
+                    )
+                        ->label('Refacciones utilizadas')
+                        ->content(
+                            function (
+                                $record
+                            ): \Illuminate\Support\HtmlString {
+                                if (
+                                    ! $record
+                                    || ! $record->getKey()
+                                ) {
+                                    return new
+                                        \Illuminate\Support\HtmlString(
+                                            'Sin refacciones registradas.'
+                                        );
+                                }
+
+                                $rows =
+                                    \Illuminate\Support\Facades\DB::
+                                        table(
+                                            'repair_order_parts'
+                                        )
+                                        ->where(
+                                            'repair_order_id',
+                                            $record->getKey()
+                                        )
+                                        ->orderBy('id')
+                                        ->get([
+                                            'product_id',
+                                            'product_name',
+                                            'description',
+                                            'quantity',
+                                            'notes',
+                                        ]);
+
+                                if ($rows->isEmpty()) {
+                                    return new
+                                        \Illuminate\Support\HtmlString(
+                                            'Sin refacciones registradas.'
+                                        );
+                                }
+
+                                $items = [];
+
+                                foreach ($rows as $row) {
+                                    $name =
+                                        trim(
+                                            (string) (
+                                                $row->product_name
+                                                ?? ''
+                                            )
+                                        );
+
+                                    if (
+                                        $name === ''
+                                        && ! empty(
+                                            $row->product_id
+                                        )
+                                    ) {
+                                        $name =
+                                            ServiceAccess::productLabel(
+                                                (int)
+                                                $row->product_id
+                                            ) ?? '';
+                                    }
+
+                                    if ($name === '') {
+                                        $name =
+                                            trim(
+                                                (string) (
+                                                    $row->description
+                                                    ?? ''
+                                                )
+                                            );
+                                    }
+
+                                    if ($name === '') {
+                                        $name = 'Refacción';
+                                    }
+
+                                    $quantity =
+                                        (float) (
+                                            $row->quantity
+                                            ?? 0
+                                        );
+
+                                    $qty =
+                                        rtrim(
+                                            rtrim(
+                                                number_format(
+                                                    $quantity,
+                                                    2,
+                                                    '.',
+                                                    ''
+                                                ),
+                                                '0'
+                                            ),
+                                            '.'
+                                        );
+
+                                    if ($qty === '') {
+                                        $qty = '0';
+                                    }
+
+                                    $notes =
+                                        trim(
+                                            (string) (
+                                                $row->notes
+                                                ?? ''
+                                            )
+                                        );
+
+                                    $label =
+                                        e($name)
+                                        . ' · Cantidad: '
+                                        . e($qty);
+
+                                    if ($notes !== '') {
+                                        $label .=
+                                            ' · '
+                                            . e($notes);
+                                    }
+
+                                    $items[] =
+                                        '<li>'
+                                        . $label
+                                        . '</li>';
+                                }
+
+                                return new
+                                    \Illuminate\Support\HtmlString(
+                                        '<ul>'
+                                        . implode(
+                                            '',
+                                            $items
+                                        )
+                                        . '</ul>'
+                                    );
+                            }
+                        )
+                        ->columnSpanFull(),
+
+                    Forms\Components\Placeholder::make(
+                        'technician_action_hint'
+                    )
+                        ->label('Siguiente paso')
+                        ->content(
+                            function ($record): string {
+                                $work =
+                                    static::technicianWorkMetadata(
+                                        $record
+                                    );
+
+                                if (
+                                    (string) (
+                                        $work['status']
+                                        ?? ''
+                                    ) === 'completed'
+                                ) {
+                                    return
+                                        'El trabajo técnico está finalizado y bloqueado. Las etapas posteriores corresponden al Encargado de Técnicos y a los roles autorizados.';
+                                }
+
+                                return
+                                    'Usa "Finalizar trabajo técnico" para registrar diagnóstico, trabajo, refacciones y evidencia.';
+                            }
+                        )
+                        ->columnSpanFull(),
+                ]),
+        ];
+    }
+
+    /*
+     * Extrae metadata técnica sin asumir que Eloquent ya la
+     * haya convertido a array.
+     */
+    protected static function technicianWorkMetadata(
+        mixed $record
+    ): array {
+        if (! $record) {
+            return [];
+        }
+
+        $metadata =
+            $record->metadata
+            ?? [];
+
+        if (is_string($metadata)) {
+            $decoded =
+                json_decode(
+                    $metadata,
+                    true
+                );
+
+            $metadata =
+                is_array($decoded)
+                    ? $decoded
+                    : [];
+        }
+
+        if (! is_array($metadata)) {
+            return [];
+        }
+
+        $work =
+            $metadata['technical_work']
+            ?? [];
+
+        return
+            is_array($work)
+                ? $work
+                : [];
+    }
+
 
     protected static function recalculateBudgetFields(Get $get, Set $set, string $prefix = ''): void
     {

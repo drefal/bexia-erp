@@ -76,6 +76,7 @@ class ServiceCase extends Model
         'esperando_refaccion' => 'Esperando refaccion',
         'en_pruebas' => 'En pruebas',
         'listo_entrega' => 'Listo para entrega',
+        'resuelto' => 'Resuelto',
         'entregado' => 'Entregado',
         'cerrado' => 'Cerrado',
         'rechazado' => 'Rechazado',
@@ -84,17 +85,32 @@ class ServiceCase extends Model
 
     public const PRIORITIES = [
         'baja' => 'Baja',
-        'media' => 'Media',
+        'media' => 'Normal',
+        'alta' => 'Alta',
+        'urgente' => 'Urgente',
+    ];
+
+    public const OPERATIONAL_PRIORITIES = [
+        'media' => 'Normal',
         'alta' => 'Alta',
         'urgente' => 'Urgente',
     ];
 
     public const CHANNELS = [
-        'manual' => 'Manual',
+        'manual' => 'Presencial',
         'whatsapp' => 'WhatsApp',
         'correo' => 'Correo',
         'telefono' => 'Telefono',
         'portal' => 'Portal',
+        'otro' => 'Otro',
+    ];
+
+    public const OPERATIONAL_CHANNELS = [
+        'manual' => 'Presencial',
+        'whatsapp' => 'WhatsApp',
+        'correo' => 'Correo',
+        'telefono' => 'Telefono',
+        'otro' => 'Otro',
     ];
 
     public const CASE_TYPES = [
@@ -111,8 +127,22 @@ class ServiceCase extends Model
     ];
 
     public const ATTENTION_ROUTES = [
-        'repair' => 'Reparación',
-        'non_repair' => 'Sin reparación',
+        'repair' => 'Revisión / reparación de equipo',
+        'non_repair' => 'Respuesta / gestión',
+    ];
+
+    /*
+     * BEXIA_ATC_REPAIR_ARRIVAL_METHODS_V5_83_4C1
+     *
+     * El equipo todavía NO está recibido en esta etapa.
+     * Sólo describe cómo está previsto que llegue.
+     */
+    public const REPAIR_ARRIVAL_METHODS = [
+        'cliente_entrega' => 'Cliente lo lleva',
+        'recoleccion_chofer' => 'Recolección por chofer',
+        'ya_en_sucursal' => 'Ya está en sucursal',
+        'transferencia_interna' => 'Transferencia interna',
+        'otro' => 'Otro',
     ];
 
     public const NON_REPAIR_TYPES = [
@@ -130,6 +160,105 @@ class ServiceCase extends Model
         'visita_tecnica' => 'Visita técnica',
         'otro' => 'Otro servicio',
     ];
+
+
+    public const VISIBLE_STATUSES = [
+        'nuevo' => 'Nuevo',
+        'en_atencion' => 'En atención',
+        'resuelto' => 'Resuelto',
+        'cerrado' => 'Cerrado',
+    ];
+
+    public const TERMINAL_STATUSES = [
+        'cerrado',
+        'rechazado',
+        'cancelado',
+    ];
+
+    public function visibleStatusKey(): string
+    {
+        $status = (string) ($this->status ?: 'nuevo');
+
+        if ($status === 'nuevo') {
+            return 'nuevo';
+        }
+
+        if (in_array($status, ['resuelto', 'entregado'], true)) {
+            return 'resuelto';
+        }
+
+        if (in_array($status, self::TERMINAL_STATUSES, true)) {
+            return 'cerrado';
+        }
+
+        return 'en_atencion';
+    }
+
+    public function visibleStatusLabel(): string
+    {
+        return self::VISIBLE_STATUSES[
+            $this->visibleStatusKey()
+        ] ?? 'En atención';
+    }
+
+    public function operationalSubstatusLabel(): string
+    {
+        $status = (string) ($this->status ?: 'nuevo');
+
+        if ($status === 'nuevo') {
+            return 'Pendiente de atención';
+        }
+
+        if ($status === 'resuelto') {
+            return 'Resuelto';
+        }
+
+        if ($status === 'entregado') {
+            return 'Equipo entregado';
+        }
+
+        return self::STATUSES[$status]
+            ?? ucfirst(str_replace('_', ' ', $status));
+    }
+
+    public function attentionTypeLabel(): string
+    {
+        return self::ATTENTION_ROUTES[
+            (string) ($this->attention_route ?? '')
+        ] ?? 'Pendiente de definir';
+    }
+
+    public function nextActionLabel(): string
+    {
+        $status = (string) ($this->status ?: 'nuevo');
+
+        if ($this->visibleStatusKey() === 'cerrado') {
+            return 'Ver expediente';
+        }
+
+        if (in_array($status, ['resuelto', 'entregado'], true)) {
+            return 'Cerrar';
+        }
+
+        if (blank($this->attention_route)) {
+            return 'Atender';
+        }
+
+        if ((string) $this->attention_route === 'non_repair') {
+            return 'Continuar';
+        }
+
+        return match ($status) {
+            'esperando_producto' => 'Recibir equipo',
+            'producto_recibido',
+            'en_diagnostico' => 'Diagnosticar',
+            'en_reparacion' => 'Continuar reparación',
+            'esperando_refaccion' => 'Continuar',
+            'en_pruebas' => 'Registrar pruebas',
+            'listo_entrega' => 'Entregar',
+            default => 'Continuar',
+        };
+    }
 
     protected static function booted(): void
     {
