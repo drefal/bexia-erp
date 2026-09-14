@@ -18,29 +18,62 @@ class AttendanceKioskClockController extends Controller
     ): JsonResponse {
         $data = $request->validate([
             'terminal_uuid' => ['nullable', 'uuid'],
-            'terminal_token' => ['nullable', 'string', 'min:32', 'max:255'],
-            'employee_qr' => ['required', 'string', 'max:2048'],
-            'photo' => ['required', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:4096'],
+            'terminal_token' => [
+                'nullable',
+                'string',
+                'min:32',
+                'max:255',
+            ],
+            'employee_qr' => [
+                'required',
+                'string',
+                'max:2048',
+            ],
+            'action' => [
+                'nullable',
+                'string',
+                'in:preview,clock_in,meal_out,meal_in,clock_out',
+            ],
+            'photo' => [
+                'nullable',
+                'file',
+                'image',
+                'mimes:jpeg,jpg,png,webp',
+                'max:4096',
+            ],
         ]);
 
-        $uuid = trim((string) ($request->header('X-Bexia-Terminal-UUID') ?: ($data['terminal_uuid'] ?? '')));
-        $token = trim((string) ($request->bearerToken() ?: ($data['terminal_token'] ?? '')));
+        $uuid = trim((string) (
+            $request->header('X-Bexia-Terminal-UUID')
+            ?: ($data['terminal_uuid'] ?? '')
+        ));
+
+        $token = trim((string) (
+            $request->bearerToken()
+            ?: ($data['terminal_token'] ?? '')
+        ));
 
         if ($uuid === '' || $token === '') {
             return response()->json([
                 'ok' => false,
                 'code' => 'terminal_credentials_missing',
-                'message' => 'La tablet no tiene credenciales de terminal.',
+                'message' =>
+                    'La tablet no tiene credenciales de terminal.',
             ], 401);
         }
 
-        $terminal = $pairing->authenticateTerminal($uuid, $token, $request);
+        $terminal = $pairing->authenticateTerminal(
+            $uuid,
+            $token,
+            $request
+        );
 
         if (! $terminal) {
             return response()->json([
                 'ok' => false,
                 'code' => 'terminal_unauthorized',
-                'message' => 'La vinculacion de esta tablet ya no es valida.',
+                'message' =>
+                    'La vinculacion de esta tablet ya no es valida.',
             ], 401);
         }
 
@@ -48,20 +81,59 @@ class AttendanceKioskClockController extends Controller
             return response()->json([
                 'ok' => false,
                 'code' => 'terminal_blocked',
-                'message' => $terminal->blocked_reason ?: 'Esta terminal esta bloqueada o desactivada.',
+                'message' =>
+                    $terminal->blocked_reason
+                    ?: 'Esta terminal esta bloqueada o desactivada.',
             ], 403);
         }
 
+        $action = strtolower(
+            trim((string) ($data['action'] ?? 'preview'))
+        );
+
+        if ($action === '') {
+            $action = 'preview';
+        }
+
         try {
+            if ($action === 'preview') {
+                $result = $clock->preview(
+                    terminal: $terminal,
+                    rawEmployeeQr: (string) $data['employee_qr'],
+                );
+
+                return response()->json(array_merge([
+                    'ok' => true,
+                    'mode' => 'preview',
+                    'message' => 'Selecciona el registro a realizar.',
+                    'server_time' => now()->toIso8601String(),
+                ], $result));
+            }
+
+            $photo = $request->file('photo');
+
+            if (! $photo) {
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'photo_required',
+                    'message' =>
+                        'Se requiere fotografia para registrar la asistencia.',
+                ], 422);
+            }
+
             $result = $clock->register(
                 terminal: $terminal,
                 rawEmployeeQr: (string) $data['employee_qr'],
-                photo: $request->file('photo'),
+                requestedAction: $action,
+                photo: $photo,
                 ipAddress: (string) $request->ip(),
                 userAgent: (string) $request->userAgent(),
             );
         } catch (ValidationException $e) {
-            $message = collect($e->errors())->flatten()->filter()->first()
+            $message = collect($e->errors())
+                ->flatten()
+                ->filter()
+                ->first()
                 ?: 'No fue posible registrar la asistencia.';
 
             return response()->json([
@@ -76,12 +148,14 @@ class AttendanceKioskClockController extends Controller
             return response()->json([
                 'ok' => false,
                 'code' => 'clock_error',
-                'message' => 'No fue posible registrar la asistencia. Intenta nuevamente.',
+                'message' =>
+                    'No fue posible registrar la asistencia. Intenta nuevamente.',
             ], 500);
         }
 
         return response()->json(array_merge([
             'ok' => true,
+            'mode' => 'registered',
             'message' => 'Registro correcto.',
             'server_time' => now()->toIso8601String(),
         ], $result));
