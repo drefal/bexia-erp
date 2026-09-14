@@ -24,7 +24,7 @@
         body {
             position: relative;
             font-family: DejaVu Sans, sans-serif;
-            color: #111827;
+            color: #17212b;
             background: #ffffff;
         }
 
@@ -36,7 +36,7 @@
             height: 82mm;
             overflow: hidden;
             background: #ffffff;
-            border: 0.32mm solid #111827;
+            border: 0.42mm solid #16476a;
         }
 
         .credential-header {
@@ -44,48 +44,52 @@
             left: 0;
             top: 0;
             width: 100%;
-            height: 9.2mm;
-            border-bottom: 0.24mm solid #d1d5db;
-            text-align: center;
-        }
-
-        .brand {
-            margin-top: 1.1mm;
-            font-size: 13.5pt;
-            line-height: 4.6mm;
-            font-weight: 800;
-            letter-spacing: 0.8mm;
-        }
-
-        .company {
-            margin: 0.25mm 2.5mm 0;
-            font-size: 5.2pt;
-            line-height: 2.2mm;
-            font-weight: 700;
-            color: #4b5563;
-            text-transform: uppercase;
-            white-space: nowrap;
+            height: 10.8mm;
             overflow: hidden;
+            text-align: center;
+            background: #edf5fa;
+            border-top: 1.1mm solid #16476a;
+            border-bottom: 0.48mm solid #5ba8c7;
+        }
+
+        .company-logo {
+            display: block;
+            max-width: 39mm;
+            max-height: 7.1mm;
+            margin: 1.25mm auto 0;
+        }
+
+        .company-name {
+            margin: 2.3mm 2.8mm 0;
+            max-height: 6.5mm;
+            overflow: hidden;
+            font-size: 8.2pt;
+            line-height: 3.2mm;
+            font-weight: 800;
+            color: #16476a;
+            text-transform: uppercase;
         }
 
         .credential-body {
             position: absolute;
             left: 0;
-            top: 9.2mm;
+            top: 10.8mm;
             width: 100%;
-            height: 42.3mm;
+            height: 40.2mm;
+            overflow: hidden;
             text-align: center;
+            background: #ffffff;
         }
 
         .photo-frame {
             position: absolute;
-            left: 16.5mm;
-            top: 2.2mm;
-            width: 19mm;
-            height: 19mm;
+            left: 17.25mm;
+            top: 1.5mm;
+            width: 17.5mm;
+            height: 17.5mm;
             overflow: hidden;
-            border: 0.24mm solid #d1d5db;
-            background: #f3f4f6;
+            border: 0.35mm solid #5ba8c7;
+            background: #f3f7fa;
         }
 
         .photo-frame img {
@@ -96,46 +100,58 @@
 
         .employee-info {
             position: absolute;
-            left: 2.8mm;
-            right: 2.8mm;
-            top: 22.5mm;
+            left: 2.4mm;
+            right: 2.4mm;
+            top: 20mm;
             text-align: center;
         }
 
         .employee-name {
-            font-size: 8.8pt;
-            line-height: 3.8mm;
-            font-weight: 800;
-            text-transform: uppercase;
-            max-height: 7.6mm;
+            max-height: 9.45mm;
             overflow: hidden;
+            font-size: 8.1pt;
+            line-height: 3.15mm;
+            font-weight: 800;
+            color: #123d5a;
+            text-transform: uppercase;
+            white-space: normal;
+        }
+
+        .employee-name--sm {
+            font-size: 7.2pt;
+            line-height: 2.95mm;
+        }
+
+        .employee-name--xs {
+            font-size: 6.4pt;
+            line-height: 2.7mm;
         }
 
         .employee-number {
-            margin-top: 0.45mm;
-            font-size: 5.7pt;
-            line-height: 2.6mm;
+            margin-top: 0.25mm;
+            font-size: 5.6pt;
+            line-height: 2.35mm;
             font-weight: 700;
-            color: #4b5563;
+            color: #1c608b;
         }
 
         .employee-position {
-            margin-top: 0.25mm;
-            font-size: 5.5pt;
-            line-height: 2.5mm;
-            color: #111827;
-            max-height: 5mm;
+            margin-top: 0.1mm;
+            max-height: 4.5mm;
             overflow: hidden;
+            font-size: 5.2pt;
+            line-height: 2.25mm;
+            color: #17212b;
         }
 
         .employee-branch {
-            margin-top: 0.25mm;
-            font-size: 5.4pt;
-            line-height: 2.45mm;
-            font-weight: 700;
-            color: #4b5563;
-            max-height: 4.9mm;
+            margin-top: 0.1mm;
+            max-height: 2.3mm;
             overflow: hidden;
+            font-size: 5.1pt;
+            line-height: 2.25mm;
+            font-weight: 700;
+            color: #527084;
         }
 
         .credential-qr-area {
@@ -143,44 +159,28 @@
             left: 0;
             right: 0;
             bottom: 0;
-            height: 30.5mm;
-            border-top: 0.24mm solid #d1d5db;
-            background: #fafafa;
+            height: 31mm;
+            overflow: hidden;
+            border-top: 0.4mm solid #5ba8c7;
+            background: #eef5fa;
             text-align: center;
         }
 
         .qr-box {
             position: absolute;
-            left: 13.5mm;
-            top: 3.7mm;
-            width: 25mm;
-            height: 25mm;
+            left: 13.3mm;
+            top: 2.8mm;
+            width: 25.4mm;
+            height: 25.4mm;
+            padding: 0.2mm;
+            overflow: hidden;
+            border: 0.2mm solid #bfd4e1;
             background: #ffffff;
         }
 
         .qr-box img {
             width: 25mm;
             height: 25mm;
-        }
-
-        .qr-copy {
-            position: absolute;
-            left: 2mm;
-            right: 2mm;
-            top: 0.8mm;
-            text-align: center;
-        }
-
-        .qr-copy .qr-title {
-            font-size: 5.6pt;
-            line-height: 2.4mm;
-            font-weight: 800;
-            color: #374151;
-        }
-
-        .qr-copy .qr-instruction,
-        .qr-copy .qr-security {
-            display: none;
         }
     </style>
 </head>
