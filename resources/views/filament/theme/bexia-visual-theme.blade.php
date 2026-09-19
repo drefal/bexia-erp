@@ -19274,3 +19274,99 @@ html.bexia-repair-order-edit-page
 
 /* BEXIA_CONTACT_DROPDOWN_ALL_TABS_FIX_V5_83_5K2_END */
 </style>
+<style>
+/* BEXIA_CONTACT_OPEN_SECTION_FIX_V5_83_5K3_START */
+
+/*
+ * Cuando un select searchable está abierto,
+ * elevar TODA la sección que lo contiene.
+ *
+ * Esto evita que una sección hermana posterior
+ * (Pago, Compras, etc.) pinte encima del dropdown.
+ */
+
+.bexia-contact-resource-tabs
+.fi-section:has(.choices.is-open),
+
+.bexia-contact-resource-tabs
+.fi-section:has(.choices.is-focused),
+
+.bexia-contact-resource-tabs
+.fi-section:has(.ts-wrapper.dropdown-active),
+
+.bexia-contact-resource-tabs
+.fi-section:has(.ts-wrapper.focus),
+
+.bexia-contact-resource-tabs
+.fi-section:has([aria-expanded="true"]) {
+    position: relative !important;
+    z-index: 100000 !important;
+    overflow: visible !important;
+    transform: none !important;
+}
+
+
+/* Elevar también el contenedor principal del campo abierto */
+
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp:has(.choices.is-open),
+
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp:has(.choices.is-focused),
+
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp:has(.ts-wrapper.dropdown-active),
+
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp:has([aria-expanded="true"]) {
+    position: relative !important;
+    z-index: 100100 !important;
+    overflow: visible !important;
+}
+
+
+/* El propio dropdown queda por encima */
+
+.bexia-contact-resource-tabs
+.choices.is-open {
+    z-index: 100200 !important;
+}
+
+.bexia-contact-resource-tabs
+.choices.is-open
+.choices__list--dropdown,
+
+.bexia-contact-resource-tabs
+.choices__list--dropdown.is-active,
+
+.bexia-contact-resource-tabs
+.choices__list[aria-expanded="true"],
+
+.bexia-contact-resource-tabs
+.ts-dropdown {
+    z-index: 100300 !important;
+}
+
+
+/* Evitar clipping en grids y contenedores del tab activo */
+
+.bexia-contact-resource-tabs
+.fi-fo-tabs-tab.fi-active
+.fi-grid,
+
+.bexia-contact-resource-tabs
+.fi-fo-tabs-tab.fi-active
+.fi-fo-component-ctn,
+
+.bexia-contact-resource-tabs
+[role="tabpanel"].fi-active
+.fi-grid,
+
+.bexia-contact-resource-tabs
+[role="tabpanel"].fi-active
+.fi-fo-component-ctn {
+    overflow: visible !important;
+}
+
+/* BEXIA_CONTACT_OPEN_SECTION_FIX_V5_83_5K3_END */
+</style>
