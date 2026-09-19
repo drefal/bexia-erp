@@ -5,6 +5,8 @@ namespace App\Services;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
+use Smalot\PdfParser\Parser as PdfParser;
+use Throwable;
 
 class SatConstanciaParser
 {
@@ -193,12 +195,51 @@ class SatConstanciaParser
 
     protected function extractText(string $path): string
     {
-        $command = 'pdftotext -layout -enc UTF-8 ' . escapeshellarg($path) . ' - 2>/dev/null';
-        $text = shell_exec($command);
+        $text = '';
+
+        /*
+         * Preferir pdftotext cuando este disponible porque conserva bien
+         * el texto de las constancias SAT.
+         *
+         * Algunos contenedores de Bexia no incluyen Poppler/pdftotext.
+         * En esos casos usamos el parser PHP que ya forma parte del proyecto.
+         */
+        $pdftotext = trim((string) shell_exec(
+            'command -v pdftotext 2>/dev/null'
+        ));
+
+        if ($pdftotext !== '') {
+            $binary = escapeshellarg($pdftotext);
+
+            $command = $binary
+                . ' -layout -enc UTF-8 '
+                . escapeshellarg($path)
+                . ' - 2>/dev/null';
+
+            $text = shell_exec($command);
+
+            if (! is_string($text) || trim($text) === '') {
+                $command = $binary
+                    . ' -raw -enc UTF-8 '
+                    . escapeshellarg($path)
+                    . ' - 2>/dev/null';
+
+                $text = shell_exec($command);
+            }
+        }
 
         if (! is_string($text) || trim($text) === '') {
-            $command = 'pdftotext -raw -enc UTF-8 ' . escapeshellarg($path) . ' - 2>/dev/null';
-            $text = shell_exec($command);
+            try {
+                $parser = new PdfParser();
+                $pdf = $parser->parseFile($path);
+                $text = $pdf->getText();
+            } catch (Throwable $e) {
+                throw new RuntimeException(
+                    'No pude extraer texto del PDF de la Constancia SAT.',
+                    0,
+                    $e
+                );
+            }
         }
 
         return $this->normalizeText((string) $text);
