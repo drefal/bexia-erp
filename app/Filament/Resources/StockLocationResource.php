@@ -245,17 +245,14 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('warehouse_id')
-                    ->extraAttributes(['class' => 'bexia-slr-filter bexia-slr-filter-warehouse bexia-slr-filter-related'])
                     ->label('Almacén')
                     ->options(fn (): array => static::warehouseOptions()),
 
                 Tables\Filters\SelectFilter::make('stock_location_type_id')
-                    ->extraAttributes(['class' => 'bexia-slr-filter bexia-slr-filter-type bexia-slr-filter-related'])
                     ->label('Tipo')
                     ->options(fn (): array => static::locationTypeOptions()),
 
                 Tables\Filters\TernaryFilter::make('is_active')
-                    ->extraAttributes(['class' => 'bexia-slr-filter bexia-slr-filter-active bexia-slr-filter-status'])
                     ->label('Activo'),
             ])
             ->actions([
