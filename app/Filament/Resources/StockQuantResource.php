@@ -117,7 +117,10 @@ class StockQuantResource extends Resource
                     ])
                     ->label('Producto')
                     ->state(fn (StockQuant $record): string => static::productLabel($record->product_id))
-                    ->searchable(false)
+                    ->searchable(
+                        query: fn (Builder $query, string $search): Builder =>
+                            static::applyProductSearch($query, $search),
+                    )
                     ->sortable(false)
                     ->wrap(),
 
@@ -228,9 +231,90 @@ class StockQuantResource extends Resource
         ];
     }
 
+    /**
+     * BEXIA_V5835H_product_stock_search
+     *
+     * Permite que la busqueda global de Existencias encuentre el producto
+     * aunque product_label sea una columna calculada.
+     */
+    protected static function applyProductSearch(
+        Builder $query,
+        string $search
+    ): Builder {
+        $search = trim($search);
+
+        if (
+            $search === ''
+            || ! Schema::hasTable('products')
+        ) {
+            return $query;
+        }
+
+        $columns = array_values(array_filter(
+            [
+                'internal_reference',
+                'sku',
+                'barcode',
+                'reference',
+                'code',
+                'name',
+                'description',
+            ],
+            fn (string $column): bool =>
+                Schema::hasColumn('products', $column),
+        ));
+
+        if ($columns === []) {
+            return $query;
+        }
+
+        return $query->whereExists(
+            function ($productQuery) use (
+                $search,
+                $columns
+            ): void {
+                $productQuery
+                    ->selectRaw('1')
+                    ->from('products')
+                    ->whereColumn(
+                        'products.id',
+                        'stock_quants.product_id'
+                    )
+                    ->where(
+                        function ($matchQuery) use (
+                            $search,
+                            $columns
+                        ): void {
+                            foreach ($columns as $column) {
+                                $matchQuery->orWhere(
+                                    'products.' . $column,
+                                    'ilike',
+                                    '%' . $search . '%'
+                                );
+                            }
+                        }
+                    );
+            }
+        );
+    }
+
     protected static function productLabel($productId): string
     {
-        return static::labelFromTable('products', $productId, ['sku', 'internal_reference', 'reference', 'code'], ['name', 'description']);
+        return static::labelFromTable(
+            'products',
+            $productId,
+            [
+                'internal_reference',
+                'sku',
+                'barcode',
+                'reference',
+                'code',
+            ],
+            [
+                'name',
+                'description',
+            ]
+        );
     }
 
     protected static function variantLabel($variantId): string
