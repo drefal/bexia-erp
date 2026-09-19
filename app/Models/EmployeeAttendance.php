@@ -15,25 +15,13 @@ class EmployeeAttendance extends Model
         'status',
         'expected_start_at',
         'expected_end_at',
-
         'clock_in_at',
         'clock_out_at',
-
-        'meal_out_at',
-        'meal_in_at',
-
         'clock_in_attendance_terminal_id',
         'clock_out_attendance_terminal_id',
-        'meal_out_attendance_terminal_id',
-        'meal_in_attendance_terminal_id',
-
         'clock_in_photo_path',
         'clock_out_photo_path',
-        'meal_out_photo_path',
-        'meal_in_photo_path',
-
         'break_minutes',
-        'meal_punch_required',
         'expected_hours',
         'worked_minutes',
         'worked_hours',
@@ -41,77 +29,36 @@ class EmployeeAttendance extends Model
         'early_leave_minutes',
         'overtime_minutes',
         'source',
-
         'clock_in_method',
         'clock_out_method',
-        'meal_out_method',
-        'meal_in_method',
-
         'clock_in_hr_attendance_location_id',
         'clock_out_hr_attendance_location_id',
-
         'clock_in_latitude',
         'clock_in_longitude',
         'clock_in_accuracy_meters',
         'clock_in_distance_meters',
         'clock_in_location_status',
-
         'clock_out_latitude',
         'clock_out_longitude',
         'clock_out_accuracy_meters',
         'clock_out_distance_meters',
         'clock_out_location_status',
-
         'mobile_review_status',
         'mobile_reviewed_by_user_id',
         'mobile_reviewed_at',
         'mobile_review_notes',
-
         'clock_in_ip_address',
         'clock_out_ip_address',
-        'meal_out_ip_address',
-        'meal_in_ip_address',
-
         'clock_in_user_agent',
         'clock_out_user_agent',
-        'meal_out_user_agent',
-        'meal_in_user_agent',
-
         'clock_in_device_fingerprint',
         'clock_out_device_fingerprint',
-        'meal_out_device_fingerprint',
-        'meal_in_device_fingerprint',
-
         'clock_in_device_info',
         'clock_out_device_info',
-        'meal_out_device_info',
-        'meal_in_device_info',
-
         'clock_in_device_guard_status',
         'clock_out_device_guard_status',
-        'meal_out_device_guard_status',
-        'meal_in_device_guard_status',
-
         'clock_in_device_guard_message',
         'clock_out_device_guard_message',
-        'meal_out_device_guard_message',
-        'meal_in_device_guard_message',
-
-        'meal_out_location_status',
-        'meal_in_location_status',
-
-        'meal_out_hr_attendance_location_id',
-        'meal_out_latitude',
-        'meal_out_longitude',
-        'meal_out_accuracy_meters',
-        'meal_out_distance_meters',
-
-        'meal_in_hr_attendance_location_id',
-        'meal_in_latitude',
-        'meal_in_longitude',
-        'meal_in_accuracy_meters',
-        'meal_in_distance_meters',
-
         'notes',
         'created_by_user_id',
         'updated_by_user_id',
@@ -121,47 +68,26 @@ class EmployeeAttendance extends Model
         'attendance_date' => 'date',
         'expected_start_at' => 'datetime',
         'expected_end_at' => 'datetime',
-
         'clock_in_at' => 'datetime',
         'clock_out_at' => 'datetime',
-        'meal_out_at' => 'datetime',
-        'meal_in_at' => 'datetime',
-
         'break_minutes' => 'integer',
-        'meal_punch_required' => 'boolean',
         'expected_hours' => 'decimal:2',
         'worked_minutes' => 'integer',
         'worked_hours' => 'decimal:2',
         'late_minutes' => 'integer',
         'early_leave_minutes' => 'integer',
         'overtime_minutes' => 'integer',
-
         'clock_in_latitude' => 'decimal:7',
         'clock_in_longitude' => 'decimal:7',
         'clock_in_accuracy_meters' => 'integer',
         'clock_in_distance_meters' => 'integer',
-
         'clock_out_latitude' => 'decimal:7',
         'clock_out_longitude' => 'decimal:7',
         'clock_out_accuracy_meters' => 'integer',
         'clock_out_distance_meters' => 'integer',
-
-        'meal_out_latitude' => 'decimal:7',
-        'meal_out_longitude' => 'decimal:7',
-        'meal_out_accuracy_meters' => 'integer',
-        'meal_out_distance_meters' => 'integer',
-
-        'meal_in_latitude' => 'decimal:7',
-        'meal_in_longitude' => 'decimal:7',
-        'meal_in_accuracy_meters' => 'integer',
-        'meal_in_distance_meters' => 'integer',
-
         'mobile_reviewed_at' => 'datetime',
-
         'clock_in_device_info' => 'array',
         'clock_out_device_info' => 'array',
-        'meal_out_device_info' => 'array',
-        'meal_in_device_info' => 'array',
     ];
 
     protected static function booted(): void
@@ -186,79 +112,33 @@ class EmployeeAttendance extends Model
         return $this->belongsTo(\App\Models\HrWorkSchedule::class, 'hr_work_schedule_id');
     }
 
+
     public function clockInAttendanceLocation()
     {
-        return $this->belongsTo(
-            \App\Models\HrAttendanceLocation::class,
-            'clock_in_hr_attendance_location_id'
-        );
+        return $this->belongsTo(\App\Models\HrAttendanceLocation::class, 'clock_in_hr_attendance_location_id');
     }
 
     public function clockOutAttendanceLocation()
     {
-        return $this->belongsTo(
-            \App\Models\HrAttendanceLocation::class,
-            'clock_out_hr_attendance_location_id'
-        );
-    }
-
-
-    public function mealOutAttendanceLocation()
-    {
-        return $this->belongsTo(
-            \App\Models\HrAttendanceLocation::class,
-            'meal_out_hr_attendance_location_id'
-        );
-    }
-
-    public function mealInAttendanceLocation()
-    {
-        return $this->belongsTo(
-            \App\Models\HrAttendanceLocation::class,
-            'meal_in_hr_attendance_location_id'
-        );
+        return $this->belongsTo(\App\Models\HrAttendanceLocation::class, 'clock_out_hr_attendance_location_id');
     }
 
 
     public function clockInAttendanceTerminal()
     {
-        return $this->belongsTo(
-            \App\Models\AttendanceTerminal::class,
-            'clock_in_attendance_terminal_id'
-        );
+        return $this->belongsTo(\App\Models\AttendanceTerminal::class, 'clock_in_attendance_terminal_id');
     }
 
     public function clockOutAttendanceTerminal()
     {
-        return $this->belongsTo(
-            \App\Models\AttendanceTerminal::class,
-            'clock_out_attendance_terminal_id'
-        );
-    }
-
-    public function mealOutAttendanceTerminal()
-    {
-        return $this->belongsTo(
-            \App\Models\AttendanceTerminal::class,
-            'meal_out_attendance_terminal_id'
-        );
-    }
-
-    public function mealInAttendanceTerminal()
-    {
-        return $this->belongsTo(
-            \App\Models\AttendanceTerminal::class,
-            'meal_in_attendance_terminal_id'
-        );
+        return $this->belongsTo(\App\Models\AttendanceTerminal::class, 'clock_out_attendance_terminal_id');
     }
 
     public function mobileReviewedBy()
     {
-        return $this->belongsTo(
-            \App\Models\User::class,
-            'mobile_reviewed_by_user_id'
-        );
+        return $this->belongsTo(\App\Models\User::class, 'mobile_reviewed_by_user_id');
     }
+
 
     /*
      * V5.64.16b-start
@@ -266,10 +146,7 @@ class EmployeeAttendance extends Model
      */
     public function incidents()
     {
-        return $this->hasMany(
-            \App\Models\EmployeeIncident::class,
-            'employee_attendance_id'
-        );
+        return $this->hasMany(\App\Models\EmployeeIncident::class, 'employee_attendance_id');
     }
     /*
      * V5.64.16b-end
@@ -277,18 +154,12 @@ class EmployeeAttendance extends Model
 
     public function createdBy()
     {
-        return $this->belongsTo(
-            \App\Models\User::class,
-            'created_by_user_id'
-        );
+        return $this->belongsTo(\App\Models\User::class, 'created_by_user_id');
     }
 
     public function updatedBy()
     {
-        return $this->belongsTo(
-            \App\Models\User::class,
-            'updated_by_user_id'
-        );
+        return $this->belongsTo(\App\Models\User::class, 'updated_by_user_id');
     }
 
     public static function statusOptions(): array
@@ -305,7 +176,6 @@ class EmployeeAttendance extends Model
             'no_schedule' => 'Sin horario',
         ];
     }
-
     public function setWorkedMinutesAttribute($value): void
     {
         if ($value === null || $value === '') {
@@ -322,4 +192,6 @@ class EmployeeAttendance extends Model
 
         $this->attributes['worked_minutes'] = $value;
     }
+
+
 }

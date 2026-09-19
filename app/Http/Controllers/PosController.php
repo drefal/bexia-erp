@@ -1732,9 +1732,8 @@ abort_if(! $sessionRow, 404);
             $products[] = [
                 'id' => (int) $row->id,
                 'name' => $this->productDisplayName($row),
-                // BEXIA_V582P4B_POS_SEARCH_RAW_IDENTIFIERS
-                // No colapsar SKU, barcode y referencia en un solo valor.
-                // El buscador del PDV debe poder encontrar cualquiera.
+                // BEXIA_V582P4E1_POS_RAW_SEARCH_IDENTIFIERS
+                // Mantener cada identificador para búsqueda PDV.
                 'internal_reference' => (string) ($row->internal_reference ?? ''),
                 'sku' => (string) ($row->sku ?? ''),
                 'barcode' => (string) ($row->barcode ?? ''),
@@ -8958,7 +8957,7 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             }
         }
 
-        // BEXIA_V582P4B_REFRESH_SELECT_IDENTIFIERS
+        // BEXIA_V582P4E1_REFRESH_SELECT_IDENTIFIERS
         foreach (['sku', 'code', 'barcode', 'internal_reference'] as $column) {
             if (in_array($column, $productColumns, true)) {
                 $select[] = "p.$column";
@@ -8987,15 +8986,9 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
 
         // BEXIA_V5832A_PENDING_REFRESH_STOCK_PARITY
         //
-        // El refresco del PDV debe usar EXACTAMENTE la misma lógica de
-        // existencia que la carga inicial de tarjetas.
-        //
-        // Esto corrige principalmente variantes, donde:
-        //   stock_quants.product_id         = producto padre
-        //   stock_quants.product_variant_id = variante
-        //
-        // También conserva empresa, almacén, ubicación, reservados,
-        // series y servicios.
+        // Usar la misma lógica de existencia que la carga inicial del PDV.
+        // Resuelve producto padre + variante + empresa + almacén +
+        // ubicación + reservados + series + servicios.
         $stockByProduct = $this->v5828b5BulkStockForProducts(
             $products,
             $pos
@@ -9003,13 +8996,11 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
 
         $payload = $products->map(function ($product) use ($productColumns, $stockByProduct, $selectedPriceListId) {
             // BEXIA_V5832A_PENDING_REFRESH_AVAILABLE_STOCK
-            // El helper ya descuenta reservados y resuelve padre/variante.
             $available = round(
                 (float) ($stockByProduct->get((int) $product->id) ?? 0),
                 4
             );
 
-            // Este endpoint publica existencia disponible para la tarjeta PDV.
             $quantity = $available;
             $reserved = 0.0;
 
@@ -9028,9 +9019,7 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
              * El PDV debe refrescar y mostrar precio público con IVA incluido.
              */
             // BEXIA_V5832A_PENDING_REFRESH_TAX_NORMALIZATION
-            //
-            // Bexia puede encontrar la tasa como 16 o 0.16.
-            // normalizePosTaxRate() convierte ambos formatos a 0.16.
+            // normalizePosTaxRate soporta tanto 16 como 0.16.
             $rawTaxRate = null;
 
             if (
@@ -9048,8 +9037,6 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
                 $basePrice
             );
 
-            // El precio que recibe la tarjeta del PDV es precio PUBLICO,
-            // por lo que debe incluir IVA.
             $price = round(
                 $basePrice * (1 + $taxRate),
                 2
@@ -9062,7 +9049,7 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             return [
                 'id' => (int) $product->id,
                 'name' => (string) $name,
-                // BEXIA_V582P4B_REFRESH_PAYLOAD_IDENTIFIERS
+                // BEXIA_V582P4E1_REFRESH_PAYLOAD_IDENTIFIERS
                 'internal_reference' => (string) ($product->internal_reference ?? ''),
                 'sku' => (string) ($product->sku ?? ''),
                 'barcode' => (string) ($product->barcode ?? ''),

@@ -8,7 +8,6 @@ use App\Models\EmployeeAttendance;
 use App\Models\HrAttendanceLocation;
 use App\Support\Attendance\GeofenceDistance;
 use App\Support\EmployeeAttendanceIncidentSync;
-use App\Support\EmployeeWorkScheduleResolver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -50,7 +49,6 @@ class PublicEmployeeAttendanceController extends Controller
         }
 
         $request->validate([
-            'action' => ['required', 'string', 'in:clock_in,meal_out,meal_in,clock_out'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'accuracy' => ['nullable', 'integer', 'min:0', 'max:100000'],
@@ -60,24 +58,15 @@ class PublicEmployeeAttendanceController extends Controller
 
         $attendance = $this->todayAttendance($employee) ?: new EmployeeAttendance();
 
-        $direction = (string) $request->input('action');
-        $allowedDirections = $this->allowedDirections($attendance);
+        $direction = 'clock_in';
 
-        if (! in_array($direction, $allowedDirections, true)) {
-            if ($attendance->exists && $attendance->clock_out_at) {
-                return back()->with('warning', 'Tu registro de asistencia de hoy ya está completo.');
-            }
-
-            return back()->with(
-                'warning',
-                'La acción solicitada no corresponde al estado actual de tu asistencia. Actualiza la página e intenta nuevamente.'
-            );
+        if ($attendance->exists && $attendance->clock_in_at && ! $attendance->clock_out_at) {
+            $direction = 'clock_out';
+        } elseif ($attendance->exists && $attendance->clock_in_at && $attendance->clock_out_at) {
+            return back()->with('warning', 'Ya tienes entrada y salida registradas para hoy.');
         }
 
-        $deviceFingerprint = $request->input('device_fingerprint')
-            ? substr((string) $request->input('device_fingerprint'), 0, 64)
-            : null;
-
+        $deviceFingerprint = $request->input('device_fingerprint') ? substr((string) $request->input('device_fingerprint'), 0, 64) : null;
         $deviceInfo = $this->decodeDeviceInfo($request->input('device_info'));
 
         $deviceGuard = $this->deviceGuard(
@@ -90,123 +79,36 @@ class PublicEmployeeAttendanceController extends Controller
             return back()->with('warning', $deviceGuard['message']);
         }
 
-        $locationPayload = $this->punchLocationPayload(
+        $locationPayload = $this->locationPayload(
             employee: $employee,
             direction: $direction,
-            latitude: $request->input('latitude') !== null
-                ? (float) $request->input('latitude')
-                : null,
-            longitude: $request->input('longitude') !== null
-                ? (float) $request->input('longitude')
-                : null,
-            accuracy: $request->input('accuracy') !== null
-                ? (int) $request->input('accuracy')
-                : null,
+            latitude: $request->input('latitude') !== null ? (float) $request->input('latitude') : null,
+            longitude: $request->input('longitude') !== null ? (float) $request->input('longitude') : null,
+            accuracy: $request->input('accuracy') !== null ? (int) $request->input('accuracy') : null,
             request: $request,
             deviceFingerprint: $deviceFingerprint,
             deviceInfo: $deviceInfo,
             deviceGuard: $deviceGuard,
         );
 
-        /*
-         * Si una checada previa ya dejó pendiente de revisión el día,
-         * una checada posterior dentro de geocerca no debe borrar ese pendiente.
-         */
-        if (
-            $attendance->exists
-            && $attendance->mobile_review_status === 'pending'
-            && ($locationPayload['mobile_review_status'] ?? null) === 'accepted'
-        ) {
-            unset($locationPayload['mobile_review_status']);
-        }
-
-        $clockedAt = now();
-        $mealWarning = null;
-
-        switch ($direction) {
-            case 'clock_in':
-                $attendance->fill(array_merge([
-                    'company_id' => $employee->company_id,
-                    'employee_id' => $employee->id,
-                    'attendance_date' => $clockedAt->toDateString(),
-                    'meal_punch_required' => $this->mealPunchRequired($employee, $clockedAt),
-                    'clock_in_at' => $clockedAt,
-                    'source' => 'qr_link',
-                    'notes' => $this->appendNote(
-                        $attendance->notes ?? null,
-                        'Entrada registrada por QR publico.'
-                        . $this->locationNote($locationPayload)
-                        . $this->deviceNote($deviceGuard)
-                    ),
-                    'created_by_user_id' => null,
-                    'updated_by_user_id' => null,
-                ], $locationPayload));
-                break;
-
-            case 'meal_out':
-                $attendance->forceFill(array_merge([
-                    'meal_out_at' => $clockedAt,
-                    'source' => $attendance->source ?: 'qr_link',
-                    'notes' => $this->appendNote(
-                        $attendance->notes ?? null,
-                        'Salida a comida registrada por QR publico.'
-                        . $this->locationNote($locationPayload)
-                        . $this->deviceNote($deviceGuard)
-                    ),
-                    'updated_by_user_id' => null,
-                ], $locationPayload));
-                break;
-
-            case 'meal_in':
-                $attendance->forceFill(array_merge([
-                    'meal_in_at' => $clockedAt,
-                    'source' => $attendance->source ?: 'qr_link',
-                    'notes' => $this->appendNote(
-                        $attendance->notes ?? null,
-                        'Regreso de comida registrado por QR publico.'
-                        . $this->locationNote($locationPayload)
-                        . $this->deviceNote($deviceGuard)
-                    ),
-                    'updated_by_user_id' => null,
-                ], $locationPayload));
-                break;
-
-            case 'clock_out':
-                $mealPunchRequired = (bool) ($attendance->meal_punch_required ?? false);
-
-                if ($mealPunchRequired && ! $attendance->meal_out_at) {
-                    $mealWarning = 'Terminaste la jornada sin registrar la comida. El registro quedó pendiente de revisión.';
-                } elseif (
-                    $mealPunchRequired
-                    && $attendance->meal_out_at
-                    && ! $attendance->meal_in_at
-                ) {
-                    $mealWarning = 'Terminaste la jornada sin registrar el regreso de comida. El registro quedó pendiente de revisión.';
-                }
-
-                $payload = array_merge([
-                    'clock_out_at' => $clockedAt,
-                    'source' => $attendance->source ?: 'qr_link',
-                    'notes' => $this->appendNote(
-                        $attendance->notes ?? null,
-                        'Salida final registrada por QR publico.'
-                        . $this->locationNote($locationPayload)
-                        . $this->deviceNote($deviceGuard)
-                    ),
-                    'updated_by_user_id' => null,
-                ], $locationPayload);
-
-                if ($mealWarning) {
-                    $payload['mobile_review_status'] = 'pending';
-
-                    $payload['notes'] = $this->appendNote(
-                        $payload['notes'] ?? $attendance->notes,
-                        'Revision requerida: comida no registrada o incompleta.'
-                    );
-                }
-
-                $attendance->forceFill($payload);
-                break;
+        if ($direction === 'clock_in') {
+            $attendance->fill(array_merge([
+                'company_id' => $employee->company_id,
+                'employee_id' => $employee->id,
+                'attendance_date' => now()->toDateString(),
+                'clock_in_at' => now(),
+                'source' => 'qr_link',
+                'notes' => $this->appendNote($attendance->notes ?? null, 'Entrada registrada por QR publico.' . $this->locationNote($locationPayload) . $this->deviceNote($deviceGuard)),
+                'created_by_user_id' => null,
+                'updated_by_user_id' => null,
+            ], $locationPayload));
+        } else {
+            $attendance->forceFill(array_merge([
+                'clock_out_at' => now(),
+                'source' => $attendance->source ?: 'qr_link',
+                'notes' => $this->appendNote($attendance->notes ?? null, 'Salida registrada por QR publico.' . $this->locationNote($locationPayload) . $this->deviceNote($deviceGuard)),
+                'updated_by_user_id' => null,
+            ], $locationPayload));
         }
 
         $attendance->save();
@@ -215,170 +117,9 @@ class PublicEmployeeAttendanceController extends Controller
             $this->syncIncidentAfterClockOut($attendance);
         }
 
-        $labels = [
-            'clock_in' => 'Entrada',
-            'meal_out' => 'Salida a comida',
-            'meal_in' => 'Regreso de comida',
-            'clock_out' => 'Salida',
-        ];
-
-        $redirect = redirect()
+        return redirect()
             ->route('attendance.employee.show', ['token' => $token])
-            ->with(
-                'success',
-                ($labels[$direction] ?? 'Registro') . ' registrada correctamente.'
-            );
-
-        if ($mealWarning) {
-            $redirect->with('warning', $mealWarning);
-        }
-
-        return $redirect;
-    }
-
-    protected function allowedDirections(EmployeeAttendance $attendance): array
-    {
-        if (! $attendance->exists || ! $attendance->clock_in_at) {
-            return ['clock_in'];
-        }
-
-        if ($attendance->clock_out_at) {
-            return [];
-        }
-
-        $breakMinutes = max(0, (int) ($attendance->break_minutes ?? 0));
-
-        if ($breakMinutes <= 0) {
-            return ['clock_out'];
-        }
-
-        if (! $attendance->meal_out_at) {
-            return ['meal_out', 'clock_out'];
-        }
-
-        if (! $attendance->meal_in_at) {
-            return ['meal_in', 'clock_out'];
-        }
-
-        return ['clock_out'];
-    }
-
-    protected function mealPunchRequired(Employee $employee, mixed $at): bool
-    {
-        try {
-            $schedule = EmployeeWorkScheduleResolver::scheduleForEmployee(
-                $employee,
-                $at,
-            );
-
-            return (int) ($schedule['break_minutes'] ?? 0) > 0;
-        } catch (\Throwable $e) {
-            report($e);
-
-            return false;
-        }
-    }
-
-    protected function employeeGeofencePolicy(Employee $employee): string
-    {
-        /*
-         * Compatibilidad temporal si el esquema c8 aun no existiera.
-         */
-        if (! Schema::hasColumn('employees', 'attendance_geofence_policy')) {
-            if (! (bool) $this->companySetting(
-                $employee,
-                'attendance_allow_outside_geofence',
-                true
-            )) {
-                return 'fixed';
-            }
-
-            return (bool) $this->companySetting(
-                $employee,
-                'attendance_review_outside_geofence',
-                true
-            )
-                ? 'mobile_review'
-                : 'mobile_authorized';
-        }
-
-        $policy = trim(
-            (string) ($employee->attendance_geofence_policy ?: 'fixed')
-        );
-
-        if (! in_array(
-            $policy,
-            ['fixed', 'mobile_review', 'mobile_authorized'],
-            true
-        )) {
-            return 'fixed';
-        }
-
-        return $policy;
-    }
-
-
-    protected function punchLocationPayload(
-        Employee $employee,
-        string $direction,
-        ?float $latitude,
-        ?float $longitude,
-        ?int $accuracy,
-        Request $request,
-        ?string $deviceFingerprint,
-        ?array $deviceInfo,
-        array $deviceGuard,
-    ): array {
-        if (in_array($direction, ['clock_in', 'clock_out'], true)) {
-            return $this->locationPayload(
-                employee: $employee,
-                direction: $direction,
-                latitude: $latitude,
-                longitude: $longitude,
-                accuracy: $accuracy,
-                request: $request,
-                deviceFingerprint: $deviceFingerprint,
-                deviceInfo: $deviceInfo,
-                deviceGuard: $deviceGuard,
-            );
-        }
-
-        /*
-         * Reutiliza la validación completa de geocerca existente.
-         * Después traduce únicamente los campos que existen para meal_out/meal_in.
-         */
-        $base = $this->locationPayload(
-            employee: $employee,
-            direction: 'clock_in',
-            latitude: $latitude,
-            longitude: $longitude,
-            accuracy: $accuracy,
-            request: $request,
-            deviceFingerprint: $deviceFingerprint,
-            deviceInfo: $deviceInfo,
-            deviceGuard: $deviceGuard,
-        );
-
-        $payload = [];
-
-        foreach ($base as $key => $value) {
-            if ($key === 'mobile_review_status') {
-                $payload[$key] = $value;
-                continue;
-            }
-
-            if (! str_starts_with($key, 'clock_in_')) {
-                continue;
-            }
-
-            $target = $direction . substr($key, strlen('clock_in'));
-
-            if (Schema::hasColumn('employee_attendances', $target)) {
-                $payload[$target] = $value;
-            }
-        }
-
-        return $payload;
+            ->with('success', ($direction === 'clock_in' ? 'Entrada' : 'Salida') . ' registrada correctamente.');
     }
 
     protected function syncIncidentAfterClockOut(EmployeeAttendance $attendance): void
@@ -636,42 +377,18 @@ class PublicEmployeeAttendanceController extends Controller
             $payload[$prefix . '_device_guard_message'] = $deviceGuard['message'] ?? null;
         }
 
-        $policy = $this->employeeGeofencePolicy($employee);
-
-        /*
-         * attendance_geofence_enabled sigue siendo el interruptor maestro.
-         */
-        if (! (bool) $this->companySetting(
-            $employee,
-            'attendance_geofence_enabled',
-            true
-        )) {
+        if (! (bool) $this->companySetting($employee, 'attendance_geofence_enabled', true)) {
             $payload[$prefix . '_latitude'] = $latitude;
             $payload[$prefix . '_longitude'] = $longitude;
             $payload[$prefix . '_accuracy_meters'] = $accuracy;
             $payload[$prefix . '_location_status'] = 'geofence_disabled';
-            $payload['mobile_review_status'] =
-                $payload['mobile_review_status'] ?? 'accepted';
+            $payload['mobile_review_status'] = $payload['mobile_review_status'] ?? 'accepted';
 
             return $payload;
         }
 
-        /*
-         * FIJO:
-         * debe poder demostrar que esta dentro de alguna geocerca permitida.
-         *
-         * MOVIL:
-         * si no hay GPS no se acepta automaticamente; queda pendiente.
-         */
         if ($latitude === null || $longitude === null) {
             $payload[$prefix . '_location_status'] = 'no_location';
-
-            if ($policy === 'fixed') {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'attendance' => 'No se pudo obtener tu ubicación. Los empleados con política Fijo deben registrar dentro de una geocerca autorizada.',
-                ]);
-            }
-
             $payload['mobile_review_status'] = 'pending';
 
             return $payload;
@@ -681,31 +398,11 @@ class PublicEmployeeAttendanceController extends Controller
         $payload[$prefix . '_longitude'] = $longitude;
         $payload[$prefix . '_accuracy_meters'] = $accuracy;
 
-        $nearest = $this->nearestGeofence(
-            $employee,
-            $latitude,
-            $longitude
-        );
+        $nearest = $this->nearestGeofence($employee, $latitude, $longitude);
 
-        /*
-         * Si no existe ninguna geocerca utilizable:
-         * - Fijo: bloquea.
-         * - Movil con revision: permite pendiente.
-         * - Movil autorizado: permite aceptado porque si entrego GPS.
-         */
         if (! $nearest) {
             $payload[$prefix . '_location_status'] = 'no_geofence';
-
-            if ($policy === 'fixed') {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'attendance' => 'No hay una geocerca autorizada disponible para este registro. Solicita a RRHH revisar tu configuración.',
-                ]);
-            }
-
-            $payload['mobile_review_status'] =
-                $policy === 'mobile_authorized'
-                    ? 'accepted'
-                    : 'pending';
+            $payload['mobile_review_status'] = 'pending';
 
             return $payload;
         }
@@ -713,14 +410,10 @@ class PublicEmployeeAttendanceController extends Controller
         $location = $nearest['location'];
         $distance = (int) $nearest['distance_meters'];
 
-        $accuracyRequired = $location->accuracy_required_meters
-            ? (int) $location->accuracy_required_meters
-            : null;
+        $location = $nearest['location'];
+        $accuracyRequired = $location->accuracy_required_meters ? (int) $location->accuracy_required_meters : null;
 
-        if (
-            ($nearest['geofence_type'] ?? 'circle') === 'polygon'
-            && method_exists($location, 'polygonPoints')
-        ) {
+        if (($nearest['geofence_type'] ?? 'circle') === 'polygon' && method_exists($location, 'polygonPoints')) {
             $status = GeofenceDistance::polygonStatus(
                 $latitude,
                 $longitude,
@@ -741,50 +434,24 @@ class PublicEmployeeAttendanceController extends Controller
         $payload[$prefix . '_distance_meters'] = $distance;
         $payload[$prefix . '_location_status'] = $status;
 
-        /*
-         * Cualquier geocerca permitida es valida.
-         * NO es obligatorio salir en la misma geocerca de la entrada.
-         */
         if ($status === 'inside') {
             $payload['mobile_review_status'] = 'accepted';
 
             return $payload;
         }
 
-        /*
-         * FIJO: cualquier resultado distinto de inside se bloquea.
-         */
-        if ($policy === 'fixed') {
+        if (! (bool) $this->companySetting($employee, 'attendance_allow_outside_geofence', true)) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'attendance' => 'Estás fuera de las geocercas autorizadas para tu perfil Fijo. No se registró la asistencia.',
+                'attendance' => 'No es posible registrar asistencia fuera de las geocercas permitidas.',
             ]);
         }
 
-        /*
-         * GPS impreciso nunca se acepta automaticamente, incluso en
-         * Movil autorizado.
-         */
-        if ($status === 'poor_accuracy') {
-            $payload['mobile_review_status'] = 'pending';
-
-            return $payload;
-        }
-
-        /*
-         * MOVIL CON REVISION:
-         * se permite y queda pendiente.
-         *
-         * MOVIL AUTORIZADO:
-         * se permite y queda aceptado.
-         */
-        $payload['mobile_review_status'] =
-            $policy === 'mobile_authorized'
-                ? 'accepted'
-                : 'pending';
+        $payload['mobile_review_status'] = (bool) $this->companySetting($employee, 'attendance_review_outside_geofence', true)
+            ? 'pending'
+            : 'accepted';
 
         return $payload;
     }
-
 
     protected function appendNote(?string $current, string $line): string
     {
@@ -793,19 +460,8 @@ class PublicEmployeeAttendanceController extends Controller
 
     protected function locationNote(array $payload): string
     {
-        $status = (string) (
-            $payload['meal_out_location_status']
-            ?? $payload['meal_in_location_status']
-            ?? $payload['clock_in_location_status']
-            ?? $payload['clock_out_location_status']
-            ?? ''
-        );
-
-        $distance = $payload['meal_out_distance_meters']
-            ?? $payload['meal_in_distance_meters']
-            ?? $payload['clock_in_distance_meters']
-            ?? $payload['clock_out_distance_meters']
-            ?? null;
+        $status = (string) ($payload['clock_in_location_status'] ?? $payload['clock_out_location_status'] ?? '');
+        $distance = $payload['clock_in_distance_meters'] ?? $payload['clock_out_distance_meters'] ?? null;
 
         $labels = [
             'inside' => 'Dentro de geocerca',

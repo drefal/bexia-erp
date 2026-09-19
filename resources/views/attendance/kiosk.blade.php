@@ -132,64 +132,6 @@
         .result-name { margin-top: 10px; font-size: clamp(25px, 4vw, 38px); font-weight: 800; }
         .result-time { margin-top: 8px; font-size: 28px; font-variant-numeric: tabular-nums; color: #4b5563; }
         .result-message { margin-top: 12px; font-size: 19px; color: #4b5563; }
-
-        .action-card {
-            width: min(720px, 94vw);
-            border-radius: 28px;
-            background: #fff;
-            padding: 34px;
-            text-align: center;
-            box-shadow: 0 30px 90px rgba(0,0,0,.25);
-        }
-        .action-kicker {
-            font-size: 17px;
-            font-weight: 900;
-            letter-spacing: .08em;
-            color: #6b7280;
-        }
-        .action-name {
-            margin-top: 10px;
-            font-size: clamp(28px, 5vw, 44px);
-            font-weight: 900;
-        }
-        .action-status {
-            margin-top: 10px;
-            font-size: 16px;
-            color: #4b5563;
-            line-height: 1.5;
-        }
-        .action-buttons {
-            display: grid;
-            gap: 14px;
-            margin-top: 24px;
-        }
-        .action-button {
-            border: 0;
-            border-radius: 16px;
-            padding: 20px;
-            font-size: clamp(20px, 3vw, 28px);
-            font-weight: 900;
-            cursor: pointer;
-            background: #2563eb;
-            color: #fff;
-        }
-        .action-button.meal_in {
-            background: #16a34a;
-        }
-        .action-button.clock_out {
-            background: #f59e0b;
-        }
-        .action-cancel {
-            width: 100%;
-            margin-top: 16px;
-            border: 1px solid #d1d5db;
-            border-radius: 14px;
-            padding: 14px;
-            font-size: 17px;
-            font-weight: 800;
-            background: #fff;
-            color: #374151;
-        }
         @media (max-width: 720px) {
             body { padding: 8px; align-items: flex-start; }
             .body { padding: 18px 14px; }
@@ -219,7 +161,7 @@
             <div id="readyArea" class="ready-grid" hidden>
                 <div class="scan-box">
                     <div id="scanTitle" class="scan-title">PASA TU TARJETA</div>
-                    <div id="scanSubtitle" class="scan-subtitle">Escanea tu credencial y selecciona el registro que deseas realizar.</div>
+                    <div id="scanSubtitle" class="scan-subtitle">Acerca el QR al lector. La entrada o salida se determina automaticamente.</div>
                 </div>
                 <div class="camera-wrap">
                     <video id="cameraVideo" autoplay playsinline muted></video>
@@ -235,18 +177,6 @@
         </div>
 
         <div class="small">UUID + token seguro identifican la tablet. La fotografia de cada marcacion se guarda como evidencia privada.</div>
-    </div>
-</div>
-
-<div id="actionOverlay" class="overlay" hidden>
-    <div class="action-card">
-        <div class="action-kicker">SELECCIONA TU REGISTRO</div>
-        <div id="actionName" class="action-name"></div>
-        <div id="actionStatus" class="action-status"></div>
-        <div id="actionButtons" class="action-buttons"></div>
-        <button id="actionCancel" class="action-cancel" type="button">
-            Cancelar
-        </button>
     </div>
 </div>
 
@@ -296,12 +226,6 @@
     const resultTime = document.getElementById('resultTime');
     const resultMessage = document.getElementById('resultMessage');
 
-    const actionOverlay = document.getElementById('actionOverlay');
-    const actionName = document.getElementById('actionName');
-    const actionStatus = document.getElementById('actionStatus');
-    const actionButtons = document.getElementById('actionButtons');
-    const actionCancel = document.getElementById('actionCancel');
-
     let pairing = null;
     let pairingTimer = null;
     let heartbeatTimer = null;
@@ -314,9 +238,6 @@
     let scanLastKeyAt = 0;
     let scanCommitTimer = null;
     let overlayTimer = null;
-    let actionTimer = null;
-    let pendingQr = '';
-    let pendingPreview = null;
 
     function updateClock() {
         const now = new Date();
@@ -445,7 +366,7 @@
         messageEl.className = 'message';
         messageEl.textContent = 'Lista para registrar asistencia.';
         scanTitle.textContent = 'PASA TU TARJETA';
-        scanSubtitle.textContent = 'Escanea tu credencial y selecciona el registro que deseas realizar.';
+        scanSubtitle.textContent = 'Acerca el QR al lector. La entrada o salida se determina automaticamente.';
         setScannerStatus('ok', 'Lector QR: esperando tarjeta');
         await startCamera();
     }
@@ -471,7 +392,7 @@
                 device_name: 'Tablet de asistencia',
                 device_model: navigator.userAgent,
                 platform: navigator.platform || 'web',
-                app_version: 'web-kiosk-v5.83.4c9a',
+                app_version: 'web-kiosk-v5.83.4D',
             });
 
             if (! response.ok || ! data.request_id || ! data.exchange_secret || ! data.pairing_code) {
@@ -612,7 +533,6 @@
     }
 
     function showResult(success, data = {}) {
-        resetActionSelection(false);
         clearTimeout(overlayTimer);
         resultCard.className = 'result-card ' + (success ? 'success' : 'failure');
         resultKicker.textContent = success ? 'REGISTRO CORRECTO' : 'NO SE REGISTRO';
@@ -626,164 +546,49 @@
             resultOverlay.hidden = true;
             processingScan = false;
             scanTitle.textContent = 'PASA TU TARJETA';
-            scanSubtitle.textContent = 'Escanea tu credencial y selecciona el registro que deseas realizar.';
+            scanSubtitle.textContent = 'Acerca el QR al lector. La entrada o salida se determina automaticamente.';
             setScannerStatus(terminalReady ? 'ok' : 'bad', terminalReady ? 'Lector QR: esperando tarjeta' : 'Lector QR: terminal no disponible');
         }, success ? 3000 : 4200);
     }
 
-    function resetActionSelection(releaseScanner = true) {
-        clearTimeout(actionTimer);
-        actionTimer = null;
-        actionOverlay.hidden = true;
-        actionButtons.innerHTML = '';
-        actionName.textContent = '';
-        actionStatus.textContent = '';
-        pendingQr = '';
-        pendingPreview = null;
+    async function processEmployeeQr(rawQr) {
+        rawQr = String(rawQr || '').trim();
+        if (! rawQr || processingScan || ! terminalReady) return;
 
-        if (releaseScanner) {
-            processingScan = false;
-            scanTitle.textContent = 'PASA TU TARJETA';
-            scanSubtitle.textContent =
-                'Escanea tu credencial y selecciona el registro que deseas realizar.';
-            setScannerStatus(
-                terminalReady ? 'ok' : 'bad',
-                terminalReady
-                    ? 'Lector QR: esperando tarjeta'
-                    : 'Lector QR: terminal no disponible'
-            );
-        }
-    }
-
-    function attendanceSummary(data) {
-        const a = data?.attendance || {};
-        const parts = [];
-
-        if (a.clock_in) parts.push(`Entrada: ${a.clock_in}`);
-        if (a.meal_out) parts.push(`Salida comida: ${a.meal_out}`);
-        if (a.meal_in) parts.push(`Regreso comida: ${a.meal_in}`);
-        if (a.clock_out) parts.push(`Salida: ${a.clock_out}`);
-
-        if (Number(data?.break_minutes || 0) > 0) {
-            parts.push(`Comida programada: ${data.break_minutes} min`);
-        }
-
-        return parts.join(' · ');
-    }
-
-    function showActionSelection(data, rawQr) {
-        const actions = Array.isArray(data.allowed_actions)
-            ? data.allowed_actions
-            : [];
-
-        if (! actions.length) {
-            showResult(false, {
-                message: data.complete
-                    ? 'El registro de asistencia de hoy ya esta completo.'
-                    : 'No hay acciones disponibles para esta credencial.',
-            });
-            return;
-        }
-
-        pendingQr = rawQr;
-        pendingPreview = data;
-
-        actionName.textContent = data.employee_name || 'Empleado';
-        actionStatus.textContent = attendanceSummary(data);
-        actionButtons.innerHTML = '';
-
-        for (const item of actions) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = `action-button ${item.action || ''}`;
-            button.textContent = item.label || item.action || 'Registrar';
-
-            button.addEventListener('click', () => {
-                submitSelectedAction(item.action);
-            });
-
-            actionButtons.appendChild(button);
-        }
-
-        actionOverlay.hidden = false;
-        scanTitle.textContent = 'ACCION PENDIENTE';
-        scanSubtitle.textContent =
-            'Selecciona en pantalla el registro que deseas realizar.';
-        setScannerStatus('warn', 'Lector QR: esperando seleccion');
-
-        clearTimeout(actionTimer);
-        actionTimer = setTimeout(() => {
-            resetActionSelection(true);
-        }, 20000);
-    }
-
-    async function submitSelectedAction(action) {
-        if (! pendingQr || ! action) return;
-
-        clearTimeout(actionTimer);
-        actionTimer = null;
-
-        for (const button of actionButtons.querySelectorAll('button')) {
-            button.disabled = true;
-        }
-
-        actionCancel.disabled = true;
-        actionStatus.textContent =
-            'Mira hacia la camara. Registrando...';
+        processingScan = true;
+        scanTitle.textContent = 'REGISTRANDO...';
+        scanSubtitle.textContent = 'Mira hacia la camara. No retires tu tarjeta todavia.';
+        setScannerStatus('warn', 'Lector QR: procesando');
 
         try {
-            if (! navigator.onLine) {
-                throw new Error(
-                    'Sin conexion. No se registro la asistencia.'
-                );
-            }
+            if (! navigator.onLine) throw new Error('Sin conexion. No se registro la asistencia.');
 
             const uuid = localStorage.getItem(uuidKey);
             const token = localStorage.getItem(tokenKey);
-
-            if (! uuid || ! token) {
-                throw new Error(
-                    'La terminal perdio su vinculacion.'
-                );
-            }
+            if (! uuid || ! token) throw new Error('La terminal perdio su vinculacion.');
 
             const photoBlob = await capturePhotoBlob();
-
             const formData = new FormData();
-            formData.append('employee_qr', pendingQr);
-            formData.append('action', action);
-            formData.append(
-                'photo',
-                photoBlob,
-                'attendance.jpg'
-            );
+            formData.append('employee_qr', rawQr);
+            formData.append('photo', photoBlob, 'attendance.jpg');
 
-            const response = await fetch(
-                '/asistencia/kiosco/registrar',
-                {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf,
-                        'X-Bexia-Terminal-UUID': uuid,
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: formData,
-                }
-            );
+            const response = await fetch('/asistencia/kiosco/registrar', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Bexia-Terminal-UUID': uuid,
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: formData,
+            });
 
             let data = {};
-            try {
-                data = await response.json();
-            } catch (_) {}
+            try { data = await response.json(); } catch (_) {}
 
             if (response.ok && data.ok) {
-                setScannerStatus(
-                    'ok',
-                    'Lector QR: registro correcto'
-                );
-                actionCancel.disabled = false;
+                setScannerStatus('ok', 'Lector QR: lectura correcta');
                 showResult(true, data);
                 return;
             }
@@ -791,159 +596,12 @@
             if (response.status === 401) {
                 localStorage.removeItem(uuidKey);
                 localStorage.removeItem(tokenKey);
-
-                throw new Error(
-                    'La vinculacion de esta tablet ya no es valida. '
-                    + 'Se requiere vincular nuevamente.'
-                );
+                throw new Error('La vinculacion de esta tablet ya no es valida. Se requiere vincular nuevamente.');
             }
 
-            throw new Error(
-                firstErrorMessage(
-                    data,
-                    'No fue posible registrar la asistencia.'
-                )
-            );
+            throw new Error(firstErrorMessage(data, 'No fue posible registrar la asistencia.'));
         } catch (error) {
-            actionCancel.disabled = false;
-
-            showResult(false, {
-                message:
-                    error.message
-                    || 'No fue posible registrar la asistencia.',
-            });
-        }
-    }
-
-    actionCancel.addEventListener('click', () => {
-        actionCancel.disabled = false;
-        resetActionSelection(true);
-    });
-
-    async function processEmployeeQr(rawQr) {
-        rawQr = String(rawQr || '').trim();
-
-        if (
-            ! rawQr
-            || processingScan
-            || ! terminalReady
-        ) {
-            return;
-        }
-
-        processingScan = true;
-        scanTitle.textContent = 'IDENTIFICANDO...';
-        scanSubtitle.textContent =
-            'Espera mientras consultamos tu registro de hoy.';
-        setScannerStatus('warn', 'Lector QR: consultando');
-
-        try {
-            if (! navigator.onLine) {
-                throw new Error(
-                    'Sin conexion. No se pudo consultar la asistencia.'
-                );
-            }
-
-            const uuid = localStorage.getItem(uuidKey);
-            const token = localStorage.getItem(tokenKey);
-
-            if (! uuid || ! token) {
-                throw new Error(
-                    'La terminal perdio su vinculacion.'
-                );
-            }
-
-            const formData = new FormData();
-            formData.append('employee_qr', rawQr);
-            formData.append('action', 'preview');
-
-            const response = await fetch(
-                '/asistencia/kiosco/registrar',
-                {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf,
-                        'X-Bexia-Terminal-UUID': uuid,
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: formData,
-                }
-            );
-
-            let data = {};
-
-            try {
-                data = await response.json();
-            } catch (_) {}
-
-            if (
-                response.ok
-                && data.ok
-                && data.mode === 'preview'
-            ) {
-                const actions = Array.isArray(data.allowed_actions)
-                    ? data.allowed_actions
-                    : [];
-
-                /*
-                 * AUTO_CLOCK_IN_C9A
-                 *
-                 * La primera entrada del dia no requiere decision:
-                 * si clock_in es la unica accion disponible,
-                 * se registra directamente despues del escaneo.
-                 *
-                 * Todas las acciones posteriores siguen requiriendo
-                 * seleccion explicita en pantalla.
-                 */
-                if (
-                    actions.length === 1
-                    && actions[0]?.action === 'clock_in'
-                ) {
-                    pendingQr = rawQr;
-                    pendingPreview = data;
-
-                    scanTitle.textContent = 'REGISTRANDO ENTRADA...';
-                    scanSubtitle.textContent =
-                        'Mira hacia la camara. '
-                        + 'Tu entrada se registrara automaticamente.';
-
-                    setScannerStatus(
-                        'warn',
-                        'Lector QR: registrando entrada'
-                    );
-
-                    await submitSelectedAction('clock_in');
-                    return;
-                }
-
-                showActionSelection(data, rawQr);
-                return;
-            }
-
-            if (response.status === 401) {
-                localStorage.removeItem(uuidKey);
-                localStorage.removeItem(tokenKey);
-
-                throw new Error(
-                    'La vinculacion de esta tablet ya no es valida. '
-                    + 'Se requiere vincular nuevamente.'
-                );
-            }
-
-            throw new Error(
-                firstErrorMessage(
-                    data,
-                    'No fue posible consultar la asistencia.'
-                )
-            );
-        } catch (error) {
-            showResult(false, {
-                message:
-                    error.message
-                    || 'No fue posible consultar la asistencia.',
-            });
+            showResult(false, { message: error.message || 'No fue posible registrar la asistencia.' });
         }
     }
 

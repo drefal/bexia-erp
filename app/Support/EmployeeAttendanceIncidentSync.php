@@ -103,21 +103,6 @@ class EmployeeAttendanceIncidentSync
             $codes[] = 'JORNADA_INCOMPLETA';
         }
 
-        /*
-         * Solo asistencias creadas bajo el seguimiento nuevo de comida.
-         * Esto evita crear incidencias retroactivas en historicos.
-         */
-        if (
-            (bool) ($attendance->meal_punch_required ?? false)
-            && $attendance->clock_out_at
-        ) {
-            if (! $attendance->meal_out_at) {
-                $codes[] = 'COMIDA_NO_REGISTRADA';
-            } elseif (! $attendance->meal_in_at) {
-                $codes[] = 'REGRESO_COMIDA_NO_REGISTRADO';
-            }
-        }
-
         return array_values(array_unique($codes));
     }
 
@@ -217,8 +202,6 @@ class EmployeeAttendanceIncidentSync
             'RETARDO' => 'Retardo - ' . $date,
             'SALIDA_TEMPRANA' => 'Salida temprana - ' . $date,
             'JORNADA_INCOMPLETA' => 'Jornada incompleta - ' . $date,
-            'COMIDA_NO_REGISTRADA' => 'Comida no registrada - ' . $date,
-            'REGRESO_COMIDA_NO_REGISTRADO' => 'Regreso de comida no registrado - ' . $date,
             'FALTA' => 'Falta - ' . $date,
             default => 'Incidencia asistencia - ' . $date,
         };
@@ -230,8 +213,6 @@ class EmployeeAttendanceIncidentSync
             'RETARDO' => (float) max(1, (int) $attendance->late_minutes),
             'SALIDA_TEMPRANA' => (float) max(1, (int) $attendance->early_leave_minutes),
             'JORNADA_INCOMPLETA' => (float) max(1, static::incompleteWorkdayMinutes($attendance)),
-            'COMIDA_NO_REGISTRADA' => 1.0,
-            'REGRESO_COMIDA_NO_REGISTRADO' => 1.0,
             'FALTA' => 1.0,
             default => 1.0,
         };
@@ -241,7 +222,6 @@ class EmployeeAttendanceIncidentSync
     {
         return match ($code) {
             'RETARDO', 'SALIDA_TEMPRANA', 'JORNADA_INCOMPLETA' => 'minutes',
-            'COMIDA_NO_REGISTRADA', 'REGRESO_COMIDA_NO_REGISTRADO' => 'events',
             'FALTA' => 'days',
             default => 'units',
         };
@@ -275,17 +255,6 @@ class EmployeeAttendanceIncidentSync
 
         if ($code === 'FALTA') {
             $parts[] = 'La asistencia no tiene entrada ni salida en un día laborable.';
-        }
-
-        if ($code === 'COMIDA_NO_REGISTRADA') {
-            $parts[] = 'El horario requiere registro de comida, pero no existe salida a comida.';
-            $parts[] = 'Comida programada: ' . (int) $attendance->break_minutes . ' min.';
-        }
-
-        if ($code === 'REGRESO_COMIDA_NO_REGISTRADO') {
-            $parts[] = 'Existe salida a comida, pero no existe registro de regreso de comida.';
-            $parts[] = 'Salida a comida: ' . ($attendance->meal_out_at?->format('H:i') ?: '-');
-            $parts[] = 'Comida programada: ' . (int) $attendance->break_minutes . ' min.';
         }
 
         return implode(PHP_EOL, $parts) . static::attendanceGeofenceSummary($attendance);

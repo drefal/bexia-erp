@@ -49,7 +49,6 @@ class Employee extends Model
         'badge_id',
         'attendance_qr_token',
         'attendance_qr_enabled',
-        'attendance_geofence_policy',
         'attendance_qr_generated_at',
         'attendance_pin',
         'hourly_cost',

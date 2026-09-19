@@ -631,17 +631,6 @@ public static function canCreate(): bool
                                                 ->label('QR de asistencia activo')
                                                 ->default(true),
 
-                                            Forms\Components\Select::make('attendance_geofence_policy')
-                                                ->label('Política de geocerca')
-                                                ->options([
-                                                    'fixed' => 'Fijo',
-                                                    'mobile_review' => 'Móvil con revisión',
-                                                    'mobile_authorized' => 'Móvil autorizado',
-                                                ])
-                                                ->default('fixed')
-                                                ->required()
-                                                ->helperText('Fijo es el valor predeterminado. Un empleado fijo puede utilizar cualquiera de sus geocercas permitidas, pero no registrar fuera de ellas.'),
-
                                             Forms\Components\TextInput::make('attendance_qr_token')
                                                 ->label('Token QR')
                                                 ->disabled()
