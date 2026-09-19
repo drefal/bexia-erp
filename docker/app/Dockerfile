@@ -12,7 +12,7 @@ RUN set -eux; \
         libpng-dev libjpeg62-turbo-dev libfreetype6-dev libwebp-dev \
         libonig-dev \
         pkg-config \
-        libpq-dev; \
+        libpq-dev poppler-utils; \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone; \
     echo "date.timezone=${TZ}" > /usr/local/etc/php/conf.d/zz-timezone.ini; \
     \
