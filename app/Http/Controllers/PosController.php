@@ -5660,11 +5660,39 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 ->where('id', $orderRow->id)
                 ->update($update);
 
+            /*
+             * V5.83.5G - Una cancelacion de ticket pendiente debe liberar
+             * en la misma transaccion cualquier reserva activa de inventario.
+             *
+             * Si la liberacion falla, se lanza excepcion para que Laravel
+             * revierta tambien el cambio de status a cancelled.
+             */
+            $reservationRelease = app(
+                \App\Support\PosStockReservationService::class
+            )->releaseOrder(
+                (int) $orderRow->id,
+                'cancelled'
+            );
+
+            if (! ($reservationRelease['ok'] ?? false)) {
+                throw new \RuntimeException(
+                    (string) (
+                        $reservationRelease['message']
+                        ?? 'No se pudieron liberar las reservas del ticket cancelado.'
+                    )
+                );
+            }
+
+            // BEXIA_V5835G_cancel_pending_reservation_release
             return [
                 'ok' => true,
                 'status' => 200,
                 'order_id' => (int) $orderRow->id,
                 'number' => (string) $orderRow->number,
+                'released_reservations' => (int) (
+                    $reservationRelease['released_lines']
+                    ?? 0
+                ),
             ];
         });
 
