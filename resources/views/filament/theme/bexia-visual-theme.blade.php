@@ -18194,6 +18194,126 @@ button[role="switch"] > span {
 
 /* BEXIA_FILAMENT_NOTIFICATIONS_V5_83_P4A_END */
 
+
+/* BEXIA_CONTACT_DROPDOWN_LAYER_FIX_V5_83_5K1_START */
+/*
+ * ContactResource:
+ * El tema global usa overflow:hidden en .fi-section y transform en hover.
+ * Los Select searchable/native(false) de Filament despliegan su lista dentro
+ * de la sección y pueden quedar recortados o debajo de secciones vecinas.
+ *
+ * Este ajuste es LOCAL a Contactos.
+ */
+
+/* Permitir que los dropdowns salgan fuera de las tarjetas. */
+.fi-section.bexia-contact-main-section,
+.fi-section.bexia-contact-details-section,
+.fi-section.bexia-contact-address-section,
+.fi-section.bexia-contact-fiscal-section,
+.fi-section.bexia-contact-csf-section,
+.fi-section.bexia-contact-payment-section,
+.fi-section.bexia-contact-sales-section,
+.fi-section.bexia-contact-purchases-section,
+.bexia-contact-main-section.fi-section,
+.bexia-contact-details-section.fi-section,
+.bexia-contact-address-section.fi-section,
+.bexia-contact-fiscal-section.fi-section,
+.bexia-contact-csf-section.fi-section,
+.bexia-contact-payment-section.fi-section,
+.bexia-contact-sales-section.fi-section,
+.bexia-contact-purchases-section.fi-section,
+.bexia-contact-main-section .fi-section-content-ctn,
+.bexia-contact-details-section .fi-section-content-ctn,
+.bexia-contact-address-section .fi-section-content-ctn,
+.bexia-contact-fiscal-section .fi-section-content-ctn,
+.bexia-contact-csf-section .fi-section-content-ctn,
+.bexia-contact-payment-section .fi-section-content-ctn,
+.bexia-contact-sales-section .fi-section-content-ctn,
+.bexia-contact-purchases-section .fi-section-content-ctn,
+.bexia-contact-main-section .fi-section-content,
+.bexia-contact-details-section .fi-section-content,
+.bexia-contact-address-section .fi-section-content,
+.bexia-contact-fiscal-section .fi-section-content,
+.bexia-contact-csf-section .fi-section-content,
+.bexia-contact-payment-section .fi-section-content,
+.bexia-contact-sales-section .fi-section-content,
+.bexia-contact-purchases-section .fi-section-content {
+    overflow: visible !important;
+}
+
+/* Evitar stacking context causado por el hover global. */
+.fi-section.bexia-contact-main-section,
+.fi-section.bexia-contact-details-section,
+.fi-section.bexia-contact-address-section,
+.fi-section.bexia-contact-fiscal-section,
+.fi-section.bexia-contact-csf-section,
+.fi-section.bexia-contact-payment-section,
+.fi-section.bexia-contact-sales-section,
+.fi-section.bexia-contact-purchases-section {
+    position: relative !important;
+    transform: none !important;
+    z-index: 1 !important;
+}
+
+/* La sección activa debe quedar por encima de sus hermanas. */
+.fi-section.bexia-contact-main-section:focus-within,
+.fi-section.bexia-contact-details-section:focus-within,
+.fi-section.bexia-contact-address-section:focus-within,
+.fi-section.bexia-contact-fiscal-section:focus-within,
+.fi-section.bexia-contact-csf-section:focus-within,
+.fi-section.bexia-contact-payment-section:focus-within,
+.fi-section.bexia-contact-sales-section:focus-within,
+.fi-section.bexia-contact-purchases-section:focus-within {
+    z-index: 200 !important;
+}
+
+/* Elevar el componente Select searchable. */
+.bexia-contact-main-section .fi-fo-select,
+.bexia-contact-address-section .fi-fo-select,
+.bexia-contact-fiscal-section .fi-fo-select,
+.bexia-contact-payment-section .fi-fo-select,
+.bexia-contact-sales-section .fi-fo-select,
+.bexia-contact-purchases-section .fi-fo-select,
+.bexia-contact-main-section .choices,
+.bexia-contact-address-section .choices,
+.bexia-contact-fiscal-section .choices,
+.bexia-contact-payment-section .choices,
+.bexia-contact-sales-section .choices,
+.bexia-contact-purchases-section .choices,
+.bexia-contact-main-section .ts-wrapper,
+.bexia-contact-address-section .ts-wrapper,
+.bexia-contact-fiscal-section .ts-wrapper,
+.bexia-contact-payment-section .ts-wrapper,
+.bexia-contact-sales-section .ts-wrapper,
+.bexia-contact-purchases-section .ts-wrapper {
+    position: relative !important;
+    z-index: 210 !important;
+    overflow: visible !important;
+}
+
+/* Paneles reales de Choices / TomSelect / Filament. */
+.bexia-contact-resource-tabs .choices__list--dropdown,
+.bexia-contact-resource-tabs .choices__list[aria-expanded],
+.bexia-contact-resource-tabs .ts-dropdown,
+.bexia-contact-resource-tabs .fi-dropdown-panel,
+.bexia-contact-resource-tabs [role="listbox"],
+.bexia-contact-resource-tabs [data-placement] {
+    z-index: 99999 !important;
+}
+
+/* Mantener hover visual sin mover físicamente la sección. */
+.fi-section.bexia-contact-main-section:hover,
+.fi-section.bexia-contact-details-section:hover,
+.fi-section.bexia-contact-address-section:hover,
+.fi-section.bexia-contact-fiscal-section:hover,
+.fi-section.bexia-contact-csf-section:hover,
+.fi-section.bexia-contact-payment-section:hover,
+.fi-section.bexia-contact-sales-section:hover,
+.fi-section.bexia-contact-purchases-section:hover {
+    transform: none !important;
+}
+/* BEXIA_CONTACT_DROPDOWN_LAYER_FIX_V5_83_5K1_END */
+
 </style>
 
 <!-- BEXIA_FILAMENT_PAGINATION_AUTOSCROLL_V5_83_P6A2_START -->
