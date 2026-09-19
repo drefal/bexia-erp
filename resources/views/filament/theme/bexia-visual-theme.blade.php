@@ -19060,3 +19060,217 @@ html.bexia-repair-order-edit-page
 })();
 </script>
 {{-- BEXIA_V582_P7H24F_REPAIR_TOAST_HEADER_END --}}
+
+<style>
+/* BEXIA_CONTACT_DROPDOWN_ALL_TABS_FIX_V5_83_5K2_START */
+/*
+ * ContactResource - fix completo de stacking/overflow.
+ *
+ * Filament 3.3:
+ * - root: .fi-fo-tabs
+ * - pestaña activa: .fi-fo-tabs-tab.fi-active
+ * - secciones internas: .fi-section
+ * - campo: .fi-fo-field-wrp
+ * - select: .fi-fo-select / Choices
+ *
+ * K1 corrigió las secciones.
+ * K2 corrige también la pestaña activa y el campo abierto.
+ *
+ * Alcance exclusivo:
+ * .bexia-contact-resource-tabs
+ */
+
+
+/* ---------------------------------------------------------
+   1. ROOT DEL COMPONENTE TABS
+   --------------------------------------------------------- */
+
+.bexia-contact-resource-tabs {
+    position: relative !important;
+    overflow: visible !important;
+    isolation: auto !important;
+}
+
+
+/* ---------------------------------------------------------
+   2. PESTAÑA ACTIVA
+   Filament pone fi-active únicamente en el panel visible.
+   No alteramos las pestañas inactivas.
+   --------------------------------------------------------- */
+
+.bexia-contact-resource-tabs
+.fi-fo-tabs-tab.fi-active,
+.bexia-contact-resource-tabs
+[role="tabpanel"].fi-active {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 10 !important;
+}
+
+
+/* Contenedor interno del panel activo */
+
+.bexia-contact-resource-tabs
+.fi-fo-tabs-tab.fi-active
+> .fi-fo-component-ctn,
+.bexia-contact-resource-tabs
+[role="tabpanel"].fi-active
+> .fi-fo-component-ctn {
+    overflow: visible !important;
+}
+
+
+/* ---------------------------------------------------------
+   3. SECCIONES DE CONTACTOS
+   --------------------------------------------------------- */
+
+.bexia-contact-resource-tabs
+.fi-fo-tabs-tab.fi-active
+.fi-section,
+.bexia-contact-resource-tabs
+[role="tabpanel"].fi-active
+.fi-section {
+    position: relative !important;
+    overflow: visible !important;
+    transform: none !important;
+    z-index: 20 !important;
+}
+
+
+/* wrappers internos de Section */
+
+.bexia-contact-resource-tabs
+.fi-fo-tabs-tab.fi-active
+.fi-section-content-ctn,
+.bexia-contact-resource-tabs
+.fi-fo-tabs-tab.fi-active
+.fi-section-content,
+.bexia-contact-resource-tabs
+[role="tabpanel"].fi-active
+.fi-section-content-ctn,
+.bexia-contact-resource-tabs
+[role="tabpanel"].fi-active
+.fi-section-content {
+    overflow: visible !important;
+}
+
+
+/* La sección que contiene el campo activo sube sobre hermanas */
+
+.bexia-contact-resource-tabs
+.fi-fo-tabs-tab.fi-active
+.fi-section:focus-within,
+.bexia-contact-resource-tabs
+[role="tabpanel"].fi-active
+.fi-section:focus-within {
+    z-index: 1000 !important;
+}
+
+
+/* ---------------------------------------------------------
+   4. CAMPO ACTIVO
+   Este es el nivel que faltaba en K1.
+   --------------------------------------------------------- */
+
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp {
+    position: relative !important;
+}
+
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp:focus-within {
+    z-index: 5000 !important;
+}
+
+
+/* wrapper de input/select */
+
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp:focus-within
+.fi-input-wrp,
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp:focus-within
+.fi-input-wrp-input,
+.bexia-contact-resource-tabs
+.fi-fo-field-wrp:focus-within
+.fi-fo-select {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 5100 !important;
+}
+
+
+/* ---------------------------------------------------------
+   5. CHOICES / TOMSELECT
+   --------------------------------------------------------- */
+
+.bexia-contact-resource-tabs
+.choices {
+    overflow: visible !important;
+}
+
+.bexia-contact-resource-tabs
+.choices.is-open,
+.bexia-contact-resource-tabs
+.choices.is-focused,
+.bexia-contact-resource-tabs
+.ts-wrapper.dropdown-active,
+.bexia-contact-resource-tabs
+.ts-wrapper.focus {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 6000 !important;
+}
+
+
+/* Dropdown real */
+
+.bexia-contact-resource-tabs
+.choices__list--dropdown,
+.bexia-contact-resource-tabs
+.choices__list[aria-expanded],
+.bexia-contact-resource-tabs
+.ts-dropdown {
+    position: absolute !important;
+    z-index: 999999 !important;
+}
+
+
+/* Filament listbox/panel */
+
+.bexia-contact-resource-tabs
+[role="listbox"],
+.bexia-contact-resource-tabs
+.fi-dropdown-panel,
+.bexia-contact-resource-tabs
+.fi-select-panel,
+.bexia-contact-resource-tabs
+[data-placement] {
+    z-index: 999999 !important;
+}
+
+
+/* ---------------------------------------------------------
+   6. EVITAR STACKING CONTEXT POR HOVER GLOBAL
+   --------------------------------------------------------- */
+
+.bexia-contact-resource-tabs
+.fi-section:hover {
+    transform: none !important;
+}
+
+
+/* ---------------------------------------------------------
+   7. CONSERVAR SCROLL HORIZONTAL DE LA BARRA DE TABS
+   No se toca el contenido de los paneles.
+   --------------------------------------------------------- */
+
+.bexia-contact-resource-tabs
+> .fi-tabs {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+}
+
+
+/* BEXIA_CONTACT_DROPDOWN_ALL_TABS_FIX_V5_83_5K2_END */
+</style>
