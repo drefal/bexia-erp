@@ -110,11 +110,60 @@ class SatConstanciaParser
 
         $interiorNumber = $this->cleanValue($this->field($text, ['Número Interior:'], [
             'Nombre de la Colonia:',
+            'Nombre de la Localidad:',
+            'Nombre del Municipio o Demarcación Territorial:',
+            'Nombre de la Entidad Federativa:',
         ]));
+
+        /*
+         * En algunas CSF el layout PDF intercala la segunda columna de la
+         * tabla y "Número Interior" termina capturando parte del domicilio.
+         * Un número interior real debe ser un valor corto y no contener
+         * otras etiquetas SAT.
+         */
+        if (
+            filled($interiorNumber)
+            && (
+                mb_strlen((string) $interiorNumber) > 40
+                || preg_match(
+                    '/Nombre de la|Municipio|Entidad Federativa|Entre Calle|Y Calle|Actividades Económicas|Regímenes|Obligaciones|Página/iu',
+                    (string) $interiorNumber
+                )
+            )
+        ) {
+            $interiorNumber = null;
+        }
 
         $neighborhood = $this->cleanValue($this->field($text, ['Nombre de la Colonia:'], [
             'Nombre de la Localidad:',
         ]));
+
+        if (filled($neighborhood)) {
+            $neighborhood = $this->cleanValue(str_replace(
+                ['Número Interior:', 'NúmeroInterior:'],
+                ' ',
+                (string) $neighborhood
+            ));
+        }
+
+        /*
+         * Algunos layouts SAT imprimen la colonia en dos renglones.
+         * pdftotext puede colocar el segundo renglon despues de la etiqueta
+         * "Numero Interior", aunque dicho campo este vacio.
+         *
+         * Si el supuesto numero interior es exactamente el sufijo de la
+         * colonia, es una duplicacion del layout y no un numero interior real.
+         */
+        if (
+            filled($interiorNumber)
+            && filled($neighborhood)
+            && str_ends_with(
+                mb_strtoupper(trim((string) $neighborhood)),
+                mb_strtoupper(trim((string) $interiorNumber))
+            )
+        ) {
+            $interiorNumber = null;
+        }
 
         $locality = $this->cleanValue($this->field($text, ['Nombre de la Localidad:'], [
             'Nombre del Municipio o Demarcación Territorial:',
@@ -136,10 +185,24 @@ class SatConstanciaParser
         ]));
 
         $andStreet = $this->cleanValue($this->field($text, ['Y Calle:'], [
+            'Correo Electrónico:',
+            'Tel. Fijo Lada:',
+            'Estado del domicilio:',
+            'Página',
             'Actividades Económicas:',
             'Orden Actividad Económica',
             'Regímenes:',
         ]));
+
+        if (filled($andStreet)) {
+            $andStreet = preg_split(
+                '/\s+(?:Correo Electrónico:|Tel\.\s*Fijo\s*Lada:|Estado del domicilio:|Página\s*\[)/iu',
+                (string) $andStreet,
+                2
+            )[0] ?? $andStreet;
+
+            $andStreet = $this->cleanValue($andStreet);
+        }
 
         $street2 = trim(implode(' y ', array_filter([$betweenStreet, $andStreet])));
 
