@@ -178,6 +178,29 @@ class EmployeeCredentialResource extends Resource
                     ->options(fn (): array => static::branchOptions())
                     ->searchable()
                     ->preload(),
+
+                Tables\Filters\SelectFilter::make('photo_status')
+                    ->label('Foto')
+                    ->options([
+                        'with_photo' => 'Con foto cargada',
+                        'generic' => 'Sin foto cargada (usa genérica)',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return match ($data['value'] ?? null) {
+                            'with_photo' => $query
+                                ->whereNotNull('avatar_path')
+                                ->where('avatar_path', '<>', ''),
+
+                            'generic' => $query
+                                ->where(function (Builder $query): void {
+                                    $query
+                                        ->whereNull('avatar_path')
+                                        ->orWhere('avatar_path', '');
+                                }),
+
+                            default => $query,
+                        };
+                    }),
             ])
             ->actions([
                 Tables\Actions\Action::make('download_credential')

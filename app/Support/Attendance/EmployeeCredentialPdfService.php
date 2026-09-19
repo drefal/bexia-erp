@@ -66,8 +66,11 @@ class EmployeeCredentialPdfService
             ),
 
             'company' => trim(
-                (string) ($employee->company?->name ?: 'BEXIA')
+                (string) ($employee->company?->name ?: 'EMPRESA')
             ),
+
+            'company_logo_data_uri' =>
+                $this->companyLogoDataUri($employee),
 
             'branch' => trim(
                 (string) ($employee->branch?->name ?: '')
@@ -183,6 +186,100 @@ class EmployeeCredentialPdfService
             . now()->format('Y-m-d')
             . '.pdf';
     }
+
+
+    protected function companyLogoDataUri(
+        Employee $employee
+    ): string {
+        $company = $employee->company;
+
+        if (! $company) {
+            return '';
+        }
+
+        /*
+         * Se usa primero el logo principal.
+         * Si no existe fisicamente se intenta el compacto.
+         * Si ninguno existe, la vista mostrara el nombre de empresa.
+         */
+        $paths = [
+            trim((string) $company->logo_path),
+            trim((string) $company->logo_compact_path),
+        ];
+
+        foreach ($paths as $path) {
+            $dataUri = $this->publicImageDataUri($path);
+
+            if ($dataUri !== null) {
+                return $dataUri;
+            }
+        }
+
+        return '';
+    }
+
+    protected function publicImageDataUri(
+        string $path
+    ): ?string {
+        $path = ltrim(
+            trim($path),
+            '/'
+        );
+
+        if ($path === '') {
+            return null;
+        }
+
+        $disk = Storage::disk('public');
+
+        if (! $disk->exists($path)) {
+            return null;
+        }
+
+        try {
+            $bytes = $disk->get($path);
+
+            $mime = (string) (
+                $disk->mimeType($path)
+                ?: ''
+            );
+        } catch (Throwable) {
+            return null;
+        }
+
+        if ($bytes === '') {
+            return null;
+        }
+
+        if (! str_starts_with($mime, 'image/')) {
+            $extension = strtolower(
+                pathinfo(
+                    $path,
+                    PATHINFO_EXTENSION
+                )
+            );
+
+            $mime = match ($extension) {
+                'png' => 'image/png',
+                'jpg',
+                'jpeg' => 'image/jpeg',
+                'gif' => 'image/gif',
+                'webp' => 'image/webp',
+                'svg' => 'image/svg+xml',
+                default => '',
+            };
+        }
+
+        if (! str_starts_with($mime, 'image/')) {
+            return null;
+        }
+
+        return 'data:'
+            . $mime
+            . ';base64,'
+            . base64_encode($bytes);
+    }
+
 
     protected function qrDataUri(string $contents): string
     {
