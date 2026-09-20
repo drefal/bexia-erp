@@ -19,6 +19,9 @@ class SatCfdiCancellationReasonResource extends Resource
      */
     protected static ?string $model = SatCfdiCancellationReason::class;
 
+    // BEXIA_V5_83_5K5E_GLOBAL_SAT_CANCEL_REASON
+    protected static bool $isScopedToTenant = false;
+
     protected static ?string $navigationIcon = 'heroicon-o-x-circle';
 
     protected static ?string $navigationGroup = 'Facturación';
