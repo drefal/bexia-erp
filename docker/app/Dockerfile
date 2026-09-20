@@ -23,7 +23,7 @@ RUN set -eux; \
     { \
       echo "memory_limit=512M"; \
       echo "opcache.enable=1"; \
-      echo "opcache.validate_timestamps=0"; \
+      echo "opcache.validate_timestamps=1"; \
     } > /usr/local/etc/php/conf.d/zz-tuning.ini; \
     rm -rf /var/lib/apt/lists/*
 
