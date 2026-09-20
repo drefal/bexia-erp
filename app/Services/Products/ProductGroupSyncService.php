@@ -147,11 +147,16 @@ class ProductGroupSyncService
                 $targetCompanyId
             );
 
-        $extra = $source->extra_attributes;
-
-        if (! is_array($extra)) {
-            $extra = [];
-        }
+        /*
+         * BEXIA_V5_83_5K5F_B4_SANITIZE_REPLICA_LINEAGE
+         *
+         * Las replicas pertenecen a otra empresa Bexia y no deben
+         * heredar identificadores internos de la migracion Odoo/DEV
+         * de la fila origen.
+         */
+        $extra = $this->sanitizeReplicaExtraAttributes(
+            $source->extra_attributes
+        );
 
         $extra['bexia_group_product_uuid'] = $groupUuid;
         $extra['bexia_group_sync_source_company_id'] =
@@ -718,6 +723,31 @@ class ProductGroupSyncService
                 $attributes
             );
         }
+    }
+
+    protected function sanitizeReplicaExtraAttributes(
+        mixed $value
+    ): array {
+        $extra = is_array($value)
+            ? $value
+            : [];
+
+        /*
+         * Identidades historicas detectadas en el catalogo migrado.
+         * Se conservan en el producto original, nunca en la replica.
+         */
+        foreach ([
+            'dev_product_id',
+            'odoo_company_id',
+            'odoo_company_name',
+            'source_odoo_company_id',
+            'source_odoo_product_id',
+            'source_odoo_template_id',
+        ] as $key) {
+            unset($extra[$key]);
+        }
+
+        return $extra;
     }
 
     protected function normalizeText(
