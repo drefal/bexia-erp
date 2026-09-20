@@ -17334,6 +17334,31 @@ document.addEventListener('DOMContentLoaded', function () {
         return input;
     }
 
+    /*
+     * BEXIA_V5_83_5K5G1_PRESERVE_PAYMENT_SELECTION_START
+     *
+     * K5C puede ejecutar prepareAll() despues de que A35D2 ya selecciono
+     * todo el importe. Asignar input.value nuevamente, incluso con el
+     * mismo texto, elimina la seleccion y deja el cursor al final.
+     *
+     * Solo escribimos el valor cuando realmente cambia.
+     */
+    function setValueIfChanged(input, nextValue) {
+        const next = String(nextValue ?? '');
+
+        if (input.value === next) {
+            return false;
+        }
+
+        input.value = next;
+
+        return true;
+    }
+
+    /*
+     * BEXIA_V5_83_5K5G1_PRESERVE_PAYMENT_SELECTION_END
+     */
+
     function normalizeInput(input, fixedDecimals) {
         if (!input) {
             return;
@@ -17354,24 +17379,34 @@ document.addEventListener('DOMContentLoaded', function () {
         const canonical = canonicalDecimal(input.value);
 
         if (canonical === '') {
-            input.value = '';
+            setValueIfChanged(input, '');
             return;
         }
 
         if (!fixedDecimals) {
-            input.value = canonical;
+            setValueIfChanged(input, canonical);
             return;
         }
 
         const numeric = Number(canonical);
 
-        if (Number.isFinite(numeric)) {
-            input.value = numeric.toFixed(2);
-        } else {
-            input.value = canonical;
-        }
+        const formatted = Number.isFinite(numeric)
+            ? numeric.toFixed(2)
+            : canonical;
+
+        setValueIfChanged(input, formatted);
     }
 
+    /*
+     * BEXIA_V5_83_5K5G2_PAYMENT_TYPING_START
+     *
+     * Mientras el usuario esta capturando un importe no debemos
+     * forzar los dos decimales. De lo contrario:
+     *
+     *   5 -> 5.00
+     *
+     * entre una tecla y la siguiente.
+     */
     function prepareAll() {
         const modal = document.querySelector(modalSelector);
 
@@ -17382,9 +17417,46 @@ document.addEventListener('DOMContentLoaded', function () {
         modal
             .querySelectorAll(amountSelector)
             .forEach(function (input) {
-                normalizeInput(input, true);
+                const isActive =
+                    document.activeElement === input;
+
+                normalizeInput(
+                    input,
+                    !isActive
+                );
             });
     }
+
+    function mutationContainsAmountInput(mutations) {
+        return Array.from(mutations || []).some(function (mutation) {
+            return Array.from(
+                mutation.addedNodes || []
+            ).some(function (node) {
+                if (
+                    !node
+                    || node.nodeType !== 1
+                ) {
+                    return false;
+                }
+
+                if (
+                    typeof node.matches === 'function'
+                    && node.matches(amountSelector)
+                ) {
+                    return true;
+                }
+
+                return (
+                    typeof node.querySelector === 'function'
+                    && !!node.querySelector(amountSelector)
+                );
+            });
+        });
+    }
+
+    /*
+     * BEXIA_V5_83_5K5G2_PAYMENT_TYPING_END
+     */
 
     /*
      * Capture phase: normaliza "," -> "." antes de que los listeners
@@ -17433,8 +17505,21 @@ document.addEventListener('DOMContentLoaded', function () {
         prepareAll();
 
         if (!modal.__bexiaV5835K5CObserver) {
-            const observer = new MutationObserver(function () {
-                prepareAll();
+            const observer = new MutationObserver(function (mutations) {
+                /*
+                 * updateSummary() cambia el HTML del resumen cada vez
+                 * que se escribe una tecla. Eso NO debe provocar que
+                 * reformateemos nuevamente el importe.
+                 *
+                 * Solo preparamos cuando aparece un nuevo input de pago.
+                 */
+                if (
+                    mutationContainsAmountInput(
+                        mutations
+                    )
+                ) {
+                    prepareAll();
+                }
             });
 
             observer.observe(modal, {
