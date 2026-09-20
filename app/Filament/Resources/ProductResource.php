@@ -976,6 +976,15 @@ public static function canCreate(): bool
 
 
 
+    /*
+     * BEXIA_V5_83_5K5B_CLEAN_TAX_LABELS_START
+     *
+     * Los codigos ODOO-TAX-* se conservan en BD para trazabilidad,
+     * pero no se muestran al usuario en los selectores del producto.
+     *
+     * Tambien evita ofrecer impuestos Odoo de COMPRA en el selector
+     * de VENTA y viceversa.
+     */
     protected static function taxRateOptions(?string $usageType = null): array
     {
         if (! class_exists(\App\Models\TaxRate::class)) {
@@ -984,29 +993,235 @@ public static function canCreate(): bool
 
         $companyId = static::currentCompanyId();
 
+        $usageType = in_array($usageType, ['sale', 'purchase'], true)
+            ? $usageType
+            : null;
+
         return \App\Models\TaxRate::query()
-            ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
+            ->when(
+                $companyId,
+                fn ($query) => $query->where('company_id', $companyId)
+            )
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('code')
             ->get()
-            ->mapWithKeys(function (\App\Models\TaxRate $tax): array {
-                $rate = rtrim(rtrim(number_format((float) $tax->rate * 100, 4, '.', ''), '0'), '.');
+            ->filter(
+                function (\App\Models\TaxRate $tax) use ($usageType): bool {
+                    if ($usageType === null) {
+                        return true;
+                    }
 
-                $suffix = $tax->factor_type === 'exento'
-                    ? 'Exento'
-                    : $rate . '%';
+                    $code = strtoupper(
+                        trim((string) $tax->code)
+                    );
 
-                $type = strtoupper((string) $tax->tax_type);
-                $kind = $tax->is_withholding ? 'Retención' : 'Traslado';
+                    if (! str_starts_with($code, 'ODOO-TAX-')) {
+                        return true;
+                    }
 
-                return [
-                    $tax->id => trim("{$tax->code} - {$tax->name} ({$type} {$suffix}, {$kind})"),
-                ];
-            })
+                    $name = strtoupper(
+                        trim((string) $tax->name)
+                    );
+
+                    if (
+                        $usageType === 'sale'
+                        && preg_match(
+                            '/\bCOMPRAS?\s*$/u',
+                            $name
+                        )
+                    ) {
+                        return false;
+                    }
+
+                    if (
+                        $usageType === 'purchase'
+                        && preg_match(
+                            '/\bVENTAS?\s*$/u',
+                            $name
+                        )
+                    ) {
+                        return false;
+                    }
+
+                    return true;
+                }
+            )
+            ->mapWithKeys(
+                function (\App\Models\TaxRate $tax): array {
+                    return [
+                        $tax->id => static::taxRateOptionLabel($tax),
+                    ];
+                }
+            )
             ->all();
     }
 
+    protected static function taxRateOptionLabel(
+        \App\Models\TaxRate $tax
+    ): string {
+        $code = trim((string) $tax->code);
+        $name = trim((string) $tax->name);
+
+        $isOdooTax = str_starts_with(
+            strtoupper($code),
+            'ODOO-TAX-'
+        );
+
+        /*
+         * Impuestos nativos Bexia conservan el formato actual.
+         */
+        if (! $isOdooTax) {
+            $rate = rtrim(
+                rtrim(
+                    number_format(
+                        (float) $tax->rate * 100,
+                        4,
+                        '.',
+                        ''
+                    ),
+                    '0'
+                ),
+                '.'
+            );
+
+            $suffix = strtolower(
+                (string) $tax->factor_type
+            ) === 'exento'
+                ? 'Exento'
+                : $rate . '%';
+
+            $type = strtoupper(
+                (string) $tax->tax_type
+            );
+
+            $kind = $tax->is_withholding
+                ? 'Retención'
+                : 'Traslado';
+
+            return trim(
+                "{$tax->code} - {$tax->name} " .
+                "({$type} {$suffix}, {$kind})"
+            );
+        }
+
+        /*
+         * Ejemplo:
+         *
+         * ODOO-TAX-2 - IVA(16%) VENTAS
+         *
+         * se muestra como:
+         *
+         * IVA 16% · Traslado
+         *
+         * Codigo y nombre originales permanecen intactos en BD.
+         */
+        $label = $name;
+
+        $label = preg_replace(
+            '/\s+(VENTAS?|COMPRAS?)\s*$/iu',
+            '',
+            $label
+        ) ?? $label;
+
+        $label = preg_replace_callback(
+            '/\bIVA\s*\(\s*([0-9]+(?:\.[0-9]+)?)\s*%\s*\)/iu',
+            static function (array $matches): string {
+                $rate = rtrim(
+                    rtrim($matches[1], '0'),
+                    '.'
+                );
+
+                if ($rate === '') {
+                    $rate = '0';
+                }
+
+                return 'IVA ' . $rate . '%';
+            },
+            $label
+        ) ?? $label;
+
+        $label = preg_replace(
+            '/^RETENCION\s+IVA\b/iu',
+            'Retención IVA',
+            $label
+        ) ?? $label;
+
+        $label = preg_replace(
+            '/^RET\s+IVA\b/iu',
+            'Retención IVA',
+            $label
+        ) ?? $label;
+
+        $label = preg_replace(
+            '/^RETENCION\s+ISR\b/iu',
+            'Retención ISR',
+            $label
+        ) ?? $label;
+
+        $label = preg_replace(
+            '/^RET\s+ISR\b/iu',
+            'Retención ISR',
+            $label
+        ) ?? $label;
+
+        $label = preg_replace(
+            '/\s+/u',
+            ' ',
+            trim($label)
+        ) ?? trim($label);
+
+        if ($label === '') {
+            $rate = rtrim(
+                rtrim(
+                    number_format(
+                        abs((float) $tax->rate) * 100,
+                        4,
+                        '.',
+                        ''
+                    ),
+                    '0'
+                ),
+                '.'
+            );
+
+            $type = strtoupper(
+                trim((string) $tax->tax_type)
+            );
+
+            if (
+                strtolower((string) $tax->factor_type)
+                === 'exento'
+            ) {
+                $label = trim($type . ' Exento');
+            } else {
+                $label = trim(
+                    $type . ' ' . $rate . '%'
+                );
+            }
+        }
+
+        if ($tax->is_withholding) {
+            if (
+                ! preg_match(
+                    '/retenci[oó]n/iu',
+                    $label
+                )
+            ) {
+                $label .= ' · Retención';
+            }
+        } elseif (
+            ! preg_match('/\btraslado\b/iu', $label)
+        ) {
+            $label .= ' · Traslado';
+        }
+
+        return trim($label);
+    }
+
+    /*
+     * BEXIA_V5_83_5K5B_CLEAN_TAX_LABELS_END
+     */
 
 
     protected static function satProductSearchOptions(?string $search = null, int $limit = 80): array
