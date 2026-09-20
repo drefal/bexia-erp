@@ -19370,3 +19370,145 @@ html.bexia-repair-order-edit-page
 
 /* BEXIA_CONTACT_OPEN_SECTION_FIX_V5_83_5K3_END */
 </style>
+<style>
+/* BEXIA_GLOBAL_CHOICES_OVERLAY_FIX_V5_83_5K4B_START */
+
+/*
+ * Fix global controlado para Select de Filament / Choices.js.
+ *
+ * NO elimina los overflow:hidden generales.
+ * Solamente libera la cadena de ancestros mientras existe
+ * un Choices abierto dentro del componente.
+ *
+ * No modifica:
+ * - tablas
+ * - POS custom
+ * - vistas publicas
+ * - PDF
+ * - topbar
+ * - dropdowns de acciones
+ * - datepickers
+ */
+
+
+/* ---------------------------------------------------------
+   SECCION / CARD QUE CONTIENE UN SELECT ABIERTO
+   --------------------------------------------------------- */
+
+.fi-form .fi-section:has(.choices.is-open),
+.fi-form .fi-card:has(.choices.is-open),
+.fi-form .fi-in-card:has(.choices.is-open),
+
+.fi-fo .fi-section:has(.choices.is-open),
+.fi-fo .fi-card:has(.choices.is-open),
+.fi-fo .fi-in-card:has(.choices.is-open),
+
+.fi-modal-window .fi-section:has(.choices.is-open),
+.fi-modal-window .fi-card:has(.choices.is-open),
+.fi-modal-window .fi-in-card:has(.choices.is-open) {
+    position: relative !important;
+    overflow: visible !important;
+    transform: none !important;
+    z-index: 1000 !important;
+}
+
+
+/* ---------------------------------------------------------
+   CONTENIDO INTERNO QUE PUEDE RECORTAR EL PANEL
+   --------------------------------------------------------- */
+
+.fi-form .fi-section-content-ctn:has(.choices.is-open),
+.fi-form .fi-section-content:has(.choices.is-open),
+.fi-form .fi-fo-component-ctn:has(.choices.is-open),
+.fi-form .fi-grid:has(.choices.is-open),
+
+.fi-fo .fi-section-content-ctn:has(.choices.is-open),
+.fi-fo .fi-section-content:has(.choices.is-open),
+.fi-fo .fi-fo-component-ctn:has(.choices.is-open),
+.fi-fo .fi-grid:has(.choices.is-open) {
+    overflow: visible !important;
+}
+
+
+/* ---------------------------------------------------------
+   TABS
+   --------------------------------------------------------- */
+
+.fi-form .fi-fo-tabs-tab:has(.choices.is-open),
+.fi-fo .fi-fo-tabs-tab:has(.choices.is-open) {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 1000 !important;
+}
+
+
+/* ---------------------------------------------------------
+   REPEATERS
+   --------------------------------------------------------- */
+
+.fi-form .fi-fo-repeater-item:has(.choices.is-open),
+.fi-form .fi-fo-repeater-item-content:has(.choices.is-open),
+
+.fi-fo .fi-fo-repeater-item:has(.choices.is-open),
+.fi-fo .fi-fo-repeater-item-content:has(.choices.is-open) {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 1000 !important;
+}
+
+
+/* ---------------------------------------------------------
+   CAMPO QUE CONTIENE EL SELECT
+   --------------------------------------------------------- */
+
+.fi-form .fi-fo-field-wrp:has(.choices.is-open),
+.fi-fo .fi-fo-field-wrp:has(.choices.is-open),
+.fi-modal-window .fi-fo-field-wrp:has(.choices.is-open) {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 1100 !important;
+}
+
+
+/* ---------------------------------------------------------
+   CHOICES ABIERTO
+   --------------------------------------------------------- */
+
+.fi-form .choices.is-open,
+.fi-fo .choices.is-open,
+.fi-modal-window .choices.is-open {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 1200 !important;
+}
+
+
+/*
+ * NO cambiamos overflow:hidden del dropdown real:
+ * Choices lo utiliza correctamente para recortar
+ * su propio contenido y respetar border-radius.
+ */
+
+.fi-form .choices.is-open .choices__list--dropdown,
+.fi-form .choices.is-open .choices__list[aria-expanded],
+.fi-fo .choices.is-open .choices__list--dropdown,
+.fi-fo .choices.is-open .choices__list[aria-expanded],
+.fi-modal-window .choices.is-open .choices__list--dropdown,
+.fi-modal-window .choices.is-open .choices__list[aria-expanded] {
+    z-index: 1300 !important;
+}
+
+
+/* ---------------------------------------------------------
+   MODALES
+   Solo liberar la ventana mientras contiene Choices abierto.
+   Las esquinas vuelven a su overflow original al cerrar.
+   --------------------------------------------------------- */
+
+.fi-modal-window:has(.choices.is-open) {
+    overflow: visible !important;
+}
+
+
+/* BEXIA_GLOBAL_CHOICES_OVERLAY_FIX_V5_83_5K4B_END */
+</style>
