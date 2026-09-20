@@ -3728,40 +3728,94 @@ variants_inner_table')
 
     public static function archiveProductRecord(Product $record): void
     {
-        if (! \Illuminate\Support\Facades\Schema::hasColumn('products', 'is_active')) {
+        if (
+            ! \Illuminate\Support\Facades\Schema::hasColumn(
+                'products',
+                'is_active'
+            )
+        ) {
             return;
         }
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($record): void {
-            $now = now();
+        \Illuminate\Support\Facades\DB::transaction(
+            function () use ($record): void {
+                $now = now();
 
-            Product::query()
-                ->whereKey($record->id)
-                ->update([
-                    'is_active' => false,
-                    'updated_at' => $now,
-                ]);
+                Product::query()
+                    ->whereKey($record->id)
+                    ->update([
+                        'is_active' => false,
+                        'updated_at' => $now,
+                    ]);
 
-            if (
-                \Illuminate\Support\Facades\Schema::hasColumn('products', 'parent_product_id')
-                && \Illuminate\Support\Facades\Schema::hasColumn('products', 'is_variant')
-            ) {
-                $variants = Product::query()
-                    ->where('parent_product_id', $record->id);
+                $variantIds = collect();
 
                 if (
-                    \Illuminate\Support\Facades\Schema::hasColumn('products', 'company_id')
-                    && ! empty($record->company_id)
+                    \Illuminate\Support\Facades\Schema::hasColumn(
+                        'products',
+                        'parent_product_id'
+                    )
+                    && \Illuminate\Support\Facades\Schema::hasColumn(
+                        'products',
+                        'is_variant'
+                    )
                 ) {
-                    $variants->where('company_id', (int) $record->company_id);
+                    $variants = Product::query()
+                        ->where(
+                            'parent_product_id',
+                            $record->id
+                        );
+
+                    if (
+                        \Illuminate\Support\Facades\Schema::hasColumn(
+                            'products',
+                            'company_id'
+                        )
+                        && ! empty($record->company_id)
+                    ) {
+                        $variants->where(
+                            'company_id',
+                            (int) $record->company_id
+                        );
+                    }
+
+                    $variantIds =
+                        (clone $variants)
+                            ->pluck('id');
+
+                    $variants->update([
+                        'is_active' => false,
+                        'updated_at' => $now,
+                    ]);
                 }
 
-                $variants->update([
-                    'is_active' => false,
-                    'updated_at' => $now,
-                ]);
+                $sync = app(
+                    \App\Services\Products\ProductGroupSyncService::class
+                );
+
+                $fresh = Product::query()->find(
+                    $record->id
+                );
+
+                if ($fresh) {
+                    $sync->syncUpdatedProduct(
+                        $fresh
+                    );
+                }
+
+                foreach ($variantIds as $variantId) {
+                    $variant = Product::query()->find(
+                        $variantId
+                    );
+
+                    if ($variant) {
+                        $sync->syncUpdatedProduct(
+                            $variant
+                        );
+                    }
+                }
             }
-        });
+        );
     }
 
     public static function getRelations(): array

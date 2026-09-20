@@ -66,6 +66,109 @@ class ProductGroupSyncService
         });
     }
 
+    /**
+     * Sincroniza cambios de configuracion de un producto existente
+     * hacia todas las empresas activas del mismo grupo.
+     *
+     * No toca inventario, movimientos ni documentos.
+     */
+    public function syncUpdatedProduct(Product $source): array
+    {
+        $source->refresh();
+
+        $company = Company::query()->find(
+            $source->company_id
+        );
+
+        if (
+            ! $company
+            || ! $company->company_group_id
+        ) {
+            return [];
+        }
+
+        $groupUuid = trim(
+            (string) (
+                $source->group_product_uuid
+                ?? ''
+            )
+        );
+
+        if ($groupUuid === '') {
+            return $this->syncCreatedProduct(
+                $source
+            );
+        }
+
+        $targets = Company::query()
+            ->where(
+                'company_group_id',
+                $company->company_group_id
+            )
+            ->where('active', true)
+            ->whereKeyNot(
+                $company->getKey()
+            )
+            ->orderBy('id')
+            ->get();
+
+        if ($targets->isEmpty()) {
+            return [];
+        }
+
+        return DB::transaction(
+            function () use (
+                $source,
+                $targets,
+                $groupUuid
+            ): array {
+                $result = [];
+
+                foreach ($targets as $company) {
+                    $targetCompanyId =
+                        (int) $company->id;
+
+                    $target = Product::query()
+                        ->where(
+                            'company_id',
+                            $targetCompanyId
+                        )
+                        ->where(
+                            'group_product_uuid',
+                            $groupUuid
+                        )
+                        ->first();
+
+                    if (! $target) {
+                        $result[$targetCompanyId] =
+                            $this->syncToCompany(
+                                $source,
+                                $targetCompanyId,
+                                $groupUuid
+                            );
+
+                        continue;
+                    }
+
+                    $this->syncAttributeCatalogToCompany(
+                        (int) $source->company_id,
+                        $targetCompanyId
+                    );
+
+                    $result[$targetCompanyId] =
+                        $this->updateExistingProduct(
+                            $source,
+                            $target,
+                            $groupUuid
+                        );
+                }
+
+                return $result;
+            }
+        );
+    }
+
+
     protected function syncToCompany(
         Product $source,
         int $targetCompanyId,
@@ -82,6 +185,11 @@ class ProductGroupSyncService
 
         $this->assertNoIdentifierCollision(
             $source,
+            $targetCompanyId
+        );
+
+        $this->syncAttributeCatalogToCompany(
+            (int) $source->company_id,
             $targetCompanyId
         );
 
@@ -135,11 +243,13 @@ class ProductGroupSyncService
         }
 
         /*
-         * Estas relaciones pueden depender de permisos o catálogos
-         * específicos por empresa. No se copian ciegamente.
+         * El proveedor preferido puede ser especifico por empresa
+         * y actualmente no forma parte del formulario homologado.
+         *
+         * responsible_user_id referencia users.id global, por lo
+         * que conserva el valor del producto origen.
          */
         $attributes['preferred_supplier_id'] = null;
-        $attributes['responsible_user_id'] = null;
 
         $attributes['parent_product_id'] =
             $this->mapParentProduct(
@@ -164,6 +274,13 @@ class ProductGroupSyncService
         $extra['bexia_group_sync_source_product_id'] =
             (int) $source->id;
 
+        if (! empty($attributes['parent_product_id'])) {
+            $extra['parent_product_id'] =
+                (int) $attributes['parent_product_id'];
+        } else {
+            unset($extra['parent_product_id']);
+        }
+
         $attributes['extra_attributes'] = $extra;
 
         $replica = new Product();
@@ -185,8 +302,711 @@ class ProductGroupSyncService
             $replica
         );
 
+        $this->copyAttributeAssignments(
+            $source,
+            $replica
+        );
+
         return (int) $replica->id;
     }
+
+    protected function updateExistingProduct(
+        Product $source,
+        Product $target,
+        string $groupUuid
+    ): int {
+        $this->assertNoIdentifierCollisionForUpdate(
+            $source,
+            (int) $target->company_id,
+            (int) $target->id
+        );
+
+        $attributes = $source->getAttributes();
+
+        /*
+         * Campos locales, operativos o de linaje que nunca se
+         * sobreescriben al sincronizar una edicion.
+         */
+        foreach ([
+            'id',
+            'company_id',
+            'group_product_uuid',
+            'created_at',
+            'updated_at',
+            'product_template_id',
+
+            'preferred_supplier_id',
+
+            'last_purchase_cost',
+            'last_supplier_name',
+            'last_purchase_at',
+
+            'odoo_product_id',
+            'odoo_template_id',
+            'odoo_category_id',
+            'odoo_category_name',
+            'odoo_tracking',
+            'odoo_migration_notes',
+            'odoo_raw_json',
+        ] as $column) {
+            unset($attributes[$column]);
+        }
+
+        $attributes['group_product_uuid'] =
+            $groupUuid;
+
+        $attributes['product_category_id'] =
+            $this->mapCategory(
+                $source->product_category_id,
+                (int) $target->company_id
+            );
+
+        $attributes['inventory_unit_id'] =
+            $this->mapInventoryUnit(
+                $source->inventory_unit_id,
+                (int) $target->company_id
+            );
+
+        foreach ([
+            'inventory_account_id',
+            'cogs_account_id',
+            'sales_income_account_id',
+        ] as $column) {
+            $attributes[$column] =
+                $this->mapAccountingAccount(
+                    $source->{$column},
+                    (int) $target->company_id
+                );
+        }
+
+        $targetParentId =
+            $this->mapParentProduct(
+                $source,
+                (int) $target->company_id
+            );
+
+        $attributes['parent_product_id'] =
+            $targetParentId;
+
+        $extra =
+            $this->sanitizeReplicaExtraAttributes(
+                $source->extra_attributes
+            );
+
+        $extra['bexia_group_product_uuid'] =
+            $groupUuid;
+
+        $extra['bexia_group_sync_source_company_id'] =
+            (int) $source->company_id;
+
+        $extra['bexia_group_sync_source_product_id'] =
+            (int) $source->id;
+
+        if ($targetParentId) {
+            $extra['parent_product_id'] =
+                $targetParentId;
+        } else {
+            unset($extra['parent_product_id']);
+        }
+
+        $attributes['extra_attributes'] =
+            $extra;
+
+        $target->forceFill($attributes);
+        $target->saveQuietly();
+
+        $this->replaceTaxRates(
+            $source,
+            $target
+        );
+
+        $this->replaceImages(
+            $source,
+            $target
+        );
+
+        $this->replacePurchaseUnits(
+            $source,
+            $target
+        );
+
+        $this->replaceAttributeAssignments(
+            $source,
+            $target
+        );
+
+        return (int) $target->id;
+    }
+
+    protected function assertNoIdentifierCollisionForUpdate(
+        Product $source,
+        int $targetCompanyId,
+        int $targetProductId
+    ): void {
+        $reference = trim(
+            (string) (
+                $source->internal_reference
+                ?? ''
+            )
+        );
+
+        $sku = trim(
+            (string) ($source->sku ?? '')
+        );
+
+        $barcode = trim(
+            (string) ($source->barcode ?? '')
+        );
+
+        if (
+            $reference === ''
+            && $sku === ''
+            && $barcode === ''
+        ) {
+            return;
+        }
+
+        $query = Product::query()
+            ->where(
+                'company_id',
+                $targetCompanyId
+            )
+            ->where('is_active', true)
+            ->whereKeyNot(
+                $targetProductId
+            )
+            ->where(
+                function ($query) use (
+                    $reference,
+                    $sku,
+                    $barcode
+                ): void {
+                    if ($reference !== '') {
+                        $query->orWhereRaw(
+                            'LOWER(TRIM(internal_reference)) = ?',
+                            [
+                                mb_strtolower(
+                                    $reference,
+                                    'UTF-8'
+                                ),
+                            ]
+                        );
+                    }
+
+                    if ($sku !== '') {
+                        $query->orWhereRaw(
+                            'LOWER(TRIM(sku)) = ?',
+                            [
+                                mb_strtolower(
+                                    $sku,
+                                    'UTF-8'
+                                ),
+                            ]
+                        );
+                    }
+
+                    if ($barcode !== '') {
+                        $query->orWhereRaw(
+                            'LOWER(TRIM(barcode)) = ?',
+                            [
+                                mb_strtolower(
+                                    $barcode,
+                                    'UTF-8'
+                                ),
+                            ]
+                        );
+                    }
+                }
+            );
+
+        if ($query->exists()) {
+            throw new RuntimeException(
+                'No se puede sincronizar el producto ' .
+                $source->id .
+                ' a company_id=' .
+                $targetCompanyId .
+                ': existe otro producto activo con la misma ' .
+                'referencia, SKU o codigo de barras.'
+            );
+        }
+    }
+
+    protected function replaceTaxRates(
+        Product $source,
+        Product $target
+    ): void {
+        DB::table('product_tax_rates')
+            ->where(
+                'product_id',
+                $target->id
+            )
+            ->delete();
+
+        $this->copyTaxRates(
+            $source,
+            $target
+        );
+    }
+
+    protected function replaceImages(
+        Product $source,
+        Product $target
+    ): void {
+        $sourceRows = DB::table(
+                'product_images'
+            )
+            ->where(
+                'product_id',
+                $source->id
+            )
+            ->orderBy('id')
+            ->get();
+
+        $existingRows = DB::table(
+                'product_images'
+            )
+            ->where(
+                'product_id',
+                $target->id
+            )
+            ->orderBy('id')
+            ->get();
+
+        /*
+         * Conservamos identidad historica propia del destino
+         * cuando la misma ruta fisica ya existia alli.
+         */
+        $identityColumns = [
+            'source_system',
+            'source_model',
+            'source_id',
+            'source_attachment_id',
+            'source_reference',
+            'legacy_reference',
+            'legacy_company_id',
+            'legacy_payload',
+            'migrated_at',
+            'migration_batch_id',
+        ];
+
+        $existingByPath = [];
+
+        foreach ($existingRows as $row) {
+            $path = (string) (
+                $row->image_path ?? ''
+            );
+
+            $existingByPath[$path][] =
+                $row;
+        }
+
+        DB::table('product_images')
+            ->where(
+                'product_id',
+                $target->id
+            )
+            ->delete();
+
+        foreach ($sourceRows as $row) {
+            $attributes = (array) $row;
+
+            foreach ([
+                'id',
+                'company_id',
+                'product_id',
+                'product_template_id',
+                'created_at',
+                'updated_at',
+            ] as $column) {
+                unset($attributes[$column]);
+            }
+
+            foreach ($identityColumns as $column) {
+                unset($attributes[$column]);
+            }
+
+            $path = (string) (
+                $row->image_path ?? ''
+            );
+
+            $previous = null;
+
+            if (
+                isset($existingByPath[$path])
+                && $existingByPath[$path] !== []
+            ) {
+                $previous =
+                    array_shift(
+                        $existingByPath[$path]
+                    );
+            }
+
+            if ($previous) {
+                foreach (
+                    $identityColumns
+                    as $column
+                ) {
+                    $attributes[$column] =
+                        $previous->{$column}
+                        ?? null;
+                }
+
+                if (
+                    property_exists(
+                        $previous,
+                        'is_legacy'
+                    )
+                ) {
+                    $attributes['is_legacy'] =
+                        (bool) $previous->is_legacy;
+                }
+
+                if (
+                    property_exists(
+                        $previous,
+                        'locked'
+                    )
+                ) {
+                    $attributes['locked'] =
+                        (bool) $previous->locked;
+                }
+            } else {
+                if (
+                    array_key_exists(
+                        'is_legacy',
+                        $attributes
+                    )
+                ) {
+                    $attributes['is_legacy'] =
+                        false;
+                }
+
+                if (
+                    array_key_exists(
+                        'locked',
+                        $attributes
+                    )
+                ) {
+                    $attributes['locked'] =
+                        false;
+                }
+            }
+
+            $attributes['company_id'] =
+                $target->company_id;
+
+            $attributes['product_id'] =
+                $target->id;
+
+            $attributes['product_template_id'] =
+                null;
+
+            $attributes['created_at'] = now();
+            $attributes['updated_at'] = now();
+
+            DB::table('product_images')
+                ->insert($attributes);
+        }
+    }
+
+    protected function replacePurchaseUnits(
+        Product $source,
+        Product $target
+    ): void {
+        DB::table('product_purchase_units')
+            ->where(
+                'product_id',
+                $target->id
+            )
+            ->delete();
+
+        $this->copyPurchaseUnits(
+            $source,
+            $target
+        );
+    }
+
+    protected function replaceAttributeAssignments(
+        Product $source,
+        Product $target
+    ): void {
+        DB::table(
+            'product_attribute_assignments'
+        )
+            ->where(
+                'product_id',
+                $target->id
+            )
+            ->delete();
+
+        $this->copyAttributeAssignments(
+            $source,
+            $target
+        );
+    }
+
+    protected function syncAttributeCatalogToCompany(
+        int $sourceCompanyId,
+        int $targetCompanyId
+    ): void {
+        $attributes = DB::table(
+                'product_attributes'
+            )
+            ->where(
+                'company_id',
+                $sourceCompanyId
+            )
+            ->orderBy('id')
+            ->get();
+
+        foreach ($attributes as $attribute) {
+            $targetAttributeId =
+                $this->mapProductAttribute(
+                    $attribute->id,
+                    $targetCompanyId
+                );
+
+            $valueIds = DB::table(
+                    'product_attribute_values'
+                )
+                ->where(
+                    'product_attribute_id',
+                    $attribute->id
+                )
+                ->orderBy('id')
+                ->pluck('id');
+
+            foreach ($valueIds as $valueId) {
+                $this->mapProductAttributeValue(
+                    $valueId,
+                    $targetCompanyId,
+                    $targetAttributeId
+                );
+            }
+        }
+    }
+
+    protected function mapProductAttribute(
+        mixed $sourceAttributeId,
+        int $targetCompanyId
+    ): int {
+        $source = DB::table(
+                'product_attributes'
+            )
+            ->where(
+                'id',
+                $sourceAttributeId
+            )
+            ->first();
+
+        if (! $source) {
+            throw new RuntimeException(
+                'Atributo origen no encontrado: ' .
+                $sourceAttributeId
+            );
+        }
+
+        $code = trim(
+            (string) $source->code
+        );
+
+        if ($code === '') {
+            throw new RuntimeException(
+                'Atributo sin code: ' .
+                $sourceAttributeId
+            );
+        }
+
+        $targetId = DB::table(
+                'product_attributes'
+            )
+            ->where(
+                'company_id',
+                $targetCompanyId
+            )
+            ->whereRaw(
+                'LOWER(TRIM(code)) = ?',
+                [
+                    mb_strtolower(
+                        $code,
+                        'UTF-8'
+                    ),
+                ]
+            )
+            ->value('id');
+
+        $payload = [
+            'name' => $source->name,
+            'is_variant' =>
+                (bool) $source->is_variant,
+            'is_active' =>
+                (bool) $source->is_active,
+            'is_system' =>
+                (bool) $source->is_system,
+            'sort_order' =>
+                (int) $source->sort_order,
+            'updated_at' => now(),
+        ];
+
+        if ($targetId) {
+            DB::table('product_attributes')
+                ->where('id', $targetId)
+                ->update($payload);
+
+            return (int) $targetId;
+        }
+
+        return (int) DB::table(
+            'product_attributes'
+        )->insertGetId([
+            'company_id' =>
+                $targetCompanyId,
+            'code' => $source->code,
+            ...$payload,
+            'created_at' => now(),
+        ]);
+    }
+
+    protected function mapProductAttributeValue(
+        mixed $sourceValueId,
+        int $targetCompanyId,
+        int $targetAttributeId
+    ): ?int {
+        $sourceValueId =
+            (int) ($sourceValueId ?? 0);
+
+        if ($sourceValueId <= 0) {
+            return null;
+        }
+
+        $source = DB::table(
+                'product_attribute_values'
+            )
+            ->where(
+                'id',
+                $sourceValueId
+            )
+            ->first();
+
+        if (! $source) {
+            throw new RuntimeException(
+                'Valor de atributo origen no encontrado: ' .
+                $sourceValueId
+            );
+        }
+
+        $code = trim(
+            (string) $source->code
+        );
+
+        if ($code === '') {
+            throw new RuntimeException(
+                'Valor de atributo sin code: ' .
+                $sourceValueId
+            );
+        }
+
+        $targetId = DB::table(
+                'product_attribute_values'
+            )
+            ->where(
+                'company_id',
+                $targetCompanyId
+            )
+            ->where(
+                'product_attribute_id',
+                $targetAttributeId
+            )
+            ->whereRaw(
+                'LOWER(TRIM(code)) = ?',
+                [
+                    mb_strtolower(
+                        $code,
+                        'UTF-8'
+                    ),
+                ]
+            )
+            ->value('id');
+
+        $payload = [
+            'name' => $source->name,
+            'is_active' =>
+                (bool) $source->is_active,
+            'sort_order' =>
+                (int) $source->sort_order,
+            'updated_at' => now(),
+        ];
+
+        if ($targetId) {
+            DB::table(
+                'product_attribute_values'
+            )
+                ->where('id', $targetId)
+                ->update($payload);
+
+            return (int) $targetId;
+        }
+
+        return (int) DB::table(
+            'product_attribute_values'
+        )->insertGetId([
+            'company_id' =>
+                $targetCompanyId,
+            'product_attribute_id' =>
+                $targetAttributeId,
+            'code' => $source->code,
+            ...$payload,
+            'created_at' => now(),
+        ]);
+    }
+
+    protected function copyAttributeAssignments(
+        Product $source,
+        Product $target
+    ): void {
+        $rows = DB::table(
+                'product_attribute_assignments'
+            )
+            ->where(
+                'product_id',
+                $source->id
+            )
+            ->orderBy('id')
+            ->get();
+
+        foreach ($rows as $row) {
+            $targetAttributeId =
+                $this->mapProductAttribute(
+                    $row->product_attribute_id,
+                    (int) $target->company_id
+                );
+
+            $targetValueId =
+                $this->mapProductAttributeValue(
+                    $row->product_attribute_value_id,
+                    (int) $target->company_id,
+                    $targetAttributeId
+                );
+
+            DB::table(
+                'product_attribute_assignments'
+            )->insert([
+                'company_id' =>
+                    $target->company_id,
+                'product_id' =>
+                    $target->id,
+                'product_attribute_id' =>
+                    $targetAttributeId,
+                'product_attribute_value_id' =>
+                    $targetValueId,
+                'custom_value' =>
+                    $row->custom_value,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
 
     protected function assertNoIdentifierCollision(
         Product $source,
