@@ -10,6 +10,7 @@ class Product extends Model
 {
     protected $fillable = [
         'company_id',
+        'group_product_uuid',
         'product_template_id',
         'product_category_id',
         'inventory_unit_id',
