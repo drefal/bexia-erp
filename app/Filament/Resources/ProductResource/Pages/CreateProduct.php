@@ -287,37 +287,61 @@ class CreateProduct extends CreateRecord
 
         $record = $this->record;
 
-        if (! $record || ! ($record->is_variant ?? false) || ! $record->parent_product_id) {
+        if (! $record) {
             return;
         }
 
-        $parent = Product::query()->find($record->parent_product_id);
+        /*
+         * Mantener la logica actual de finalizacion de variantes antes
+         * de replicar el producto al resto de empresas del grupo.
+         */
+        if (
+            (bool) ($record->is_variant ?? false)
+            && $record->parent_product_id
+        ) {
+            $parent = Product::query()->find(
+                $record->parent_product_id
+            );
 
-        if (! $parent) {
-            return;
+            if (! $parent) {
+                return;
+            }
+
+            $variantValue = trim(
+                (string) $record->variant_value
+            );
+
+            if ($variantValue === '') {
+                return;
+            }
+
+            $finalName =
+                trim((string) $parent->name) .
+                ' - ' .
+                $variantValue;
+
+            $record->forceFill([
+                'name' => $finalName,
+                'variant_name' => null,
+                // BEXIA_V5_83_P12C4D2R2_VARIANT_NAME_REMOVED
+                'has_variants' => false,
+                'is_variant' => true,
+            ])->saveQuietly();
+
+            $parent->forceFill([
+                'has_variants' => true,
+                'is_variant' => false,
+                'parent_product_id' => null,
+            ])->saveQuietly();
         }
 
-        $variantValue = trim((string) $record->variant_value);
-
-        if ($variantValue === '') {
-            return;
-        }
-
-        $finalName = trim((string) $parent->name) . ' - ' . $variantValue;
-
-        $record->forceFill([
-            'name' => $finalName,
-            'variant_name' => null,
-            // BEXIA_V5_83_P12C4D2R2_VARIANT_NAME_REMOVED
-            'has_variants' => false,
-            'is_variant' => true,
-        ])->saveQuietly();
-
-        $parent->forceFill([
-            'has_variants' => true,
-            'is_variant' => false,
-            'parent_product_id' => null,
-        ])->saveQuietly();
+        // BEXIA_V5_83_5K5F_GROUP_PRODUCT_SYNC_START
+        app(
+            \App\Services\Products\ProductGroupSyncService::class
+        )->syncCreatedProduct(
+            $record->fresh()
+        );
+        // BEXIA_V5_83_5K5F_GROUP_PRODUCT_SYNC_END
     }
 
 

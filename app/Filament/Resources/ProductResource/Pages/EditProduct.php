@@ -330,6 +330,12 @@ class EditProduct extends EditRecord
                             'extra_attributes' => $extra,
                         ])->saveQuietly();
 
+                        app(
+                            \App\Services\Products\ProductGroupSyncService::class
+                        )->syncUpdatedProduct(
+                            $this->record->fresh()
+                        );
+
                         \Filament\Notifications\Notification::make()
                             ->title('Imagen asignada')
                             ->body('La imagen fue copiada y asignada al producto.')
@@ -423,29 +429,53 @@ class EditProduct extends EditRecord
 
         $record = $this->record;
 
-        if (! $record || ! ($record->is_variant ?? false) || ! $record->parent_product_id) {
+        if (! $record) {
             return;
         }
 
-        $parent = Product::query()->find($record->parent_product_id);
+        /*
+         * Finalizar nombre de variante antes de replicar
+         * la configuracion al resto del grupo.
+         */
+        if (
+            (bool) ($record->is_variant ?? false)
+            && $record->parent_product_id
+        ) {
+            $parent = Product::query()->find(
+                $record->parent_product_id
+            );
 
-        if (! $parent) {
-            return;
+            if ($parent) {
+                $variantValue = trim(
+                    (string) (
+                        $record->variant_value
+                        ?: $record->variant_name
+                    )
+                );
+
+                if ($variantValue !== '') {
+                    $finalName =
+                        trim((string) $parent->name) .
+                        ' - ' .
+                        $variantValue;
+
+                    if (
+                        $record->name !== $finalName
+                    ) {
+                        $record->forceFill([
+                            'name' => $finalName,
+                        ])->saveQuietly();
+                    }
+                }
+            }
         }
 
-        $variantValue = trim((string) ($record->variant_value ?: $record->variant_name));
-
-        if ($variantValue === '') {
-            return;
-        }
-
-        $finalName = trim((string) $parent->name) . ' - ' . $variantValue;
-
-        if ($record->name !== $finalName) {
-            $record->forceFill([
-                'name' => $finalName,
-            ])->saveQuietly();
-        }
+        // BEXIA_V5_83_5K5F_B7B_GROUP_PRODUCT_UPDATE_SYNC
+        app(
+            \App\Services\Products\ProductGroupSyncService::class
+        )->syncUpdatedProduct(
+            $record->fresh()
+        );
     }
 
 

@@ -19081,5 +19081,64 @@ html.bexia-repair-order-edit-page
 }
 
 
+
+/* BEXIA_PRODUCT_ATTRIBUTE_CHOICES_OVERLAY_V5_83_5K5F_B7D_START */
+
+/*
+ * El Repeater de atributos agrega contenedores adicionales
+ * alrededor del item. Aunque el fix global libera el item,
+ * estos wrappers pueden seguir recortando Choices.js.
+ *
+ * Se limita al Repeater de atributos de ProductResource.
+ */
+
+.bexia-product-attribute-repeater:has(.choices.is-open),
+.bexia-product-attribute-repeater:has(.choices.is-open) .fi-fo-repeater,
+.bexia-product-attribute-repeater:has(.choices.is-open) .fi-fo-repeater-items,
+.bexia-product-attribute-repeater:has(.choices.is-open) .fi-fo-repeater-item,
+.bexia-product-attribute-repeater:has(.choices.is-open) .fi-fo-repeater-item-content,
+.bexia-product-attribute-repeater:has(.choices.is-open) .fi-fo-repeater-item-content-ctn,
+.bexia-product-attribute-repeater:has(.choices.is-open) .fi-fo-component-ctn,
+.bexia-product-attribute-repeater:has(.choices.is-open) .fi-grid {
+    overflow: visible !important;
+}
+
+.bexia-product-attribute-repeater:has(.choices.is-open) {
+    position: relative !important;
+    z-index: 2000 !important;
+}
+
+.bexia-product-attribute-repeater .fi-fo-repeater-item:has(.choices.is-open),
+.bexia-product-attribute-repeater .fi-fo-repeater-item-content:has(.choices.is-open),
+.bexia-product-attribute-repeater .fi-fo-field-wrp:has(.choices.is-open) {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 2100 !important;
+}
+
+.bexia-product-attribute-repeater .choices.is-open {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 2200 !important;
+}
+
+.bexia-product-attribute-repeater .choices.is-open .choices__list--dropdown,
+.bexia-product-attribute-repeater .choices.is-open .choices__list[aria-expanded] {
+    z-index: 2300 !important;
+}
+
+/*
+ * El section padre tambien necesita quedar sobre la siguiente
+ * seccion del formulario mientras el dropdown esta abierto.
+ */
+.fi-section:has(.bexia-product-attribute-repeater .choices.is-open) {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 1900 !important;
+}
+
+/* BEXIA_PRODUCT_ATTRIBUTE_CHOICES_OVERLAY_V5_83_5K5F_B7D_END */
+
+
 /* BEXIA_GLOBAL_CHOICES_OVERLAY_FIX_V5_83_5K4B_END */
 </style>
