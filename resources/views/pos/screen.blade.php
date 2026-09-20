@@ -17236,3 +17236,248 @@ document.addEventListener('DOMContentLoaded', function () {
     }, true);
 })();
 </script>
+
+<script id="v5835k5c-payment-decimal-dot">
+/*
+ * BEXIA_V5_83_5K5C_PDV_PAYMENT_DECIMAL_DOT_START
+ *
+ * Los importes del modal de cobro deben mostrarse con punto decimal,
+ * independientemente del locale del navegador.
+ *
+ * Tambien se acepta coma capturada por teclados regionales y se
+ * normaliza a punto antes de que el flujo de pagos procese el valor.
+ */
+(function () {
+    'use strict';
+
+    if (window.BEXIA_V5835K5C_PAYMENT_DECIMAL_DOT_READY) {
+        return;
+    }
+
+    window.BEXIA_V5835K5C_PAYMENT_DECIMAL_DOT_READY = true;
+
+    const modalSelector = '#v5335-payment-modal';
+
+    const amountSelector = [
+        'input[data-v5481i-amount="1"]',
+        'input[data-v5448-payment-amount="1"]',
+        'input[data-v5418-amount]'
+    ].join(', ');
+
+    function canonicalDecimal(rawValue) {
+        let value = String(rawValue ?? '')
+            .trim()
+            .replace(/\s+/g, '')
+            .replace(/\$/g, '')
+            .replace(/MXN/ig, '');
+
+        if (value === '') {
+            return '';
+        }
+
+        let negative = '';
+
+        if (value.startsWith('-')) {
+            negative = '-';
+            value = value.slice(1);
+        }
+
+        value = value.replace(/[^\d.,]/g, '');
+
+        const lastDot = value.lastIndexOf('.');
+        const lastComma = value.lastIndexOf(',');
+
+        if (lastDot >= 0 && lastComma >= 0) {
+            /*
+             * 1,234.56 -> 1234.56
+             * 1.234,56 -> 1234.56
+             */
+            if (lastComma > lastDot) {
+                value = value
+                    .replace(/\./g, '')
+                    .replace(',', '.');
+            } else {
+                value = value.replace(/,/g, '');
+            }
+        } else if (lastComma >= 0) {
+            /*
+             * 123,45 -> 123.45
+             */
+            value = value.replace(/,/g, '.');
+        }
+
+        /*
+         * Si existen varios puntos, sólo el último puede representar
+         * decimales.
+         */
+        const parts = value.split('.');
+
+        if (parts.length > 2) {
+            const decimals = parts.pop();
+            value = parts.join('') + '.' + decimals;
+        }
+
+        return negative + value;
+    }
+
+    function amountInput(target) {
+        if (!target || typeof target.closest !== 'function') {
+            return null;
+        }
+
+        const input = target.closest(amountSelector);
+
+        if (!input || !input.closest(modalSelector)) {
+            return null;
+        }
+
+        return input;
+    }
+
+    function normalizeInput(input, fixedDecimals) {
+        if (!input) {
+            return;
+        }
+
+        /*
+         * type=number puede renderizar "," según locale.
+         * type=text conserva exactamente el punto que asignamos.
+         */
+        if (input.type !== 'text') {
+            input.type = 'text';
+        }
+
+        input.inputMode = 'decimal';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+
+        const canonical = canonicalDecimal(input.value);
+
+        if (canonical === '') {
+            input.value = '';
+            return;
+        }
+
+        if (!fixedDecimals) {
+            input.value = canonical;
+            return;
+        }
+
+        const numeric = Number(canonical);
+
+        if (Number.isFinite(numeric)) {
+            input.value = numeric.toFixed(2);
+        } else {
+            input.value = canonical;
+        }
+    }
+
+    function prepareAll() {
+        const modal = document.querySelector(modalSelector);
+
+        if (!modal) {
+            return;
+        }
+
+        modal
+            .querySelectorAll(amountSelector)
+            .forEach(function (input) {
+                normalizeInput(input, true);
+            });
+    }
+
+    /*
+     * Capture phase: normaliza "," -> "." antes de que los listeners
+     * propios del PDV calculen Pagado / Restante / Cambio.
+     */
+    document.addEventListener('input', function (event) {
+        const input = amountInput(event.target);
+
+        if (!input) {
+            return;
+        }
+
+        normalizeInput(input, false);
+    }, true);
+
+    document.addEventListener('change', function (event) {
+        const input = amountInput(event.target);
+
+        if (!input) {
+            return;
+        }
+
+        normalizeInput(input, true);
+    }, true);
+
+    document.addEventListener('blur', function (event) {
+        const input = amountInput(event.target);
+
+        if (!input) {
+            return;
+        }
+
+        normalizeInput(input, true);
+    }, true);
+
+    /*
+     * Los renglones de pago se crean dinámicamente.
+     */
+    function bootObserver() {
+        const modal = document.querySelector(modalSelector);
+
+        if (!modal) {
+            return false;
+        }
+
+        prepareAll();
+
+        if (!modal.__bexiaV5835K5CObserver) {
+            const observer = new MutationObserver(function () {
+                prepareAll();
+            });
+
+            observer.observe(modal, {
+                childList: true,
+                subtree: true
+            });
+
+            modal.__bexiaV5835K5CObserver = observer;
+        }
+
+        return true;
+    }
+
+    document.addEventListener('click', function (event) {
+        const target = event.target;
+
+        if (
+            target
+            && typeof target.closest === 'function'
+            && (
+                target.closest('#v5349-charge-ticket')
+                || target.closest(
+                    '#v5335-payment-modal button'
+                )
+            )
+        ) {
+            window.setTimeout(prepareAll, 0);
+            window.setTimeout(prepareAll, 80);
+        }
+    }, true);
+
+    if (!bootObserver()) {
+        document.addEventListener(
+            'DOMContentLoaded',
+            bootObserver,
+            { once: true }
+        );
+    }
+
+    window.setTimeout(bootObserver, 250);
+})();
+
+/*
+ * BEXIA_V5_83_5K5C_PDV_PAYMENT_DECIMAL_DOT_END
+ */
+</script>
