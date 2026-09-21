@@ -112,7 +112,7 @@ class CreateProductAttribute extends CreateRecord
         $data['name'] = $name;
         $data['code'] = $code;
         $data['sort_order'] = 0;
-        $data['is_variant'] = true;
+        $data['is_variant'] = (bool) ($data['is_variant'] ?? false);
         $data['is_active'] = true;
         $data['is_system'] = false;
 
