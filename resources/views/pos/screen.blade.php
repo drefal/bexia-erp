@@ -890,15 +890,19 @@
 
 @endphp
 
+            {{-- BEXIA_V5836A_DYNAMIC_PRODUCT_CATALOG_FRAGMENT --}}
+            <div id="v5836a-products-catalog-fragment">
             @if(! $canCreateTicket)
                 <div class="empty">
                     Esta caja está en modo cobro. Aquí se mostrarán los tickets pendientes para cobrar.
                 </div>
-            @elseif($v5336Products->isEmpty())
-                <div class="empty">
-                    No hay productos disponibles para este PDV. Revisa que los productos estén activos, puedan venderse y estén disponibles para PDV.
-                </div>
             @else
+                @if($v5336Products->isEmpty())
+                    <div class="empty">
+                        No hay productos disponibles para este PDV. Revisa que los productos estén activos, puedan venderse y estén disponibles para PDV.
+                    </div>
+                @endif
+
                 <div id="v5828b5i-main-products-grid" class="products">
 @foreach($v5336Products as $product)
 
@@ -1042,7 +1046,7 @@
                 </div>
 
                 {{-- V5.51.5E - Productos ocultos para búsqueda global. --}}
-                @if(($v5515eHiddenSearchProducts ?? collect())->isNotEmpty())
+                {{-- BEXIA_V5836A mantener pool aunque esté vacío para refrescos dinámicos --}}
                     <div id="v5515e-global-search-products" style="display:none;">
                         @foreach($v5515eHiddenSearchProducts as $product)
                             @php
@@ -1167,8 +1171,8 @@
                             </div>
                         @endforeach
                     </div>
-                @endif
             @endif
+            </div>
 
             <div style="height:110px;"></div>
         </main>
@@ -3009,10 +3013,19 @@ document.addEventListener('DOMContentLoaded', function () {
         render();
     }
 
-    document.querySelectorAll('.product').forEach(function (card) {
-        card.addEventListener('click', function () {
-            addProduct(card);
-        });
+    // BEXIA_V5836A_DYNAMIC_PRODUCT_CARD_CLICK
+    // Delegación: funciona también para tarjetas creadas por "Actualizar productos".
+    document.addEventListener('click', function (event) {
+        const target = event.target;
+        const card = target && typeof target.closest === 'function'
+            ? target.closest('.product[data-product-id]')
+            : null;
+
+        if (!card) {
+            return;
+        }
+
+        addProduct(card);
     });
 
     clearBtn?.addEventListener('click', function (event) {
@@ -11042,6 +11055,77 @@ document.addEventListener('DOMContentLoaded', function () {
         console.log(message);
     }
 
+    // BEXIA_V5836A_DYNAMIC_PRODUCT_CATALOG_REFRESH
+    async function refreshCatalogFragment() {
+        const currentFragment = document.getElementById('v5836a-products-catalog-fragment');
+
+        if (!currentFragment) {
+            throw new Error('No se encontró el fragmento actual del catálogo.');
+        }
+
+        const beforeIds = new Set(
+            Array.from(currentFragment.querySelectorAll('.product[data-product-id]'))
+                .map(function (card) {
+                    return String(card.dataset.productId || '');
+                })
+                .filter(Boolean)
+        );
+
+        const screenResponse = await fetch(window.location.href, {
+            method: 'GET',
+            headers: {
+                'Accept': 'text/html',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
+        });
+
+        if (!screenResponse.ok) {
+            throw new Error('No se pudo reconstruir el catálogo. HTTP ' + screenResponse.status);
+        }
+
+        const html = await screenResponse.text();
+        const parsed = new DOMParser().parseFromString(html, 'text/html');
+        const freshFragment = parsed.getElementById('v5836a-products-catalog-fragment');
+
+        if (!freshFragment) {
+            throw new Error('La respuesta no contiene el catálogo actualizado.');
+        }
+
+        const afterIds = new Set(
+            Array.from(freshFragment.querySelectorAll('.product[data-product-id]'))
+                .map(function (card) {
+                    return String(card.dataset.productId || '');
+                })
+                .filter(Boolean)
+        );
+
+        let added = 0;
+        let removed = 0;
+
+        afterIds.forEach(function (id) {
+            if (!beforeIds.has(id)) {
+                added++;
+            }
+        });
+
+        beforeIds.forEach(function (id) {
+            if (!afterIds.has(id)) {
+                removed++;
+            }
+        });
+
+        currentFragment.innerHTML = freshFragment.innerHTML;
+
+        return {
+            before: beforeIds.size,
+            after: afterIds.size,
+            added: added,
+            removed: removed
+        };
+    }
+
     async function refreshProducts(button) {
         const sid = sessionIdFromUrl();
 
@@ -11059,14 +11143,21 @@ document.addEventListener('DOMContentLoaded', function () {
             const priceListId = window.BEXIA_POS_SELECTED_PRICE_LIST_ID || 0;
             const url = '/pos/sessions/' + sid + '/products-refresh' + (priceListId > 0 ? ('?price_list_id=' + encodeURIComponent(priceListId)) : '');
 
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                credentials: 'same-origin'
-            });
+            const results = await Promise.all([
+                refreshCatalogFragment(),
+                fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin',
+                    cache: 'no-store'
+                })
+            ]);
+
+            const catalogResult = results[0];
+            const response = results[1];
 
             if (!response.ok) {
                 throw new Error('HTTP ' + response.status);
@@ -11100,6 +11191,14 @@ document.addEventListener('DOMContentLoaded', function () {
             const cardsChanged = applied.cardsChanged;
             const cartChanged = applied.cartChanged;
 
+            const searchInput = document.getElementById('v5490b-product-search');
+
+            if (searchInput) {
+                searchInput.dispatchEvent(new Event('input', {
+                    bubbles: true
+                }));
+            }
+
             document.dispatchEvent(new CustomEvent('bexia:pos-products-refreshed', {
                 detail: {
                     products: data.products,
@@ -11110,7 +11209,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
             button.textContent = 'Actualizado';
 
-            notify('Productos actualizados: ' + cardsChanged + ' tarjetas, ' + cartChanged + ' líneas en carrito.', 'success');
+            notify(
+                'Productos actualizados: '
+                    + cardsChanged
+                    + ' tarjetas, '
+                    + cartChanged
+                    + ' líneas en carrito. Catálogo: +'
+                    + catalogResult.added
+                    + ' / -'
+                    + catalogResult.removed
+                    + '.',
+                'success'
+            );
 
             setTimeout(function () {
                 button.textContent = originalText;
@@ -15515,17 +15625,42 @@ document.addEventListener('click', function (event) {
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('v5490b-product-search');
     const clearButton = document.getElementById('v5490b-clear-search');
-    const visibleGrid = document.getElementById(
-        'v5828b5i-main-products-grid'
-    );
-    const hiddenPool = document.getElementById('v5515e-global-search-products');
 
-    if (!searchInput || !visibleGrid || !hiddenPool) {
+    if (!searchInput) {
         return;
     }
 
-    const originalVisibleProducts = Array.from(visibleGrid.querySelectorAll('.product:not(.v5515e-hidden-search-product)'));
-    const hiddenProducts = Array.from(hiddenPool.querySelectorAll('.v5515e-hidden-search-product'));
+    function visibleGrid() {
+        return document.getElementById('v5828b5i-main-products-grid');
+    }
+
+    function hiddenPool() {
+        return document.getElementById('v5515e-global-search-products');
+    }
+
+    function originalVisibleProducts() {
+        const grid = visibleGrid();
+
+        return grid
+            ? Array.from(
+                grid.querySelectorAll(
+                    '.product:not(.v5515e-hidden-search-product)'
+                )
+            )
+            : [];
+    }
+
+    function hiddenProducts() {
+        const pool = hiddenPool();
+
+        return pool
+            ? Array.from(
+                pool.querySelectorAll(
+                    '.v5515e-hidden-search-product'
+                )
+            )
+            : [];
+    }
 
     function normalize(value) {
         return (value || '')
@@ -15554,35 +15689,50 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function restoreCategoryView() {
-        hiddenProducts.forEach(function (product) {
+        const grid = visibleGrid();
+        const pool = hiddenPool();
+
+        if (!grid || !pool) {
+            return;
+        }
+
+        Array.from(
+            grid.querySelectorAll('.v5515e-hidden-search-product')
+        ).forEach(function (product) {
             product.style.display = 'none';
-            hiddenPool.appendChild(product);
+            pool.appendChild(product);
         });
 
-        originalVisibleProducts.forEach(function (product) {
+        originalVisibleProducts().forEach(function (product) {
             product.style.display = '';
         });
     }
 
     function applyGlobalSearch() {
         const query = normalize(searchInput.value);
+        const grid = visibleGrid();
+        const pool = hiddenPool();
+
+        if (!grid || !pool) {
+            return;
+        }
 
         if (!query) {
             restoreCategoryView();
             return;
         }
 
-        originalVisibleProducts.forEach(function (product) {
+        originalVisibleProducts().forEach(function (product) {
             product.style.display = matches(product, query) ? '' : 'none';
         });
 
-        hiddenProducts.forEach(function (product) {
+        hiddenProducts().forEach(function (product) {
             if (matches(product, query)) {
                 product.style.display = '';
-                visibleGrid.appendChild(product);
+                grid.appendChild(product);
             } else {
                 product.style.display = 'none';
-                hiddenPool.appendChild(product);
+                pool.appendChild(product);
             }
         });
     }
