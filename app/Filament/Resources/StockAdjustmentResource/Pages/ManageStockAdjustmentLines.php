@@ -271,8 +271,10 @@ class ManageStockAdjustmentLines extends Page
                 ->action(fn (): null => $this->saveVisibleLines()),
 
             Actions\Action::make('confirmAdjustment')
+                // BEXIA_V5836D_HIDE_CONFIRM_WHEN_NOT_DRAFT
                 ->label('Confirmar ajuste')
                 ->color('primary')
+                ->visible(fn (): bool => (string) $this->record->status === 'draft')
                 ->requiresConfirmation()
                 ->modalWidth(MaxWidth::FourExtraLarge)
                 ->closeModalByClickingAway(false)
@@ -388,6 +390,163 @@ class ManageStockAdjustmentLines extends Page
         }
 
         return $this->productRequiresSerial((int) $this->quickProductId, $this->quickVariantId);
+    }
+
+    /**
+     * BEXIA_V5836F_QUICK_STOCK_STATUS
+     *
+     * Existencia fisica, reservada y disponible para la combinacion
+     * que se esta capturando en el ajuste.
+     *
+     * - Sin variante seleccionada, si el producto tiene variantes:
+     *   muestra el total de todas sus variantes.
+     * - Sin lote seleccionado, si el producto maneja lote:
+     *   muestra el total de todos sus lotes.
+     * - Al seleccionar variante/lote Livewire recalcula el dato.
+     */
+    public function quickStockStatus(bool $hasVariants = false, bool $requiresLot = false): array
+    {
+        $empty = [
+            'selected' => false,
+            'current' => 0.0,
+            'reserved' => 0.0,
+            'available' => 0.0,
+            'context' => '',
+        ];
+
+        $productId = (int) ($this->quickProductId ?: 0);
+
+        if ($productId <= 0 || ! Schema::hasTable('stock_quants')) {
+            return $empty;
+        }
+
+        $variantId = $this->quickVariantId
+            ? (int) $this->quickVariantId
+            : null;
+
+        $lotId = $this->quickLotId
+            ? (int) $this->quickLotId
+            : null;
+
+        $quantQuery = DB::table('stock_quants')
+            ->where('company_id', (int) $this->record->company_id)
+            ->where('warehouse_id', (int) $this->record->warehouse_id)
+            ->where('location_id', (int) $this->record->location_id)
+            ->where('product_id', $productId);
+
+        if (Schema::hasColumn('stock_quants', 'product_variant_id')) {
+            if ($variantId) {
+                $quantQuery->where('product_variant_id', $variantId);
+            } elseif (! $hasVariants) {
+                $quantQuery->whereNull('product_variant_id');
+            }
+        }
+
+        if (Schema::hasColumn('stock_quants', 'lot_id')) {
+            if ($lotId) {
+                $quantQuery->where('lot_id', $lotId);
+            } elseif (! $requiresLot) {
+                $quantQuery->whereNull('lot_id');
+            }
+        }
+
+        $current = (float) (clone $quantQuery)->sum('quantity');
+
+        $reservedFromQuant = Schema::hasColumn('stock_quants', 'reserved_quantity')
+            ? (float) (clone $quantQuery)->sum('reserved_quantity')
+            : 0.0;
+
+        $reservedFromReservations = 0.0;
+
+        if (
+            Schema::hasTable('stock_reservations')
+            && Schema::hasColumn('stock_reservations', 'quantity')
+        ) {
+            $reservationQuery = DB::table('stock_reservations')
+                ->where('product_id', $productId);
+
+            if (Schema::hasColumn('stock_reservations', 'status')) {
+                $reservationQuery->where('status', 'active');
+            }
+
+            if (Schema::hasColumn('stock_reservations', 'company_id')) {
+                $reservationQuery->where(
+                    'company_id',
+                    (int) $this->record->company_id
+                );
+            }
+
+            if (Schema::hasColumn('stock_reservations', 'warehouse_id')) {
+                $reservationQuery->where(
+                    'warehouse_id',
+                    (int) $this->record->warehouse_id
+                );
+            }
+
+            if (Schema::hasColumn('stock_reservations', 'location_id')) {
+                $reservationQuery->where(
+                    'location_id',
+                    (int) $this->record->location_id
+                );
+            }
+
+            if (Schema::hasColumn('stock_reservations', 'product_variant_id')) {
+                if ($variantId) {
+                    $reservationQuery->where(
+                        'product_variant_id',
+                        $variantId
+                    );
+                } elseif (! $hasVariants) {
+                    $reservationQuery->whereNull('product_variant_id');
+                }
+            }
+
+            if (Schema::hasColumn('stock_reservations', 'lot_id')) {
+                if ($lotId) {
+                    $reservationQuery->where('lot_id', $lotId);
+                } elseif (! $requiresLot) {
+                    $reservationQuery->whereNull('lot_id');
+                }
+            }
+
+            $reservedFromReservations =
+                (float) $reservationQuery->sum('quantity');
+        }
+
+        /*
+         * Misma estrategia que el PDV:
+         * no sumar ambas fuentes porque pueden representar la misma reserva.
+         */
+        $reserved = max(
+            0.0,
+            $reservedFromQuant,
+            $reservedFromReservations
+        );
+
+        $available = max(
+            0.0,
+            round($current - $reserved, 6)
+        );
+
+        $contextParts = [];
+
+        if ($hasVariants && ! $variantId) {
+            $contextParts[] = 'todas las variantes';
+        }
+
+        if ($requiresLot && ! $lotId) {
+            $contextParts[] = 'todos los lotes';
+        }
+
+        return [
+            'selected' => true,
+            'current' => round($current, 6),
+            'reserved' => round($reserved, 6),
+            'available' => $available,
+            'context' => $contextParts
+                ? 'Total: ' . implode(' · ', $contextParts)
+                : 'Producto seleccionado',
+        ];
     }
 
     public function selectQuickProduct(int $productId): void

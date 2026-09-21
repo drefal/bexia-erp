@@ -10,6 +10,10 @@ class CreateStockAdjustment extends CreateRecord
 {
     protected static string $resource = StockAdjustmentResource::class;
 
+    // BEXIA_V5836E_DISABLE_CREATE_ANOTHER
+    // El flujo del ajuste requiere crear el encabezado y continuar a captura de líneas.
+    protected static bool $canCreateAnother = false;
+
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $reason = trim((string) ($data['reason'] ?? ''));

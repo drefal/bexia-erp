@@ -6,6 +6,13 @@
         $lotOptions = $this->quickLotOptions();
         $requiresLot = $this->quickProductRequiresLot();
         $requiresSerial = $this->quickProductRequiresSerial();
+
+        // BEXIA_V5836F_QUICK_STOCK_PANEL
+        $quickStockStatus = $this->quickStockStatus(
+            count($variantOptions) > 0,
+            $requiresLot
+        );
+
         $totalDifference = $lines->sum(fn ($line) => (float) ($line->difference_quantity ?? 0));
         $totalValue = $lines->sum(fn ($line) => (float) ($line->difference_quantity ?? 0) * (float) ($line->unit_cost ?? 0));
     @endphp
@@ -173,11 +180,80 @@
                             @endif
 
                             @if ($this->quickProductId)
-                                <div class="mt-2 flex items-center justify-between rounded-xl bg-primary-50 px-3 py-2 text-sm text-primary-900 dark:bg-primary-950 dark:text-primary-100">
-                                    <span>{{ $this->quickProductLabel }}</span>
-                                    <button type="button" wire:click="clearQuickProduct" class="font-semibold text-primary-700 hover:underline">
-                                        Cambiar
-                                    </button>
+                                <div
+                                    class="mt-2"
+                                    style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;"
+                                >
+                                    <div class="flex items-center justify-between rounded-xl bg-primary-50 px-3 py-2 text-sm text-primary-900 dark:bg-primary-950 dark:text-primary-100">
+                                        <div>
+                                            <div class="text-xs font-semibold uppercase tracking-wide opacity-70">
+                                                Producto seleccionado
+                                            </div>
+                                            <div class="mt-1 font-semibold">
+                                                {{ $this->quickProductLabel }}
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            wire:click="clearQuickProduct"
+                                            class="ml-3 font-semibold text-primary-700 hover:underline"
+                                        >
+                                            Cambiar
+                                        </button>
+                                    </div>
+
+                                    <div class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                    Existencia en esta ubicación
+                                                </div>
+
+                                                @if (! empty($quickStockStatus['context']))
+                                                    <div class="mt-0.5 text-xs text-gray-500">
+                                                        {{ $quickStockStatus['context'] }}
+                                                    </div>
+                                                @endif
+                                            </div>
+
+                                            @if ((float) ($quickStockStatus['reserved'] ?? 0) > 0)
+                                                <span class="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+                                                    Con reservas
+                                                </span>
+                                            @else
+                                                <span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800">
+                                                    Sin reservas
+                                                </span>
+                                            @endif
+                                        </div>
+
+                                        <div
+                                            class="mt-2"
+                                            style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;"
+                                        >
+                                            <div>
+                                                <div class="text-xs text-gray-500">Actual</div>
+                                                <div class="font-semibold text-gray-950 dark:text-white">
+                                                    {{ $this->quantity($quickStockStatus['current'] ?? 0) }}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <div class="text-xs text-gray-500">Reservado</div>
+                                                <div class="font-semibold {{ (float) ($quickStockStatus['reserved'] ?? 0) > 0 ? 'text-amber-700' : 'text-gray-950 dark:text-white' }}">
+                                                    {{ $this->quantity($quickStockStatus['reserved'] ?? 0) }}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <div class="text-xs text-gray-500">Disponible</div>
+                                                <div class="font-semibold {{ (float) ($quickStockStatus['available'] ?? 0) > 0 ? 'text-emerald-700' : 'text-red-700' }}">
+                                                    {{ $this->quantity($quickStockStatus['available'] ?? 0) }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             @endif
                         </div>
