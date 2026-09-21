@@ -8825,24 +8825,9 @@ document.addEventListener('DOMContentLoaded', function () {
         m.setAttribute('aria-hidden', 'true');
     }
 
-    async function loadMethods() {
-        const sid = sessionId();
-
-        if (!sid) {
-            throw new Error('No se pudo identificar la sesión del PDV.');
-        }
-
-        const data = await getJson('/pos/sessions/' + sid + '/payment-methods', {
-            method: 'GET',
-        });
-
-        const rows = data.methods || data.payment_methods || [];
-
-        if (!rows.length) {
-            throw new Error('No hay métodos de pago configurados para este PDV.');
-        }
-
-        return rows.map(function (method) {
+    // BEXIA_V5836C_PAYMENT_METHODS_PREFETCH_CACHE
+    function v5836cNormalizePaymentMethods(rows) {
+        return (Array.isArray(rows) ? rows : []).map(function (method) {
             const label = method.label || method.name || method.description || method.code || 'Pago';
             const code = String(method.code || method.payment_form_code || '').trim();
             const isCash = Boolean(method.is_cash)
@@ -8857,8 +8842,84 @@ document.addEventListener('DOMContentLoaded', function () {
                 is_cash: isCash,
                 is_credit: Boolean(method.is_credit),
             };
+        }).filter(function (method) {
+            return method.id !== '' && method.id !== null;
         });
     }
+
+    async function loadMethods() {
+        /*
+         * V5.83.6C
+         *
+         * Los métodos de pago cambian muy poco durante una sesión.
+         * Se cargan una sola vez y se reutilizan para los siguientes cobros.
+         *
+         * Si todavía no están disponibles, se hace el GET normal como fallback.
+         */
+        const cached = v5836cNormalizePaymentMethods(
+            window.BEXIA_POS_PAYMENT_METHODS || []
+        );
+
+        if (cached.length) {
+            return cached;
+        }
+
+        if (window.BEXIA_POS_PAYMENT_METHODS_PROMISE) {
+            return window.BEXIA_POS_PAYMENT_METHODS_PROMISE;
+        }
+
+        const sid = sessionId();
+
+        if (!sid) {
+            throw new Error('No se pudo identificar la sesión del PDV.');
+        }
+
+        const startedAt = performance.now();
+
+        window.BEXIA_POS_PAYMENT_METHODS_PROMISE = getJson(
+            '/pos/sessions/' + sid + '/payment-methods',
+            {
+                method: 'GET',
+            }
+        ).then(function (data) {
+            const rows = data.methods || data.payment_methods || [];
+            const normalized = v5836cNormalizePaymentMethods(rows);
+
+            if (!normalized.length) {
+                throw new Error(
+                    'No hay métodos de pago configurados para este PDV.'
+                );
+            }
+
+            window.BEXIA_POS_PAYMENT_METHODS = normalized;
+            window.BEXIA_POS_PAYMENT_METHODS_FETCH_MS =
+                Number((performance.now() - startedAt).toFixed(2));
+
+            return normalized;
+        }).catch(function (error) {
+            /*
+             * Permitir reintento si hubo una falla temporal de red.
+             */
+            window.BEXIA_POS_PAYMENT_METHODS_PROMISE = null;
+            throw error;
+        });
+
+        return window.BEXIA_POS_PAYMENT_METHODS_PROMISE;
+    }
+
+    /*
+     * V5.83.6C:
+     * precargar en segundo plano al abrir el PDV.
+     * Para cuando el cajero pulse "Cobrar", normalmente ya estará listo.
+     */
+    window.setTimeout(function () {
+        loadMethods().catch(function (error) {
+            console.warn(
+                'BEXIA V5.83.6C: no se pudieron precargar métodos de pago',
+                error
+            );
+        });
+    }, 0);
 
     function rowsBox() {
         return document.getElementById('v5481i-payment-rows');
