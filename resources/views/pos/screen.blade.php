@@ -2757,7 +2757,10 @@ document.addEventListener('DOMContentLoaded', function () {
             cartCount.textContent = String(count);
         }
 
-        cart.forEach(function (item, key) {
+        // BEXIA_V5836B_CART_LIFO_VISUAL
+        // El ultimo producto nuevo agregado se muestra arriba.
+        // Solo cambia el orden visual del carrito.
+        Array.from(cart.entries()).reverse().forEach(function ([key, item]) {
             const line = document.createElement('div');
             line.className = 'item v5339-cart-line';
             line.dataset.key = key;
