@@ -135,7 +135,7 @@ public static function form(Form $form): Form
 
                 Forms\Components\Section::make('Configuración del atributo')
                     // BEXIA_V5_83_P14A_SIMPLIFIED_ATTRIBUTE_CREATE
-                    ->description('Captura el nombre del atributo. Al crear, Bexia genera automáticamente el código y los valores predeterminados.')
+                    ->description('Captura el nombre y define si el atributo genera variantes. Los valores permitidos se administran después desde este mismo catálogo.')
                     ->extraAttributes([
                         'class' => 'bexia-pattr-section bexia-pattr-section-main',
                     ])
@@ -183,9 +183,8 @@ public static function form(Form $form): Form
                                 'class' => 'bexia-pattr-field bexia-pattr-toggle-field bexia-pattr-variant-field',
                             ])
                             ->label('Usar para variantes')
-                            ->helperText('Actívalo si este atributo genera variantes del producto.')
-                            ->default(true)
-                            ->hiddenOn('create')
+                            ->helperText('Actívalo sólo si este atributo debe generar variantes. Para clasificación o datos adicionales, déjalo apagado.')
+                            ->default(false)
                             ->columnSpan(4),
 
                         Forms\Components\Toggle::make('is_active')

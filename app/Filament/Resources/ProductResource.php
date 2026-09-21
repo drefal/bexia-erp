@@ -2339,7 +2339,7 @@ Forms\Components\Section::make('Auditoría de precios y costos')
                                     ->columns(12),
 
 Forms\Components\Section::make('Atributos de catálogo')
-                                    ->description('Selecciona valores desde el catálogo homologado de atributos configurado para esta empresa.')
+                                    ->description('Selecciona únicamente valores existentes en el catálogo de atributos. Si necesitas uno nuevo, agrégalo primero en Productos > Atributos de producto; la ficha no permite captura libre.')
                                     // BEXIA_V5_83_P12C4D_PRODUCT_ATTRIBUTE_CATALOG_UI
 
                                 // hide_attributes_on_variant_create_v5
