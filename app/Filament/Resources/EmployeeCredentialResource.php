@@ -202,31 +202,7 @@ class EmployeeCredentialResource extends Resource
                         };
                     }),
             ])
-            ->actions([
-                Tables\Actions\Action::make('download_credential')
-                    ->label('Descargar tarjeta')
-                    ->icon('heroicon-o-arrow-down-tray')
-                    ->color('primary')
-                    ->action(function (Employee $record) {
-                        $companyId = static::currentCompanyId();
-
-                        if ($companyId < 1 || (int) $record->company_id !== $companyId) {
-                            abort(403);
-                        }
-
-                        $service = app(EmployeeCredentialPdfService::class);
-                        $contents = $service->renderIndividual($record);
-                        $filename = $service->individualFilename($record);
-
-                        return response()->streamDownload(
-                            static function () use ($contents): void {
-                                echo $contents;
-                            },
-                            $filename,
-                            ['Content-Type' => 'application/pdf'],
-                        );
-                    }),
-            ])
+            ->actions([])
             ->bulkActions([
                 Tables\Actions\BulkAction::make('download_selected_credentials')
                     ->label('Descargar seleccionadas')

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use App\Support\EmployeeOrganizationResolver;
 
 class Employee extends Model
@@ -128,6 +129,30 @@ class Employee extends Model
      */
     protected static function booted(): void
     {
+        /*
+         * V5.83.4c23d2 - QR automatico.
+         * Todo empleado nuevo recibe token QR automaticamente.
+         */
+        static::creating(function (Employee $employee): void {
+            if (blank($employee->attendance_qr_token)) {
+                do {
+                    $token = Str::random(48);
+                } while (
+                    static::query()
+                        ->where('attendance_qr_token', $token)
+                        ->exists()
+                );
+
+                $employee->attendance_qr_token = $token;
+                $employee->attendance_qr_generated_at =
+                    $employee->attendance_qr_generated_at ?: now();
+            }
+
+            if ($employee->attendance_qr_enabled === null) {
+                $employee->attendance_qr_enabled = true;
+            }
+        });
+
         static::saving(function (Employee $employee): void {
             if (
                 $employee->exists
