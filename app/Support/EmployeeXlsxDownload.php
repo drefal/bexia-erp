@@ -81,7 +81,9 @@ final class EmployeeXlsxDownload
 
         foreach ($rows[0] as $index => $heading) {
             $width = match ($heading) {
-                'Nombre', 'Jefe directo', 'Nombre fiscal' => 38,
+                'Nombre', 'Nombre(s)', 'Nombre completo',
+                'Jefe directo', 'Nombre fiscal' => 38,
+                'Apellido paterno', 'Apellido materno' => 28,
                 'Empresa', 'Correo trabajo' => 32,
                 'Observaciones para actualizar' => 45,
                 default => 24,
