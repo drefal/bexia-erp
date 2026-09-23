@@ -213,7 +213,7 @@ public static function canCreate(): bool
          *   ultimas dos como apellidos y todo lo anterior como nombre(s).
          *
          * Casos con particulas deben revisarse manualmente antes
-         * de activar "Confirmar separacion del nombre".
+         * de guardar cambios en el nombre.
          */
         if ($count === 1) {
             return [
@@ -405,7 +405,7 @@ public static function canCreate(): bool
                                                 ->helperText(
                                                     'Para empleados historicos se muestra '
                                                     . 'una propuesta basada en el nombre actual. '
-                                                    . 'Revisala antes de confirmarla.'
+                                                    . 'Revisala antes de guardar cambios en el nombre.'
                                                 ),
 
                                             TextInput::make('paternal_surname')
@@ -537,31 +537,11 @@ public static function canCreate(): bool
                                                 )
                                                 ->helperText('Opcional.'),
 
-                                            Toggle::make(
+                                            Forms\Components\Hidden::make(
                                                 'confirm_name_parts'
                                             )
-                                                ->label(
-                                                    'Confirmar separacion del nombre'
-                                                )
                                                 ->default(false)
-                                                ->visible(
-                                                    fn (
-                                                        ?Employee $record
-                                                    ): bool =>
-                                                        static::isLegacyNameRecord(
-                                                            $record
-                                                        )
-                                                )
-                                                ->dehydrated(false)
-                                                ->helperText(
-                                                    'Activalo despues de revisar que '
-                                                    . 'Nombre(s), apellido paterno y '
-                                                    . 'apellido materno sean correctos. '
-                                                    . 'Mientras permanezca apagado, '
-                                                    . 'guardar otros datos no modificara '
-                                                    . 'el nombre historico.'
-                                                )
-                                                ->columnSpanFull(),
+                                                ->dehydrated(false),
 
                                             Placeholder::make(
                                                 'full_name_preview'
