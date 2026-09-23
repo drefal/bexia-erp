@@ -79,7 +79,12 @@ class ListEmployees extends ListRecords
 
                             $write([
                                 'ID empleado', 'ID empresa', 'Empresa',
-                                'Numero empleado', 'Nombre', 'Activo',
+                                'Numero empleado',
+                                'Nombre(s)',
+                                'Apellido paterno',
+                                'Apellido materno',
+                                'Nombre completo',
+                                'Activo',
                                 'Ubicacion', 'Departamento RRHH',
                                 'Departamento anterior', 'Puesto RRHH',
                                 'Puesto anterior', 'Jefe directo',
@@ -95,7 +100,11 @@ class ListEmployees extends ListRecords
                             foreach ($employees as $e) {
                                 $write([
                                     $e->id, $e->company_id, $companyName,
-                                    $e->employee_number, $e->name,
+                                    $e->employee_number,
+                                    $e->first_name,
+                                    $e->paternal_surname,
+                                    $e->maternal_surname,
+                                    $e->name,
                                     $e->active ? 'Si' : 'No',
                                     $label($e->branch), $label($e->hrDepartment),
                                     $e->department, $label($e->hrJobPosition),

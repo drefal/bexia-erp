@@ -32,6 +32,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
+use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -137,6 +138,136 @@ public static function canCreate(): bool
         return EmployeeOrganizationResolver::activeEmployeeOptions($companyId ?: null, $excludeId);
     }
 
+    /*
+     * V5.83.4c23e1b2a
+     * Propuesta visual para nombres historicos.
+     *
+     * No persiste nada por si sola. Sirve para que el usuario pueda
+     * revisar/corregir la separacion antes de confirmarla.
+     */
+    protected static function legacyNameParts(?Employee $record): array
+    {
+        if (! $record) {
+            return [
+                'first_name' => '',
+                'paternal_surname' => '',
+                'maternal_surname' => '',
+            ];
+        }
+
+        if (
+            filled($record->first_name)
+            || filled($record->paternal_surname)
+            || filled($record->maternal_surname)
+        ) {
+            return [
+                'first_name' =>
+                    trim((string) $record->first_name),
+
+                'paternal_surname' =>
+                    trim((string) $record->paternal_surname),
+
+                'maternal_surname' =>
+                    trim((string) $record->maternal_surname),
+            ];
+        }
+
+        $fullName = trim(
+            preg_replace(
+                '/\\s+/u',
+                ' ',
+                (string) $record->name
+            ) ?? ''
+        );
+
+        if ($fullName === '') {
+            return [
+                'first_name' => '',
+                'paternal_surname' => '',
+                'maternal_surname' => '',
+            ];
+        }
+
+        $words = preg_split(
+            '/\\s+/u',
+            $fullName,
+            -1,
+            PREG_SPLIT_NO_EMPTY
+        ) ?: [];
+
+        $count = count($words);
+
+        /*
+         * Es solo una propuesta.
+         *
+         * 1 palabra:
+         *   nombre
+         *
+         * 2 palabras:
+         *   nombre + paterno
+         *
+         * 3 palabras:
+         *   nombre + paterno + materno
+         *
+         * 4 o mas:
+         *   ultimas dos como apellidos y todo lo anterior como nombre(s).
+         *
+         * Casos con particulas deben revisarse manualmente antes
+         * de activar "Confirmar separacion del nombre".
+         */
+        if ($count === 1) {
+            return [
+                'first_name' => $words[0],
+                'paternal_surname' => '',
+                'maternal_surname' => '',
+            ];
+        }
+
+        if ($count === 2) {
+            return [
+                'first_name' => $words[0],
+                'paternal_surname' => $words[1],
+                'maternal_surname' => '',
+            ];
+        }
+
+        if ($count === 3) {
+            return [
+                'first_name' => $words[0],
+                'paternal_surname' => $words[1],
+                'maternal_surname' => $words[2],
+            ];
+        }
+
+        return [
+            'first_name' =>
+                implode(
+                    ' ',
+                    array_slice(
+                        $words,
+                        0,
+                        -2
+                    )
+                ),
+
+            'paternal_surname' =>
+                $words[$count - 2],
+
+            'maternal_surname' =>
+                $words[$count - 1],
+        ];
+    }
+
+    protected static function isLegacyNameRecord(
+        ?Employee $record
+    ): bool {
+        return $record !== null
+            && blank($record->first_name)
+            && blank($record->paternal_surname)
+            && blank($record->maternal_surname)
+            && filled($record->name);
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([
@@ -203,10 +334,292 @@ public static function canCreate(): bool
 
                                     Grid::make(10)
                                         ->schema([
-                                            TextInput::make('name')
-                                                ->label('Nombre')
-                                                ->required()
-                                                ->maxLength(255),
+                                            TextInput::make('first_name')
+                                                ->label('Nombre(s)')
+                                                ->required(
+                                                    fn (
+                                                        string $operation,
+                                                        Get $get
+                                                    ): bool =>
+                                                        $operation === 'create'
+                                                        || (bool) $get(
+                                                            'confirm_name_parts'
+                                                        )
+                                                )
+                                                ->maxLength(255)
+                                                ->live(onBlur: true)
+                                                ->afterStateHydrated(
+                                                    function (
+                                                        TextInput $component,
+                                                        ?Employee $record
+                                                    ): void {
+                                                        if (
+                                                            static::isLegacyNameRecord(
+                                                                $record
+                                                            )
+                                                        ) {
+                                                            $parts =
+                                                                static::legacyNameParts(
+                                                                    $record
+                                                                );
+
+                                                            $component->state(
+                                                                $parts[
+                                                                    'first_name'
+                                                                ]
+                                                            );
+                                                        }
+                                                    }
+                                                )
+                                                ->afterStateUpdated(
+                                                    function (
+                                                        Set $set,
+                                                        ?Employee $record
+                                                    ): void {
+                                                        if (
+                                                            static::isLegacyNameRecord(
+                                                                $record
+                                                            )
+                                                        ) {
+                                                            $set(
+                                                                'confirm_name_parts',
+                                                                true
+                                                            );
+                                                        }
+                                                    }
+                                                )
+                                                ->dehydrated(
+                                                    fn (
+                                                        string $operation,
+                                                        Get $get,
+                                                        ?Employee $record
+                                                    ): bool =>
+                                                        $operation === 'create'
+                                                        || ! static::isLegacyNameRecord(
+                                                            $record
+                                                        )
+                                                        || (bool) $get(
+                                                            'confirm_name_parts'
+                                                        )
+                                                )
+                                                ->helperText(
+                                                    'Para empleados historicos se muestra '
+                                                    . 'una propuesta basada en el nombre actual. '
+                                                    . 'Revisala antes de confirmarla.'
+                                                ),
+
+                                            TextInput::make('paternal_surname')
+                                                ->label('Apellido paterno')
+                                                ->required(
+                                                    fn (
+                                                        string $operation,
+                                                        Get $get
+                                                    ): bool =>
+                                                        $operation === 'create'
+                                                        || (bool) $get(
+                                                            'confirm_name_parts'
+                                                        )
+                                                )
+                                                ->maxLength(255)
+                                                ->live(onBlur: true)
+                                                ->afterStateHydrated(
+                                                    function (
+                                                        TextInput $component,
+                                                        ?Employee $record
+                                                    ): void {
+                                                        if (
+                                                            static::isLegacyNameRecord(
+                                                                $record
+                                                            )
+                                                        ) {
+                                                            $parts =
+                                                                static::legacyNameParts(
+                                                                    $record
+                                                                );
+
+                                                            $component->state(
+                                                                $parts[
+                                                                    'paternal_surname'
+                                                                ]
+                                                            );
+                                                        }
+                                                    }
+                                                )
+                                                ->afterStateUpdated(
+                                                    function (
+                                                        Set $set,
+                                                        ?Employee $record
+                                                    ): void {
+                                                        if (
+                                                            static::isLegacyNameRecord(
+                                                                $record
+                                                            )
+                                                        ) {
+                                                            $set(
+                                                                'confirm_name_parts',
+                                                                true
+                                                            );
+                                                        }
+                                                    }
+                                                )
+                                                ->dehydrated(
+                                                    fn (
+                                                        string $operation,
+                                                        Get $get,
+                                                        ?Employee $record
+                                                    ): bool =>
+                                                        $operation === 'create'
+                                                        || ! static::isLegacyNameRecord(
+                                                            $record
+                                                        )
+                                                        || (bool) $get(
+                                                            'confirm_name_parts'
+                                                        )
+                                                ),
+
+                                            TextInput::make('maternal_surname')
+                                                ->label('Apellido materno')
+                                                ->maxLength(255)
+                                                ->live(onBlur: true)
+                                                ->afterStateHydrated(
+                                                    function (
+                                                        TextInput $component,
+                                                        ?Employee $record
+                                                    ): void {
+                                                        if (
+                                                            static::isLegacyNameRecord(
+                                                                $record
+                                                            )
+                                                        ) {
+                                                            $parts =
+                                                                static::legacyNameParts(
+                                                                    $record
+                                                                );
+
+                                                            $component->state(
+                                                                $parts[
+                                                                    'maternal_surname'
+                                                                ]
+                                                            );
+                                                        }
+                                                    }
+                                                )
+                                                ->afterStateUpdated(
+                                                    function (
+                                                        Set $set,
+                                                        ?Employee $record
+                                                    ): void {
+                                                        if (
+                                                            static::isLegacyNameRecord(
+                                                                $record
+                                                            )
+                                                        ) {
+                                                            $set(
+                                                                'confirm_name_parts',
+                                                                true
+                                                            );
+                                                        }
+                                                    }
+                                                )
+                                                ->dehydrated(
+                                                    fn (
+                                                        string $operation,
+                                                        Get $get,
+                                                        ?Employee $record
+                                                    ): bool =>
+                                                        $operation === 'create'
+                                                        || ! static::isLegacyNameRecord(
+                                                            $record
+                                                        )
+                                                        || (bool) $get(
+                                                            'confirm_name_parts'
+                                                        )
+                                                )
+                                                ->helperText('Opcional.'),
+
+                                            Toggle::make(
+                                                'confirm_name_parts'
+                                            )
+                                                ->label(
+                                                    'Confirmar separacion del nombre'
+                                                )
+                                                ->default(false)
+                                                ->visible(
+                                                    fn (
+                                                        ?Employee $record
+                                                    ): bool =>
+                                                        static::isLegacyNameRecord(
+                                                            $record
+                                                        )
+                                                )
+                                                ->dehydrated(false)
+                                                ->helperText(
+                                                    'Activalo despues de revisar que '
+                                                    . 'Nombre(s), apellido paterno y '
+                                                    . 'apellido materno sean correctos. '
+                                                    . 'Mientras permanezca apagado, '
+                                                    . 'guardar otros datos no modificara '
+                                                    . 'el nombre historico.'
+                                                )
+                                                ->columnSpanFull(),
+
+                                            Placeholder::make(
+                                                'full_name_preview'
+                                            )
+                                                ->label('Nombre completo')
+                                                ->content(
+                                                    function (
+                                                        Get $get,
+                                                        ?Employee $record
+                                                    ): string {
+                                                        $parts =
+                                                            array_values(
+                                                                array_filter(
+                                                                    [
+                                                                        trim(
+                                                                            (string) $get(
+                                                                                'first_name'
+                                                                            )
+                                                                        ),
+                                                                        trim(
+                                                                            (string) $get(
+                                                                                'paternal_surname'
+                                                                            )
+                                                                        ),
+                                                                        trim(
+                                                                            (string) $get(
+                                                                                'maternal_surname'
+                                                                            )
+                                                                        ),
+                                                                    ],
+                                                                    static fn (
+                                                                        string $value
+                                                                    ): bool =>
+                                                                        $value !== ''
+                                                                )
+                                                            );
+
+                                                        if ($parts !== []) {
+                                                            return implode(
+                                                                ' ',
+                                                                $parts
+                                                            );
+                                                        }
+
+                                                        return trim(
+                                                            (string) (
+                                                                $record?->name
+                                                                ?: 'Se generara al guardar.'
+                                                            )
+                                                        );
+                                                    }
+                                                )
+                                                ->helperText(
+                                                    'La credencial, asistencia, PDV '
+                                                    . 'y reportes continuan usando este '
+                                                    . 'nombre completo.'
+                                                )
+                                                ->columnSpanFull(),
 
                                             Select::make('hr_job_position_id')
                                                 ->label('Puesto (catálogo RRHH)')
@@ -807,9 +1220,24 @@ public static function canCreate(): bool
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nombre')
+                    ->label('Nombre completo')
                     ->searchable()
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('first_name')
+                    ->label('Nombre(s)')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('paternal_surname')
+                    ->label('Apellido paterno')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('maternal_surname')
+                    ->label('Apellido materno')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\IconColumn::make('attendance_qr_enabled')
                     ->label('QR')

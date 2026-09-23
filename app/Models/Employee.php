@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use App\Support\EmployeeOrganizationResolver;
 
 class Employee extends Model
@@ -21,6 +22,9 @@ class Employee extends Model
         'branch_id',
 
         'name',
+        'first_name',
+        'paternal_surname',
+        'maternal_surname',
         'employee_number',
         'position',
         'department',
@@ -151,6 +155,107 @@ class Employee extends Model
             if ($employee->attendance_qr_enabled === null) {
                 $employee->attendance_qr_enabled = true;
             }
+        });
+
+        /*
+         * V5.83.4c23e1 - nombre estructurado.
+         *
+         * Nombre(s), apellido paterno y apellido materno se almacenan
+         * por separado. El campo name sigue siendo el nombre completo
+         * para compatibilidad con el resto de Bexia.
+         *
+         * Los empleados historicos que todavia no tengan componentes
+         * separados conservan intacto su campo name.
+         */
+        static::saving(function (Employee $employee): void {
+            $fields = [
+                'first_name',
+                'paternal_surname',
+                'maternal_surname',
+            ];
+
+            $parts = [];
+
+            foreach ($fields as $field) {
+                $value = trim(
+                    preg_replace(
+                        '/\\s+/u',
+                        ' ',
+                        (string) ($employee->{$field} ?? '')
+                    ) ?? ''
+                );
+
+                $employee->{$field} =
+                    $value !== ''
+                        ? $value
+                        : null;
+
+                $parts[$field] = $value;
+            }
+
+            $hasSeparatedName =
+                $parts['first_name'] !== ''
+                || $parts['paternal_surname'] !== ''
+                || $parts['maternal_surname'] !== '';
+
+            $hadSeparatedName = false;
+
+            if ($employee->exists) {
+                foreach ($fields as $field) {
+                    if (
+                        trim(
+                            (string) $employee->getOriginal($field)
+                        ) !== ''
+                    ) {
+                        $hadSeparatedName = true;
+                        break;
+                    }
+                }
+            }
+
+            if (! $hasSeparatedName) {
+                if ($hadSeparatedName) {
+                    throw ValidationException::withMessages([
+                        'first_name' =>
+                            'No se pueden borrar todos los componentes del nombre.',
+                    ]);
+                }
+
+                return;
+            }
+
+            $errors = [];
+
+            if ($parts['first_name'] === '') {
+                $errors['first_name'] =
+                    'El nombre o nombres son obligatorios.';
+            }
+
+            if ($parts['paternal_surname'] === '') {
+                $errors['paternal_surname'] =
+                    'El apellido paterno es obligatorio.';
+            }
+
+            if ($errors !== []) {
+                throw ValidationException::withMessages(
+                    $errors
+                );
+            }
+
+            $employee->name = implode(
+                ' ',
+                array_values(
+                    array_filter(
+                        [
+                            $parts['first_name'],
+                            $parts['paternal_surname'],
+                            $parts['maternal_surname'],
+                        ],
+                        static fn (string $value): bool =>
+                            $value !== ''
+                    )
+                )
+            );
         });
 
         static::saving(function (Employee $employee): void {
