@@ -65,7 +65,7 @@ class AttendanceReport extends Page
             return true;
         }
 
-        return $user->can('rrhh.asistencias.ver') || $user->can('company.update');
+        return $user->can('rrhh.asistencias.ver');
     }
 
     public function filters(): array

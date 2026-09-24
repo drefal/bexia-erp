@@ -193,32 +193,32 @@ class HrIncidentTypeResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.ver');
+        return static::bexiaCanCatalogPermission('rrhh.tipos_incidencia.ver');
     }
 
     public static function canView(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.ver');
+        return static::bexiaCanCatalogPermission('rrhh.tipos_incidencia.ver');
     }
 
     public static function canCreate(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.crear');
+        return static::bexiaCanCatalogPermission('rrhh.tipos_incidencia.crear');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.editar');
+        return static::bexiaCanCatalogPermission('rrhh.tipos_incidencia.editar');
     }
 
     public static function canDelete(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.eliminar');
+        return static::bexiaCanCatalogPermission('rrhh.tipos_incidencia.eliminar');
     }
 
     public static function canDeleteAny(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.eliminar');
+        return static::bexiaCanCatalogPermission('rrhh.tipos_incidencia.eliminar');
     }
     /*
      * V5.64.1i-end

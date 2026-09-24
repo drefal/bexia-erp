@@ -49,7 +49,7 @@ class ReplenishmentReport extends Page
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.view_replenishment_report')
             );
     }
 
@@ -59,7 +59,7 @@ class ReplenishmentReport extends Page
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.view_replenishment_report')
             );
     }
 

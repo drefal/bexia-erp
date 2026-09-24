@@ -63,7 +63,7 @@ class StockReplenishmentRuleResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.view_replenishment_rules')
             );
     }
 
@@ -73,7 +73,7 @@ class StockReplenishmentRuleResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.view_replenishment_rules')
             );
     }
 
@@ -826,51 +826,21 @@ public static function canDelete(Model $record): bool
     return static::userCanManage();
 }
 
-protected static function userCanView(): bool
-{
-    $user = auth()->user();
+    protected static function userCanView(): bool
+    {
+        $user = auth()->user();
 
-    if (! $user) {
-        return false;
+        return $user
+            && method_exists($user, 'can')
+            && $user->can('inventory.view_replenishment_rules');
     }
 
-    if (
-        method_exists($user, 'hasAnyRole')
-        && $user->hasAnyRole([
-            'super_admin',
-            'Super Admin',
-            'Super Administrador',
-        ])
-    ) {
-        return true;
+    protected static function userCanManage(): bool
+    {
+        $user = auth()->user();
+
+        return $user
+            && method_exists($user, 'can')
+            && $user->can('inventory.manage_replenishment_rules');
     }
-
-    return method_exists($user, 'can')
-        ? $user->can('inventory.view_replenishment_rules') || $user->can('inventory.view')
-        : false;
-}
-
-protected static function userCanManage(): bool
-{
-    $user = auth()->user();
-
-    if (! $user) {
-        return false;
-    }
-
-    if (
-        method_exists($user, 'hasAnyRole')
-        && $user->hasAnyRole([
-            'super_admin',
-            'Super Admin',
-            'Super Administrador',
-        ])
-    ) {
-        return true;
-    }
-
-    return method_exists($user, 'can')
-        ? $user->can('inventory.manage_replenishment_rules')
-        : false;
-}
 }

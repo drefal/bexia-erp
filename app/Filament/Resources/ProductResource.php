@@ -121,22 +121,22 @@ protected static ?string $modelLabel = 'producto';
 
     public static function canAccess(): bool
     {
-        return static::canManage('inventory.view');
+        return static::canManage('inventory.products.view');
     }
 
 public static function canCreate(): bool
     {
-        return static::canManage('inventory.create');
+        return static::canManage('inventory.products.create');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::canManage('inventory.update');
+        return static::canManage('inventory.products.update');
     }
 
     public static function canDelete(Model $record): bool
     {
-        return static::canManage('inventory.delete');
+        return static::canManage('inventory.products.delete');
     }
 
     public static function getEloquentQuery(): Builder
@@ -1470,7 +1470,7 @@ public static function canCreate(): bool
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.products.view')
             );
     }
 
@@ -1480,7 +1480,7 @@ public static function canCreate(): bool
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.products.view')
             );
     }
 

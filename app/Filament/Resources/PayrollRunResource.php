@@ -57,7 +57,7 @@ class PayrollRunResource extends Resource
             return true;
         }
 
-        return $user->can($permission) || $user->can('company.update');
+        return $user->can($permission);
     }
 
     public static function shouldRegisterNavigation(): bool
@@ -172,8 +172,7 @@ class PayrollRunResource extends Resource
         return $user->can('nomina.prenomina.cerrar')
             || $user->can('accounting.create')
             || $user->can('accounting.post')
-            || $user->can('accounting.view')
-            || $user->can('company.update');
+            || $user->can('accounting.view');
     }
 
     public static function payrollAccountingActiveEntryId(PayrollRun $record): ?int
@@ -673,8 +672,7 @@ class PayrollRunResource extends Resource
 
                         return (bool) ($user->is_system_admin ?? false)
                             || ($user->email ?? null) === 'admin@bexiaerp.com'
-                            || static::bexiaCanPayrollPermission('nomina.prenomina.cerrar')
-                            || $user->can('company.update');
+                            || static::bexiaCanPayrollPermission('nomina.prenomina.cerrar');
                     })
                     ->action(function (PayrollRun $record, array $data): void {
                         try {

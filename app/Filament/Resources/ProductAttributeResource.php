@@ -58,17 +58,17 @@ class ProductAttributeResource extends Resource
 
     public static function canAccess(): bool
     {
-        return static::canManage('inventory.view');
+        return static::canManage('inventory.product_attributes.view');
     }
 
 public static function canCreate(): bool
     {
-        return static::canManage('inventory.create');
+        return static::canManage('inventory.product_attributes.create');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::canManage('inventory.update');
+        return static::canManage('inventory.product_attributes.update');
     }
 
     /*
@@ -85,7 +85,7 @@ public static function canCreate(): bool
         }
 
         if (
-            ! static::canManage('inventory.delete')
+            ! static::canManage('inventory.product_attributes.delete')
             || (bool) $record->is_system
         ) {
             return false;
@@ -226,7 +226,7 @@ public static function form(Form $form): Form
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.product_attributes.view')
             );
     }
 
@@ -236,7 +236,7 @@ public static function form(Form $form): Form
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.product_attributes.view')
             );
     }
 

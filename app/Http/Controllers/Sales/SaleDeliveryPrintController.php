@@ -25,7 +25,7 @@ class SaleDeliveryPrintController extends Controller
             && ! (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin())
             && method_exists($user, 'can')
             && ! $user->can('sales.view')
-            && ! $user->can('inventory.view')
+            && ! $user->can('sales.deliver')
         ) {
             abort(403);
         }

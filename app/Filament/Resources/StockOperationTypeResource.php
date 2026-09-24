@@ -65,7 +65,7 @@ class StockOperationTypeResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('pos.menu.view')
+                $user?->can('inventory.operation_types.view')
             );
     }
 
@@ -75,7 +75,7 @@ class StockOperationTypeResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('pos.menu.view')
+                $user?->can('inventory.operation_types.view')
             );
     }
 
@@ -387,22 +387,22 @@ class StockOperationTypeResource extends Resource
 
 public static function canCreate(): bool
     {
-        return static::userCanPermission('inventory.create');
+        return static::userCanPermission('inventory.operation_types.create');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::userCanPermission('inventory.update');
+        return static::userCanPermission('inventory.operation_types.update');
     }
 
     public static function canDelete(Model $record): bool
     {
-        return static::userCanPermission('inventory.delete');
+        return static::userCanPermission('inventory.operation_types.delete');
     }
 
     public static function canDeleteAny(): bool
     {
-        return static::userCanPermission('inventory.delete');
+        return static::userCanPermission('inventory.operation_types.delete');
     }
 
     protected static function userCanPermission(string $permission): bool

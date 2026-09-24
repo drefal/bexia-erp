@@ -33,12 +33,12 @@ class StockSerialSpecialMovementResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return auth()->check() && static::canManage('inventory.menu.view');
+        return auth()->check() && static::canManage('inventory.serials.audit.view');
     }
 
     public static function canViewAny(): bool
     {
-        return auth()->check() && static::canManage('inventory.menu.view');
+        return auth()->check() && static::canManage('inventory.serials.audit.view');
     }
 
     public static function canCreate(): bool

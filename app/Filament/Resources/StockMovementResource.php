@@ -69,7 +69,7 @@ class StockMovementResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.movements.view')
             );
     }
 
@@ -79,7 +79,7 @@ class StockMovementResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.movements.view')
             );
     }
 
@@ -2011,28 +2011,33 @@ class StockMovementResource extends Resource
 
 public static function canCreate(): bool
     {
-        return static::userCanPermission('inventory.transfer_stock');
+        return static::userCanPermission('inventory.movements.create');
     }
 
     public static function canEdit(Model $record): bool
     {
-        if ($record instanceof StockMovement && in_array($record->status, ['done', 'cancelled'], true)) {
+        if (
+            $record instanceof StockMovement
+            && in_array($record->status, ['done', 'cancelled'], true)
+        ) {
             return false;
         }
 
-        return static::userCanPermission('inventory.transfer_stock');
+        return static::userCanPermission('inventory.movements.update');
     }
 
     public static function canDelete(Model $record): bool
     {
         return $record instanceof StockMovement
             && $record->status === 'draft'
-            && static::userCanPermission('inventory.delete');
+            && (
+                static::userCanPermission('inventory.movements.delete')
+            );
     }
 
     public static function canDeleteAny(): bool
     {
-        return static::userCanPermission('inventory.delete');
+        return static::userCanPermission('inventory.movements.delete');
     }
 
     protected static function userCanPermission(string $permission): bool

@@ -41,7 +41,7 @@ class InventoryCostingMethodDiagnostic extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.costing_diagnostic.view');
     }
 
     public function table(Table $table): Table
@@ -314,7 +314,7 @@ class InventoryCostingMethodDiagnostic extends Page implements HasTable
     }
 public static function shouldRegisterNavigation(): bool
     {
-        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.costing_diagnostic.view');
     }
 
 }

@@ -66,7 +66,7 @@ class StockAdjustmentResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.adjustments.view')
             );
     }
 
@@ -76,7 +76,7 @@ class StockAdjustmentResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.adjustments.view')
             );
     }
 
@@ -1349,12 +1349,14 @@ public static function canCreate(): bool
     {
         return $record instanceof StockAdjustment
             && $record->status === 'draft'
-            && static::userCanPermission('inventory.delete');
+            && (
+                static::userCanPermission('inventory.adjustments.delete')
+            );
     }
 
     public static function canDeleteAny(): bool
     {
-        return static::userCanPermission('inventory.delete');
+        return static::userCanPermission('inventory.adjustments.delete');
     }
 
     protected static function userCanPermission(string $permission): bool

@@ -62,7 +62,7 @@ protected static ?string $modelLabel = 'entrega de venta';
             return true;
         }
 
-        return $user->can('sales.view') || $user->can('inventory.view');
+        return $user->can('sales.view') || $user->can('sales.deliver');
     }
 
     public static function getEloquentQuery(): Builder

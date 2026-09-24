@@ -30,7 +30,7 @@ class SatBillingCatalogItemResource extends Resource
     protected static ?string $pluralModelLabel = 'Catálogos CFDI';
     protected static ?int $navigationSort = 70;
 
-    public static function canAccess(): bool
+    protected static function canFiscalPermission(string $permission): bool
     {
         $user = Filament::auth()->user();
 
@@ -46,7 +46,33 @@ class SatBillingCatalogItemResource extends Resource
             return true;
         }
 
-        return $user->can('accounting.update') || $user->can('inventory.update');
+        return method_exists($user, 'can')
+            && $user->can($permission);
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::canFiscalPermission('catalogs.fiscal.create');
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::canFiscalPermission('catalogs.fiscal.update');
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::canFiscalPermission('catalogs.fiscal.delete');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return static::canFiscalPermission('catalogs.fiscal.delete');
+    }
+
+    public static function canAccess(): bool
+    {
+        return static::canFiscalPermission('catalogs.fiscal.view');
     }
 
     protected static function catalogOptions(): array
@@ -66,24 +92,14 @@ public static function shouldRegisterNavigation(): bool
     );
 }
 
-protected static function bexiaBaseShouldRegisterNavigation(): bool
+    protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('invoicing.view')
-            );
+        return static::canFiscalPermission('catalogs.fiscal.view');
     }
 
     public static function canViewAny(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('invoicing.view')
-            );
+        return static::canFiscalPermission('catalogs.fiscal.view');
     }
 
     public static function form(Form $form): Form

@@ -47,38 +47,42 @@ class EmployeePayrollPurchaseResource extends Resource
             return true;
         }
 
-        return $user->can($permission) || $user->can('company.update');
+        return $user->can($permission);
     }
 
     public static function shouldRegisterNavigation(): bool
     {
-        return static::canManage('nomina.descuentos.ver');
+        return static::canManage('nomina.compras_via_nomina.ver');
     }
 
     public static function canViewAny(): bool
     {
-        return static::canManage('nomina.descuentos.ver');
+        return static::canManage('nomina.compras_via_nomina.ver');
     }
 
     public static function canView(Model $record): bool
     {
-        return static::canManage('nomina.descuentos.ver');
+        return static::canManage('nomina.compras_via_nomina.ver');
     }
 
     public static function canCreate(): bool
     {
-        return static::canManage('nomina.descuentos.crear');
+        return static::canManage('nomina.compras_via_nomina.crear');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::canManage('nomina.descuentos.editar')
+        return (
+            static::canManage('nomina.compras_via_nomina.editar')
+        )
             && (string) $record->status === 'draft';
     }
 
     public static function canDelete(Model $record): bool
     {
-        return static::canManage('nomina.descuentos.eliminar')
+        return (
+            static::canManage('nomina.compras_via_nomina.eliminar')
+        )
             && (string) $record->status === 'draft';
     }
 
@@ -594,9 +598,17 @@ class EmployeePayrollPurchaseResource extends Resource
                     ->visible(
                         fn (EmployeePayrollPurchase $record): bool =>
                             (string) $record->status === 'draft'
-                            && static::canManage('nomina.descuentos.crear')
+                            && (
+                                static::canManage('nomina.compras_via_nomina.crear')
+                            )
                     )
                     ->action(function (EmployeePayrollPurchase $record): void {
+                        if (
+                            ! static::canManage('nomina.compras_via_nomina.crear')
+                        ) {
+                            abort(403);
+                        }
+
                         EmployeePayrollPurchaseService::confirm($record, auth()->id());
 
                         Notification::make()
@@ -614,9 +626,17 @@ class EmployeePayrollPurchaseResource extends Resource
                     ->visible(
                         fn (EmployeePayrollPurchase $record): bool =>
                             (string) $record->status === 'confirmed'
-                            && static::canManage('nomina.descuentos.editar')
+                            && (
+                                static::canManage('nomina.compras_via_nomina.editar')
+                            )
                     )
                     ->action(function (EmployeePayrollPurchase $record): void {
+                        if (
+                            ! static::canManage('nomina.compras_via_nomina.editar')
+                        ) {
+                            abort(403);
+                        }
+
                         try {
                             EmployeePayrollPurchaseService::cancel($record, auth()->id());
 

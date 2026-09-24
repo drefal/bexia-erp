@@ -238,32 +238,32 @@ class HrWorkScheduleResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.ver');
+        return static::bexiaCanCatalogPermission('rrhh.horarios.ver');
     }
 
     public static function canView(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.ver');
+        return static::bexiaCanCatalogPermission('rrhh.horarios.ver');
     }
 
     public static function canCreate(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.crear');
+        return static::bexiaCanCatalogPermission('rrhh.horarios.crear');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.editar');
+        return static::bexiaCanCatalogPermission('rrhh.horarios.editar');
     }
 
     public static function canDelete(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.eliminar');
+        return static::bexiaCanCatalogPermission('rrhh.horarios.eliminar');
     }
 
     public static function canDeleteAny(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.eliminar');
+        return static::bexiaCanCatalogPermission('rrhh.horarios.eliminar');
     }
     /*
      * V5.64.1i-end
