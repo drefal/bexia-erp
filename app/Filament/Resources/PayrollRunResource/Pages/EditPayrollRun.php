@@ -166,8 +166,7 @@ class EditPayrollRun extends EditRecord
 
                     return (bool) ($user->is_system_admin ?? false)
                         || ($user->email ?? null) === 'admin@bexiaerp.com'
-                        || $user->can('nomina.prenomina.cerrar')
-                        || $user->can('company.update');
+                        || $user->can('nomina.prenomina.cerrar');
                 })
                 ->action(function (array $data): void {
                     try {

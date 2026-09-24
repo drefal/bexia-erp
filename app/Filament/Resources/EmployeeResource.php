@@ -57,24 +57,51 @@ class EmployeeResource extends Resource
     protected static ?int $navigationSort = 10;
     protected static ?string $tenantOwnershipRelationshipName = null;
 
-public static function canCreate(): bool
+protected static function bexiaCanEmployeePermission(string $permission): bool
     {
-        return auth()->check() && auth()->user()->can('company.update');
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if ((bool) ($user->is_system_admin ?? false)) {
+            return true;
+        }
+
+        if (($user->email ?? null) === 'admin@bexiaerp.com') {
+            return true;
+        }
+
+        return $user->can($permission);
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::bexiaCanEmployeePermission(
+            'rrhh.empleados.crear'
+        );
     }
 
     public static function canEdit(Model $record): bool
     {
-        return auth()->check() && auth()->user()->can('company.update');
+        return static::bexiaCanEmployeePermission(
+            'rrhh.empleados.editar'
+        );
     }
 
     public static function canDeleteAny(): bool
     {
-        return auth()->check() && auth()->user()->can('company.update');
+        return static::bexiaCanEmployeePermission(
+            'rrhh.empleados.eliminar'
+        );
     }
 
     public static function canDelete(Model $record): bool
     {
-        return auth()->check() && auth()->user()->can('company.update');
+        return static::bexiaCanEmployeePermission(
+            'rrhh.empleados.eliminar'
+        );
     }
 
     public static function getNavigationLabel(): string
@@ -115,7 +142,7 @@ public static function canCreate(): bool
 
         return auth()->check()
             && (
-                $user?->can('contacts.view')
+                $user?->can('rrhh.empleados.ver')
             );
     }
 
@@ -125,7 +152,17 @@ public static function canCreate(): bool
 
         return auth()->check()
             && (
-                $user?->can('contacts.view')
+                $user?->can('rrhh.empleados.ver')
+            );
+    }
+
+    public static function canView(Model $record): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('rrhh.empleados.ver')
             );
     }
 

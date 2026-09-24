@@ -69,9 +69,7 @@ class EmployeeIncidentResource extends Resource
             return true;
         }
 
-        return $user->can($permission)
-            || $user->can('rrhh.catalogos.ver')
-            || $user->can('company.update');
+        return $user->can($permission);
     }
 
     public static function shouldRegisterNavigation(): bool

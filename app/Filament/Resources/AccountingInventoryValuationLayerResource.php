@@ -136,7 +136,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.valuation.view')
             );
     }
 
@@ -146,7 +146,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.valuation.view')
             );
     }
 

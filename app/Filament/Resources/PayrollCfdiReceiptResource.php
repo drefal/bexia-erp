@@ -52,9 +52,7 @@ class PayrollCfdiReceiptResource extends Resource
         }
 
         return $user->can('nomina.recibos_cfdi.ver')
-            || $user->can('nomina.procesos.ver')
-            || $user->can('nomina.conceptos.ver')
-            || $user->can('company.update');
+            || $user->can('nomina.procesos.ver');
     }
 
     public static function shouldRegisterNavigation(): bool

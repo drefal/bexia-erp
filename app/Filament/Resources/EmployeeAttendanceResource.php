@@ -62,11 +62,28 @@ class EmployeeAttendanceResource extends Resource
             return true;
         }
 
-        return $user->can($permission)
-            || $user->can('rrhh.incidencias.ver')
-            || $user->can('company.update');
+        return $user->can($permission);
     }
 
+
+    protected static function bexiaCanExactAsistenciaPermission(string $permission): bool
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if ((bool) ($user->is_system_admin ?? false)) {
+            return true;
+        }
+
+        if (($user->email ?? null) === 'admin@bexiaerp.com') {
+            return true;
+        }
+
+        return $user->can($permission);
+    }
 
     public static function canReviewMobileAttendance(?EmployeeAttendance $record = null): bool
     {
@@ -88,7 +105,6 @@ class EmployeeAttendanceResource extends Resource
             $user->can('rrhh.asistencias.revisar_movil')
             || $user->can('rrhh.asistencias.revisar_geocerca')
             || $user->can('rrhh.asistencias.editar')
-            || $user->can('company.update')
         ) {
             return true;
         }
@@ -770,17 +786,20 @@ class EmployeeAttendanceResource extends Resource
 
     public static function canCreate(): bool
     {
-        return static::canManageAttendanceRecords();
+        return static::canManageAttendanceRecords()
+            || static::bexiaCanExactAsistenciaPermission('rrhh.asistencias.crear');
     }
 
     public static function canDelete($record): bool
     {
-        return static::canManageAttendanceRecords();
+        return static::canManageAttendanceRecords()
+            || static::bexiaCanExactAsistenciaPermission('rrhh.asistencias.eliminar');
     }
 
     public static function canDeleteAny(): bool
     {
-        return static::canManageAttendanceRecords();
+        return static::canManageAttendanceRecords()
+            || static::bexiaCanExactAsistenciaPermission('rrhh.asistencias.eliminar');
     }
 
 

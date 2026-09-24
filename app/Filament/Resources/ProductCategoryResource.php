@@ -40,7 +40,7 @@ class ProductCategoryResource extends Resource
             : null;
     }
 
-    protected static function canManage(): bool
+    protected static function canManage(string $permission): bool
     {
         $user = Filament::auth()->user();
 
@@ -56,12 +56,22 @@ class ProductCategoryResource extends Resource
             return true;
         }
 
-        return $user->can('inventory.update') || $user->can('inventory.create');
+        return $user->can($permission);
     }
 
     public static function canAccess(): bool
     {
-        return static::canManage();
+        return static::canManage('inventory.product_categories.view');
+    }
+
+    public static function canCreate(): bool
+    {
+        return static::canManage('inventory.product_categories.create');
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return static::canManage('inventory.product_categories.update');
     }
 
     public static function getEloquentQuery(): Builder
@@ -222,7 +232,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.product_categories.view')
             );
     }
 
@@ -232,7 +242,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.product_categories.view')
             );
     }
 

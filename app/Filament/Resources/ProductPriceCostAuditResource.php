@@ -57,22 +57,12 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
 
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('inventory.menu.view')
-            );
+        return static::userCanView();
     }
 
     public static function canViewAny(): bool
     {
-        $user = auth()->user();
-
-        return auth()->check()
-            && (
-                $user?->can('inventory.menu.view')
-            );
+        return static::userCanView();
     }
 
     public static function table(Table $table): Table
@@ -240,7 +230,7 @@ protected static ?string $modelLabel = 'auditoría de precio/costo';
         return false;
     }
 
-protected static function userCanView(): bool
+    protected static function userCanView(): bool
     {
         $user = auth()->user();
 
@@ -248,25 +238,8 @@ protected static function userCanView(): bool
             return false;
         }
 
-        if (
-            method_exists($user, 'hasAnyRole')
-            && $user->hasAnyRole([
-                'super_admin',
-                'Super Admin',
-                'Super Administrador',
-                'admin',
-                'Administrador',
-                'Admin Empresa',
-                'Admin Grupo',
-                'Inventarios',
-                'Reportes',
-            ])
-        ) {
-            return true;
-        }
-
         return method_exists($user, 'can')
-            ? $user->can('inventory.view_product_price_cost_audit') || $user->can('inventory.view')
+            ? $user->can('inventory.view_product_price_cost_audit')
             : false;
     }
 

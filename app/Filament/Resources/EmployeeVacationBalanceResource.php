@@ -58,9 +58,7 @@ class EmployeeVacationBalanceResource extends Resource
             return true;
         }
 
-        return $user->can($permission)
-            || $user->can('rrhh.incidencias.ver')
-            || $user->can('company.update');
+        return $user->can($permission);
     }
 
     public static function shouldRegisterNavigation(): bool

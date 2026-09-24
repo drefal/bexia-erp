@@ -202,32 +202,32 @@ class HrDepartmentResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.ver');
+        return static::bexiaCanCatalogPermission('rrhh.departamentos.ver');
     }
 
     public static function canView(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.ver');
+        return static::bexiaCanCatalogPermission('rrhh.departamentos.ver');
     }
 
     public static function canCreate(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.crear');
+        return static::bexiaCanCatalogPermission('rrhh.departamentos.crear');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.editar');
+        return static::bexiaCanCatalogPermission('rrhh.departamentos.editar');
     }
 
     public static function canDelete(Model $record): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.eliminar');
+        return static::bexiaCanCatalogPermission('rrhh.departamentos.eliminar');
     }
 
     public static function canDeleteAny(): bool
     {
-        return static::bexiaCanCatalogPermission('rrhh.catalogos.eliminar');
+        return static::bexiaCanCatalogPermission('rrhh.departamentos.eliminar');
     }
     /*
      * V5.64.1i-end

@@ -531,17 +531,17 @@ class StockAdjustmentAuditResource extends Resource
 
 public static function shouldRegisterNavigation(): bool
     {
-        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.adjustments.audit.view');
     }
 
 public static function canAccess(): bool
     {
-        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.adjustments.audit.view');
     }
 
 public static function canViewAny(): bool
     {
-        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.adjustments.audit.view');
     }
 
 }

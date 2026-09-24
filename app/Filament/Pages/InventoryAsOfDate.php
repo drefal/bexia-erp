@@ -459,12 +459,12 @@ class InventoryAsOfDate extends Page
     }
 public static function shouldRegisterNavigation(): bool
     {
-        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.as_of_date.view');
     }
 
 public static function canAccess(): bool
     {
-        return \App\Support\Security\BexiaTenantPermission::can('inventory.menu.view');
+        return \App\Support\Security\BexiaTenantPermission::can('inventory.as_of_date.view');
     }
 
 }

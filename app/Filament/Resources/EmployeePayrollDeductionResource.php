@@ -49,7 +49,7 @@ class EmployeePayrollDeductionResource extends Resource
             return true;
         }
 
-        return $user->can($permission) || $user->can('company.update');
+        return $user->can($permission);
     }
 
     public static function shouldRegisterNavigation(): bool

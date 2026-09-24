@@ -20,8 +20,7 @@ class PayrollCfdiReceiptPdfController extends Controller
         $allowed = (bool) ($user->is_system_admin ?? false)
             || (($user->email ?? null) === 'admin@bexiaerp.com')
             || $user->can('nomina.recibos_cfdi.ver')
-            || $user->can('nomina.procesos.ver')
-            || $user->can('company.update');
+            || $user->can('nomina.procesos.ver');
 
         abort_unless($allowed, 403);
 

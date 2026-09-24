@@ -14,7 +14,7 @@ class SaleDeliveryController extends Controller
 {
     public function show(SaleOrder $saleOrder)
     {
-        if (! $this->userCanUpdateSales()) {
+        if (! $this->userCanManageDelivery()) {
             abort(403);
         }
 
@@ -45,7 +45,7 @@ class SaleDeliveryController extends Controller
 
     public function showDelivery(SaleDelivery $saleDelivery)
     {
-        if (! $this->userCanUpdateSales()) {
+        if (! $this->userCanViewDelivery()) {
             abort(403);
         }
 
@@ -56,7 +56,7 @@ class SaleDeliveryController extends Controller
 
     public function printDelivery(SaleDelivery $saleDelivery)
     {
-        if (! $this->userCanUpdateSales()) {
+        if (! $this->userCanViewDelivery()) {
             abort(403);
         }
 
@@ -67,7 +67,7 @@ class SaleDeliveryController extends Controller
 
     public function validateDelivery(Request $request, SaleDelivery $saleDelivery): RedirectResponse
     {
-        if (! $this->userCanUpdateSales()) {
+        if (! $this->userCanManageDelivery()) {
             abort(403);
         }
 
@@ -323,7 +323,7 @@ class SaleDeliveryController extends Controller
 
     public function returnDelivery(Request $request, SaleDelivery $saleDelivery): RedirectResponse
     {
-        if (! $this->userCanUpdateSales()) {
+        if (! $this->userCanManageDelivery()) {
             abort(403);
         }
 
@@ -617,7 +617,7 @@ class SaleDeliveryController extends Controller
 
     public function cancel(Request $request, SaleDelivery $saleDelivery): RedirectResponse
     {
-        if (! $this->userCanUpdateSales()) {
+        if (! $this->userCanManageDelivery()) {
             abort(403);
         }
 
@@ -653,7 +653,7 @@ class SaleDeliveryController extends Controller
 
     protected function createDelivery(Request $request, SaleOrder $saleOrder, string $mode): RedirectResponse
     {
-        if (! $this->userCanUpdateSales()) {
+        if (! $this->userCanManageDelivery()) {
             abort(403);
         }
 
@@ -1744,7 +1744,29 @@ class SaleDeliveryController extends Controller
             : '';
     }
 
-    protected function userCanUpdateSales(): bool
+    protected function userCanViewDelivery(): bool
+    {
+        $user = auth()->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin()) {
+            return true;
+        }
+
+        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
+            return true;
+        }
+
+        return method_exists($user, 'can') && (
+            $user->can('sales.view')
+            || $user->can('sales.deliver')
+        );
+    }
+
+    protected function userCanManageDelivery(): bool
     {
         $user = auth()->user();
 
@@ -1762,8 +1784,7 @@ class SaleDeliveryController extends Controller
 
         return method_exists($user, 'can') && (
             $user->can('sales.update')
-            || $user->can('inventory.update')
-            || $user->can('inventory.view')
+            || $user->can('sales.deliver')
         );
     }
 

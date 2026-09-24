@@ -59,7 +59,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.warehouses.view')
             );
     }
 
@@ -69,7 +69,7 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.warehouses.view')
             );
     }
 
@@ -193,7 +193,48 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
         ];
     }
 
-    protected static function currentCompanyId(): ?int
+
+    public static function canCreate(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.warehouses.create')
+            );
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.warehouses.update')
+            );
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.warehouses.delete')
+            );
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        $user = auth()->user();
+
+        return auth()->check()
+            && (
+                $user?->can('inventory.warehouses.delete')
+            );
+    }
+
+protected static function currentCompanyId(): ?int
     {
         $tenant = Filament::getTenant();
 

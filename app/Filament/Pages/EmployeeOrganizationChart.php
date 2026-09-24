@@ -30,9 +30,7 @@ class EmployeeOrganizationChart extends Page
 
         return (bool) ($user->is_system_admin ?? false)
             || ($user->email ?? null) === 'admin@bexiaerp.com'
-            || $user->can('company.update')
-            || $user->can('rrhh.empleados.ver')
-            || $user->can('rrhh.contratos.ver');
+            || $user->can('rrhh.organigrama.ver');
     }
 
     public function rows(): array

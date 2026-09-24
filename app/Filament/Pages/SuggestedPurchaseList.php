@@ -72,7 +72,7 @@ class SuggestedPurchaseList extends Page
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.view_suggested_purchase_list')
             );
     }
 
@@ -82,7 +82,7 @@ class SuggestedPurchaseList extends Page
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                $user?->can('inventory.view_suggested_purchase_list')
             );
     }
 
@@ -1045,35 +1045,13 @@ class SuggestedPurchaseList extends Page
         return null;
     }
 
-protected static function userCanView(): bool
+    protected static function userCanView(): bool
     {
         $user = auth()->user();
 
-        if (! $user) {
-            return false;
-        }
-
-        if (
-            method_exists($user, 'hasAnyRole')
-            && $user->hasAnyRole([
-                'super_admin',
-                'Super Admin',
-                'Super Administrador',
-                'admin',
-                'Administrador',
-                'Admin Empresa',
-                'Admin Grupo',
-                'Inventarios',
-                'Compras',
-                'Reportes',
-            ])
-        ) {
-            return true;
-        }
-
-        return method_exists($user, 'can')
-            ? $user->can('inventory.view_suggested_purchase_list') || $user->can('inventory.view') || $user->can('purchases.view')
-            : false;
+        return $user
+            && method_exists($user, 'can')
+            && $user->can('inventory.view_suggested_purchase_list');
     }
 
     public function generatePurchaseRequests()

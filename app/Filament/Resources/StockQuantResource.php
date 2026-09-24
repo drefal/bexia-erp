@@ -66,7 +66,9 @@ class StockQuantResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                (
+                    $user?->can('inventory.stock.view')
+                )
             );
     }
 
@@ -76,7 +78,9 @@ class StockQuantResource extends Resource
 
         return auth()->check()
             && (
-                $user?->can('inventory.menu.view')
+                (
+                    $user?->can('inventory.stock.view')
+                )
             );
     }
 
@@ -182,6 +186,10 @@ class StockQuantResource extends Resource
                     ])
                     ->label('Costo prom.')
                     ->alignRight()
+                    ->visible(
+                        fn (): bool =>
+                            static::userCanPermission('inventory.stock.cost.view')
+                    )
                     ->formatStateUsing(fn ($state): string => $state === null ? '—' : '$ ' . number_format((float) $state, 2))
                     ->sortable(),
 ])

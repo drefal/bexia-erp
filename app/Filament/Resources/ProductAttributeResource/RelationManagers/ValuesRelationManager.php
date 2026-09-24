@@ -40,7 +40,7 @@ class ValuesRelationManager extends RelationManager
 
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
-        return static::canManage('inventory.view');
+        return static::canManage('inventory.product_attributes.view');
     }
 
     /*
@@ -276,7 +276,7 @@ class ValuesRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make()
                     ->label('Nuevo valor')
-                    ->visible(fn () => static::canManage('inventory.create'))
+                    ->visible(fn () => static::canManage('inventory.product_attributes.create'))
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['company_id'] = $this->getOwnerRecord()->company_id;
 
@@ -286,7 +286,7 @@ class ValuesRelationManager extends RelationManager
             ->actions([
                 Tables\Actions\EditAction::make()
                     ->label('Editar')
-                    ->visible(fn () => static::canManage('inventory.update'))
+                    ->visible(fn () => static::canManage('inventory.product_attributes.update'))
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['company_id'] = $this->getOwnerRecord()->company_id;
 
@@ -300,7 +300,7 @@ class ValuesRelationManager extends RelationManager
                             ProductAttributeValue $record
                         ): bool =>
                             static::canManage(
-                                'inventory.delete'
+                                'inventory.product_attributes.delete'
                             )
                             && ! $this->valueIsUsed(
                                 $record

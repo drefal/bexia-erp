@@ -46,9 +46,7 @@ class AttendancesRelationManager extends RelationManager
             return true;
         }
 
-        return $user->can($permission)
-            || $user->can('rrhh.incidencias.ver')
-            || $user->can('company.update');
+        return $user->can($permission);
     }
 
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool

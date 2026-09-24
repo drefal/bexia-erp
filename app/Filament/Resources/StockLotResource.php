@@ -43,12 +43,12 @@ class StockLotResource extends Resource
 
     protected static function bexiaBaseShouldRegisterNavigation(): bool
     {
-        return auth()->check() && static::canManage('inventory.menu.view');
+        return auth()->check() && static::canManage('inventory.lots.view');
     }
 
     public static function canViewAny(): bool
     {
-        return auth()->check() && static::canManage('inventory.menu.view');
+        return auth()->check() && static::canManage('inventory.lots.view');
     }
 
     public static function getEloquentQuery(): Builder
