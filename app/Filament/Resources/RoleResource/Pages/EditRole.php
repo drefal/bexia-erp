@@ -10,18 +10,38 @@ class EditRole extends EditRecord
 {
     protected static string $resource = RoleResource::class;
 
+    protected array $bexiaPermissionIds = [];
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $data['permission_ids'] = $this->record->permissions()->pluck('permissions.id')->all();
+        $permissionIds = $this->record
+            ->permissions()
+            ->pluck('permissions.id')
+            ->all();
+
+        return RoleResource::hydratePermissionGroupState(
+            $data,
+            $permissionIds
+        );
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $this->bexiaPermissionIds =
+            RoleResource::extractPermissionIds(
+                $data
+            );
 
         return $data;
     }
 
     protected function afterSave(): void
     {
-        $permissionIds = $this->data['permission_ids'] ?? [];
-
-        $this->record->permissions()->sync($permissionIds);
+        $this->record
+            ->permissions()
+            ->sync(
+                $this->bexiaPermissionIds
+            );
     }
 
     protected function getHeaderActions(): array

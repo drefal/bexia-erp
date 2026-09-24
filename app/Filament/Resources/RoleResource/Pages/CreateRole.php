@@ -14,7 +14,9 @@ class CreateRole extends CreateRecord
 
     protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
     {
-        $permissionIds = $data['permission_ids'] ?? [];
+        $permissionIds = RoleResource::extractPermissionIds(
+            $data
+        );
         $companyIds = $data['company_ids'] ?? [];
         $currentTenantId = Filament::getTenant()?->getKey();
 

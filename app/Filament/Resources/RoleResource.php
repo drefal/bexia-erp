@@ -171,48 +171,498 @@ $user->can('roles.view')
                 '))
                 ->columnSpanFull(),
 
-            Forms\Components\CheckboxList::make('permission_ids')
-                ->label('Permisos')
-                ->options(function () {
-                    $labels = [
-                        'company.view' => 'Ver empresas',
-                        'company.update' => 'Editar empresas',
-                        'users.view' => 'Ver usuarios',
-                        'users.create' => 'Crear usuarios',
-                        'users.update' => 'Editar usuarios',
-                        'users.delete' => 'Eliminar usuarios',
-                        'salidas.ver' => 'Ver salidas',
-                        'salidas.create' => 'Crear salidas',
-                        'salidas.update' => 'Editar salidas',
-                        'salidas.delete' => 'Eliminar salidas',
-                        'salidas.enviar_pdf' => 'Enviar PDF',
-                        'salidas.ver_todas' => 'Ver todas las salidas',
-                        'roles.view' => 'Ver roles',
-                        'roles.manage' => 'Administrar roles',
-                        'user_access.view' => 'Ver accesos',
-                        'user_access.update' => 'Editar accesos',
-                        'settings.access' => 'Acceso a configuración',
-                    ];
-
-                    return \Spatie\Permission\Models\Permission::query()
-                        ->orderBy('name')
-                        ->get()
-                        ->mapWithKeys(function ($permission) use ($labels) {
-                            $friendly = PermissionLabels::label($permission->name);
-
-                            return [
-                                $permission->id => $friendly . ' (' . $permission->name . ')',
-                            ];
-                        })
-                        ->toArray();
-                })
-                ->columns(2)
-                ->searchable()
-                ->bulkToggleable()
-                ->columnSpanFull()
-                ->extraAttributes(['class' => 'bexia-role-permission-list']),
+            Forms\Components\Group::make()
+                ->schema(static::permissionModuleSections())
+                ->columnSpanFull(),
         ])->columns(2);
     }
+
+
+    /**
+     * Construye la UI de permisos sin modificar el modelo de permisos.
+     *
+     * @return array<int, \Filament\Forms\Components\Component>
+     */
+    public static function permissionModuleSections(): array
+    {
+        $permissions = \Spatie\Permission\Models\Permission::query()
+            ->where('guard_name', 'web')
+            ->orderBy('name')
+            ->get();
+
+        $modules = [];
+
+        foreach ($permissions as $permission) {
+            [$module, $resource] = static::permissionModuleResource(
+                (string) $permission->name
+            );
+
+            if (! isset($modules[$module])) {
+                $modules[$module] = [
+                    'label' => static::permissionModuleLabel($module),
+                    'sort' => static::permissionModuleSort($module),
+                    'resources' => [],
+                ];
+            }
+
+            if (! isset($modules[$module]['resources'][$resource])) {
+                $modules[$module]['resources'][$resource] = [
+                    'label' => static::permissionResourceLabel(
+                        $module,
+                        $resource
+                    ),
+                    'field' => static::permissionGroupFieldName(
+                        $module,
+                        $resource
+                    ),
+                    'options' => [],
+                ];
+            }
+
+            $modules[$module]['resources'][$resource]['options'][
+                (int) $permission->id
+            ] = PermissionLabels::label(
+                (string) $permission->name
+            ) . ' (' . $permission->name . ')';
+        }
+
+        uasort(
+            $modules,
+            static function (array $a, array $b): int {
+                return [
+                    $a['sort'],
+                    $a['label'],
+                ] <=> [
+                    $b['sort'],
+                    $b['label'],
+                ];
+            }
+        );
+
+        $sections = [];
+
+        foreach ($modules as $moduleData) {
+            uasort(
+                $moduleData['resources'],
+                static fn (array $a, array $b): int =>
+                    $a['label'] <=> $b['label']
+            );
+
+            $resourceComponents = [];
+            $modulePermissionCount = 0;
+            $moduleStateFields = [];
+
+            foreach ($moduleData['resources'] as $resourceData) {
+                $modulePermissionCount += count(
+                    $resourceData['options']
+                );
+
+                $moduleStateFields[] =
+                    $resourceData['field'];
+
+                $resourceComponents[] =
+                    Forms\Components\Fieldset::make(
+                        $resourceData['label']
+                    )
+                    ->schema([
+                        Forms\Components\CheckboxList::make(
+                            $resourceData['field']
+                        )
+                            ->label('Permisos')
+                            ->options(
+                                $resourceData['options']
+                            )
+                            ->columns(2)
+                            ->searchable()
+                            ->live()
+                            ->bulkToggleable(),
+                    ])
+                    ->columns(1);
+            }
+
+            $sections[] =
+                Forms\Components\Section::make(
+                    $moduleData['label']
+                )
+                ->description(
+                    static function (
+                        Forms\Get $get
+                    ) use (
+                        $modulePermissionCount,
+                        $moduleStateFields
+                    ): string {
+                        $selectedCount = 0;
+
+                        foreach ($moduleStateFields as $field) {
+                            $value = $get($field);
+
+                            if (! is_array($value)) {
+                                continue;
+                            }
+
+                            $selectedCount += count(
+                                array_filter(
+                                    $value,
+                                    static fn ($id): bool =>
+                                        is_numeric($id)
+                                )
+                            );
+                        }
+
+                        return $modulePermissionCount
+                            . ' permisos / '
+                            . $selectedCount
+                            . ' seleccionados';
+                    }
+                )
+                ->schema($resourceComponents)
+                ->collapsible()
+                ->collapsed()
+                ->columnSpanFull();
+        }
+
+        return $sections;
+    }
+
+    /**
+     * Carga los IDs seleccionados en cada grupo visual.
+     */
+    public static function hydratePermissionGroupState(
+        array $data,
+        array $permissionIds
+    ): array {
+        $selected = array_fill_keys(
+            array_map('intval', $permissionIds),
+            true
+        );
+
+        $groupedIds = static::permissionIdsByGroup();
+
+        foreach ($groupedIds as $field => $ids) {
+            $data[$field] = array_values(
+                array_filter(
+                    $ids,
+                    static fn (int $id): bool =>
+                        isset($selected[$id])
+                )
+            );
+        }
+
+        unset($data['permission_ids']);
+
+        return $data;
+    }
+
+    /**
+     * Obtiene todos los IDs elegidos y elimina los campos virtuales
+     * antes de guardar el modelo Role.
+     */
+    public static function extractPermissionIds(
+        array &$data
+    ): array {
+        $permissionIds = [];
+
+        if (isset($data['permission_ids'])) {
+            $permissionIds = array_merge(
+                $permissionIds,
+                (array) $data['permission_ids']
+            );
+
+            unset($data['permission_ids']);
+        }
+
+        foreach (array_keys($data) as $key) {
+            if (! str_starts_with(
+                (string) $key,
+                'permission_group_'
+            )) {
+                continue;
+            }
+
+            $permissionIds = array_merge(
+                $permissionIds,
+                (array) $data[$key]
+            );
+
+            unset($data[$key]);
+        }
+
+        $permissionIds = array_values(
+            array_unique(
+                array_map(
+                    'intval',
+                    array_filter(
+                        $permissionIds,
+                        static fn ($id): bool =>
+                            is_numeric($id)
+                    )
+                )
+            )
+        );
+
+        sort($permissionIds);
+
+        return $permissionIds;
+    }
+
+    /**
+     * @return array<string, array<int, int>>
+     */
+    protected static function permissionIdsByGroup(): array
+    {
+        $groups = [];
+
+        $permissions = \Spatie\Permission\Models\Permission::query()
+            ->where('guard_name', 'web')
+            ->orderBy('id')
+            ->get(['id', 'name']);
+
+        foreach ($permissions as $permission) {
+            [$module, $resource] = static::permissionModuleResource(
+                (string) $permission->name
+            );
+
+            $field = static::permissionGroupFieldName(
+                $module,
+                $resource
+            );
+
+            $groups[$field][] = (int) $permission->id;
+        }
+
+        return $groups;
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    protected static function permissionModuleResource(
+        string $permission
+    ): array {
+        $parts = explode('.', $permission);
+
+        $module = (string) ($parts[0] ?? 'otros');
+
+        $module = match ($module) {
+            'hr' => 'rrhh',
+            'payroll' => 'nomina',
+            'rol' => 'roles',
+            'billing' => 'invoicing',
+            default => $module,
+        };
+
+        $resource = count($parts) >= 3
+            ? (string) $parts[1]
+            : 'general';
+
+        return [
+            $module,
+            $resource,
+        ];
+    }
+
+    protected static function permissionGroupFieldName(
+        string $module,
+        string $resource
+    ): string {
+        return 'permission_group_'
+            . substr(
+                sha1($module . '|' . $resource),
+                0,
+                16
+            );
+    }
+
+    protected static function permissionModuleLabel(
+        string $module
+    ): string {
+        return [
+            'accounting' => 'Contabilidad',
+            'account_payables' => 'Cuentas por pagar',
+            'account_receivable_payments' => 'Cobros de cuentas por cobrar',
+            'account_receivables' => 'Cuentas por cobrar',
+            'ai_insights' => 'IA / Insights',
+            'approvals' => 'Aprobaciones',
+            'bexia' => 'Bexia',
+            'catalogs' => 'Catálogos',
+            'company' => 'Empresas',
+            'contacts' => 'Contactos',
+            'dashboard' => 'Inicio / Dashboard',
+            'inventory' => 'Inventario',
+            'invoicing' => 'Facturación',
+            'nomina' => 'Nómina',
+            'payment_terms' => 'Condiciones de pago',
+            'pos' => 'Punto de venta',
+            'purchase_requests' => 'Solicitudes de compra',
+            'purchases' => 'Compras',
+            'reports' => 'Reportes',
+            'roles' => 'Roles',
+            'rrhh' => 'RRHH',
+            'sales' => 'Ventas',
+            'salidas' => 'Salidas',
+            'server_monitor' => 'Monitor del servidor',
+            'service' => 'Atención y Servicio',
+            'settings' => 'Configuración',
+            'treasury' => 'Tesorería',
+            'user_access' => 'Accesos de usuario',
+            'users' => 'Usuarios',
+        ][$module]
+            ?? \Illuminate\Support\Str::of($module)
+                ->replace('_', ' ')
+                ->headline()
+                ->toString();
+    }
+
+    protected static function permissionModuleSort(
+        string $module
+    ): int {
+        $order = [
+            'dashboard',
+            'company',
+            'users',
+            'roles',
+            'rrhh',
+            'nomina',
+            'sales',
+            'salidas',
+            'purchases',
+            'purchase_requests',
+            'inventory',
+            'pos',
+            'contacts',
+            'invoicing',
+            'account_receivables',
+            'account_receivable_payments',
+            'account_payables',
+            'accounting',
+            'treasury',
+            'service',
+            'reports',
+            'approvals',
+            'catalogs',
+            'payment_terms',
+            'ai_insights',
+            'server_monitor',
+            'settings',
+            'bexia',
+        ];
+
+        $position = array_search(
+            $module,
+            $order,
+            true
+        );
+
+        return $position === false
+            ? 900
+            : $position;
+    }
+
+    protected static function permissionResourceLabel(
+        string $module,
+        string $resource
+    ): string {
+        $labels = [
+            'rrhh' => [
+                'general' => 'General',
+                'menu' => 'Acceso al módulo',
+                'empleados' => 'Empleados',
+                'departamentos' => 'Departamentos',
+                'expediente' => 'Expedientes',
+                'vacaciones' => 'Vacaciones / Saldos',
+                'contratos' => 'Contratos',
+                'bajas' => 'Bajas',
+                'organigrama' => 'Organigrama',
+                'puestos' => 'Puestos',
+                'incidencias' => 'Incidencias',
+                'asistencias' => 'Asistencias',
+                'geocercas' => 'Geocercas de asistencia',
+                'catalogos' => 'Configuración general',
+                'tipos_documento' => 'Tipos de documento',
+                'tipos_incidencia' => 'Tipos de incidencia',
+                'terminales' => 'Terminales de asistencia',
+                'credenciales' => 'Credenciales QR',
+                'horarios' => 'Horarios',
+            ],
+
+            'nomina' => [
+                'general' => 'General',
+                'menu' => 'Acceso al módulo',
+                'catalogos' => 'Catálogos de nómina',
+                'compras_via_nomina' => 'Compras vía nómina',
+                'conceptos' => 'Conceptos de nómina',
+                'descuentos' => 'Descuentos de empleados',
+                'percepciones' => 'Percepciones de empleados',
+                'politicas' => 'Políticas de nómina',
+                'prenomina' => 'Pre-nómina',
+                'procesos' => 'Procesos de nómina',
+                'recibos_cfdi' => 'Recibos CFDI nómina',
+            ],
+
+            'inventory' => [
+                'general' => 'General',
+                'menu' => 'Acceso al módulo',
+                'adjustments' => 'Ajustes de inventario',
+                'as_of_date' => 'Inventario a fecha',
+                'costing_diagnostic' => 'Diagnóstico de costos',
+                'kardex' => 'Kardex',
+                'locations' => 'Ubicaciones',
+                'location_types' => 'Tipos de ubicación',
+                'lots' => 'Lotes',
+                'movements' => 'Movimientos',
+                'operation_types' => 'Tipos de operación',
+                'product_attributes' => 'Atributos de producto',
+                'product_categories' => 'Categorías de producto',
+                'products' => 'Productos',
+                'serials' => 'Series',
+                'stock' => 'Existencias',
+                'traceability' => 'Trazabilidad',
+                'valuation' => 'Valuación',
+                'warehouses' => 'Almacenes',
+            ],
+
+            'pos' => [
+                'general' => 'Operación general',
+                'menu' => 'Acceso al módulo',
+                'audit' => 'Auditoría',
+                'discount' => 'Descuentos',
+                'pending_tickets' => 'Tickets pendientes',
+                'refund' => 'Devoluciones',
+                'refunds' => 'Devoluciones',
+                'session' => 'Sesión',
+                'sessions' => 'Sesiones',
+                'ticket' => 'Tickets',
+            ],
+
+            'service' => [
+                'general' => 'General',
+                'menu' => 'Acceso al módulo',
+                'cases' => 'Tickets de servicio',
+                'events' => 'Bitácora de servicio',
+                'repairs' => 'Reparaciones',
+            ],
+
+            'catalogs' => [
+                'general' => 'General',
+                'menu' => 'Acceso al módulo',
+                'fiscal' => 'Catálogos fiscales',
+            ],
+        ];
+
+        if (isset($labels[$module][$resource])) {
+            return $labels[$module][$resource];
+        }
+
+        return match ($resource) {
+            'general' => 'General',
+            'menu' => 'Acceso al módulo',
+            default => \Illuminate\Support\Str::of($resource)
+                ->replace('_', ' ')
+                ->headline()
+                ->toString(),
+        };
+    }
+
 
     public static function table(Table $table): Table
     {
