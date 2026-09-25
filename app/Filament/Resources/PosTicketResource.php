@@ -1367,7 +1367,21 @@ return (int) $refundId;
             return false;
         }
 
-        return (bool) static::v5506gRefundForOrder((int) $record->id);
+        $refund = static::v5506gRefundForOrder((int) $record->id);
+
+        if (! $refund) {
+            return false;
+        }
+
+        /*
+         * BEXIA_V5836G3S1_SERVICE_REFUND_NO_MANUAL_INVENTORY
+         *
+         * La acción manual sólo debe mostrarse cuando la devolución
+         * contiene líneas que realmente regresan a inventario.
+         * Una devolución formada únicamente por servicios termina
+         * como skipped_no_stockable_lines y no requiere recuperación.
+         */
+        return static::v5527eRefundHasInventoryReturnLines($refund);
     }
 
 

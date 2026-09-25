@@ -96,7 +96,7 @@ class ViewPosTicket extends ViewRecord
                 })
                 ->requiresConfirmation()
                 ->modalHeading(fn (): string => 'Devolución - ' . ($this->record->number ?: ('#' . $this->record->id)))
-                ->modalDescription('Puedes devolver todo el ticket o capturar cantidades específicas para una devolución parcial. Productos inventariables podrán regresar a inventario; servicios solo generan devolución financiera.')
+                ->modalDescription('Puedes devolver todo el ticket o capturar cantidades específicas para una devolución parcial. Los productos inventariables regresarán automáticamente al inventario; los servicios solo generan devolución financiera.')
                 ->modalSubmitActionLabel('Registrar devolución')
                 ->action(function (array $data): void {
                     $reason = (string) ($data['reason'] ?? '');
@@ -112,11 +112,70 @@ class ViewPosTicket extends ViewRecord
                         $typeLabel = 'parcial';
                     }
 
-                    \Filament\Notifications\Notification::make()
-                        ->title('Devolución registrada')
-                        ->body('Se registró la devolución ' . $typeLabel . ' #' . $refundId . ' para el ticket ' . ($this->record->number ?: ('#' . $this->record->id)) . '.')
-                        ->success()
-                        ->send();
+                    /*
+                     * BEXIA_V5836G3_AUTO_REFUND_INVENTORY
+                     *
+                     * La devolución financiera se registra primero.
+                     * Después se intenta automáticamente el regreso físico
+                     * de productos inventariables.
+                     *
+                     * Si la entrada falla, la devolución financiera se conserva
+                     * y queda disponible la acción manual de recuperación.
+                     */
+                    $inventoryMovementId = null;
+                    $inventoryError = null;
+
+                    try {
+                        $inventoryMovementId = \App\Filament\Resources\PosTicketResource::v5506gPostRefundInventory($this->record);
+                    } catch (\Throwable $exception) {
+                        $inventoryError = $exception->getMessage();
+
+                        \Illuminate\Support\Facades\Log::error(
+                            'V5.83.6G3 - devolución PDV registrada con entrada de inventario pendiente.',
+                            [
+                                'pos_order_id' => (int) ($this->record->id ?? 0),
+                                'pos_order_number' => $this->record->number ?? null,
+                                'refund_id' => (int) $refundId,
+                                'refund_type' => $typeLabel,
+                                'user_id' => auth()->id(),
+                                'error' => $inventoryError,
+                            ]
+                        );
+                    }
+
+                    if ($inventoryError !== null) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('Devolución registrada · inventario pendiente')
+                            ->body(
+                                'Se registró la devolución '
+                                . $typeLabel
+                                . ' #'
+                                . $refundId
+                                . ', pero no fue posible generar automáticamente la entrada de inventario. '
+                                . 'La devolución permanece registrada y la entrada puede recuperarse con “Registrar entrada inventario”.'
+                            )
+                            ->warning()
+                            ->send();
+                    } else {
+                        $inventoryMessage = $inventoryMovementId > 0
+                            ? (' Entrada de inventario #' . $inventoryMovementId . ' registrada automáticamente.')
+                            : ' No había líneas inventariables para regresar.';
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('Devolución registrada')
+                            ->body(
+                                'Se registró la devolución '
+                                . $typeLabel
+                                . ' #'
+                                . $refundId
+                                . ' para el ticket '
+                                . ($this->record->number ?: ('#' . $this->record->id))
+                                . '.'
+                                . $inventoryMessage
+                            )
+                            ->success()
+                            ->send();
+                    }
 
                     $this->redirect(static::getResource()::getUrl('view', ['record' => $this->record]));
                 }),
