@@ -10,6 +10,14 @@
     $sessionNumber = (string) ($session->number ?? ('#' . ($session->id ?? '')));
     $openedAt = $session->opened_at ?? $session->created_at ?? null;
     $closedAt = $session->closed_at ?? null;
+
+    /*
+     * BEXIA_V5836G5H4C_SEPARATE_SALES_ADVANCES
+     */
+    $isClosed =
+        (string) ($session->status ?? '') === 'closed'
+        && ! empty($closedAt);
+
     $logoSrc = trim((string) ($companyLogoUrl ?? ''));
     $hasLogo = $logoSrc !== '';
 @endphp
@@ -49,9 +57,66 @@ td{padding:2px 0;vertical-align:top}
     font-weight:700;
     cursor:pointer;
 }
+/*
+ * BEXIA_V5836G5H7C4B_COMPACT_PRINT
+ *
+ * Compactar exclusivamente al imprimir.
+ * Pantalla conserva sus medidas normales.
+ */
 @media print{
-    body{margin:0}
-    .no-print{display:none!important}
+    @page{
+        margin:4mm;
+    }
+
+    body{
+        margin:0!important;
+        padding:3px!important;
+        font-size:9.5px!important;
+        line-height:1.05!important;
+    }
+
+    .logo{
+        max-height:16mm!important;
+        margin-bottom:2px!important;
+    }
+
+    .brand{
+        font-size:13px!important;
+        margin:1px 0!important;
+    }
+
+    .subtitle{
+        font-size:11px!important;
+        margin-bottom:2px!important;
+    }
+
+    .sep{
+        margin:3px 0!important;
+    }
+
+    .section-title{
+        padding:2px 1px!important;
+        margin-top:3px!important;
+    }
+
+    td{
+        padding:1px 0!important;
+        line-height:1.05!important;
+    }
+
+    .total-row td,
+    .net-row td{
+        padding-top:2px!important;
+    }
+
+    .cash-table td{
+        padding:1px 0!important;
+        line-height:1!important;
+    }
+
+    .no-print{
+        display:none!important;
+    }
 }
 </style>
 </head>
@@ -65,10 +130,18 @@ td{padding:2px 0;vertical-align:top}
     <div class="subtitle">CORTE DE CAJA</div>
     <div>Sesión: {{ $sessionNumber }}</div>
     <div>Apertura: {{ $openedAt ?: 'N/D' }}</div>
-    <div>Cierre: {{ $closedAt ?: now()->format('Y-m-d H:i:s') }}</div>
+    @if($isClosed)
+        <div>Cierre: {{ $closedAt }}</div>
+    @else
+        <div>Generado: {{ now()->format('Y-m-d H:i:s') }}</div>
+    @endif
 </div>
 
 <div class="sep"></div>
+
+<div class="section-title">
+    COBROS POR SECCIÓN Y MÉTODO
+</div>
 
 @foreach($sections as $section)
     <div class="section-title">{{ $section['name'] ?? 'SECCIÓN' }}</div>
@@ -82,9 +155,9 @@ td{padding:2px 0;vertical-align:top}
         <tr class="total-row">
             <td>
                 @if(($section['name'] ?? '') === 'IMPRESIÓN Y COPIAS')
-                    TOTAL IMPRESIONES
+                    TOTAL COBRADO IMPRESIONES
                 @else
-                    Total {{ $section['name'] ?? '' }}
+                    Total cobrado {{ $section['name'] ?? '' }}
                 @endif
             </td>
             <td class="right">{{ $money($section['total'] ?? 0) }}</td>
@@ -104,6 +177,13 @@ td{padding:2px 0;vertical-align:top}
         <td>Devoluciones parciales</td>
         <td class="right">{{ $money($refunds['partial_refunds_total'] ?? 0) }}</td>
     </tr>
+    {{-- BEXIA_V5836G5H7C4B_ADVANCE_REFUND_VISUAL --}}
+    @if((float)($refunds['advance_refunds_total'] ?? 0) > 0)
+        <tr>
+            <td>Anticipos devueltos</td>
+            <td class="right">{{ $money($refunds['advance_refunds_total'] ?? 0) }}</td>
+        </tr>
+    @endif
     @if((float)($refunds['other_refunds_total'] ?? 0) > 0)
         <tr>
             <td>Otras devoluciones</td>
@@ -119,24 +199,46 @@ td{padding:2px 0;vertical-align:top}
 <div class="sep"></div>
 
 <div class="section-title">RESUMEN FINAL</div>
+
+{{-- BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS --}}
 <table>
     <tr>
-        <td>Total vendido</td>
+        <td>Ventas liquidadas</td>
         <td class="right">{{ $money($totals['gross_total'] ?? 0) }}</td>
     </tr>
     <tr>
-        <td>Total devuelto</td>
-        <td class="right">-{{ $money($totals['refunded_total'] ?? $refunds['refunded_total'] ?? 0) }}</td>
+        <td>Anticipos cobrados</td>
+        <td class="right">{{ $money($totals['advance_payments_total'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Anticipos devueltos</td>
+        <td class="right">-{{ $money($totals['advance_refunds_total'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Anticipos pendientes</td>
+        <td class="right">{{ $money($totals['outstanding_advance_total'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Cobrado en sesión</td>
+        <td class="right">{{ $money($totals['collected_total'] ?? $totals['payments_total'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Flujo neto cobrado</td>
+        <td class="right">{{ $money($totals['net_cashflow_total'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Devoluciones de venta</td>
+        <td class="right">-{{ $money($totals['sale_refunds_total'] ?? 0) }}</td>
     </tr>
     <tr class="net-row">
-        <td>VENTA NETA</td>
-        <td class="right">{{ $money($totals['net_total'] ?? 0) }}</td>
+        <td>VENTA NETA LIQUIDADA</td>
+        <td class="right">{{ $money($totals['net_settled_sales_total'] ?? $totals['net_total'] ?? 0) }}</td>
     </tr>
 </table>
 
 <div class="sep"></div>
 
-<div class="section-title">TOTALES POR MÉTODO</div>
+<div class="section-title">TOTALES COBRADOS POR MÉTODO</div>
 <table>
     @foreach($methodTotals as $method)
         <tr>

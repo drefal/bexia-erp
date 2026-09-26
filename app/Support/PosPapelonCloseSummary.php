@@ -65,13 +65,181 @@ class PosPapelonCloseSummary
             'p.pos_order_id',
             'p.payment_label',
             'p.amount',
+            'p.metadata',
             'p.created_at',
             'o.number as order_number',
             'o.total as order_total',
+            'o.status as order_status',
         ]);
 
-        $orderIds = $payments->pluck('pos_order_id')->filter()->unique()->values();
-        $refunds = $this->refunds($session, $orderIds);
+        /*
+         * BEXIA_V5836G5H4C_SEPARATE_SALES_ADVANCES
+         */
+        $orderIds =
+            $payments
+                ->pluck('pos_order_id')
+                ->filter()
+                ->unique()
+                ->values();
+
+        $settledOrderIds =
+            $payments
+                ->filter(
+                    fn ($row) => in_array(
+                        (string) ($row->order_status ?? ''),
+                        ['paid', 'returned'],
+                        true
+                    )
+                )
+                ->pluck('pos_order_id')
+                ->filter()
+                ->unique()
+                ->values();
+
+        $settledOrderMap = array_fill_keys(
+            $settledOrderIds
+                ->map(fn ($id) => (int) $id)
+                ->all(),
+            true
+        );
+
+        $advancePayments =
+            $payments
+                ->filter(
+                    fn ($row) =>
+                        (string) ($row->order_status ?? '')
+                            === 'pending_payment'
+                )
+                ->values();
+
+        $advancePaymentsTotal = round(
+            (float) $advancePayments->sum('amount'),
+            2
+        );
+
+        $settledPaymentsTotal = round(
+            (float)
+                $payments
+                    ->filter(
+                        fn ($row) => in_array(
+                            (string) (
+                                $row->order_status ?? ''
+                            ),
+                            ['paid', 'returned'],
+                            true
+                        )
+                    )
+                    ->sum('amount'),
+            2
+        );
+
+        /*
+         * BEXIA_V5836G5H7C2_STABLE_ADVANCE_REFUND_REPORTING
+         *
+         * H4C calculaba anticipos según el estado ACTUAL
+         * del ticket. Guardamos ese valor como pendiente.
+         */
+        $outstandingAdvanceTotal =
+            round(
+                (float) $advancePaymentsTotal,
+                2
+            );
+
+        /*
+         * Anticipos cobrados históricos:
+         * usar payment_kind guardado cuando ocurrió el pago.
+         */
+        $advancePayments =
+            $payments
+                ->filter(
+                    function ($row) {
+                        $metadata = [];
+
+                        if (
+                            ! empty(
+                                $row->metadata
+                            )
+                        ) {
+                            $decoded =
+                                json_decode(
+                                    (string)
+                                        $row->metadata,
+                                    true
+                                );
+
+                            $metadata =
+                                is_array($decoded)
+                                    ? $decoded
+                                    : [];
+                        }
+
+                        $kind =
+                            trim(
+                                strtolower(
+                                    (string) (
+                                        $metadata[
+                                            'payment_kind'
+                                        ]
+                                        ?? $metadata[
+                                            'kind'
+                                        ]
+                                        ?? ''
+                                    )
+                                )
+                            );
+
+                        if (
+                            $kind === 'advance'
+                        ) {
+                            return true;
+                        }
+
+                        /*
+                         * Compatibilidad con pagos previos
+                         * sin metadata.
+                         */
+                        return
+                            $kind === ''
+                            && (
+                                (string) (
+                                    $row->order_status
+                                    ?? ''
+                                )
+                                === 'pending_payment'
+                            );
+                    }
+                )
+                ->values();
+
+        $advancePaymentsTotal =
+            round(
+                (float)
+                    $advancePayments
+                        ->sum('amount'),
+                2
+            );
+
+        /*
+         * Totales por método representan COBROS reales
+         * de la sesión, sin depender del detalle de líneas.
+         */
+        $directMethodTotals = [];
+
+        foreach ($payments as $payment) {
+            $method =
+                $this->paymentMethod(
+                    $payment->payment_label ?? null
+                );
+
+            $directMethodTotals[$method] =
+                ($directMethodTotals[$method] ?? 0)
+                + (float) ($payment->amount ?? 0);
+        }
+
+        $refunds = $this->refunds(
+            $session,
+            $orderIds
+        );
 
         if ($orderIds->isEmpty()) {
             return $this->result([], [], [], $refunds, 0, 0, 0, 0);
@@ -117,12 +285,24 @@ class PosPapelonCloseSummary
         $methodTotals = [];
         $sectionProducts = [];
         $sectionTotals = [];
+        $settledGrossTotal = 0.0;
 
         foreach ($lines as $line) {
             $lineGross = round((float) ($grossByLine[(int) $line->id] ?? 0), 4);
 
             if ($lineGross <= 0) {
                 continue;
+            }
+
+            $isSettled = isset(
+                $settledOrderMap[
+                    (int) $line->pos_order_id
+                ]
+            );
+
+            if ($isSettled) {
+                $settledGrossTotal +=
+                    $lineGross;
             }
 
             $orderPayments = $paymentsByOrder->get($line->pos_order_id, collect());
@@ -162,6 +342,14 @@ class PosPapelonCloseSummary
                 $sectionTotals[$section] = ($sectionTotals[$section] ?? 0) + $lineNet;
             }
 
+            /*
+             * Un anticipo sí forma parte del COBRO,
+             * pero todavía no representa producto vendido.
+             */
+            if (! $isSettled) {
+                continue;
+            }
+
             $productName = html_entity_decode(
                 trim((string) ($line->product_name ?: ('Producto #' . ($line->product_id ?? '')))),
                 ENT_QUOTES | ENT_HTML5,
@@ -181,15 +369,25 @@ class PosPapelonCloseSummary
             }
 
             $sectionProducts[$section][$productName]['qty'] += (float) ($line->quantity ?? 0);
-            $sectionProducts[$section][$productName]['total'] += $lineNet;
+            $sectionProducts[$section][$productName]['total'] += $lineGross;
         }
 
-        $grossTotal = round((float) array_sum($sectionTotals), 2);
-        $paymentsTotal = round((float) $payments->sum('amount'), 2);
+        $grossTotal = round(
+            (float) $settledGrossTotal,
+            2
+        );
 
-        if ($grossTotal <= 0 && $paymentsTotal > 0) {
-            $grossTotal = $paymentsTotal;
-        }
+        $paymentsTotal = round(
+            (float) $payments->sum('amount'),
+            2
+        );
+
+        /*
+         * Los totales generales por método deben ser
+         * exactamente el dinero recibido en la sesión.
+         */
+        $methodTotals =
+            $directMethodTotals;
 
         return $this->result(
             $sectionMethods,
@@ -198,8 +396,11 @@ class PosPapelonCloseSummary
             $refunds,
             $grossTotal,
             $paymentsTotal,
-            $orderIds->count(),
-            $lines->count()
+            $settledOrderIds->count(),
+            $lines->count(),
+            $advancePaymentsTotal,
+            $settledPaymentsTotal,
+            $outstandingAdvanceTotal
         );
     }
 
@@ -274,6 +475,11 @@ class PosPapelonCloseSummary
             'partial_refunds_count' => 0,
             'other_refunds_count' => 0,
             'refunds_count' => 0,
+            /*
+             * BEXIA_V5836G5H7C2_STABLE_ADVANCE_REFUND_REPORTING
+             */
+            'advance_refunds_total' => 0.0,
+            'sale_refunds_total' => 0.0,
         ];
 
         if (! Schema::hasTable('pos_order_refunds')) {
@@ -353,10 +559,51 @@ class PosPapelonCloseSummary
             $summary['refunded_total'] += $amount;
             $summary['refunds_count']++;
 
-            if (str_contains($type, 'total')) {
+            /*
+             * Una cancelación de apartado con anticipo no
+             * es una devolución de venta.
+             */
+            if (
+                str_contains(
+                    $type,
+                    'advance'
+                )
+            ) {
+                $summary[
+                    'advance_refunds_total'
+                ] += $amount;
+            } else {
+                $summary[
+                    'sale_refunds_total'
+                ] += $amount;
+            }
+
+            /*
+             * BEXIA_V5836G5H7C4B_ADVANCE_REFUND_VISUAL
+             *
+             * advance_cancel ya esta contabilizado arriba como
+             * advance_refunds_total. No debe volver a caer en
+             * Totales / Parciales / Otras devoluciones de venta.
+             */
+            if (
+                str_contains(
+                    $type,
+                    'advance'
+                )
+            ) {
+                // Clasificacion exclusiva como anticipo devuelto.
+            } elseif (
+                str_contains(
+                    $type,
+                    'total'
+                )
+            ) {
                 $summary['total_refunds_total'] += $amount;
                 $summary['total_refunds_count']++;
-            } elseif (str_contains($type, 'partial') || str_contains($type, 'parcial')) {
+            } elseif (
+                str_contains($type, 'partial')
+                || str_contains($type, 'parcial')
+            ) {
                 $summary['partial_refunds_total'] += $amount;
                 $summary['partial_refunds_count']++;
             } else {
@@ -365,14 +612,33 @@ class PosPapelonCloseSummary
             }
         }
 
-        foreach (['refunded_total', 'total_refunds_total', 'partial_refunds_total', 'other_refunds_total'] as $key) {
+        foreach ([
+            'refunded_total',
+            'total_refunds_total',
+            'partial_refunds_total',
+            'other_refunds_total',
+            'advance_refunds_total',
+            'sale_refunds_total',
+        ] as $key) {
             $summary[$key] = round((float) $summary[$key], 2);
         }
 
         return $summary;
     }
 
-    protected function result(array $sectionMethods, array $methodTotals, array $sectionProducts, array $refunds, float $grossTotal, float $paymentsTotal, int $ordersCount, int $linesCount): array
+    protected function result(
+        array $sectionMethods,
+        array $methodTotals,
+        array $sectionProducts,
+        array $refunds,
+        float $grossTotal,
+        float $paymentsTotal,
+        int $ordersCount,
+        int $linesCount,
+        float $advancePaymentsTotal = 0.0,
+        float $settledPaymentsTotal = 0.0,
+        float $outstandingAdvanceTotal = 0.0
+    ): array
     {
         $sections = [];
 
@@ -411,8 +677,58 @@ class PosPapelonCloseSummary
             }, array_values($products));
         }
 
-        $refundedTotal = round((float) ($refunds['refunded_total'] ?? 0), 2);
-        $netTotal = round($grossTotal - $refundedTotal, 2);
+        $refundedTotal =
+            round(
+                (float) (
+                    $refunds[
+                        'refunded_total'
+                    ]
+                    ?? 0
+                ),
+                2
+            );
+
+        $advanceRefundedTotal =
+            round(
+                (float) (
+                    $refunds[
+                        'advance_refunds_total'
+                    ]
+                    ?? 0
+                ),
+                2
+            );
+
+        $saleRefundedTotal =
+            round(
+                (float) (
+                    $refunds[
+                        'sale_refunds_total'
+                    ]
+                    ?? $refundedTotal
+                ),
+                2
+            );
+
+        /*
+         * BEXIA_V5836G5H7C2_STABLE_ADVANCE_REFUND_REPORTING
+         *
+         * Sólo devoluciones de venta disminuyen la
+         * venta neta liquidada.
+         */
+        $netTotal =
+            round(
+                $grossTotal
+                - $saleRefundedTotal,
+                2
+            );
+
+        $netCashflowTotal =
+            round(
+                $paymentsTotal
+                - $refundedTotal,
+                2
+            );
 
         return [
             'format' => 'papelon',
@@ -423,10 +739,37 @@ class PosPapelonCloseSummary
             'products_by_section' => $productsBySection,
             'refunds' => $refunds,
             'totals' => [
-                'gross_total' => round($grossTotal, 2),
-                'payments_total' => round($paymentsTotal, 2),
-                'refunded_total' => $refundedTotal,
-                'net_total' => $netTotal,
+                /*
+                 * gross_total = venta realmente liquidada.
+                 * payments_total = dinero realmente cobrado.
+                 */
+                'gross_total' =>
+                    round($grossTotal, 2),
+                'payments_total' =>
+                    round($paymentsTotal, 2),
+                'collected_total' =>
+                    round($paymentsTotal, 2),
+                'advance_payments_total' =>
+                    round($advancePaymentsTotal, 2),
+                'settled_payments_total' =>
+                    round($settledPaymentsTotal, 2),
+                'outstanding_advance_total' =>
+                    round(
+                        $outstandingAdvanceTotal,
+                        2
+                    ),
+                'refunded_total' =>
+                    $refundedTotal,
+                'advance_refunds_total' =>
+                    $advanceRefundedTotal,
+                'sale_refunds_total' =>
+                    $saleRefundedTotal,
+                'net_total' =>
+                    $netTotal,
+                'net_settled_sales_total' =>
+                    $netTotal,
+                'net_cashflow_total' =>
+                    $netCashflowTotal,
                 'orders_count' => $ordersCount,
                 'lines_count' => $linesCount,
             ],

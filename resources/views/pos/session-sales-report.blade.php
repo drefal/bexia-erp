@@ -153,6 +153,45 @@
 
     $payments = $summary['payments_by_method'] ?? [];
 
+    /*
+     * BEXIA_V5836G5H6B_GENERIC_DETAIL_FIXES
+     * Corrige contador por vendedor, importes por ticket
+     * y fecha de cierre cuando la sesión sigue abierta.
+     */
+
+    /*
+     * BEXIA_V5836G5H6A_GENERIC_CLOSE_ADVANCES
+     *
+     * El formato genérico debe distinguir:
+     * - dinero cobrado
+     * - anticipos de apartados aún pendientes
+     * - ventas realmente liquidadas
+     */
+    $v5836g5h6aCollectedTotal = round(
+        (float) (
+            $totals['collected_total']
+            ?? $totals['paid_total']
+            ?? 0
+        ),
+        2
+    );
+
+    $v5836g5h6aAdvanceTotal = round(
+        (float) (
+            $totals['advance_payments_total']
+            ?? 0
+        ),
+        2
+    );
+
+    $v5836g5h6aSettledSales = round(
+        (float) (
+            $totals['settled_sales_total']
+            ?? 0
+        ),
+        2
+    );
+
     // V5.51.0S - Reporte cierre: total vendido bruto, devuelto y venta neta.
     try {
         $v5510sTotalVendidoBruto = 0.0;
@@ -984,7 +1023,7 @@ try {
         <div><strong>Sesión:</strong> <?= $safe($session['number'] ?? '') ?></div>
         <div><strong>Estado:</strong> <?= $safe($session['status_label'] ?? $session['status'] ?? '') ?></div>
         <div><strong>Apertura:</strong> <?= $safe($session['opened_at'] ?? '') ?></div>
-        <div><strong>Cierre:</strong> <?= $safe($session['closed_at'] ?? 'Aún abierta') ?></div>
+        <div><strong>Cierre:</strong> <?= $safe(trim((string) ($session['closed_at'] ?? '')) !== '' ? $session['closed_at'] : 'Aún abierta') ?></div>
         <div><strong>Generado:</strong> <?= $safe($summary['generated_at'] ?? now()->toDateTimeString()) ?></div>
     </div>
 </div>
@@ -1010,7 +1049,7 @@ try {
         <td class="right"><?= $money($totals['opening_cash_amount'] ?? ($session['opening_amount'] ?? 0)) ?></td>
     </tr>
     <tr>
-        <td>Ventas cobradas en efectivo</td>
+        <td>Cobros en efectivo</td>
         <td class="right"><?= $money($totals['cash_payments_total'] ?? 0) ?></td>
     </tr>
     <tr>
@@ -1276,16 +1315,16 @@ try {
 @endphp
 
 
-            <small>Total vendido</small>
-            <strong><?= $money($v5510tTotalVendidoBruto ?? 0) ?></strong>
+            <small>Total cobrado</small>
+            <strong><?= $money($v5836g5h6aCollectedTotal) ?></strong>
         </div>
         <div class="kpi">
             <small>Tickets cobrados</small>
             <strong><?= number_format((float) ($totals['paid_tickets'] ?? 0)) ?></strong>
         </div>
         <div class="kpi">
-            <small>Tickets pendientes</small>
-            <strong><?= number_format((float) ($totals['pending_tickets_created_in_session'] ?? 0)) ?></strong>
+            <small>Anticipos cobrados</small>
+            <strong><?= $money($v5836g5h6aAdvanceTotal) ?></strong>
         </div>
         <div class="kpi">
             <small>Reservas activas</small>
@@ -1370,8 +1409,8 @@ try {
     </div>
 
     <div id="v5507h-net-sales-card" style="display:table-cell; width:33.33%; padding:10px 12px; border:1px solid #e5e7eb; vertical-align:top;">
-        <small style="display:block; color:#64748b; font-size:10px;">Venta neta</small>
-        <strong><?= $money($v5510tVentaNeta ?? 0) ?></strong>
+        <small style="display:block; color:#64748b; font-size:10px;">Venta neta liquidada</small>
+        <strong><?= $money($v5836g5h6aNetSettled ?? 0) ?></strong>
     </div>
 
     <div id="v5507h-refunded-tickets-card" style="display:table-cell; width:33.33%; padding:10px 12px; border:1px solid #e5e7eb; vertical-align:top;">
@@ -1381,7 +1420,74 @@ try {
 </div>
 <?php endif; ?>
 
-<h2>Resumen por método de pago</h2>
+<?php
+    $v5836g5h6aRefundTotal = round(
+        (float) (
+            $v5510tTotalDevuelto
+            ?? $v5507eRefundTotal
+            ?? 0
+        ),
+        2
+    );
+
+    /*
+     * BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS
+     *
+     * Una devolución de anticipo no reduce ventas liquidadas.
+     */
+    $v5836g5h6aNetSettled = round(
+        (float) (
+            $totals['net_settled_sales_total']
+            ?? $totals['net_total']
+            ?? $v5836g5h6aSettledSales
+        ),
+        2
+    );
+?>
+
+<h2>Resumen de ventas y cobros</h2>
+
+{{-- BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS --}}
+<table>
+    <tbody>
+        <tr>
+            <td>Ventas liquidadas</td>
+            <td class="right"><?= $money($totals['settled_sales_total'] ?? 0) ?></td>
+        </tr>
+        <tr>
+            <td>Anticipos cobrados</td>
+            <td class="right"><?= $money($totals['advance_payments_total'] ?? 0) ?></td>
+        </tr>
+        <tr>
+            <td>Anticipos devueltos</td>
+            <td class="right">-<?= $money($totals['advance_refunds_total'] ?? 0) ?></td>
+        </tr>
+        <tr>
+            <td>Anticipos pendientes</td>
+            <td class="right"><?= $money($totals['outstanding_advance_total'] ?? 0) ?></td>
+        </tr>
+        <tr>
+            <td>Cobrado en sesión</td>
+            <td class="right"><?= $money($totals['collected_total'] ?? $totals['paid_total'] ?? 0) ?></td>
+        </tr>
+        <tr>
+            <td>Flujo neto cobrado</td>
+            <td class="right"><?= $money($totals['net_cashflow_total'] ?? 0) ?></td>
+        </tr>
+        <tr>
+            <td>Devoluciones de venta</td>
+            <td class="right">-<?= $money($totals['sale_refunds_total'] ?? 0) ?></td>
+        </tr>
+        <tr>
+            <td><strong>Venta neta liquidada</strong></td>
+            <td class="right total">
+                <strong><?= $money($totals['net_settled_sales_total'] ?? $totals['net_total'] ?? 0) ?></strong>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2>Cobros por método de pago</h2>
 <table>
     <tr>
         <th>Método</th>
@@ -1416,7 +1522,7 @@ try {
         <?php foreach ($salesBySeller as $seller): ?>
             <tr>
                 <td><?= $safe($seller['seller_name'] ?? 'Sin vendedor') ?></td>
-                <td class="right"><?= number_format((float) ($seller['tickets'] ?? $seller['count'] ?? 0)) ?></td>
+                <td class="right"><?= number_format((float) ($seller['tickets_count'] ?? $seller['tickets'] ?? $seller['count'] ?? 0)) ?></td>
                 <td class="right"><?= $money($seller['total'] ?? 0) ?></td>
             </tr>
         <?php endforeach; ?>
@@ -1455,7 +1561,7 @@ try {
 
                         if (is_array($orderPayments)) {
                             foreach ($orderPayments as $payment) {
-                                $pieces[] = ($payment['method'] ?? $payment['payment_label'] ?? 'Pago') . ' ' . $money($payment['amount'] ?? 0);
+                                $pieces[] = ($payment['method'] ?? $payment['payment_label'] ?? 'Pago') . ' ' . $money($payment['amount'] ?? $payment['total'] ?? 0);
                             }
                         }
 

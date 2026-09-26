@@ -10,6 +10,14 @@
     $sessionNumber = (string) ($session->number ?? ('#' . ($session->id ?? '')));
     $openedAt = $session->opened_at ?? $session->created_at ?? null;
     $closedAt = $session->closed_at ?? null;
+
+    /*
+     * BEXIA_V5836G5H4C_SEPARATE_SALES_ADVANCES
+     */
+    $isClosed =
+        (string) ($session->status ?? '') === 'closed'
+        && ! empty($closedAt);
+
     $logoSrc = trim((string) ($companyLogoUrl ?? ''));
     $hasLogo = $logoSrc !== '';
 @endphp
@@ -54,12 +62,16 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
             <div class="muted">Reporte especial por sección de cierre</div>
             <div><strong>Sesión:</strong> {{ $sessionNumber }}</div>
             <div><strong>Apertura:</strong> {{ $openedAt ?: 'N/D' }}</div>
-            <div><strong>Cierre:</strong> {{ $closedAt ?: now()->format('Y-m-d H:i:s') }}</div>
+            @if($isClosed)
+                <div><strong>Cierre:</strong> {{ $closedAt }}</div>
+            @else
+                <div><strong>Generado:</strong> {{ now()->format('Y-m-d H:i:s') }}</div>
+            @endif
         </td>
     </tr>
 </table>
 
-<h2>Resumen por sección y método de pago</h2>
+<h2>Resumen de cobros por sección y método de pago</h2>
 
 @foreach($sections as $section)
     <h3>{{ $section['name'] ?? 'SECCIÓN' }}</h3>
@@ -80,9 +92,9 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
             <tr class="total-row">
                 <td>
                     @if(($section['name'] ?? '') === 'IMPRESIÓN Y COPIAS')
-                        TOTAL IMPRESIONES
+                        TOTAL COBRADO IMPRESIONES
                     @else
-                        Total {{ $section['name'] ?? '' }}
+                        Total cobrado {{ $section['name'] ?? '' }}
                     @endif
                 </td>
                 <td class="right">{{ $money($section['total'] ?? 0) }}</td>
@@ -102,6 +114,13 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
             <td>Devoluciones parciales</td>
             <td class="right">{{ $money($refunds['partial_refunds_total'] ?? 0) }}</td>
         </tr>
+        {{-- BEXIA_V5836G5H7C4B_ADVANCE_REFUND_VISUAL --}}
+        @if((float)($refunds['advance_refunds_total'] ?? 0) > 0)
+            <tr>
+                <td>Anticipos devueltos</td>
+                <td class="right">{{ $money($refunds['advance_refunds_total'] ?? 0) }}</td>
+            </tr>
+        @endif
         @if((float)($refunds['other_refunds_total'] ?? 0) > 0)
             <tr>
                 <td>Otras devoluciones</td>
@@ -116,24 +135,46 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
 </table>
 
 <h2>Resumen final</h2>
+
+{{-- BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS --}}
 <table>
     <tbody>
         <tr>
-            <td>Total vendido</td>
+            <td>Ventas liquidadas</td>
             <td class="right">{{ $money($totals['gross_total'] ?? 0) }}</td>
         </tr>
         <tr>
-            <td>Total devuelto</td>
-            <td class="right">-{{ $money($totals['refunded_total'] ?? $refunds['refunded_total'] ?? 0) }}</td>
+            <td>Anticipos cobrados</td>
+            <td class="right">{{ $money($totals['advance_payments_total'] ?? 0) }}</td>
+        </tr>
+        <tr>
+            <td>Anticipos devueltos</td>
+            <td class="right">-{{ $money($totals['advance_refunds_total'] ?? 0) }}</td>
+        </tr>
+        <tr>
+            <td>Anticipos pendientes</td>
+            <td class="right">{{ $money($totals['outstanding_advance_total'] ?? 0) }}</td>
+        </tr>
+        <tr>
+            <td>Cobrado en sesión</td>
+            <td class="right">{{ $money($totals['collected_total'] ?? $totals['payments_total'] ?? 0) }}</td>
+        </tr>
+        <tr>
+            <td>Flujo neto cobrado</td>
+            <td class="right">{{ $money($totals['net_cashflow_total'] ?? 0) }}</td>
+        </tr>
+        <tr>
+            <td>Devoluciones de venta</td>
+            <td class="right">-{{ $money($totals['sale_refunds_total'] ?? 0) }}</td>
         </tr>
         <tr class="net-row">
-            <td>Venta neta</td>
-            <td class="right">{{ $money($totals['net_total'] ?? 0) }}</td>
+            <td>Venta neta liquidada</td>
+            <td class="right">{{ $money($totals['net_settled_sales_total'] ?? $totals['net_total'] ?? 0) }}</td>
         </tr>
     </tbody>
 </table>
 
-<h2>Totales por método</h2>
+<h2>Totales cobrados por método</h2>
 <table>
     <tbody>
         @foreach($methodTotals as $method)
@@ -145,7 +186,13 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
     </tbody>
 </table>
 
-<h2>Detalle de productos por sección</h2>
+<h2>Detalle de productos vendidos por sección</h2>
+
+@if(empty($productsBySection))
+    <div class="note">
+        Sin productos vendidos/liquidados en esta sesión.
+    </div>
+@endif
 
 @foreach($productsBySection as $sectionName => $products)
     @continue($sectionName === 'IMPRESIÓN Y COPIAS')
