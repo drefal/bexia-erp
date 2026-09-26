@@ -6904,6 +6904,7 @@ return response()->json([
             'o.pos_point_id',
             'o.company_id',
             'o.customer_id',
+            'o.metadata',
             \Illuminate\Support\Facades\DB::raw("'' as seller_name"),
             \Illuminate\Support\Facades\DB::raw("'' as customer_name"),
             \Illuminate\Support\Facades\DB::raw("'' as customer_rfc"),
@@ -6980,6 +6981,19 @@ return response()->json([
     {
         $isCurrentSession = (int) ($row->pos_session_id ?? 0) === (int) ($currentSession->id ?? 0);
 
+        /*
+         * BEXIA_V5836G5D1_PENDING_ORDER_NOTE
+         * La nota se muestra en la lista solo cuando existe.
+         */
+        $metadata = [];
+
+        if (! empty($row->metadata)) {
+            $decoded = json_decode((string) $row->metadata, true);
+            $metadata = is_array($decoded) ? $decoded : [];
+        }
+
+        $orderNote = trim((string) ($metadata['order_note'] ?? ''));
+
         return [
             'id' => (int) $row->id,
             'number' => (string) ($row->number ?? ''),
@@ -6991,6 +7005,7 @@ return response()->json([
             'pending_scope' => $isCurrentSession ? 'current' : 'previous',
             'pending_scope_label' => $isCurrentSession ? 'Sesión actual' : 'Sesión anterior',
             'seller_name' => (string) ($row->seller_name ?? ''),
+            'order_note' => $orderNote,
             'customer_id' => $row->customer_id ? (int) $row->customer_id : null,
             'customer_name' => (string) ($row->customer_name ?? ''),
             'customer_rfc' => (string) ($row->customer_rfc ?? ''),

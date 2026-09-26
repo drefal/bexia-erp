@@ -4787,9 +4787,33 @@ document.addEventListener('DOMContentLoaded', function () {
                 v5505dCancelConfirm.textContent = 'Cancelando...';
             }
 
+            /*
+             * Guardar productos antes de limpiar selectedLines.
+             */
+            const cancelledLines = Array.isArray(selectedLines)
+                ? selectedLines.slice()
+                : [];
+
             await v5505aPostJson('/pos/orders/' + selectedOrder.id + '/cancel-pending', {
                 reason: reason
             });
+
+            /*
+             * BEXIA_V5836G5D1_REFRESH_AFTER_PENDING_CANCEL
+             * BEXIA_V5836G5D3_FAST_CANCEL_REFRESH
+             *
+             * No reconstruir los 1,700+ productos.
+             * Sólo consultar los productos que liberó este ticket.
+             */
+            if (
+                typeof window.BEXIA_POS_REFRESH_STOCK_TEXT_ONLY
+                === 'function'
+                && cancelledLines.length
+            ) {
+                await window.BEXIA_POS_REFRESH_STOCK_TEXT_ONLY(
+                    cancelledLines
+                );
+            }
 
             const cancelledNumber = selectedOrder.number;
 
@@ -4867,6 +4891,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const scopeColor = order.pending_scope === 'previous' ? '#92400e' : '#1d4ed8';
             const scopeBg = order.pending_scope === 'previous' ? '#fef3c7' : '#dbeafe';
             const sessionLabel = order.session_number ? (' · ' + order.session_number) : '';
+            const orderNote = String(order.order_note || '').trim();
 
             row.innerHTML =
                 '<div>' +
@@ -4875,6 +4900,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         '<span style="display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:950;color:' + scopeColor + ';background:' + scopeBg + ';">' + escapeHtml(scopeLabel) + escapeHtml(sessionLabel) + '</span>' +
                     '</div>' +
                     '<div style="color:#64748b;font-size:12px;margin-top:5px;">Vendedor: ' + escapeHtml(order.seller_name || 'Sin vendedor asignado') + '</div>' +
+                    (orderNote !== ''
+                        ? '<div style="color:#475569;font-size:12px;margin-top:2px;"><strong>Nota:</strong> ' + escapeHtml(orderNote) + '</div>'
+                        : '') +
                     '<div style="color:#64748b;font-size:12px;margin-top:2px;">Pendiente de cobro · ' + money(order.total) + '</div>' +
                 '</div>';
 
@@ -8206,6 +8234,24 @@ async function createPendingTicket() {
                 api.clear();
             }
 
+            /*
+             * BEXIA_V5836G5D2_REFRESH_ACTIVE_PENDING_HANDLER
+             * BEXIA_V5836G5D3_FAST_CREATE_REFRESH
+             *
+             * La reserva ya quedó confirmada.
+             * Refrescar únicamente los artículos de este carrito.
+             */
+            if (
+                typeof window.BEXIA_POS_REFRESH_STOCK_TEXT_ONLY
+                === 'function'
+                && Array.isArray(items)
+                && items.length
+            ) {
+                await window.BEXIA_POS_REFRESH_STOCK_TEXT_ONLY(
+                    items
+                );
+            }
+
             notice(
                 (isUpdatingPending ? 'Ticket pendiente actualizado: ' : 'Ticket pendiente creado: ') + number,
                 'info'
@@ -8543,8 +8589,17 @@ async function createPendingTicket() {
         const ids = [];
 
         (items || []).forEach(function (item) {
+            /*
+             * BEXIA_V5836G5D3_TARGETED_STOCK_REFRESH
+             * Para líneas restauradas de tickets pendientes,
+             * refrescar la variante concreta cuando exista.
+             */
             const raw = item && typeof item === 'object'
-                ? (item.product_id || item.id)
+                ? (
+                    item.product_variant_id
+                    || item.product_id
+                    || item.id
+                )
                 : item;
 
             const id = Number(raw);
@@ -8573,7 +8628,9 @@ async function createPendingTicket() {
 
         const isService = card.dataset.productIsService === '1' || card.dataset.productType === 'service';
 
-        card.dataset.productStock = String(stock);
+        const numericStock = Number(stock || 0);
+
+        card.dataset.productStock = String(numericStock);
 
         const stockEl = card.querySelector('.stock');
 
@@ -8581,9 +8638,26 @@ async function createPendingTicket() {
             return;
         }
 
-        stockEl.classList.remove('no-stock');
+        /*
+         * La reserva puede llevar el disponible hasta cero,
+         * y al cancelar puede volver a habilitarlo.
+         */
+        card.dataset.productCanSell =
+            numericStock > 0 ? '1' : '0';
+
+        card.classList.toggle(
+            'disabled',
+            numericStock <= 0
+        );
+
+        stockEl.classList.toggle(
+            'no-stock',
+            numericStock <= 0
+        );
+
         stockEl.dataset.v5481e5Refreshed = '1';
-        stockEl.textContent = 'Stock: ' + formatStock(stock);
+        stockEl.textContent =
+            'Stock: ' + formatStock(numericStock);
 
         stockEl.style.color = '#475569';
         stockEl.style.fontSize = '9px';
@@ -11349,6 +11423,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
     createButton();
 
+    /*
+     * BEXIA_V5836G5D1_AUTO_PRODUCT_REFRESH
+     *
+     * Reutiliza exactamente el flujo del botón
+     * "Actualizar productos" después de operaciones
+     * que cambian reservas.
+     */
+    window.BEXIA_POS_REFRESH_PRODUCTS_NOW = async function () {
+        const button = document.getElementById(
+            'v5489b-refresh-products-button'
+        );
+
+        if (!button) {
+            return null;
+        }
+
+        return refreshProducts(button);
+    };
+
     const observer = new MutationObserver(function () {
         createButton();
     });
@@ -12050,6 +12143,22 @@ document.addEventListener('DOMContentLoaded', function () {
             window.BEXIA_POS_LOADED_PENDING_ORDER = null;
 
             clearCartSafe();
+
+            /*
+             * BEXIA_V5836G5D1_REFRESH_AFTER_PENDING_SAVE
+             * BEXIA_V5836G5D3_FAST_FALLBACK_REFRESH
+             * Crear o modificar un pendiente cambia reservas.
+             */
+            if (
+                typeof window.BEXIA_POS_REFRESH_STOCK_TEXT_ONLY
+                === 'function'
+                && Array.isArray(items)
+                && items.length
+            ) {
+                await window.BEXIA_POS_REFRESH_STOCK_TEXT_ONLY(
+                    items
+                );
+            }
 
             notify(
                 (isUpdatingPending ? 'Ticket pendiente actualizado: ' : 'Ticket pendiente creado: ') + number,
