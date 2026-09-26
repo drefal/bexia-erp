@@ -3823,6 +3823,45 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 ];
             }
 
+            /*
+             * BEXIA_V5836G5H2_LOCK_PENDING_AFTER_ADVANCE
+             *
+             * Después del primer anticipo el importe comprometido
+             * no puede alterarse modificando productos, cantidades
+             * o precios.
+             */
+            $v5836g5h2PaidBeforeUpdate = 0.0;
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasTable(
+                    'pos_order_payments'
+                )
+            ) {
+                $v5836g5h2PaidBeforeUpdate = round(
+                    (float) \Illuminate\Support\Facades\DB::table(
+                        'pos_order_payments'
+                    )
+                        ->where(
+                            'pos_order_id',
+                            (int) $orderRow->id
+                        )
+                        ->where('status', 'paid')
+                        ->sum('amount'),
+                    2
+                );
+            }
+
+            if ($v5836g5h2PaidBeforeUpdate > 0.009) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' =>
+                        'Este apartado ya tiene anticipos registrados. '
+                        . 'Sus productos, cantidades y precios ya no '
+                        . 'pueden modificarse.',
+                ];
+            }
+
             if (
                 \Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'is_legacy')
                 && (bool) ($orderRow->is_legacy ?? false)
@@ -4143,6 +4182,110 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             })
             ->values();
 
+        /*
+         * BEXIA_V5836G5H3_ADVANCE_PAYLOAD
+         *
+         * Resumen e historial de anticipos del apartado.
+         */
+        $advancePayments = collect();
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable(
+                'pos_order_payments'
+            )
+        ) {
+            $advancePayments =
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_order_payments'
+                )
+                    ->where(
+                        'pos_order_id',
+                        (int) $orderRow->id
+                    )
+                    ->where('status', 'paid')
+                    ->orderBy('id')
+                    ->get()
+                    ->map(function ($payment) {
+                        $paymentMetadata = [];
+
+                        if (! empty($payment->metadata)) {
+                            $decodedPaymentMetadata =
+                                json_decode(
+                                    (string) $payment->metadata,
+                                    true
+                                );
+
+                            if (
+                                is_array(
+                                    $decodedPaymentMetadata
+                                )
+                            ) {
+                                $paymentMetadata =
+                                    $decodedPaymentMetadata;
+                            }
+                        }
+
+                        return [
+                            'id' =>
+                                (int) $payment->id,
+                            'payment_form_id' =>
+                                ! empty(
+                                    $payment->payment_form_id
+                                )
+                                    ? (int)
+                                        $payment
+                                            ->payment_form_id
+                                    : null,
+                            'payment_label' =>
+                                (string) (
+                                    $payment->payment_label
+                                    ?? 'Pago'
+                                ),
+                            'amount' =>
+                                round(
+                                    (float)
+                                        ($payment->amount ?? 0),
+                                    2
+                                ),
+                            'status' =>
+                                (string)
+                                    ($payment->status ?? ''),
+                            'payment_kind' =>
+                                (string) (
+                                    $paymentMetadata[
+                                        'payment_kind'
+                                    ]
+                                    ?? 'advance'
+                                ),
+                            'payment_sequence' =>
+                                (int) (
+                                    $paymentMetadata[
+                                        'payment_sequence'
+                                    ]
+                                    ?? 0
+                                ),
+                            'created_at' =>
+                                (string)
+                                    ($payment->created_at ?? ''),
+                        ];
+                    })
+                    ->values();
+        }
+
+        $advancePaidTotal = round(
+            (float) $advancePayments->sum('amount'),
+            2
+        );
+
+        $advanceBalance = round(
+            max(
+                0,
+                (float) $orderRow->total
+                    - $advancePaidTotal
+            ),
+            2
+        );
+
         return response()->json([
             'ok' => true,
             'order' => [
@@ -4151,6 +4294,13 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 'status' => (string) $orderRow->status,
                 'status_label' => 'Pendiente de cobro',
                 'total' => (float) $orderRow->total,
+                'paid_total' => $advancePaidTotal,
+                'balance' => $advanceBalance,
+                'has_advances' =>
+                    $advancePaidTotal > 0.009,
+                'payment_count' =>
+                    $advancePayments->count(),
+                'payments' => $advancePayments,
                 'seller_name' => $sellerName,
                 'customer_id' => $customer['id'] ?? null,
                 'customer_name' => $customer['name'] ?? null,
@@ -5605,7 +5755,7 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             ], 422);
         }
 
-        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $reason) {
+        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $reason, $request) {
             $orderRow = \Illuminate\Support\Facades\DB::table('pos_orders')
                 ->where('id', $order)
                 ->lockForUpdate()
@@ -5627,6 +5777,87 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 ];
             }
 
+            /*
+             * BEXIA_V5836G5H2_BLOCK_CANCEL_WITH_ADVANCES
+             *
+             * Si ya se recibió dinero, primero debe existir
+             * una devolución controlada. No liberar mercancía
+             * dejando anticipos cobrados vivos.
+             */
+            $v5836g5h2PaidBeforeCancel = 0.0;
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasTable(
+                    'pos_order_payments'
+                )
+            ) {
+                $v5836g5h2PaidBeforeCancel = round(
+                    (float) \Illuminate\Support\Facades\DB::table(
+                        'pos_order_payments'
+                    )
+                        ->where(
+                            'pos_order_id',
+                            (int) $orderRow->id
+                        )
+                        ->where('status', 'paid')
+                        ->sum('amount'),
+                    2
+                );
+            }
+
+            /*
+             * BEXIA_V5836G5H7B1_REFUND_ADVANCE_CANCEL
+             *
+             * Un apartado con anticipos sólo se cancela si, en la
+             * MISMA transacción, se registra primero la devolución.
+             */
+            $v5836g5h7b1RefundResult = null;
+
+            if ($v5836g5h2PaidBeforeCancel > 0.009) {
+                if (! $request->boolean('refund_advances')) {
+                    return [
+                        'ok' => false,
+                        'status' => 422,
+                        'message' =>
+                            'Este apartado tiene $'
+                            . number_format(
+                                $v5836g5h2PaidBeforeCancel,
+                                2
+                            )
+                            . ' en anticipos. Usa '
+                            . '"Devolver anticipo y cancelar".',
+                    ];
+                }
+
+                $v5836g5h7b1RefundResult =
+                    $this->v5836g5h7b1RefundPendingAdvances(
+                        $orderRow,
+                        $request,
+                        $reason
+                    );
+
+                if (
+                    ! (
+                        $v5836g5h7b1RefundResult['ok']
+                        ?? false
+                    )
+                ) {
+                    return [
+                        'ok' => false,
+                        'status' =>
+                            $v5836g5h7b1RefundResult[
+                                'status'
+                            ]
+                            ?? 422,
+                        'message' =>
+                            $v5836g5h7b1RefundResult[
+                                'message'
+                            ]
+                            ?? 'No se pudo devolver el anticipo.',
+                    ];
+                }
+            }
+
             $metadata = [];
 
             if (! empty($orderRow->metadata)) {
@@ -5638,7 +5869,33 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             $metadata['cancelled_at'] = now()->toDateTimeString();
             $metadata['cancelled_by_user_id'] = auth()->id();
             $metadata['cancel_reason'] = $reason;
-            $metadata['cancel_source'] = 'pos_pending_ticket_modal';
+            $metadata['cancel_source'] =
+                $v5836g5h7b1RefundResult
+                    ? 'pos_pending_advance_refund_cancel'
+                    : 'pos_pending_ticket_modal';
+
+            if ($v5836g5h7b1RefundResult) {
+                $metadata[
+                    'advance_refund_id'
+                ] =
+                    $v5836g5h7b1RefundResult[
+                        'refund_id'
+                    ]
+                    ?? null;
+
+                $metadata[
+                    'advance_refund_total'
+                ] =
+                    $v5836g5h7b1RefundResult[
+                        'refund_total'
+                    ]
+                    ?? 0;
+
+                $metadata[
+                    'advance_refunded_at'
+                ] =
+                    now()->toDateTimeString();
+            }
 
             $update = [
                 'status' => 'cancelled',
@@ -5671,7 +5928,9 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 \App\Support\PosStockReservationService::class
             )->releaseOrder(
                 (int) $orderRow->id,
-                'cancelled'
+                $v5836g5h7b1RefundResult
+                    ? 'cancelled_advance_refunded'
+                    : 'cancelled'
             );
 
             if (! ($reservationRelease['ok'] ?? false)) {
@@ -5693,6 +5952,31 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                     $reservationRelease['released_lines']
                     ?? 0
                 ),
+                'refund_id' =>
+                    $v5836g5h7b1RefundResult[
+                        'refund_id'
+                    ]
+                    ?? null,
+                'refund_total' =>
+                    round(
+                        (float) (
+                            $v5836g5h7b1RefundResult[
+                                'refund_total'
+                            ]
+                            ?? 0
+                        ),
+                        2
+                    ),
+                'cash_refund_total' =>
+                    round(
+                        (float) (
+                            $v5836g5h7b1RefundResult[
+                                'cash_refund_total'
+                            ]
+                            ?? 0
+                        ),
+                        2
+                    ),
             ];
         });
 
@@ -5729,11 +6013,1016 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
 
 return response()->json([
             'ok' => true,
-            'message' => 'Ticket pendiente cancelado correctamente.',
+            'message' =>
+                ! empty($result['refund_id'])
+                    ? (
+                        'Anticipo devuelto y apartado '
+                        . 'cancelado correctamente.'
+                    )
+                    : 'Ticket pendiente cancelado correctamente.',
             'order_id' => $result['order_id'],
             'number' => $result['number'],
+            'refund_id' =>
+                $result['refund_id']
+                ?? null,
+            'refund_total' =>
+                $result['refund_total']
+                ?? 0,
+            'cash_refund_total' =>
+                $result['cash_refund_total']
+                ?? 0,
         ]);
     }
+
+
+    /**
+     * BEXIA_V5836G5H7B1_REFUND_ADVANCE_CANCEL
+     *
+     * Devuelve todos los anticipos de un apartado pendiente.
+     *
+     * - Conserva intactos los pagos originales.
+     * - Crea documento pos_order_refunds.
+     * - Crea una línea financiera por cada pago original.
+     * - El efectivo genera cash_out en la sesión que devuelve
+     *   el dinero y outflow inmediato de la Caja PDV.
+     * - Tarjeta/transferencia quedan trazadas como reembolso
+     *   financiero por el mismo método original.
+     * - NO genera entrada/salida de inventario.
+     *
+     * Debe ejecutarse dentro de la transacción de cancelación.
+     */
+    private function v5836g5h7b1RefundPendingAdvances(
+        object $orderRow,
+        \Illuminate\Http\Request $request,
+        string $reason
+    ): array {
+        foreach ([
+            'pos_order_payments',
+            'pos_order_refunds',
+            'pos_order_refund_payments',
+            'pos_sessions',
+            'pos_cash_movements',
+            'treasury_accounts',
+            'treasury_movements',
+        ] as $table) {
+            if (
+                ! \Illuminate\Support\Facades\Schema::hasTable(
+                    $table
+                )
+            ) {
+                return [
+                    'ok' => false,
+                    'status' => 500,
+                    'message' =>
+                        'Falta la tabla requerida: '
+                        . $table,
+                ];
+            }
+        }
+
+        $orderId =
+            (int) ($orderRow->id ?? 0);
+
+        $companyId =
+            (int) ($orderRow->company_id ?? 0);
+
+        $posPointId =
+            (int) ($orderRow->pos_point_id ?? 0);
+
+        if (
+            $orderId <= 0
+            || $companyId <= 0
+            || $posPointId <= 0
+        ) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' =>
+                    'El apartado no tiene empresa o PDV válido.',
+            ];
+        }
+
+        /*
+         * Evitar doble devolución incluso ante doble click.
+         */
+        $existingRefund =
+            \Illuminate\Support\Facades\DB::table(
+                'pos_order_refunds'
+            )
+                ->where(
+                    'pos_order_id',
+                    $orderId
+                )
+                ->where(
+                    'type',
+                    'advance_cancel'
+                )
+                ->whereNotIn(
+                    'status',
+                    [
+                        'cancelled',
+                        'canceled',
+                        'void',
+                    ]
+                )
+                ->lockForUpdate()
+                ->first();
+
+        if ($existingRefund) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' =>
+                    'Este apartado ya tiene una devolución '
+                    . 'de anticipos registrada.',
+            ];
+        }
+
+        $payments =
+            \Illuminate\Support\Facades\DB::table(
+                'pos_order_payments'
+            )
+                ->where(
+                    'pos_order_id',
+                    $orderId
+                )
+                ->where(
+                    'status',
+                    'paid'
+                )
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+        if ($payments->isEmpty()) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' =>
+                    'No se encontraron anticipos pagados.',
+            ];
+        }
+
+        $refundTotal =
+            round(
+                (float) $payments->sum(
+                    'amount'
+                ),
+                2
+            );
+
+        if ($refundTotal <= 0.009) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' =>
+                    'El total a devolver debe ser mayor a cero.',
+            ];
+        }
+
+        /*
+         * La devolución pertenece a la sesión que físicamente
+         * entrega el dinero al cliente.
+         */
+        $cancellingSessionId =
+            (int) $request->input(
+                'cancelling_session_id',
+                0
+            );
+
+        if ($cancellingSessionId <= 0) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' =>
+                    'No se pudo identificar la sesión de caja '
+                    . 'que realizará la devolución.',
+            ];
+        }
+
+        $cancellingSession =
+            \Illuminate\Support\Facades\DB::table(
+                'pos_sessions'
+            )
+                ->where(
+                    'id',
+                    $cancellingSessionId
+                )
+                ->where(
+                    'company_id',
+                    $companyId
+                )
+                ->where(
+                    'pos_point_id',
+                    $posPointId
+                )
+                ->where(
+                    'status',
+                    'open'
+                )
+                ->lockForUpdate()
+                ->first();
+
+        if (! $cancellingSession) {
+            return [
+                'ok' => false,
+                'status' => 422,
+                'message' =>
+                    'La devolución requiere una sesión abierta '
+                    . 'del mismo PDV y empresa.',
+            ];
+        }
+
+        $now = now();
+
+        /*
+         * Número independiente de devoluciones de anticipos.
+         */
+        $prefix =
+            'ANT-DEV-'
+            . $now->format('Ymd')
+            . '-';
+
+        $lastNumber =
+            \Illuminate\Support\Facades\DB::table(
+                'pos_order_refunds'
+            )
+                ->where(
+                    'number',
+                    'like',
+                    $prefix . '%'
+                )
+                ->orderByDesc('number')
+                ->lockForUpdate()
+                ->value('number');
+
+        $next = 1;
+
+        if (
+            $lastNumber
+            && preg_match(
+                '/-(\d+)$/',
+                (string) $lastNumber,
+                $matches
+            )
+        ) {
+            $next =
+                ((int) $matches[1]) + 1;
+        }
+
+        $refundNumber =
+            $prefix
+            . str_pad(
+                (string) $next,
+                5,
+                '0',
+                STR_PAD_LEFT
+            );
+
+        $refundMetadata = [
+            'source' =>
+                'pos_pending_advance_cancel',
+            'inventory_return_status' =>
+                'not_applicable_no_stock_output',
+            'original_order_number' =>
+                (string) (
+                    $orderRow->number
+                    ?? ''
+                ),
+            'original_order_status' =>
+                (string) (
+                    $orderRow->status
+                    ?? ''
+                ),
+            'original_order_total' =>
+                round(
+                    (float) (
+                        $orderRow->total
+                        ?? 0
+                    ),
+                    2
+                ),
+            'advance_refund_total' =>
+                $refundTotal,
+            'refund_session_id' =>
+                (int) $cancellingSession->id,
+            'refund_pos_point_id' =>
+                $posPointId,
+            'no_inventory_movement' => true,
+        ];
+
+        $refundInsert = [
+            'company_id' =>
+                $companyId,
+            'pos_order_id' =>
+                $orderId,
+            'pos_session_id' =>
+                (int) $cancellingSession->id,
+            'pos_point_id' =>
+                $posPointId,
+            'customer_id' =>
+                $orderRow->customer_id
+                ?? null,
+            'number' =>
+                $refundNumber,
+            'type' =>
+                'advance_cancel',
+            'status' =>
+                'done',
+            'reason' =>
+                $reason,
+            'subtotal' =>
+                0,
+            'tax_total' =>
+                0,
+            'total' =>
+                $refundTotal,
+            'payment_total' =>
+                $refundTotal,
+            'stock_movement_id' =>
+                null,
+            'created_by_user_id' =>
+                auth()->id(),
+            'refunded_at' =>
+                $now,
+            'metadata' =>
+                json_encode(
+                    $refundMetadata,
+                    JSON_UNESCAPED_UNICODE
+                    | JSON_UNESCAPED_SLASHES
+                ),
+            'created_at' =>
+                $now,
+            'updated_at' =>
+                $now,
+        ];
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasColumn(
+                'pos_order_refunds',
+                'accounting_status'
+            )
+        ) {
+            $refundInsert[
+                'accounting_status'
+            ] =
+                'not_applicable';
+        }
+
+        $refundId =
+            \Illuminate\Support\Facades\DB::table(
+                'pos_order_refunds'
+            )->insertGetId(
+                $refundInsert
+            );
+
+        /*
+         * Datos del PDV para Tesorería.
+         */
+        $warehouseId = null;
+        $branchId = null;
+
+        $pos = null;
+
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable(
+                'pos_points'
+            )
+        ) {
+            $pos =
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_points'
+                )
+                    ->where(
+                        'id',
+                        $posPointId
+                    )
+                    ->first();
+
+            if (
+                $pos
+                && ! empty(
+                    $pos->warehouse_id
+                )
+            ) {
+                $warehouseId =
+                    (int) $pos->warehouse_id;
+            }
+        }
+
+        if (
+            $warehouseId
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'warehouses'
+            )
+        ) {
+            $warehouse =
+                \Illuminate\Support\Facades\DB::table(
+                    'warehouses'
+                )
+                    ->where(
+                        'id',
+                        $warehouseId
+                    )
+                    ->first();
+
+            if (
+                $warehouse
+                && ! empty(
+                    $warehouse->branch_id
+                )
+            ) {
+                $branchId =
+                    (int) $warehouse->branch_id;
+            }
+        }
+
+        $cashRefundTotal = 0.0;
+        $refundPaymentIds = [];
+        $cashMovementIds = [];
+        $treasuryMovementIds = [];
+
+        foreach ($payments as $payment) {
+            $amount =
+                round(
+                    (float) (
+                        $payment->amount
+                        ?? 0
+                    ),
+                    2
+                );
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $paymentForm = null;
+
+            if (
+                ! empty(
+                    $payment->payment_form_id
+                )
+                && \Illuminate\Support\Facades\Schema::hasTable(
+                    'payment_forms'
+                )
+            ) {
+                $paymentForm =
+                    \Illuminate\Support\Facades\DB::table(
+                        'payment_forms'
+                    )
+                        ->where(
+                            'id',
+                            (int) $payment->payment_form_id
+                        )
+                        ->first();
+            }
+
+            $paymentLabel =
+                trim(
+                    (string) (
+                        $payment->payment_label
+                        ?? (
+                            $paymentForm->name
+                            ?? 'Pago'
+                        )
+                    )
+                );
+
+            $paymentFormCode =
+                trim(
+                    (string) (
+                        $paymentForm->code
+                        ?? ''
+                    )
+                );
+
+            $cashProbe =
+                mb_strtolower(
+                    $paymentLabel
+                    . ' '
+                    . $paymentFormCode
+                );
+
+            $isCash =
+                isset(
+                    $paymentForm->is_cash
+                )
+                    ? (bool) $paymentForm->is_cash
+                    : (
+                        str_contains(
+                            $cashProbe,
+                            'efectivo'
+                        )
+                        || str_contains(
+                            $cashProbe,
+                            'cash'
+                        )
+                        || $paymentFormCode === '01'
+                    );
+
+            $refundPaymentMetadata = [
+                'source' =>
+                    'pending_advance_cancel',
+                'source_payment_id' =>
+                    (int) $payment->id,
+                'source_payment_status' =>
+                    (string) (
+                        $payment->status
+                        ?? ''
+                    ),
+                'source_payment_session_id' =>
+                    ! empty(
+                        $payment->pos_session_id
+                    )
+                        ? (int)
+                            $payment->pos_session_id
+                        : null,
+                'refund_session_id' =>
+                    (int) $cancellingSession->id,
+                'refund_kind' =>
+                    'advance_cancel',
+                'is_cash' =>
+                    $isCash,
+            ];
+
+            $refundPaymentId =
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_order_refund_payments'
+                )->insertGetId([
+                    'pos_order_refund_id' =>
+                        $refundId,
+                    'pos_order_id' =>
+                        $orderId,
+                    'payment_form_id' =>
+                        $payment->payment_form_id
+                        ?? null,
+                    'payment_label' =>
+                        $paymentLabel,
+                    'amount' =>
+                        $amount,
+                    'status' =>
+                        'refunded',
+                    'metadata' =>
+                        json_encode(
+                            $refundPaymentMetadata,
+                            JSON_UNESCAPED_UNICODE
+                            | JSON_UNESCAPED_SLASHES
+                        ),
+                    'created_at' =>
+                        $now,
+                    'updated_at' =>
+                        $now,
+                ]);
+
+            $refundPaymentIds[] =
+                (int) $refundPaymentId;
+
+            /*
+             * Sólo efectivo sale físicamente de la caja.
+             */
+            if (! $isCash) {
+                continue;
+            }
+
+            $cashRefundTotal =
+                round(
+                    $cashRefundTotal
+                    + $amount,
+                    2
+                );
+
+            /*
+             * Caja PDV usada por el cobro original.
+             * Preferimos treasury_account_id del pago.
+             */
+            $treasuryAccount = null;
+
+            if (
+                ! empty(
+                    $payment->treasury_account_id
+                )
+            ) {
+                $treasuryAccount =
+                    \Illuminate\Support\Facades\DB::table(
+                        'treasury_accounts'
+                    )
+                        ->where(
+                            'id',
+                            (int)
+                                $payment
+                                    ->treasury_account_id
+                        )
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
+                        ->where(
+                            'is_active',
+                            true
+                        )
+                        ->lockForUpdate()
+                        ->first();
+            }
+
+            if (! $treasuryAccount) {
+                $treasuryAccount =
+                    \Illuminate\Support\Facades\DB::table(
+                        'treasury_accounts'
+                    )
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
+                        ->where(
+                            'pos_point_id',
+                            $posPointId
+                        )
+                        ->where(
+                            'cash_scope',
+                            'pdv'
+                        )
+                        ->where(
+                            'is_active',
+                            true
+                        )
+                        ->lockForUpdate()
+                        ->first();
+            }
+
+            if (! $treasuryAccount) {
+                throw new \RuntimeException(
+                    'No existe una Caja PDV activa '
+                    . 'para devolver el efectivo.'
+                );
+            }
+
+            /*
+             * cash_out del día de la devolución.
+             *
+             * Este registro es el que reduce el efectivo esperado
+             * del corte de la sesión.
+             */
+            $cashPrefix =
+                'DEV-EF-'
+                . $now->format('Ymd')
+                . '-';
+
+            $lastCashNumber =
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_cash_movements'
+                )
+                    ->where(
+                        'number',
+                        'like',
+                        $cashPrefix . '%'
+                    )
+                    ->orderByDesc('number')
+                    ->lockForUpdate()
+                    ->value('number');
+
+            $cashNext = 1;
+
+            if (
+                $lastCashNumber
+                && preg_match(
+                    '/-(\d+)$/',
+                    (string) $lastCashNumber,
+                    $cashMatches
+                )
+            ) {
+                $cashNext =
+                    ((int) $cashMatches[1])
+                    + 1;
+            }
+
+            $cashNumber =
+                $cashPrefix
+                . str_pad(
+                    (string) $cashNext,
+                    5,
+                    '0',
+                    STR_PAD_LEFT
+                );
+
+            $user =
+                auth()->user();
+
+            $cashMovementId =
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_cash_movements'
+                )->insertGetId([
+                    'company_id' =>
+                        $companyId,
+                    'pos_point_id' =>
+                        $posPointId,
+                    'pos_session_id' =>
+                        (int) $cancellingSession->id,
+                    'number' =>
+                        $cashNumber,
+                    'type' =>
+                        'cash_out',
+                    'amount' =>
+                        $amount,
+                    'reason' =>
+                        'Devolución anticipo apartado '
+                        . (
+                            $orderRow->number
+                            ?? ('#' . $orderId)
+                        ),
+                    'notes' =>
+                        'Pago original #'
+                        . (int) $payment->id
+                        . '. Motivo: '
+                        . $reason,
+                    'performed_by_user_id' =>
+                        auth()->id(),
+                    'performed_by_name' =>
+                        $user->name
+                        ?? $user->email
+                        ?? (
+                            'Usuario #'
+                            . auth()->id()
+                        ),
+                    'supervisor_name' =>
+                        null,
+                    'movement_at' =>
+                        $now,
+                    'metadata' =>
+                        json_encode([
+                            'source' =>
+                                'pos_advance_refund',
+                            'pos_order_id' =>
+                                $orderId,
+                            'pos_order_number' =>
+                                (string) (
+                                    $orderRow->number
+                                    ?? ''
+                                ),
+                            'pos_order_refund_id' =>
+                                $refundId,
+                            'pos_order_refund_payment_id' =>
+                                $refundPaymentId,
+                            'source_payment_id' =>
+                                (int) $payment->id,
+                            'refund_session_id' =>
+                                (int)
+                                    $cancellingSession->id,
+                            'automatic_customer_refund' =>
+                                true,
+                        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'created_at' =>
+                        $now,
+                    'updated_at' =>
+                        $now,
+                ]);
+
+            /*
+             * Tesorería:
+             * salida real de Caja PDV al cliente.
+             *
+             * NO es transferencia a caja sucursal, por eso no usamos
+             * CashTransferService.
+             */
+            $treasuryMovement = [
+                'company_id' =>
+                    $companyId,
+                'treasury_account_id' =>
+                    (int) $treasuryAccount->id,
+                'payment_form_id' =>
+                    $payment->payment_form_id
+                    ?? null,
+                'type' =>
+                    'outflow',
+                'source_type' =>
+                    'pos_order_refund_payment',
+                'source_id' =>
+                    (int) $refundPaymentId,
+                'movement_date' =>
+                    $now->toDateString(),
+                'amount' =>
+                    $amount,
+                'currency_code' =>
+                    $treasuryAccount->currency_code
+                    ?: (
+                        $orderRow->currency_code
+                        ?? 'MXN'
+                    ),
+                'reference' =>
+                    (string) (
+                        $orderRow->number
+                        ?? ('POS-' . $orderId)
+                    ),
+                'description' =>
+                    'Devolución efectivo anticipo POS '
+                    . (
+                        $orderRow->number
+                        ?? ('#' . $orderId)
+                    ),
+                'status' =>
+                    'posted',
+                'posted_at' =>
+                    $now,
+                'created_by_user_id' =>
+                    auth()->id(),
+                'metadata' =>
+                    json_encode([
+                        'source' =>
+                            'pos_advance_refund',
+                        'pos_order_id' =>
+                            $orderId,
+                        'pos_order_refund_id' =>
+                            $refundId,
+                        'pos_order_refund_payment_id' =>
+                            $refundPaymentId,
+                        'source_payment_id' =>
+                            (int) $payment->id,
+                        'pos_session_id' =>
+                            (int)
+                                $cancellingSession->id,
+                        'pos_point_id' =>
+                            $posPointId,
+                        'cash_out_movement_id' =>
+                            $cashMovementId,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at' =>
+                    $now,
+                'updated_at' =>
+                    $now,
+            ];
+
+            foreach ([
+                'pos_cash_movement_id' =>
+                    $cashMovementId,
+                'pos_order_payment_id' =>
+                    (int) $payment->id,
+                'pos_session_id' =>
+                    (int) $cancellingSession->id,
+                'pos_point_id' =>
+                    $posPointId,
+                'branch_id' =>
+                    $branchId,
+                'warehouse_id' =>
+                    $warehouseId,
+            ] as $column => $value) {
+                if (
+                    \Illuminate\Support\Facades\Schema::hasColumn(
+                        'treasury_movements',
+                        $column
+                    )
+                ) {
+                    $treasuryMovement[
+                        $column
+                    ] =
+                        $value;
+                }
+            }
+
+            $treasuryMovementId =
+                \Illuminate\Support\Facades\DB::table(
+                    'treasury_movements'
+                )->insertGetId(
+                    $treasuryMovement
+                );
+
+            \Illuminate\Support\Facades\DB::table(
+                'treasury_accounts'
+            )
+                ->where(
+                    'id',
+                    (int) $treasuryAccount->id
+                )
+                ->decrement(
+                    'current_balance',
+                    $amount,
+                    [
+                        'updated_at' =>
+                            $now,
+                    ]
+                );
+
+            \Illuminate\Support\Facades\DB::table(
+                'pos_cash_movements'
+            )
+                ->where(
+                    'id',
+                    $cashMovementId
+                )
+                ->update([
+                    'treasury_movement_id' =>
+                        $treasuryMovementId,
+                    'treasury_status' =>
+                        'posted',
+                    'updated_at' =>
+                        $now,
+                ]);
+
+            /*
+             * La tabla refund_payments no tiene FK directa a
+             * Tesorería, así que guardamos los IDs en metadata.
+             */
+            $refundPaymentMetadata[
+                'pos_cash_movement_id'
+            ] =
+                $cashMovementId;
+
+            $refundPaymentMetadata[
+                'treasury_movement_id'
+            ] =
+                $treasuryMovementId;
+
+            $refundPaymentMetadata[
+                'treasury_account_id'
+            ] =
+                (int) $treasuryAccount->id;
+
+            \Illuminate\Support\Facades\DB::table(
+                'pos_order_refund_payments'
+            )
+                ->where(
+                    'id',
+                    $refundPaymentId
+                )
+                ->update([
+                    'metadata' =>
+                        json_encode(
+                            $refundPaymentMetadata,
+                            JSON_UNESCAPED_UNICODE
+                            | JSON_UNESCAPED_SLASHES
+                        ),
+                    'updated_at' =>
+                        $now,
+                ]);
+
+            $cashMovementIds[] =
+                (int) $cashMovementId;
+
+            $treasuryMovementIds[] =
+                (int) $treasuryMovementId;
+        }
+
+        $refundMetadata[
+            'refund_payment_ids'
+        ] =
+            $refundPaymentIds;
+
+        $refundMetadata[
+            'cash_refund_total'
+        ] =
+            round(
+                $cashRefundTotal,
+                2
+            );
+
+        $refundMetadata[
+            'cash_movement_ids'
+        ] =
+            $cashMovementIds;
+
+        $refundMetadata[
+            'treasury_movement_ids'
+        ] =
+            $treasuryMovementIds;
+
+        \Illuminate\Support\Facades\DB::table(
+            'pos_order_refunds'
+        )
+            ->where(
+                'id',
+                $refundId
+            )
+            ->update([
+                'metadata' =>
+                    json_encode(
+                        $refundMetadata,
+                        JSON_UNESCAPED_UNICODE
+                        | JSON_UNESCAPED_SLASHES
+                    ),
+                'updated_at' =>
+                    $now,
+            ]);
+
+        return [
+            'ok' => true,
+            'refund_id' =>
+                (int) $refundId,
+            'refund_number' =>
+                $refundNumber,
+            'refund_total' =>
+                $refundTotal,
+            'cash_refund_total' =>
+                round(
+                    $cashRefundTotal,
+                    2
+                ),
+            'refund_payment_ids' =>
+                $refundPaymentIds,
+            'cash_movement_ids' =>
+                $cashMovementIds,
+            'treasury_movement_ids' =>
+                $treasuryMovementIds,
+        ];
+    }
+
 
     // V5_53_0C_pos_cash_change_dev
     public function payOrder(\Illuminate\Http\Request $request, int $order)
@@ -5764,7 +7053,14 @@ return response()->json([
             ]];
         }
 
-        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $payments) {
+                    /*
+             * BEXIA_V5836G5H5C1_CAPTURE_REQUEST
+             *
+             * payOrder usa $request dentro de la transaccion
+             * para resolver paying_session_id. El Request debe
+             * capturarse explicitamente en el closure.
+             */
+            $result = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $payments, $request) {
             $orderRow = \Illuminate\Support\Facades\DB::table('pos_orders')
                 ->where('id', $order)
                 ->lockForUpdate()
@@ -5786,8 +7082,212 @@ return response()->json([
                 ];
             }
 
-            $requestedTotal = $this->v5481jApplyPendingPaymentAdjustments($orderRow, request());
-            $total = round((float) $requestedTotal, 2);
+            /*
+             * BEXIA_V5836G5H4B_RESOLVE_PAYING_SESSION
+             *
+             * El ticket puede venir de una sesión anterior.
+             * El pago pertenece a la sesión actualmente
+             * utilizada para cobrarlo.
+             */
+            $requestedPayingSessionId = (int)
+                $request->input(
+                    'paying_session_id',
+                    0
+                );
+
+            $payingSessionId = null;
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasTable(
+                    'pos_sessions'
+                )
+            ) {
+                if ($requestedPayingSessionId > 0) {
+                    $payingSession = \Illuminate\Support\Facades\DB::table(
+                        'pos_sessions'
+                    )
+                        ->where(
+                            'id',
+                            $requestedPayingSessionId
+                        )
+                        ->where(
+                            'pos_point_id',
+                            (int) ($orderRow->pos_point_id ?? 0)
+                        )
+                        ->where(
+                            'company_id',
+                            (int) ($orderRow->company_id ?? 0)
+                        )
+                        ->where('status', 'open')
+                        ->first();
+
+                    if (! $payingSession) {
+                        return [
+                            'ok' => false,
+                            'status' => 422,
+                            'message' =>
+                                'La sesión usada para cobrar '
+                                . 'no está abierta o no corresponde '
+                                . 'a este PDV.',
+                        ];
+                    }
+
+                    $payingSessionId =
+                        (int) $payingSession->id;
+                } else {
+                    /*
+                     * Compatibilidad con flujos antiguos:
+                     * primero conservar la sesión original
+                     * si todavía sigue abierta.
+                     */
+                    $originalOpenSession =
+                        \Illuminate\Support\Facades\DB::table(
+                            'pos_sessions'
+                        )
+                            ->where(
+                                'id',
+                                (int) (
+                                    $orderRow->pos_session_id
+                                    ?? 0
+                                )
+                            )
+                            ->where('status', 'open')
+                            ->first();
+
+                    if ($originalOpenSession) {
+                        $payingSessionId =
+                            (int) $originalOpenSession->id;
+                    } else {
+                        $openSessions =
+                            \Illuminate\Support\Facades\DB::table(
+                                'pos_sessions'
+                            )
+                                ->where(
+                                    'pos_point_id',
+                                    (int) (
+                                        $orderRow->pos_point_id
+                                        ?? 0
+                                    )
+                                )
+                                ->where(
+                                    'company_id',
+                                    (int) (
+                                        $orderRow->company_id
+                                        ?? 0
+                                    )
+                                )
+                                ->where('status', 'open')
+                                ->orderByDesc('opened_at')
+                                ->orderByDesc('id')
+                                ->limit(2)
+                                ->get();
+
+                        if ($openSessions->count() === 1) {
+                            $payingSessionId =
+                                (int)
+                                    $openSessions
+                                        ->first()
+                                        ->id;
+                        }
+                    }
+                }
+            }
+
+            if (! $payingSessionId) {
+                $payingSessionId =
+                    ! empty($orderRow->pos_session_id)
+                        ? (int) $orderRow->pos_session_id
+                        : null;
+            }
+
+            /*
+             * BEXIA_V5836G5H2_CUMULATIVE_ADVANCES
+             *
+             * Los pagos reales ya registrados son acumulativos.
+             * Nunca se reemplazan al recibir un nuevo anticipo.
+             */
+            $existingPaidTotal = round(
+                (float) \Illuminate\Support\Facades\DB::table(
+                    'pos_order_payments'
+                )
+                    ->where(
+                        'pos_order_id',
+                        (int) $orderRow->id
+                    )
+                    ->where('status', 'paid')
+                    ->sum('amount'),
+                2
+            );
+
+            $existingPaidCount = (int)
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_order_payments'
+                )
+                    ->where(
+                        'pos_order_id',
+                        (int) $orderRow->id
+                    )
+                    ->where('status', 'paid')
+                    ->count();
+
+            /*
+             * Antes del primer anticipo todavía pueden persistirse
+             * ajustes del carrito. Después del primero el ticket
+             * queda económicamente bloqueado.
+             */
+            $requestItems = collect(
+                request()->input('items', [])
+            )
+                ->filter(fn ($item) => is_array($item))
+                ->values();
+
+            $hasEconomicAdjustments =
+                $requestItems->isNotEmpty()
+                || request()->input('discount', null) !== null;
+
+            if (
+                $existingPaidTotal > 0.009
+                && $hasEconomicAdjustments
+            ) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' =>
+                        'Este apartado ya tiene anticipos. '
+                        . 'No se pueden cambiar sus productos, '
+                        . 'cantidades, precios o descuentos.',
+                ];
+            }
+
+            $requestedTotal = $existingPaidTotal > 0.009
+                ? (float) ($orderRow->total ?? 0)
+                : $this->v5481jApplyPendingPaymentAdjustments(
+                    $orderRow,
+                    request()
+                );
+
+            $total = round(
+                (float) $requestedTotal,
+                2
+            );
+
+            $remainingBefore = round(
+                max(
+                    0,
+                    $total - $existingPaidTotal
+                ),
+                2
+            );
+
+            if ($remainingBefore <= 0.009) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'message' =>
+                        'El ticket ya está cubierto por los pagos '
+                        . 'registrados.',
+                ];
+            }
 
             $normalized = [];
             $tenderedSum = 0.0;
@@ -5878,21 +7378,26 @@ return response()->json([
 
             $tenderedSum = round($tenderedSum, 2);
 
-            if ($tenderedSum + 0.01 < $total) {
-                return [
-                    'ok' => false,
-                    'status' => 422,
-                    'message' => 'El pago recibido es menor al total del ticket. Total: $' . number_format($total, 2) . ' / Recibido: $' . number_format($tenderedSum, 2),
-                ];
-            }
-
-            $overage = round($tenderedSum - $total, 2);
+            /*
+             * Un importe menor al saldo es un anticipo válido.
+             * Sólo existe excedente si supera el SALDO,
+             * no el total original del ticket.
+             */
+            $overage = round(
+                $tenderedSum - $remainingBefore,
+                2
+            );
 
             if ($overage > 0.01 && empty($cashIndexes)) {
                 return [
                     'ok' => false,
                     'status' => 422,
-                    'message' => 'Solo el pago en efectivo puede ser mayor al total para calcular cambio. Total: $' . number_format($total, 2) . ' / Recibido: $' . number_format($tenderedSum, 2),
+                    'message' =>
+                        'Solo el pago en efectivo puede ser mayor '
+                        . 'al saldo para calcular cambio. Saldo: $'
+                        . number_format($remainingBefore, 2)
+                        . ' / Recibido: $'
+                        . number_format($tenderedSum, 2),
                 ];
             }
 
@@ -5920,20 +7425,45 @@ return response()->json([
 
             $appliedSum = round($appliedSum, 2);
 
-            if (abs($appliedSum - $total) > 0.01) {
+            if (
+                $appliedSum <= 0
+                || $appliedSum - $remainingBefore > 0.01
+            ) {
                 return [
                     'ok' => false,
                     'status' => 422,
-                    'message' => 'La suma aplicada debe ser igual al total del ticket. Total: $' . number_format($total, 2) . ' / Aplicado: $' . number_format($appliedSum, 2),
+                    'message' =>
+                        'El importe aplicado no puede ser mayor '
+                        . 'al saldo del apartado. Saldo: $'
+                        . number_format($remainingBefore, 2)
+                        . ' / Aplicado: $'
+                        . number_format($appliedSum, 2),
                 ];
             }
+
+            $cumulativePaid = round(
+                $existingPaidTotal + $appliedSum,
+                2
+            );
+
+            $remainingAfter = round(
+                max(
+                    0,
+                    $total - $cumulativePaid
+                ),
+                2
+            );
+
+            $fullyPaid =
+                $remainingAfter <= 0.01;
 
             $cashReceivedTotal = round(array_sum(array_map(fn ($payment) => (float) ($payment['cash_received'] ?? 0), $normalized)), 2);
             $changeTotal = round(array_sum(array_map(fn ($payment) => (float) ($payment['change_amount'] ?? 0), $normalized)), 2);
 
-            \Illuminate\Support\Facades\DB::table('pos_order_payments')
-                ->where('pos_order_id', $orderRow->id)
-                ->delete();
+            /*
+             * G5H2: no borrar pagos históricos.
+             * Cada anticipo queda como una fila independiente.
+             */
 
             foreach ($normalized as $paymentIndex => $payment) {
                 $paymentId = \Illuminate\Support\Facades\DB::table('pos_order_payments')->insertGetId([
@@ -5944,8 +7474,29 @@ return response()->json([
                     'status' => 'paid',
                     'metadata' => json_encode([
                         'source' => 'pos_frontend',
+                        'payment_kind' =>
+                            $fullyPaid
+                                ? 'settlement'
+                                : 'advance',
+                        'payment_sequence' =>
+                            $existingPaidCount
+                            + $paymentIndex
+                            + 1,
+                        'order_total' => $total,
+                        'paid_before' =>
+                            $existingPaidTotal,
+                        'balance_before' =>
+                            $remainingBefore,
+                        'paid_after_batch' =>
+                            $cumulativePaid,
+                        'balance_after_batch' =>
+                            $remainingAfter,
                         'paid_by_user_id' => auth()->id(),
-                        'session_id' => $orderRow->pos_session_id ?? null,
+                        'session_id' =>
+                            $payingSessionId,
+                        'order_session_id' =>
+                            $orderRow->pos_session_id
+                            ?? null,
                         'payment_form_code' => $payment['payment_form_code'],
                         'is_cash' => $payment['is_cash'],
                         'is_credit' => $payment['is_credit'],
@@ -5959,19 +7510,45 @@ return response()->json([
                 ]);
 
                 /*
+                 * BEXIA_V5836G5H4B_STORE_PAYMENT_SESSION
+                 */
+                if (
+                    $payingSessionId
+                    && \Illuminate\Support\Facades\Schema::hasColumn(
+                        'pos_order_payments',
+                        'pos_session_id'
+                    )
+                ) {
+                    \Illuminate\Support\Facades\DB::table(
+                        'pos_order_payments'
+                    )
+                        ->where('id', $paymentId)
+                        ->update([
+                            'pos_session_id' =>
+                                $payingSessionId,
+                        ]);
+                }
+
+                /*
                  * V5.69.0d5:
                  * Si el pago es efectivo, se registra inmediatamente una entrada
                  * posted en Tesoreria contra la Caja PDV asociada al punto de venta.
                  */
                 if ((bool) ($payment['is_cash'] ?? false)) {
-                    $treasuryResult = $this->v5690d5PostCashPaymentToTreasury($orderRow, (int) $paymentId, $payment);
+                    $treasuryResult = $this->v5690d5PostCashPaymentToTreasury(
+                        $orderRow,
+                        (int) $paymentId,
+                        $payment,
+                        $payingSessionId
+                    );
 
                     if (! ($treasuryResult['ok'] ?? false)) {
-                        return [
-                            'ok' => false,
-                            'status' => 422,
-                            'message' => $treasuryResult['message'] ?? 'No se pudo registrar el efectivo en Caja PDV.',
-                        ];
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'payments' => [
+                                $treasuryResult['message']
+                                ?? 'No se pudo registrar el efectivo en Caja PDV.',
+                            ],
+                        ]);
                     }
 
                     $normalized[$paymentIndex]['treasury_account_id'] = $treasuryResult['treasury_account_id'] ?? null;
@@ -6017,17 +7594,55 @@ return response()->json([
                 $metadata['price_list_name'] = $v5498cPriceListName;
             }
 
-            $metadata['paid'] = true;
-            $metadata['payment_count'] = count($normalized);
+            $metadata['paid'] = $fullyPaid;
+            $metadata['has_advances'] =
+                $cumulativePaid > 0.009;
+            $metadata['payment_count'] =
+                $existingPaidCount
+                + count($normalized);
             $metadata['paid_by_user_id'] = auth()->id();
-            $metadata['payment_tendered_total'] = $tenderedSum;
-            $metadata['payment_applied_total'] = $appliedSum;
-            $metadata['cash_received_total'] = $cashReceivedTotal;
-            $metadata['change_amount_total'] = $changeTotal;
+
+            /*
+             * Totales acumulados del apartado.
+             */
+            $metadata['paid_total'] =
+                $cumulativePaid;
+            $metadata['balance_due'] =
+                $remainingAfter;
+
+            /*
+             * Datos del último evento de pago.
+             */
+            $metadata['last_payment_tendered_total'] =
+                $tenderedSum;
+            $metadata['last_payment_applied_total'] =
+                $appliedSum;
+            $metadata['last_cash_received_total'] =
+                $cashReceivedTotal;
+            $metadata['last_change_amount_total'] =
+                $changeTotal;
+
+            /*
+             * Mantener claves históricas para compatibilidad.
+             */
+            $metadata['payment_tendered_total'] =
+                $tenderedSum;
+            $metadata['payment_applied_total'] =
+                $cumulativePaid;
+            $metadata['cash_received_total'] =
+                $cashReceivedTotal;
+            $metadata['change_amount_total'] =
+                $changeTotal;
 
             $v5498cOrderUpdate = [
-                'status' => 'paid',
-                'paid_at' => now(),
+                'status' =>
+                    $fullyPaid
+                        ? 'paid'
+                        : 'pending_payment',
+                'paid_at' =>
+                    $fullyPaid
+                        ? now()
+                        : null,
                 'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'updated_at' => now(),
             ];
@@ -6054,6 +7669,11 @@ return response()->json([
                 'order' => $fresh,
                 'payments' => $normalized,
                 'total' => $total,
+                'paid_before' => $existingPaidTotal,
+                'paid_total' => $cumulativePaid,
+                'balance' => $remainingAfter,
+                'fully_paid' => $fullyPaid,
+                'is_partial' => ! $fullyPaid,
             ];
         });
 
@@ -6064,6 +7684,14 @@ return response()->json([
             ], $result['status'] ?? 500);
         }
 
+
+        /*
+         * BEXIA_V5836G5H2_INVENTORY_ONLY_WHEN_SETTLED
+         *
+         * Un anticipo NO genera salida de inventario.
+         * La reserva continúa activa hasta saldo cero.
+         */
+        if ((bool) ($result['fully_paid'] ?? false)) {
 
         // V5.46.1 inventory poster: generar salida de inventario al cobrar.
         $v5461InventoryResult = app(\App\Support\PosInventoryPoster::class)->postPaidOrder((int) $order);
@@ -6102,16 +7730,32 @@ return response()->json([
                 ]);
             }
 
-return response()->json([
+        }
+
+        return response()->json([
             'ok' => true,
-            'message' => 'Cobro registrado correctamente.',
+            'message' =>
+                ($result['fully_paid'] ?? false)
+                    ? 'Cobro liquidado correctamente.'
+                    : 'Anticipo registrado correctamente.',
             'order_id' => (int) $result['order']->id,
             'number' => (string) $result['order']->number,
             'status' => (string) $result['order']->status,
             'paid_at' => (string) $result['order']->paid_at,
             'total' => $result['total'],
+            'paid_before' => $result['paid_before'],
+            'paid_total' => $result['paid_total'],
+            'balance' => $result['balance'],
+            'fully_paid' => $result['fully_paid'],
+            'is_partial' => $result['is_partial'],
             'payments' => $result['payments'],
-            'print_url' => route('pos.orders.receipt.print', ['order' => $result['order']->id]),
+            'print_url' =>
+                ($result['fully_paid'] ?? false)
+                    ? route(
+                        'pos.orders.receipt.print',
+                        ['order' => $result['order']->id]
+                    )
+                    : null,
         ]);
     }
 
@@ -6914,6 +8558,26 @@ return response()->json([
         ];
 
         if (
+            \Illuminate\Support\Facades\Schema::hasTable(
+                'pos_order_payments'
+            )
+        ) {
+            $selects[] =
+                \Illuminate\Support\Facades\DB::raw(
+                    "(SELECT COALESCE(SUM(padv.amount), 0)
+                      FROM pos_order_payments padv
+                      WHERE padv.pos_order_id = o.id
+                        AND padv.status = 'paid')
+                     as paid_total"
+                );
+        } else {
+            $selects[] =
+                \Illuminate\Support\Facades\DB::raw(
+                    '0 as paid_total'
+                );
+        }
+
+        if (
             \Illuminate\Support\Facades\Schema::hasTable('contacts')
             && \Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'customer_id')
         ) {
@@ -6994,10 +8658,27 @@ return response()->json([
 
         $orderNote = trim((string) ($metadata['order_note'] ?? ''));
 
+        $paidTotal = round(
+            (float) ($row->paid_total ?? 0),
+            2
+        );
+
+        $balance = round(
+            max(
+                0,
+                (float) ($row->total ?? 0)
+                    - $paidTotal
+            ),
+            2
+        );
+
         return [
             'id' => (int) $row->id,
             'number' => (string) ($row->number ?? ''),
             'total' => (float) ($row->total ?? 0),
+            'paid_total' => $paidTotal,
+            'balance' => $balance,
+            'has_advances' => $paidTotal > 0.009,
             'status' => (string) ($row->status ?? 'pending_payment'),
             'status_label' => 'Pendiente de cobro',
             'pos_session_id' => $row->pos_session_id ? (int) $row->pos_session_id : null,
@@ -7320,6 +9001,36 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
         $paymentsTotal = 0.0;
         $paymentsRows = collect();
 
+        /*
+         * BEXIA_V5836G5H4C_SEPARATE_SALES_ADVANCES
+         *
+         * paid_total sigue representando dinero cobrado
+         * por compatibilidad. A partir de H4C exponemos
+         * por separado venta liquidada y anticipos.
+         */
+        $advancePaymentsTotal = 0.0;
+        $outstandingAdvanceTotal = 0.0;
+        $settledSalesTotal = 0.0;
+
+        /*
+         * BEXIA_V5836G5H7C2_STABLE_ADVANCE_REFUND_REPORTING
+         *
+         * refundedTotal:
+         *   Todo el dinero devuelto durante la sesión.
+         *
+         * advanceRefundsTotal:
+         *   Dinero devuelto que provenía de anticipos.
+         *
+         * saleRefundsTotal:
+         *   Devoluciones que sí corresponden a ventas
+         *   liquidadas.
+         */
+        $refundedTotal = 0.0;
+        $advanceRefundsTotal = 0.0;
+        $saleRefundsTotal = 0.0;
+        $netSettledSalesTotal = 0.0;
+        $netCashflowTotal = 0.0;
+
         if ($paymentsTableExists) {
             $paymentColumns = \Illuminate\Support\Facades\Schema::getColumnListing('pos_order_payments');
 
@@ -7359,19 +9070,46 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                     'p.pos_order_id',
                     'p.amount',
                     'p.payment_label',
+                    'p.metadata',
                     'p.created_at',
                     'o.number as order_number',
+                    'o.status as order_status',
                     'o.total as order_total',
                     'o.pos_session_id as order_session_id',
                     'o.employee_id as order_employee_id',
                     'o.created_at as order_created_at',
                 ]);
 
-            $paidOrderIds = $paymentsRows
+            /*
+             * BEXIA_V5836G5H4B_PAID_TICKETS_ONLY
+             *
+             * Todos los pagos entran al dinero cobrado del corte,
+             * incluidos anticipos.
+             *
+             * Pero sólo órdenes realmente status=paid cuentan
+             * como ticket pagado / venta por vendedor.
+             */
+            $ordersWithPaymentIds = $paymentsRows
                 ->pluck('pos_order_id')
                 ->filter()
                 ->unique()
                 ->values();
+
+            $paidOrderIds =
+                $ordersWithPaymentIds->isNotEmpty()
+                    ? \Illuminate\Support\Facades\DB::table(
+                        'pos_orders'
+                    )
+                        ->whereIn(
+                            'id',
+                            $ordersWithPaymentIds->all()
+                        )
+                        ->where('status', 'paid')
+                        ->pluck('id')
+                        ->filter()
+                        ->unique()
+                        ->values()
+                    : collect();
 
             $paymentsByMethod = $paymentsRows
                 ->groupBy(fn ($row) => trim((string) ($row->payment_label ?? '')) !== '' ? trim((string) $row->payment_label) : 'Sin método')
@@ -7385,6 +9123,138 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                 ->all();
 
             $paymentsTotal = round((float) $paymentsRows->sum('amount'), 2);
+
+            if ($paymentsRows->isNotEmpty()) {
+                $v5836g5h4cPaymentOrderIds =
+                    $paymentsRows
+                        ->pluck('pos_order_id')
+                        ->filter()
+                        ->unique()
+                        ->values();
+
+                if ($v5836g5h4cPaymentOrderIds->isNotEmpty()) {
+                    $v5836g5h4cPendingIds =
+                        \Illuminate\Support\Facades\DB::table(
+                            'pos_orders'
+                        )
+                            ->whereIn(
+                                'id',
+                                $v5836g5h4cPaymentOrderIds->all()
+                            )
+                            ->where(
+                                'status',
+                                'pending_payment'
+                            )
+                            ->pluck('id')
+                            ->map(
+                                fn ($id) => (int) $id
+                            )
+                            ->values();
+
+                    if ($v5836g5h4cPendingIds->isNotEmpty()) {
+                        $advancePaymentsTotal = round(
+                            (float)
+                                $paymentsRows
+                                    ->whereIn(
+                                        'pos_order_id',
+                                        $v5836g5h4cPendingIds->all()
+                                    )
+                                    ->sum('amount'),
+                            2
+                        );
+                    }
+                }
+            }
+            /*
+             * BEXIA_V5836G5H7C2_STABLE_ADVANCE_REFUND_REPORTING
+             *
+             * El cálculo H4C anterior representa anticipos que
+             * siguen pendientes AHORA.
+             */
+            $outstandingAdvanceTotal =
+                round(
+                    (float) $advancePaymentsTotal,
+                    2
+                );
+
+            /*
+             * El histórico del corte debe depender de lo que ERA
+             * el pago cuando ocurrió, no del status posterior del
+             * ticket.
+             *
+             * Ejemplo:
+             * - anticipo -> después liquidado
+             * - anticipo -> después cancelado/devuelto
+             *
+             * En ambos casos sigue siendo un anticipo cobrado
+             * históricamente en esta sesión.
+             */
+            $advancePaymentsTotal =
+                round(
+                    (float)
+                        $paymentsRows
+                            ->filter(
+                                function ($row) {
+                                    $metadata = [];
+
+                                    if (
+                                        ! empty(
+                                            $row->metadata
+                                        )
+                                    ) {
+                                        $decoded =
+                                            json_decode(
+                                                (string)
+                                                    $row->metadata,
+                                                true
+                                            );
+
+                                        $metadata =
+                                            is_array($decoded)
+                                                ? $decoded
+                                                : [];
+                                    }
+
+                                    $kind =
+                                        trim(
+                                            strtolower(
+                                                (string) (
+                                                    $metadata[
+                                                        'payment_kind'
+                                                    ]
+                                                    ?? $metadata[
+                                                        'kind'
+                                                    ]
+                                                    ?? ''
+                                                )
+                                            )
+                                        );
+
+                                    if (
+                                        $kind === 'advance'
+                                    ) {
+                                        return true;
+                                    }
+
+                                    /*
+                                     * Fallback para pagos viejos que
+                                     * no tengan metadata H2.
+                                     */
+                                    return
+                                        $kind === ''
+                                        && (
+                                            (string) (
+                                                $row->order_status
+                                                ?? ''
+                                            )
+                                            === 'pending_payment'
+                                        );
+                                }
+                            )
+                            ->sum('amount'),
+                    2
+                );
+
         } else {
             $paidOrdersQuery = (clone $ordersBase)
                 ->where('status', 'paid')
@@ -7428,6 +9298,161 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                     'updated_at',
                 ])))
             : collect();
+
+        /*
+         * Venta liquidada = total completo de tickets
+         * que realmente quedaron pagados.
+         *
+         * No confundir con dinero cobrado: los anticipos
+         * sí entran a caja, pero todavía no son venta.
+         */
+        $settledSalesTotal = round(
+            (float) $paidOrdersCollection->sum('total'),
+            2
+        );
+
+        /*
+         * BEXIA_V5836G5H7C2_STABLE_ADVANCE_REFUND_REPORTING
+         *
+         * Separar:
+         * - devoluciones de ventas
+         * - devoluciones de anticipos
+         *
+         * Sólo las devoluciones de ventas disminuyen
+         * Venta neta liquidada.
+         */
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable(
+                'pos_order_refunds'
+            )
+        ) {
+            $refundQuery =
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_order_refunds'
+                )
+                    ->where(
+                        'pos_session_id',
+                        $sessionId
+                    );
+
+            if (
+                $companyId > 0
+                && \Illuminate\Support\Facades\Schema::hasColumn(
+                    'pos_order_refunds',
+                    'company_id'
+                )
+            ) {
+                $refundQuery->where(
+                    'company_id',
+                    $companyId
+                );
+            }
+
+            if (
+                $posPointId > 0
+                && \Illuminate\Support\Facades\Schema::hasColumn(
+                    'pos_order_refunds',
+                    'pos_point_id'
+                )
+            ) {
+                $refundQuery->where(
+                    'pos_point_id',
+                    $posPointId
+                );
+            }
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn(
+                    'pos_order_refunds',
+                    'status'
+                )
+            ) {
+                $refundQuery->whereNotIn(
+                    'status',
+                    [
+                        'cancelled',
+                        'canceled',
+                        'void',
+                    ]
+                );
+            }
+
+            $refundRows =
+                $refundQuery->get([
+                    'id',
+                    'type',
+                    'payment_total',
+                ]);
+
+            foreach ($refundRows as $refundRow) {
+                $amount =
+                    round(
+                        abs(
+                            (float) (
+                                $refundRow->payment_total
+                                ?? 0
+                            )
+                        ),
+                        2
+                    );
+
+                if ($amount <= 0) {
+                    continue;
+                }
+
+                $refundedTotal =
+                    round(
+                        $refundedTotal
+                        + $amount,
+                        2
+                    );
+
+                $type =
+                    strtolower(
+                        trim(
+                            (string) (
+                                $refundRow->type
+                                ?? ''
+                            )
+                        )
+                    );
+
+                if (
+                    str_contains(
+                        $type,
+                        'advance'
+                    )
+                ) {
+                    $advanceRefundsTotal =
+                        round(
+                            $advanceRefundsTotal
+                            + $amount,
+                            2
+                        );
+                } else {
+                    $saleRefundsTotal =
+                        round(
+                            $saleRefundsTotal
+                            + $amount,
+                            2
+                        );
+                }
+            }
+        }
+
+        $netSettledSalesTotal =
+            round(
+                $settledSalesTotal
+                - $saleRefundsTotal,
+                2
+            );
+
+        $netCashflowTotal =
+            round(
+                $paymentsTotal
+                - $refundedTotal,
+                2
+            );
 
         $sessionEmployeeNames = collect();
 
@@ -7699,6 +9724,28 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                 'created_tickets' => $createdTickets,
                 'paid_tickets' => $paidTickets,
                 'paid_total' => $paymentsTotal,
+                'collected_total' => $paymentsTotal,
+                'settled_sales_total' =>
+                    $settledSalesTotal,
+                'advance_payments_total' =>
+                    $advancePaymentsTotal,
+                'outstanding_advance_total' =>
+                    $outstandingAdvanceTotal,
+                'refunded_total' =>
+                    $refundedTotal,
+                'advance_refunds_total' =>
+                    $advanceRefundsTotal,
+                'sale_refunds_total' =>
+                    $saleRefundsTotal,
+                'net_settled_sales_total' =>
+                    $netSettledSalesTotal,
+                /*
+                 * Alias para las vistas que ya usan net_total.
+                 */
+                'net_total' =>
+                    $netSettledSalesTotal,
+                'net_cashflow_total' =>
+                    $netCashflowTotal,
                 'pending_tickets_created_in_session' => $createdPendingTickets,
                 'pending_total_created_in_session' => $createdPendingTotal,
                 'active_reservations' => $activeReservations,
@@ -7759,7 +9806,12 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
 
 
 
-    private function v5690d5PostCashPaymentToTreasury(object $orderRow, int $paymentId, array $payment): array
+    private function v5690d5PostCashPaymentToTreasury(
+        object $orderRow,
+        int $paymentId,
+        array $payment,
+        ?int $payingSessionId = null
+    ): array
     {
         if ($paymentId <= 0) {
             return ['ok' => false, 'message' => 'No se pudo identificar el pago POS.'];
@@ -7771,7 +9823,13 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
 
         $companyId = (int) ($orderRow->company_id ?? 0);
         $posPointId = (int) ($orderRow->pos_point_id ?? 0);
-        $posSessionId = ! empty($orderRow->pos_session_id) ? (int) $orderRow->pos_session_id : null;
+        $posSessionId =
+            $payingSessionId
+            ?: (
+                ! empty($orderRow->pos_session_id)
+                    ? (int) $orderRow->pos_session_id
+                    : null
+            );
         $amount = round((float) ($payment['amount'] ?? 0), 2);
 
         if ($companyId <= 0) {

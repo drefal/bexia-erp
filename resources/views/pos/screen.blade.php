@@ -4565,8 +4565,11 @@ window.BEXIA_POS_PENDING_TICKET_PERMISSIONS = {
     <div class="v5505d-cancel-modal" role="dialog" aria-modal="true" aria-labelledby="v5505d-cancel-title">
         <div class="v5505d-cancel-header">
             <h2 id="v5505d-cancel-title" class="v5505d-cancel-title">Cancelar ticket pendiente</h2>
-            <div class="v5505d-cancel-subtitle">
-                Esta acción marcará el ticket como cancelado. No genera devolución porque el ticket aún no fue cobrado.
+            <div
+                id="v5836g5h7b1-cancel-subtitle"
+                class="v5505d-cancel-subtitle"
+            >
+                Esta acción marcará el ticket como cancelado.
             </div>
         </div>
 
@@ -4717,8 +4720,47 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        const v5836g5h7b1HasAdvances =
+            Number(
+                selectedOrder.paid_total
+                || 0
+            ) > 0.009;
+
         if (v5505dCancelTicket) {
-            v5505dCancelTicket.textContent = 'Ticket: ' + (selectedOrder.number || ('#' + selectedOrder.id));
+            let v5836g5h7b1TicketText =
+                'Ticket: '
+                + (
+                    selectedOrder.number
+                    || ('#' + selectedOrder.id)
+                );
+
+            if (v5836g5h7b1HasAdvances) {
+                v5836g5h7b1TicketText +=
+                    ' · Anticipado: '
+                    + money(
+                        selectedOrder.paid_total
+                        || 0
+                    );
+            }
+
+            v5505dCancelTicket.textContent =
+                v5836g5h7b1TicketText;
+        }
+
+        if (v5836g5h7b1CancelSubtitle) {
+            v5836g5h7b1CancelSubtitle.textContent =
+                v5836g5h7b1HasAdvances
+                    ? (
+                        'Se devolverán todos los anticipos por '
+                        + 'su método original. El efectivo saldrá '
+                        + 'de esta caja hoy y después se liberará '
+                        + 'la mercancía reservada.'
+                    )
+                    : (
+                        'Esta acción marcará el ticket como '
+                        + 'cancelado. No existe dinero cobrado '
+                        + 'por devolver.'
+                    );
         }
 
         if (v5505dCancelReason) {
@@ -4731,7 +4773,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (v5505dCancelConfirm) {
             v5505dCancelConfirm.disabled = false;
-            v5505dCancelConfirm.textContent = 'Sí, cancelar ticket';
+            v5505dCancelConfirm.textContent =
+                v5836g5h7b1HasAdvances
+                    ? 'Devolver anticipo y cancelar'
+                    : 'Sí, cancelar ticket';
         }
 
         if (v5505dCancelModal) {
@@ -4794,9 +4839,27 @@ document.addEventListener('DOMContentLoaded', function () {
                 ? selectedLines.slice()
                 : [];
 
-            await v5505aPostJson('/pos/orders/' + selectedOrder.id + '/cancel-pending', {
-                reason: reason
-            });
+            const v5836g5h7b1HasAdvances =
+                Number(
+                    selectedOrder.paid_total
+                    || 0
+                ) > 0.009;
+
+            await v5505aPostJson(
+                '/pos/orders/'
+                    + selectedOrder.id
+                    + '/cancel-pending',
+                {
+                    reason: reason,
+                    refund_advances:
+                        v5836g5h7b1HasAdvances,
+                    cancelling_session_id:
+                        Number(
+                            sessionId()
+                            || 0
+                        ),
+                }
+            );
 
             /*
              * BEXIA_V5836G5D1_REFRESH_AFTER_PENDING_CANCEL
@@ -4819,7 +4882,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
             v5505dCloseCancelModal();
 
-            showPosNotice('Ticket pendiente cancelado: ' + cancelledNumber, 'info');
+            showPosNotice(
+                v5836g5h7b1HasAdvances
+                    ? (
+                        'Anticipo devuelto y apartado cancelado: '
+                        + cancelledNumber
+                    )
+                    : (
+                        'Ticket pendiente cancelado: '
+                        + cancelledNumber
+                    ),
+                'info'
+            );
 
             selectedOrder = null;
             selectedLines = [];
@@ -4855,6 +4929,15 @@ document.addEventListener('DOMContentLoaded', function () {
     const v5505aCancelBtn = document.getElementById('v5505a-cancel-ticket');
     const v5505dCancelModal = document.getElementById('v5505d-cancel-pending-modal');
     const v5505dCancelTicket = document.getElementById('v5505d-cancel-ticket');
+
+    /*
+     * BEXIA_V5836G5H7B1_REFUND_ADVANCE_CANCEL
+     */
+    const v5836g5h7b1CancelSubtitle =
+        document.getElementById(
+            'v5836g5h7b1-cancel-subtitle'
+        );
+
     const v5505dCancelReason = document.getElementById('v5505d-cancel-reason');
     const v5505dCancelError = document.getElementById('v5505d-cancel-error');
     const v5505dCancelClose = document.getElementById('v5505d-cancel-close');
@@ -4875,6 +4958,598 @@ document.addEventListener('DOMContentLoaded', function () {
     let selectedOrder = null;
     let selectedLines = [];
 
+    /*
+     * BEXIA_V5836G5H3_REGISTER_ADVANCE_BUTTON
+     * Modal ligero para registrar anticipos directamente
+     * desde Tickets pendientes.
+     */
+    function v5836g5h3EnsureAdvanceModal() {
+        let backdrop = document.getElementById(
+            'v5836g5h3-advance-backdrop'
+        );
+
+        if (backdrop) {
+            return backdrop;
+        }
+
+        backdrop = document.createElement('div');
+        backdrop.id =
+            'v5836g5h3-advance-backdrop';
+
+        backdrop.style.cssText =
+            'position:fixed;inset:0;z-index:2147483100;' +
+            'display:none;align-items:center;' +
+            'justify-content:center;padding:20px;' +
+            'background:rgba(15,23,42,.58);';
+
+        backdrop.innerHTML =
+            '<div style="' +
+                'width:min(500px,94vw);' +
+                'background:#fff;border-radius:20px;' +
+                'box-shadow:0 24px 80px rgba(15,23,42,.35);' +
+                'overflow:hidden;' +
+            '">' +
+                '<div style="' +
+                    'padding:18px 20px 14px;' +
+                    'border-bottom:1px solid #e2e8f0;' +
+                    'display:flex;align-items:center;' +
+                    'justify-content:space-between;gap:12px;' +
+                '">' +
+                    '<div>' +
+                        '<div style="' +
+                            'font-size:20px;font-weight:950;' +
+                            'color:#0f172a;' +
+                        '">Registrar anticipo</div>' +
+                        '<div id="v5836g5h3-advance-ticket" ' +
+                            'style="font-size:12px;' +
+                            'font-weight:800;color:#64748b;' +
+                            'margin-top:3px;"></div>' +
+                    '</div>' +
+                    '<button type="button" ' +
+                        'id="v5836g5h3-advance-close" ' +
+                        'style="height:38px;padding:0 14px;' +
+                        'border:1px solid #cbd5e1;' +
+                        'border-radius:11px;background:#fff;' +
+                        'font-weight:900;cursor:pointer;">' +
+                        'Cerrar' +
+                    '</button>' +
+                '</div>' +
+
+                '<div style="padding:18px 20px;">' +
+                    '<div id="v5836g5h3-advance-summary" ' +
+                        'style="display:grid;gap:7px;' +
+                        'padding:13px 14px;' +
+                        'border-radius:14px;' +
+                        'background:#f8fafc;' +
+                        'font-size:13px;font-weight:850;' +
+                        'margin-bottom:16px;"></div>' +
+
+                    '<label style="' +
+                        'display:block;font-size:12px;' +
+                        'font-weight:900;margin-bottom:6px;' +
+                    '">Forma de pago</label>' +
+
+                    '<select id="v5836g5h3-advance-method" ' +
+                        'style="width:100%;height:43px;' +
+                        'border:1px solid #cbd5e1;' +
+                        'border-radius:12px;padding:0 10px;' +
+                        'font-weight:850;margin-bottom:14px;">' +
+                    '</select>' +
+
+                    '<label style="' +
+                        'display:block;font-size:12px;' +
+                        'font-weight:900;margin-bottom:6px;' +
+                    '">Importe recibido</label>' +
+
+                    '<input id="v5836g5h3-advance-amount" ' +
+                        'type="number" min="0.01" step="0.01" ' +
+                        'style="width:100%;height:43px;' +
+                        'box-sizing:border-box;' +
+                        'border:1px solid #cbd5e1;' +
+                        'border-radius:12px;padding:0 12px;' +
+                        'font-size:17px;font-weight:950;' +
+                        'text-align:right;">' +
+
+                    '<div style="' +
+                        'font-size:11px;color:#64748b;' +
+                        'margin-top:7px;line-height:1.35;' +
+                    '">' +
+                        'Si el importe cubre el saldo, ' +
+                        'el apartado se liquidará y se generará ' +
+                        'la salida de inventario.' +
+                    '</div>' +
+
+                    '<div id="v5836g5h3-advance-error" ' +
+                        'style="display:none;color:#b91c1c;' +
+                        'font-size:12px;font-weight:850;' +
+                        'margin-top:10px;"></div>' +
+                '</div>' +
+
+                '<div style="' +
+                    'padding:14px 20px 18px;' +
+                    'border-top:1px solid #e2e8f0;' +
+                    'display:flex;justify-content:flex-end;' +
+                    'gap:10px;background:#f8fafc;' +
+                '">' +
+                    '<button type="button" ' +
+                        'id="v5836g5h3-advance-cancel" ' +
+                        'style="height:42px;padding:0 16px;' +
+                        'border:1px solid #cbd5e1;' +
+                        'border-radius:12px;background:#fff;' +
+                        'font-weight:900;cursor:pointer;">' +
+                        'Regresar' +
+                    '</button>' +
+                    '<button type="button" ' +
+                        'id="v5836g5h3-advance-confirm" ' +
+                        'style="height:42px;padding:0 18px;' +
+                        'border:1px solid #2563eb;' +
+                        'border-radius:12px;background:#2563eb;' +
+                        'color:#fff;font-weight:950;' +
+                        'cursor:pointer;">' +
+                        'Registrar anticipo' +
+                    '</button>' +
+                '</div>' +
+            '</div>';
+
+        document.body.appendChild(backdrop);
+
+        const close = function () {
+            backdrop.style.display = 'none';
+        };
+
+        document.getElementById(
+            'v5836g5h3-advance-close'
+        )?.addEventListener('click', close);
+
+        document.getElementById(
+            'v5836g5h3-advance-cancel'
+        )?.addEventListener('click', close);
+
+        backdrop.addEventListener(
+            'click',
+            function (event) {
+                if (event.target === backdrop) {
+                    close();
+                }
+            }
+        );
+
+        return backdrop;
+    }
+
+    function v5836g5h3CloseAdvanceModal() {
+        const backdrop = document.getElementById(
+            'v5836g5h3-advance-backdrop'
+        );
+
+        if (backdrop) {
+            backdrop.style.display = 'none';
+        }
+    }
+
+    /*
+     * BEXIA_V5836G5H3A_DYNAMIC_SETTLEMENT_LABEL
+     *
+     * Si el importe cubre el saldo, la acción deja de ser
+     * "anticipo" y se presenta claramente como liquidación.
+     */
+    function v5836g5h3SyncAdvanceActionLabel() {
+        const input = document.getElementById(
+            'v5836g5h3-advance-amount'
+        );
+
+        const button = document.getElementById(
+            'v5836g5h3-advance-confirm'
+        );
+
+        if (!input || !button) {
+            return;
+        }
+
+        if (
+            button.disabled
+            && button.textContent === 'Registrando...'
+        ) {
+            return;
+        }
+
+        const amount = Number(
+            input.value || 0
+        );
+
+        const balance = Number(
+            input.dataset.balance || 0
+        );
+
+        button.textContent =
+            amount > 0
+            && balance > 0
+            && amount + 0.009 >= balance
+                ? 'Liquidar apartado'
+                : 'Registrar anticipo';
+    }
+
+    async function v5836g5h3OpenAdvanceModal() {
+        if (!selectedOrder || !selectedOrder.id) {
+            showPosNotice(
+                'Selecciona un ticket pendiente.',
+                'warning'
+            );
+            return;
+        }
+
+        const balance = Number(
+            selectedOrder.balance
+            ?? selectedOrder.total
+            ?? 0
+        );
+
+        if (balance <= 0.009) {
+            showPosNotice(
+                'Este ticket ya no tiene saldo pendiente.',
+                'warning'
+            );
+            return;
+        }
+
+        const backdrop =
+            v5836g5h3EnsureAdvanceModal();
+
+        const ticketBox = document.getElementById(
+            'v5836g5h3-advance-ticket'
+        );
+
+        const summaryBox = document.getElementById(
+            'v5836g5h3-advance-summary'
+        );
+
+        const methodSelect = document.getElementById(
+            'v5836g5h3-advance-method'
+        );
+
+        const amountInput = document.getElementById(
+            'v5836g5h3-advance-amount'
+        );
+
+        const errorBox = document.getElementById(
+            'v5836g5h3-advance-error'
+        );
+
+        const confirmBtn = document.getElementById(
+            'v5836g5h3-advance-confirm'
+        );
+
+        if (ticketBox) {
+            ticketBox.textContent =
+                selectedOrder.number || '';
+        }
+
+        const total = Number(
+            selectedOrder.total || 0
+        );
+
+        const paid = Number(
+            selectedOrder.paid_total || 0
+        );
+
+        if (summaryBox) {
+            summaryBox.innerHTML =
+                '<div style="display:grid;' +
+                    'grid-template-columns:minmax(0,1fr) auto;' +
+                    'column-gap:18px;align-items:center;">' +
+                    '<span>Total</span><strong>' +
+                    money(total) +
+                    '</strong></div>' +
+
+                '<div style="display:grid;' +
+                    'grid-template-columns:minmax(0,1fr) auto;' +
+                    'column-gap:18px;align-items:center;">' +
+                    '<span>Anticipado</span><strong>' +
+                    money(paid) +
+                    '</strong></div>' +
+
+                '<div style="display:grid;' +
+                    'grid-template-columns:minmax(0,1fr) auto;' +
+                    'column-gap:18px;align-items:center;' +
+                    'font-size:15px;color:#1d4ed8;">' +
+                    '<span>Saldo</span><strong>' +
+                    money(balance) +
+                    '</strong></div>';
+        }
+
+        if (amountInput) {
+            amountInput.value =
+                balance.toFixed(2);
+
+            amountInput.dataset.balance =
+                balance.toFixed(2);
+
+            amountInput.oninput =
+                v5836g5h3SyncAdvanceActionLabel;
+        }
+
+        if (errorBox) {
+            errorBox.style.display = 'none';
+            errorBox.textContent = '';
+        }
+
+        if (methodSelect) {
+            methodSelect.innerHTML =
+                '<option value="">Cargando...</option>';
+        }
+
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+        }
+
+        v5836g5h3SyncAdvanceActionLabel();
+
+        backdrop.style.display = 'flex';
+
+        try {
+            const sid = sessionId();
+
+            if (!sid) {
+                throw new Error(
+                    'No se pudo identificar la sesión.'
+                );
+            }
+
+            const data = await fetchJson(
+                '/pos/sessions/'
+                + sid
+                + '/payment-methods'
+            );
+
+            const methods =
+                data.methods || [];
+
+            if (!methods.length) {
+                throw new Error(
+                    'No hay formas de pago configuradas.'
+                );
+            }
+
+            if (methodSelect) {
+                methodSelect.innerHTML = '';
+
+                methods.forEach(function (method) {
+                    const option =
+                        document.createElement(
+                            'option'
+                        );
+
+                    option.value =
+                        method.id || '';
+
+                    option.textContent =
+                        method.label
+                        || 'Método de pago';
+
+                    option.dataset.label =
+                        method.label
+                        || 'Método de pago';
+
+                    methodSelect.appendChild(
+                        option
+                    );
+                });
+            }
+
+            setTimeout(function () {
+                amountInput?.focus();
+                amountInput?.select();
+            }, 50);
+
+        } catch (error) {
+            if (errorBox) {
+                errorBox.textContent =
+                    error.message
+                    || 'No se pudieron cargar las formas de pago.';
+
+                errorBox.style.display =
+                    'block';
+            }
+        }
+
+        if (
+            confirmBtn
+            && !confirmBtn.dataset.v5836g5h3Bound
+        ) {
+            confirmBtn.dataset.v5836g5h3Bound =
+                '1';
+
+            confirmBtn.addEventListener(
+                'click',
+                async function () {
+                    if (
+                        !selectedOrder
+                        || !selectedOrder.id
+                    ) {
+                        return;
+                    }
+
+                    const select =
+                        document.getElementById(
+                            'v5836g5h3-advance-method'
+                        );
+
+                    const input =
+                        document.getElementById(
+                            'v5836g5h3-advance-amount'
+                        );
+
+                    const error =
+                        document.getElementById(
+                            'v5836g5h3-advance-error'
+                        );
+
+                    const amount =
+                        Number(input?.value || 0);
+
+                    const option =
+                        select
+                        ? select.options[
+                            select.selectedIndex
+                        ]
+                        : null;
+
+                    if (
+                        !select
+                        || !select.value
+                    ) {
+                        if (error) {
+                            error.textContent =
+                                'Selecciona una forma de pago.';
+                            error.style.display =
+                                'block';
+                        }
+                        return;
+                    }
+
+                    if (amount <= 0) {
+                        if (error) {
+                            error.textContent =
+                                'El importe debe ser mayor a cero.';
+                            error.style.display =
+                                'block';
+                        }
+                        return;
+                    }
+
+                    const orderId =
+                        selectedOrder.id;
+
+                    const orderNumber =
+                        selectedOrder.number || '';
+
+                    const affectedLines =
+                        Array.isArray(selectedLines)
+                            ? selectedLines.slice()
+                            : [];
+
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent =
+                        'Registrando...';
+
+                    if (error) {
+                        error.style.display =
+                            'none';
+                    }
+
+                    try {
+                        const data =
+                            await v5505aPostJson(
+                                '/pos/orders/'
+                                + orderId
+                                + '/pay',
+                                {
+                                    /*
+                                     * BEXIA_V5836G5H4B_ADVANCE_PAYING_SESSION
+                                     */
+                                    paying_session_id:
+                                        sessionId(),
+                                    payments: [
+                                        {
+                                            payment_form_id:
+                                                select.value,
+                                            payment_label:
+                                                option
+                                                    ? (
+                                                        option.dataset.label
+                                                        || option.textContent
+                                                        || 'Pago'
+                                                    )
+                                                    : 'Pago',
+                                            amount:
+                                                amount
+                                        }
+                                    ]
+                                }
+                            );
+
+                        v5836g5h3CloseAdvanceModal();
+
+                        if (
+                            data.fully_paid === true
+                        ) {
+                            if (
+                                typeof window
+                                    .BEXIA_POS_REFRESH_STOCK_TEXT_ONLY
+                                    === 'function'
+                                && affectedLines.length
+                            ) {
+                                await window
+                                    .BEXIA_POS_REFRESH_STOCK_TEXT_ONLY(
+                                        affectedLines
+                                    );
+                            }
+
+                            showPosNotice(
+                                'Apartado liquidado: '
+                                + orderNumber,
+                                'info'
+                            );
+
+                            selectedOrder = null;
+                            selectedLines = [];
+
+                            detailBox.innerHTML =
+                                '<div style="color:#64748b;">'
+                                + 'Selecciona un ticket pendiente.'
+                                + '</div>';
+
+                            loadBtn.disabled = true;
+
+                            if (v5505aCancelBtn) {
+                                v5505aCancelBtn.disabled =
+                                    true;
+                            }
+
+                            await loadOrders();
+                            return;
+                        }
+
+                        showPosNotice(
+                            'Anticipo registrado. Saldo: '
+                            + money(data.balance),
+                            'info'
+                        );
+
+                        await loadOrders();
+                        await loadOrder(orderId);
+
+                        const refreshedRow =
+                            ordersBox.querySelector(
+                                '[data-order-id="'
+                                + orderId
+                                + '"]'
+                            );
+
+                        if (refreshedRow) {
+                            refreshedRow.classList.add(
+                                'is-active'
+                            );
+                        }
+
+                    } catch (error) {
+                        if (errorBox) {
+                            errorBox.textContent =
+                                error.message
+                                || 'No se pudo registrar el anticipo.';
+
+                            errorBox.style.display =
+                                'block';
+                        }
+
+                        confirmBtn.disabled = false;
+                        v5836g5h3SyncAdvanceActionLabel();
+                    }
+                }
+            );
+        }
+    }
+
     function renderOrders(orders) {
         if (!orders.length) {
             ordersBox.innerHTML = '<div style="padding:14px; color:#64748b;">No hay tickets pendientes.</div>';
@@ -4892,6 +5567,14 @@ document.addEventListener('DOMContentLoaded', function () {
             const scopeBg = order.pending_scope === 'previous' ? '#fef3c7' : '#dbeafe';
             const sessionLabel = order.session_number ? (' · ' + order.session_number) : '';
             const orderNote = String(order.order_note || '').trim();
+            const paidTotal = Number(order.paid_total || 0);
+            const balance = Number(
+                order.balance
+                ?? (
+                    Number(order.total || 0)
+                    - paidTotal
+                )
+            );
 
             row.innerHTML =
                 '<div>' +
@@ -4903,7 +5586,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     (orderNote !== ''
                         ? '<div style="color:#475569;font-size:12px;margin-top:2px;"><strong>Nota:</strong> ' + escapeHtml(orderNote) + '</div>'
                         : '') +
-                    '<div style="color:#64748b;font-size:12px;margin-top:2px;">Pendiente de cobro · ' + money(order.total) + '</div>' +
+                    '<div style="color:#64748b;font-size:12px;margin-top:4px;">Total: ' + money(order.total) + '</div>' +
+                    '<div style="color:#64748b;font-size:12px;margin-top:2px;">Anticipado: ' + money(paidTotal) + ' · Saldo: ' + money(balance) + '</div>' +
                 '</div>';
 
             row.addEventListener('click', function () {
@@ -5007,10 +5691,109 @@ document.addEventListener('DOMContentLoaded', function () {
 
         html += '</div>';
 
-        html += '<div class="v5350-total">';
-        html += '<span>Total adeudado</span>';
-        html += '<strong>' + money(order.total) + '</strong>';
+        const v5836g5h3Paid =
+            Number(order.paid_total || 0);
+
+        const v5836g5h3Balance =
+            Number(
+                order.balance
+                ?? (
+                    Number(order.total || 0)
+                    - v5836g5h3Paid
+                )
+            );
+
+        html += '<div class="v5350-total" ' +
+            'style="display:grid;gap:7px;">';
+
+        html += '<div style="display:grid;' +
+            'grid-template-columns:minmax(0,1fr) auto;' +
+            'column-gap:18px;align-items:center;width:100%;">' +
+            '<span>Total</span><strong>' +
+            money(order.total) +
+            '</strong></div>';
+
+        html += '<div style="display:grid;' +
+            'grid-template-columns:minmax(0,1fr) auto;' +
+            'column-gap:18px;align-items:center;width:100%;">' +
+            '<span>Anticipado</span><strong>' +
+            money(v5836g5h3Paid) +
+            '</strong></div>';
+
+        html += '<div style="display:grid;' +
+            'grid-template-columns:minmax(0,1fr) auto;' +
+            'column-gap:18px;align-items:center;width:100%;' +
+            'font-size:15px;color:#1d4ed8;">' +
+            '<span>Saldo</span><strong>' +
+            money(v5836g5h3Balance) +
+            '</strong></div>';
+
         html += '</div>';
+
+        const v5836g5h3Payments =
+            Array.isArray(order.payments)
+                ? order.payments
+                : [];
+
+        if (v5836g5h3Payments.length) {
+            html += '<div style="' +
+                'margin-top:13px;padding:12px 13px;' +
+                'border:1px solid #e2e8f0;' +
+                'border-radius:13px;background:#f8fafc;">';
+
+            html += '<div style="' +
+                'font-size:12px;font-weight:950;' +
+                'margin-bottom:8px;">' +
+                'Anticipos registrados' +
+                '</div>';
+
+            v5836g5h3Payments.forEach(
+                function (payment, index) {
+                    html += '<div style="' +
+                        'display:flex;' +
+                        'justify-content:space-between;' +
+                        'align-items:flex-start;gap:10px;' +
+                        'padding:7px 0;' +
+                        (
+                            index
+                            ? 'border-top:1px solid #e2e8f0;'
+                            : ''
+                        ) +
+                    '">';
+
+                    html += '<div>' +
+                        '<div style="' +
+                            'font-size:12px;font-weight:900;">' +
+                            escapeHtml(
+                                payment.payment_label
+                                || 'Pago'
+                            ) +
+                        '</div>' +
+                        (
+                            payment.created_at
+                                ? '<div style="' +
+                                    'font-size:10px;' +
+                                    'color:#64748b;' +
+                                    'margin-top:2px;">' +
+                                    escapeHtml(
+                                        payment.created_at
+                                    ) +
+                                  '</div>'
+                                : ''
+                        ) +
+                    '</div>';
+
+                    html += '<strong style="' +
+                        'font-size:12px;">' +
+                        money(payment.amount) +
+                        '</strong>';
+
+                    html += '</div>';
+                }
+            );
+
+            html += '</div>';
+        }
         if (order && order.id && v5504aPerms.print) {
             html += '<div style="margin-top:12px;">';
             html += '<a href="/pos/orders/' + order.id + '/pending-ticket/print" target="_blank" rel="noopener" class="v5379-print-pending-ticket" style="display:flex;align-items:center;justify-content:center;width:100%;height:40px;border-radius:12px;border:1px solid #dbe3ef;background:#ffffff;color:#0f172a;font-weight:900;text-decoration:none;">Reimprimir ticket pendiente</a>';
@@ -5018,11 +5801,63 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
 
+        html += '<div style="margin-top:10px;">';
+        html += '<button type="button" ' +
+            'id="v5836g5h3-register-advance" ' +
+            'style="display:flex;align-items:center;' +
+            'justify-content:center;width:100%;height:42px;' +
+            'border-radius:12px;border:1px solid #2563eb;' +
+            'background:#2563eb;color:#ffffff;' +
+            'font-weight:950;cursor:pointer;">' +
+            'Registrar anticipo' +
+            '</button>';
+        html += '</div>';
+
         detailBox.innerHTML = html;
-        loadBtn.disabled = lines.length === 0;
+
+        document.getElementById(
+            'v5836g5h3-register-advance'
+        )?.addEventListener(
+            'click',
+            v5836g5h3OpenAdvanceModal
+        );
+
+        const v5836g5h3HasAdvances =
+            Number(order.paid_total || 0) > 0.009;
+
+        /*
+         * Después del primer anticipo el apartado
+         * queda económicamente bloqueado.
+         */
+        loadBtn.disabled =
+            lines.length === 0
+            || v5836g5h3HasAdvances;
+
+        if (v5836g5h3HasAdvances) {
+            loadBtn.title =
+                'El apartado ya tiene anticipos y no puede modificarse.';
+        } else {
+            loadBtn.title = '';
+        }
 
         if (v5505aCancelBtn) {
-            v5505aCancelBtn.disabled = !(order && order.id && v5504aPerms.cancel);
+            /*
+             * BEXIA_V5836G5H7B1_CANCEL_ADVANCE_BUTTON
+             *
+             * Ya existe devolución controlada; por eso un apartado
+             * con anticipo vuelve a poder abrir el modal de cancelación.
+             */
+            v5505aCancelBtn.disabled =
+                !(
+                    order
+                    && order.id
+                    && v5504aPerms.cancel
+                );
+
+            v5505aCancelBtn.title =
+                v5836g5h3HasAdvances
+                    ? 'Devolver anticipo y cancelar apartado.'
+                    : '';
         }
     }
 
@@ -6020,6 +6855,8 @@ async function createPendingTicket() {
                         },
                         body: JSON.stringify({
                             payments: payments,
+                            /* BEXIA_V5836G5H4B_LEGACY_PAYING_SESSION */
+                            paying_session_id: sessionId(),
                         }),
                     });
 
@@ -6694,6 +7531,8 @@ async function createPendingTicket() {
                     },
                     body: JSON.stringify({
                         payments: payments,
+                        /* BEXIA_V5836G5H4B_LEGACY_PAYING_SESSION */
+                        paying_session_id: sessionId(),
                     }),
                 });
 
@@ -9719,13 +10558,33 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '</div>';
 
         html += '<div class="v5484-close-summary">';
-        html += '<div class="v5484-close-kpi"><span>Total vendido</span><strong>' + money(totals.paid_total || 0) + '</strong></div>';
+
+        /*
+         * BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS
+         *
+         * Mostrar por separado:
+         * - dinero cobrado
+         * - anticipos históricos
+         * - anticipos devueltos
+         * - anticipos todavía pendientes
+         */
+        html += '<div class="v5484-close-kpi"><span>Total cobrado</span><strong>' + money(totals.collected_total ?? totals.paid_total ?? 0) + '</strong></div>';
+
         html += '<div class="v5484-close-kpi"><span>Tickets cobrados</span><strong>' + Number(totals.paid_tickets || 0) + '</strong></div>';
-        html += '<div class="v5484-close-kpi"><span>Pendientes sesión</span><strong>' + Number(totals.pending_tickets_created_in_session || 0) + '</strong></div>';
+
+        html += '<div class="v5484-close-kpi"><span>Anticipos cobrados</span><strong>' + money(totals.advance_payments_total || 0) + '</strong></div>';
+
+        html += '<div class="v5484-close-kpi"><span>Anticipos devueltos</span><strong>-' + money(totals.advance_refunds_total || 0) + '</strong></div>';
+
+        html += '<div class="v5484-close-kpi"><span>Anticipos pendientes</span><strong>' + money(totals.outstanding_advance_total || 0) + '</strong></div>';
+
+        html += '<div class="v5484-close-kpi"><span>Flujo neto cobrado</span><strong>' + money(totals.net_cashflow_total ?? totals.collected_total ?? totals.paid_total ?? 0) + '</strong></div>';
+
         html += '<div class="v5484-close-kpi"><span>Reservas activas</span><strong>' + Number(totals.active_reservations || 0) + '</strong></div>';
+
         html += '</div>';
 
-        html += '<h3 style="margin:4px 0 8px;font-size:15px;">Ventas por método de pago</h3>';
+        html += '<h3 style="margin:4px 0 8px;font-size:15px;">Cobros por método de pago</h3>';
         html += '<table class="v5484-close-table"><thead><tr><th>Método</th><th style="text-align:right;">Pagos</th><th style="text-align:right;">Total</th></tr></thead><tbody>';
 
         if (payments.length) {

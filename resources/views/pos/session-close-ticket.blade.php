@@ -409,6 +409,39 @@
     $closingCashCount = $sessionData['closing_cash_count'] ?? ($closePayload['cash_count'] ?? []);
     $difference = (float) ($sessionData['closing_difference'] ?? ($closePayload['closing_difference'] ?? 0));
     $closingNote = (string) ($sessionData['closing_note'] ?? ($closePayload['closing_note'] ?? ''));
+
+    /*
+     * BEXIA_V5836G5H6B_GENERIC_DETAIL_FIXES
+     * Cierre abierto debe mostrarse explícitamente.
+     */
+
+    /*
+     * BEXIA_V5836G5H6A_GENERIC_CLOSE_ADVANCES
+     */
+    $v5836g5h6aCollectedTotal = round(
+        (float) (
+            $totals['collected_total']
+            ?? $totals['paid_total']
+            ?? 0
+        ),
+        2
+    );
+
+    $v5836g5h6aAdvanceTotal = round(
+        (float) (
+            $totals['advance_payments_total']
+            ?? 0
+        ),
+        2
+    );
+
+    $v5836g5h6aSettledSales = round(
+        (float) (
+            $totals['settled_sales_total']
+            ?? 0
+        ),
+        2
+    );
 @endphp
 
 <?php
@@ -691,14 +724,14 @@
 
 <div class="row"><span>Cajero</span><strong>{{ $summary['cashier']['name'] ?? 'Sin cajero' }}</strong></div>
 <div class="row"><span>Apertura</span><strong>{{ $sessionData['opened_at'] ?? '' }}</strong></div>
-<div class="row"><span>Cierre</span><strong>{{ $sessionData['closed_at'] ?? 'Aún abierta' }}</strong></div>
+<div class="row"><span>Cierre</span><strong>{{ trim((string) ($sessionData['closed_at'] ?? '')) !== '' ? $sessionData['closed_at'] : 'Aún abierta' }}</strong></div>
 <div class="row"><span>Estado</span><strong>{{ $sessionData['status_label'] ?? $sessionData['status'] ?? '' }}</strong></div>
 <div class="row"><span>Generado</span><strong>{{ $summary['generated_at'] ?? now()->toDateTimeString() }}</strong></div>
 
 <div class="line"></div>
 
 <div class="row"><span>Fondo apertura</span><strong>${{ number_format($totals['opening_cash_amount'] ?? ($sessionData['opening_amount'] ?? 0), 2) }}</strong></div>
-<div class="row"><span>Ventas efectivo</span><strong>${{ number_format($v5510eCashGross ?? ($totals['cash_payments_total'] ?? 0), 2) }}</strong></div>
+<div class="row"><span>Cobros efectivo</span><strong>${{ number_format($v5510eCashGross ?? ($totals['cash_payments_total'] ?? 0), 2) }}</strong></div>
 @if(($v5510eRefundCash ?? 0) > 0)
     <div class="row" id="v5510e-refund-cash-row"><span>Devoluciones efectivo</span><strong>-${{ number_format($v5510eRefundCash ?? 0, 2) }}</strong></div>
 @endif
@@ -717,7 +750,7 @@
 
 <div class="line"></div>
 
-<div class="bold">Métodos de pago</div>
+<div class="bold">Cobros por método</div>
 <table>
     <thead>
         <tr>
@@ -934,10 +967,80 @@
 @endphp
 
 
-<div class="row total"><span>Total vendido</span><strong>${{ number_format($v5510qTotalVendidoBruto ?? 0, 2) }}</strong></div>
+@php
+    $v5836g5h6aRefundTotal = round(
+        (float) (
+            $v5510mTotalDevuelto
+            ?? $v5510eRefundTotal
+            ?? $v5508cRefundTotal
+            ?? 0
+        ),
+        2
+    );
+
+    /*
+     * BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS
+     */
+    $v5836g5h6aNetSettled = round(
+        (float) (
+            $totals['net_settled_sales_total']
+            ?? $totals['net_total']
+            ?? $v5836g5h6aSettledSales
+        ),
+        2
+    );
+@endphp
+
+<div class="row total"><span>Total cobrado</span><strong>${{ number_format($v5836g5h6aCollectedTotal, 2) }}</strong></div>
 <div class="row"><span>Tickets cobrados</span><strong>{{ number_format($totals['paid_tickets'] ?? 0) }}</strong></div>
-<div class="row"><span>Pendientes sesión</span><strong>{{ number_format($totals['pending_tickets_created_in_session'] ?? 0) }}</strong></div>
+<div class="row"><span>Anticipos cobrados</span><strong>${{ number_format($v5836g5h6aAdvanceTotal, 2) }}</strong></div>
 <div class="row"><span>Reservas activas</span><strong>{{ number_format($totals['active_reservations'] ?? 0) }}</strong></div>
+
+<div class="line"></div>
+
+<div class="bold">Resumen de ventas y cobros</div>
+
+{{-- BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS --}}
+
+<div class="row">
+    <span>Ventas liquidadas</span>
+    <strong>${{ number_format((float) ($totals['settled_sales_total'] ?? 0), 2) }}</strong>
+</div>
+
+<div class="row">
+    <span>Anticipos cobrados</span>
+    <strong>${{ number_format((float) ($totals['advance_payments_total'] ?? 0), 2) }}</strong>
+</div>
+
+<div class="row">
+    <span>Anticipos devueltos</span>
+    <strong>-${{ number_format((float) ($totals['advance_refunds_total'] ?? 0), 2) }}</strong>
+</div>
+
+<div class="row">
+    <span>Anticipos pendientes</span>
+    <strong>${{ number_format((float) ($totals['outstanding_advance_total'] ?? 0), 2) }}</strong>
+</div>
+
+<div class="row">
+    <span>Cobrado en sesión</span>
+    <strong>${{ number_format((float) ($totals['collected_total'] ?? $totals['paid_total'] ?? 0), 2) }}</strong>
+</div>
+
+<div class="row">
+    <span>Flujo neto cobrado</span>
+    <strong>${{ number_format((float) ($totals['net_cashflow_total'] ?? 0), 2) }}</strong>
+</div>
+
+<div class="row">
+    <span>Devoluciones de venta</span>
+    <strong>-${{ number_format((float) ($totals['sale_refunds_total'] ?? 0), 2) }}</strong>
+</div>
+
+<div class="row total">
+    <span>Venta neta liquidada</span>
+    <strong>${{ number_format((float) ($totals['net_settled_sales_total'] ?? $totals['net_total'] ?? 0), 2) }}</strong>
+</div>
 
 @if(! empty($sellers))
     
@@ -999,8 +1102,8 @@
             <td class="right">{{ number_format((int) $v5508cTicketsDevueltos) }}</td>
         </tr>
         <tr class="total" style="font-weight:900 !important;">
-                <td style="font-weight:900 !important;"><strong>Venta neta</strong></td>
-                <td class="right" style="font-weight:900 !important;"><strong>${{ number_format($v5510qVentaNeta ?? 0, 2) }}</strong></td>
+                <td style="font-weight:900 !important;"><strong>Venta neta liquidada</strong></td>
+                <td class="right" style="font-weight:900 !important;"><strong>${{ number_format($v5836g5h6aNetSettled ?? 0, 2) }}</strong></td>
             </tr>
     </table>
 @endif
