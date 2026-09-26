@@ -64,6 +64,8 @@ class PosStockReservationService
                 ->select([
                     'l.id as line_id',
                     'l.product_id',
+                    'l.product_variant_id',
+                    'l.stock_lot_id',
                     'l.quantity',
                     'p.product_type',
                     'p.name as product_name',
@@ -80,13 +82,29 @@ class PosStockReservationService
                     continue;
                 }
 
+                /*
+                 * BEXIA_V5836G5B_RESERVE_VARIANT_AND_LOT
+                 *
+                 * La reserva debe usar las mismas dimensiones de inventario
+                 * que la linea del ticket. De lo contrario una variante
+                 * queda reservada sobre el producto padre y no disminuye
+                 * correctamente el disponible de esa variante.
+                 */
+                $variantId = ! empty($line->product_variant_id)
+                    ? (int) $line->product_variant_id
+                    : null;
+
+                $lotId = ! empty($line->stock_lot_id)
+                    ? (int) $line->stock_lot_id
+                    : null;
+
                 DB::table('stock_reservations')->insert([
                     'company_id' => $companyId,
                     'warehouse_id' => $warehouseId,
                     'location_id' => $locationId,
                     'product_id' => (int) $line->product_id,
-                    'product_variant_id' => null,
-                    'lot_id' => null,
+                    'product_variant_id' => $variantId,
+                    'lot_id' => $lotId,
                     'source_type' => 'pos_order',
                     'source_id' => $orderId,
                     'pos_order_id' => $orderId,
@@ -101,6 +119,8 @@ class PosStockReservationService
                         'source' => 'pdv_pending_ticket',
                         'order_number' => $order->number ?? null,
                         'product_name' => $line->product_name ?? null,
+                        'product_variant_id' => $variantId,
+                        'stock_lot_id' => $lotId,
                     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -113,8 +133,8 @@ class PosStockReservationService
                     'warehouse_id' => $warehouseId,
                     'location_id' => $locationId,
                     'product_id' => (int) $line->product_id,
-                    'product_variant_id' => null,
-                    'lot_id' => null,
+                    'product_variant_id' => $variantId,
+                    'lot_id' => $lotId,
                 ]);
             }
 
