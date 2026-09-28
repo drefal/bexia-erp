@@ -1597,6 +1597,18 @@ class StockMovementResource extends Resource
         array $quantities,
         ?string $notes = null
     ): StockMovementReceipt {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId || (int) $movement->company_id !== $companyId) {
+            Notification::make()
+                ->title('Traslado no disponible')
+                ->body('El traslado no pertenece a la empresa seleccionada.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
         if ($movement->status !== 'in_transit' || ! $movement->isInterWarehouseTransfer()) {
             Notification::make()
                 ->title('Traslado no disponible para recepción')
@@ -1640,9 +1652,10 @@ class StockMovementResource extends Resource
             throw new Halt();
         }
 
-        return DB::transaction(function () use ($movement, $requested, $notes): StockMovementReceipt {
+        return DB::transaction(function () use ($movement, $requested, $notes, $companyId): StockMovementReceipt {
             $movement = StockMovement::query()
                 ->whereKey($movement->getKey())
+                ->where('company_id', $companyId)
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -1954,7 +1967,9 @@ class StockMovementResource extends Resource
                 : $query->whereNull('lot_id');
         }
 
-        $quant = $query->first();
+        $quant = $query
+            ->lockForUpdate()
+            ->first();
 
         if ($quant) {
             return $quant;
@@ -2088,6 +2103,10 @@ class StockMovementResource extends Resource
                     ->where('t.code', 'TRANSIT')
                     ->orWhereIn(DB::raw('upper(sl.code)'), ['TRANSIT', 'TRANSITO']);
             });
+
+        if (Schema::hasColumn('stock_locations', 'tracks_stock')) {
+            $query->where('sl.tracks_stock', true);
+        }
 
         $preferred = (clone $query)
             ->whereRaw("upper(sl.code) = 'TRANSITO'")
@@ -2354,13 +2373,11 @@ class StockMovementResource extends Resource
 
         $companyId = static::currentCompanyId();
 
-        $query->where(function ($query) use ($companyId): void {
-            $query->whereNull('stock_operation_types.company_id');
+        if (! $companyId) {
+            return [];
+        }
 
-            if ($companyId) {
-                $query->orWhere('stock_operation_types.company_id', $companyId);
-            }
-        });
+        $query->where('stock_operation_types.company_id', $companyId);
 
         return $query
             ->orderBy('warehouses.name')
@@ -2386,7 +2403,18 @@ class StockMovementResource extends Resource
             return null;
         }
 
-        return DB::table('stock_operation_types')->where('id', $id)->first();
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId) {
+            return null;
+        }
+
+        return DB::table('stock_operation_types')
+            ->where('id', $id)
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->where('operation_kind', 'internal_transfer')
+            ->first();
     }
 
     protected static function warehouseOptions(): array
@@ -2724,7 +2752,19 @@ class StockMovementResource extends Resource
         return null;
     }
 
-public static function canCreate(): bool
+    protected static function recordBelongsToCurrentCompany(Model $record): bool
+    {
+        if (! $record instanceof StockMovement) {
+            return false;
+        }
+
+        $companyId = static::currentCompanyId();
+
+        return $companyId !== null
+            && (int) $record->company_id === $companyId;
+    }
+
+    public static function canCreate(): bool
     {
         return static::userCanPermission('inventory.movements.create');
     }
@@ -2741,16 +2781,16 @@ public static function canCreate(): bool
          *   permite consultar y reimprimir PDF, pero el formulario
          *   permanece bloqueado y no muestra acciones de guardado.
          */
-        return static::userCanPermission('inventory.movements.update');
+        return static::recordBelongsToCurrentCompany($record)
+            && static::userCanPermission('inventory.movements.update');
     }
 
     public static function canDelete(Model $record): bool
     {
         return $record instanceof StockMovement
+            && static::recordBelongsToCurrentCompany($record)
             && $record->status === 'draft'
-            && (
-                static::userCanPermission('inventory.movements.delete')
-            );
+            && static::userCanPermission('inventory.movements.delete');
     }
 
     public static function canDeleteAny(): bool

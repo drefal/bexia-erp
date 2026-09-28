@@ -31,7 +31,7 @@ class StockTransferLinesInline extends Component
         ?int $sourceLocationId = null
     ): void {
         $this->movementId = $movementId;
-        $this->companyId = $companyId ?: $this->resolveCurrentCompanyId();
+        $this->companyId = $this->resolveCurrentCompanyId();
         $this->warehouseId = $warehouseId;
         $this->sourceLocationId = $sourceLocationId;
 
@@ -303,15 +303,22 @@ class StockTransferLinesInline extends Component
             return;
         }
 
-        $movement = StockMovement::query()
-            ->whereKey($this->movementId)
-            ->first();
+        $companyId = $this->resolveCurrentCompanyId();
 
-        if (!$movement) {
+        if (! $companyId) {
             return;
         }
 
-        $this->companyId = (int) $movement->company_id;
+        $movement = StockMovement::query()
+            ->whereKey($this->movementId)
+            ->where('company_id', $companyId)
+            ->first();
+
+        if (! $movement) {
+            return;
+        }
+
+        $this->companyId = $companyId;
         $this->warehouseId = (int) $movement->warehouse_id;
         $this->sourceLocationId = (int) $movement->source_location_id;
 
