@@ -40,22 +40,21 @@ class InventoryProductTraceability extends Page
 
     public function mount(): void
     {
-        $this->company_id = $this->currentCompanyId();
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            $this->currentCompanyId()
+        );
     }
 
     protected function currentCompanyId(): ?int
     {
-        foreach (['company_id', 'current_company_id', 'active_company_id', 'tenant_company_id'] as $key) {
-            if (session($key)) {
-                return (int) session($key);
-            }
-        }
-
-        return null;
+        return \App\Support\Security\InventoryTenantScope::currentCompanyId();
     }
 
     public function updatedCompanyId(): void
     {
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            (int) ($this->company_id ?? 0)
+        );
         $this->warehouse_id = null;
         $this->location_id = null;
         $this->clearProduct();
@@ -111,7 +110,9 @@ class InventoryProductTraceability extends Page
 
     public function resetFilters(): void
     {
-        $this->company_id = $this->currentCompanyId();
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            $this->currentCompanyId()
+        );
         $this->warehouse_id = null;
         $this->location_id = null;
         $this->clearProduct();
@@ -161,11 +162,7 @@ class InventoryProductTraceability extends Page
 
     public function companyOptions(): array
     {
-        if (! Schema::hasTable('companies')) {
-            return [];
-        }
-
-        return DB::table('companies')->orderBy('name')->pluck('name', 'id')->all();
+        return \App\Support\Security\InventoryTenantScope::companyOptions();
     }
 
     public function warehouseOptions(): array
@@ -193,6 +190,10 @@ class InventoryProductTraceability extends Page
 
         if ($this->warehouse_id && Schema::hasColumn('stock_locations', 'warehouse_id')) {
             $query->where('warehouse_id', $this->warehouse_id);
+        }
+
+        if ($this->company_id && Schema::hasColumn('stock_locations', 'company_id')) {
+            $query->where('company_id', $this->company_id);
         }
 
         return $query->orderBy('name')->limit(400)->pluck('name', 'id')->all();
@@ -245,8 +246,13 @@ class InventoryProductTraceability extends Page
 
         $query = DB::table('stock_movement_lines as l')
             ->join('products as v', 'v.id', '=', 'l.product_variant_id')
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
             ->where('l.product_id', $this->product_id)
             ->whereNotNull('l.product_variant_id');
+
+        if ($this->company_id) {
+            $query->where('m.company_id', $this->company_id);
+        }
 
         return $query
             ->select('v.id', 'v.name')
@@ -265,7 +271,12 @@ class InventoryProductTraceability extends Page
 
         $query = DB::table('stock_movement_lines as l')
             ->join('stock_lots as lot', 'lot.id', '=', 'l.lot_id')
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
             ->whereNotNull('l.lot_id');
+
+        if ($this->company_id) {
+            $query->where('m.company_id', $this->company_id);
+        }
 
         if ($this->product_id) {
             $query->where('l.product_id', $this->product_id);
@@ -292,7 +303,12 @@ class InventoryProductTraceability extends Page
 
         $query = DB::table('stock_movement_lines as l')
             ->join('stock_serial_numbers as s', 's.id', '=', 'l.stock_serial_number_id')
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
             ->whereNotNull('l.stock_serial_number_id');
+
+        if ($this->company_id) {
+            $query->where('m.company_id', $this->company_id);
+        }
 
         if ($this->product_id) {
             $query->where('l.product_id', $this->product_id);

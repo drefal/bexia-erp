@@ -45,11 +45,16 @@ class InventoryProductKardex extends Page
     {
         $this->date_from = now()->subMonths(3)->toDateString();
         $this->date_to = now()->toDateString();
-        $this->company_id = $this->currentCompanyId();
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            $this->currentCompanyId()
+        );
     }
 
     public function updatedCompanyId(): void
     {
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            (int) ($this->company_id ?? 0)
+        );
         $this->warehouse_id = null;
         $this->location_id = null;
         $this->clearProduct();
@@ -82,7 +87,9 @@ class InventoryProductKardex extends Page
 
     public function resetFilters(): void
     {
-        $this->company_id = $this->currentCompanyId();
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            $this->currentCompanyId()
+        );
         $this->warehouse_id = null;
         $this->location_id = null;
         $this->product_id = null;
@@ -179,43 +186,7 @@ class InventoryProductKardex extends Page
     }
     protected function currentCompanyId(): ?int
     {
-        foreach (['current_company_id', 'active_company_id', 'company_id', 'tenant_company_id', 'filament.tenant.id'] as $key) {
-            $value = session($key);
-
-            if ($value) {
-                return (int) $value;
-            }
-        }
-
-        try {
-            if (class_exists(\Filament\Facades\Filament::class) && \Filament\Facades\Filament::getTenant()) {
-                $tenant = \Filament\Facades\Filament::getTenant();
-
-                if (isset($tenant->company_id)) {
-                    return (int) $tenant->company_id;
-                }
-
-                if (isset($tenant->id)) {
-                    return (int) $tenant->id;
-                }
-            }
-        } catch (\Throwable $e) {
-            report($e);
-        }
-
-        $user = Auth::user();
-
-        foreach (['current_company_id', 'active_company_id', 'company_id'] as $column) {
-            if ($user && isset($user->{$column}) && $user->{$column}) {
-                return (int) $user->{$column};
-            }
-        }
-
-        if (Schema::hasTable('companies')) {
-            return DB::table('companies')->orderBy('id')->value('id');
-        }
-
-        return null;
+        return \App\Support\Security\InventoryTenantScope::currentCompanyId();
     }
 
     public function valuationMethodOptions(): array
@@ -272,11 +243,7 @@ class InventoryProductKardex extends Page
 
     public function companyOptions(): array
     {
-        if (! Schema::hasTable('companies')) {
-            return [];
-        }
-
-        return DB::table('companies')->orderBy('name')->pluck('name', 'id')->all();
+        return \App\Support\Security\InventoryTenantScope::companyOptions();
     }
 
     public function warehouseOptions(): array
@@ -307,9 +274,7 @@ class InventoryProductKardex extends Page
         }
 
         if ($this->company_id && Schema::hasColumn('stock_locations', 'company_id')) {
-            $query->where(function ($q): void {
-                $q->where('company_id', $this->company_id)->orWhereNull('company_id');
-            });
+            $query->where('company_id', $this->company_id);
         }
 
         return $query->orderBy('name')->limit(300)->pluck('name', 'id')->all();
@@ -317,19 +282,27 @@ class InventoryProductKardex extends Page
 
     public function productOptions(): array
     {
-        if (! Schema::hasTable('products')) {
+        if (
+            ! Schema::hasTable('stock_movement_lines')
+            || ! Schema::hasTable('stock_movements')
+            || ! Schema::hasTable('products')
+        ) {
             return [];
         }
 
         $search = trim($this->product_search);
 
-        $query = DB::table('products as p');
+        /*
+         * El producto puede ser compartido entre empresas.
+         * La autoridad de tenancy para Kardex es el movimiento de inventario,
+         * no products.company_id.
+         */
+        $query = DB::table('stock_movement_lines as l')
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
+            ->join('products as p', 'p.id', '=', 'l.product_id');
 
-        if ($this->company_id && Schema::hasColumn('products', 'company_id')) {
-            $query->where(function ($q): void {
-                $q->where('p.company_id', $this->company_id)
-                    ->orWhereNull('p.company_id');
-            });
+        if ($this->company_id) {
+            $query->where('m.company_id', $this->company_id);
         }
 
         if ($search !== '') {
@@ -344,16 +317,11 @@ class InventoryProductKardex extends Page
                     }
                 }
             });
-        } else {
-            $query->whereExists(function ($sub): void {
-                $sub->selectRaw('1')
-                    ->from('stock_movement_lines as l')
-                    ->whereColumn('l.product_id', 'p.id');
-            });
         }
 
         return $query
             ->select('p.id', 'p.name')
+            ->distinct()
             ->orderBy('p.name')
             ->limit($search === '' ? 20 : 8)
             ->pluck('p.name', 'p.id')

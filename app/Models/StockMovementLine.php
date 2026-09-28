@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StockMovementLine extends Model
 {
@@ -36,5 +37,26 @@ class StockMovementLine extends Model
     public function movement(): BelongsTo
     {
         return $this->belongsTo(StockMovement::class, 'stock_movement_id');
+    }
+
+    public function receiptLines(): HasMany
+    {
+        return $this->hasMany(
+            StockMovementReceiptLine::class,
+            'stock_movement_line_id'
+        );
+    }
+
+    public function receivedQuantity(): float
+    {
+        return (float) $this->receiptLines()->sum('quantity');
+    }
+
+    public function pendingReceiptQuantity(): float
+    {
+        return max(
+            0.0,
+            (float) $this->done_quantity - $this->receivedQuantity()
+        );
     }
 }

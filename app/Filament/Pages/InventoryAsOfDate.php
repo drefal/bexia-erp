@@ -359,104 +359,24 @@ class InventoryAsOfDate extends Page
 
     protected function allowedCompanyOptions(): array
     {
-        $companyIds = $this->accessibleCompanyIds();
-
-        if (empty($companyIds)) {
-            return [];
-        }
-
-        return \Illuminate\Support\Facades\DB::table('companies')
-            ->whereIn('id', $companyIds)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
+        return \App\Support\Security\InventoryTenantScope::companyOptions();
     }
 
     protected function ensureAllowedCompanyId(?int $companyId): ?int
     {
-        $companyIds = $this->accessibleCompanyIds();
-
-        if (empty($companyIds)) {
-            return null;
-        }
-
-        if ($companyId && in_array((int) $companyId, $companyIds, true)) {
-            return (int) $companyId;
-        }
-
-        return (int) $companyIds[0];
+        return \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId($companyId);
     }
 
     protected function accessibleCompanyIds(): array
     {
-        $user = auth()->user();
-
-        if (! $user) {
-            return [];
-        }
-
-        $ids = [];
-
-        if (
-            \Illuminate\Support\Facades\Schema::hasTable('company_user')
-            && \Illuminate\Support\Facades\Schema::hasColumn('company_user', 'user_id')
-            && \Illuminate\Support\Facades\Schema::hasColumn('company_user', 'company_id')
-        ) {
-            $ids = \Illuminate\Support\Facades\DB::table('company_user')
-                ->where('user_id', (int) $user->id)
-                ->orderBy('company_id')
-                ->pluck('company_id')
-                ->map(fn ($id): int => (int) $id)
-                ->filter(fn (int $id): bool => $id > 0)
-                ->unique()
-                ->values()
-                ->all();
-
-            if (! empty($ids)) {
-                return $ids;
-            }
-        }
-
-        $tenant = null;
-
-        if (class_exists(\Filament\Facades\Filament::class)) {
-            $tenant = \Filament\Facades\Filament::getTenant();
-        }
-
-        if ($tenant && method_exists($tenant, 'getKey') && (int) $tenant->getKey() > 0) {
-            return [(int) $tenant->getKey()];
-        }
-
-        foreach (['company_id', 'current_company_id', 'active_company_id', 'tenant_company_id'] as $field) {
-            if (isset($user->{$field}) && (int) $user->{$field} > 0) {
-                return [(int) $user->{$field}];
-            }
-        }
-
-        if ((bool) ($user->is_system_admin ?? false)) {
-            return \Illuminate\Support\Facades\DB::table('companies')
-                ->orderBy('id')
-                ->pluck('id')
-                ->map(fn ($id): int => (int) $id)
-                ->filter(fn (int $id): bool => $id > 0)
-                ->unique()
-                ->values()
-                ->all();
-        }
-
-        return [];
+        return \App\Support\Security\InventoryTenantScope::accessibleCompanyIds();
     }
 
     protected function currentCompanyId(): ?int
     {
-        foreach (['company_id', 'current_company_id', 'active_company_id', 'tenant_company_id'] as $key) {
-            if (session($key)) {
-                return (int) session($key);
-            }
-        }
-
-        return null;
+        return \App\Support\Security\InventoryTenantScope::currentCompanyId();
     }
+
 public static function shouldRegisterNavigation(): bool
     {
         return \App\Support\Security\BexiaTenantPermission::can('inventory.as_of_date.view');

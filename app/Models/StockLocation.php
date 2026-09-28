@@ -19,12 +19,14 @@ class StockLocation extends Model
         'description',
         'is_active',
         'allow_negative_stock',
-    ];
+            'tracks_stock',
+];
 
     protected $casts = [
         'is_active' => 'boolean',
         'allow_negative_stock' => 'boolean',
-    ];
+            'tracks_stock' => 'boolean',
+];
 
     public function warehouse(): BelongsTo
     {

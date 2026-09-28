@@ -15,9 +15,11 @@ class StockMovement extends Model
     protected $fillable = [
         'company_id',
         'warehouse_id',
+        'destination_warehouse_id',
         'stock_operation_type_id',
         'source_location_id',
         'destination_location_id',
+        'transit_location_id',
         'reference',
         'movement_at',
         'status',
@@ -27,11 +29,17 @@ class StockMovement extends Model
         'created_by',
         'confirmed_by',
         'confirmed_at',
+        'dispatched_by',
+        'dispatched_at',
+        'received_by',
+        'received_at',
     ];
 
     protected $casts = [
         'movement_at' => 'datetime',
         'confirmed_at' => 'datetime',
+        'dispatched_at' => 'datetime',
+        'received_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -65,6 +73,11 @@ class StockMovement extends Model
         return $this->belongsTo(Warehouse::class);
     }
 
+    public function destinationWarehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'destination_warehouse_id');
+    }
+
     public function sourceLocation(): BelongsTo
     {
         return $this->belongsTo(StockLocation::class, 'source_location_id');
@@ -75,9 +88,22 @@ class StockMovement extends Model
         return $this->belongsTo(StockLocation::class, 'destination_location_id');
     }
 
+    public function transitLocation(): BelongsTo
+    {
+        return $this->belongsTo(StockLocation::class, 'transit_location_id');
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(StockMovementLine::class);
+    }
+
+    public function receipts(): HasMany
+    {
+        return $this->hasMany(
+            StockMovementReceipt::class,
+            'stock_movement_id'
+        );
     }
 
     public function isDraft(): bool
@@ -88,6 +114,18 @@ class StockMovement extends Model
     public function isDone(): bool
     {
         return $this->status === 'done';
+    }
+
+    public function isInTransit(): bool
+    {
+        return $this->status === 'in_transit';
+    }
+
+    public function isInterWarehouseTransfer(): bool
+    {
+        return $this->warehouse_id
+            && $this->destination_warehouse_id
+            && (int) $this->warehouse_id !== (int) $this->destination_warehouse_id;
     }
 
     public static function nextReferenceForMovement(StockMovement $movement): string

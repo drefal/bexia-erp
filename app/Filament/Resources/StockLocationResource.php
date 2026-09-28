@@ -168,7 +168,15 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                             ->default(false)
                             ->columnSpan(3),
 
-                        Forms\Components\Textarea::make('description')
+                                                Forms\Components\Toggle::make('tracks_stock')
+                            ->label('Mantiene existencias')
+                            ->helperText(
+                                'Actívalo cuando esta ubicación deba conservar '
+                                .'existencia propia, incluso si es virtual o de tránsito.'
+                            )
+                            ->default(false),
+
+Forms\Components\Textarea::make('description')
                             ->extraAttributes(['class' => 'bexia-slr-field bexia-slr-description-field bexia-slr-long-field'])
                             ->label('Descripción')
                             ->rows(3)
