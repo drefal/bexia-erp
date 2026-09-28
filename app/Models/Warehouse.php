@@ -75,6 +75,17 @@ class Warehouse extends Model
             );
         }
 
+        // Ubicación física para mercancía recibida con incidencia.
+        static::ensureLocation(
+            $companyId,
+            $warehouseId,
+            'CUARENTENA',
+            'Cuarentena / dañados',
+            $internalTypeId,
+            null,
+            false
+        );
+
         // Ubicaciones virtuales de la empresa.
         $supplierLocationId = static::ensureLocation($companyId, null, 'PROVEEDORES', 'Proveedores', $supplierTypeId, null, false);
         $customerLocationId = static::ensureLocation($companyId, null, 'CLIENTES', 'Clientes', $customerTypeId, null, false);
@@ -82,6 +93,16 @@ class Warehouse extends Model
         static::ensureLocation($companyId, null, 'PERDIDA', 'Pérdida / merma', $lossTypeId, null, true);
         $productionLocationId = static::ensureLocation($companyId, null, 'PRODUCCION', 'Producción', $productionTypeId, null, false);
         $transitLocationId = static::ensureLocation($companyId, null, 'TRANSITO', 'Tránsito', $transitTypeId, null, false);
+
+        static::ensureLocation(
+            $companyId,
+            null,
+            'FALTANTE_TRANSITO',
+            'Faltante en investigación',
+            $transitTypeId,
+            null,
+            false
+        );
 
         static::ensureOperationType(
             companyId: $companyId,
@@ -254,6 +275,20 @@ class Warehouse extends Model
 
         if (Schema::hasColumn('stock_locations', 'allow_negative_stock')) {
             $values['allow_negative_stock'] = $allowNegative;
+        }
+
+        if (Schema::hasColumn('stock_locations', 'tracks_stock')) {
+            $values['tracks_stock'] = in_array(
+                $code,
+                [
+                    'EXISTENCIAS',
+                    'STOCK',
+                    'TRANSITO',
+                    'FALTANTE_TRANSITO',
+                    'CUARENTENA',
+                ],
+                true
+            );
         }
 
         if ($existingId) {

@@ -1592,6 +1592,578 @@ class StockMovementResource extends Resource
         });
     }
 
+    public static function receiveMovementWithIncidents(
+        StockMovement $movement,
+        array $items,
+        ?string $notes = null
+    ): StockMovementReceipt {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId || (int) $movement->company_id !== $companyId) {
+            Notification::make()
+                ->title('Traslado no disponible')
+                ->body('El traslado no pertenece a la empresa seleccionada.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        if (
+            $movement->status !== 'in_transit'
+            || ! $movement->isInterWarehouseTransfer()
+        ) {
+            Notification::make()
+                ->title('Traslado no disponible para recepción')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        if (
+            ! Schema::hasTable('stock_movement_incidents')
+            || ! Schema::hasColumn(
+                'stock_movement_receipt_lines',
+                'disposition'
+            )
+        ) {
+            Notification::make()
+                ->title('Esquema de incidencias no disponible')
+                ->body('Falta aplicar la estructura H9M4D1.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        $movement->load('lines');
+
+        static::validateTransfer($movement);
+
+        if (! $movement->transit_location_id) {
+            Notification::make()
+                ->title('Traslado sin tránsito')
+                ->body(
+                    'El traslado no tiene ubicación de tránsito registrada.'
+                )
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        $requested = [];
+
+        foreach ($items as $lineId => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $received = round(
+                max(0, (float) ($item['received'] ?? 0)),
+                6
+            );
+
+            $damaged = round(
+                max(0, (float) ($item['damaged'] ?? 0)),
+                6
+            );
+
+            $missing = round(
+                max(0, (float) ($item['missing'] ?? 0)),
+                6
+            );
+
+            $reason = trim((string) ($item['reason'] ?? ''));
+
+            if (($received + $damaged + $missing) <= 0) {
+                continue;
+            }
+
+            $requested[(int) $lineId] = [
+                'received' => $received,
+                'damaged' => $damaged,
+                'missing' => $missing,
+                'reason' => $reason,
+            ];
+        }
+
+        if ($requested === []) {
+            Notification::make()
+                ->title('Sin mercancía para procesar')
+                ->body(
+                    'Captura al menos una unidad como recibida, '
+                    . 'dañada o faltante.'
+                )
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        return DB::transaction(
+            function () use (
+                $movement,
+                $requested,
+                $notes,
+                $companyId
+            ): StockMovementReceipt {
+                $movement = StockMovement::query()
+                    ->whereKey($movement->getKey())
+                    ->where('company_id', $companyId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($movement->status !== 'in_transit') {
+                    Notification::make()
+                        ->title('El traslado ya cambió de estado')
+                        ->danger()
+                        ->send();
+
+                    throw new Halt();
+                }
+
+                $movement->load('lines');
+
+                $lineIds = $movement->lines
+                    ->pluck('id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->all();
+
+                foreach (array_keys($requested) as $lineId) {
+                    if (! in_array((int) $lineId, $lineIds, true)) {
+                        Notification::make()
+                            ->title('Línea inválida')
+                            ->body(
+                                'Una de las líneas no pertenece '
+                                . 'a este traslado.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        throw new Halt();
+                    }
+                }
+
+                $resolvedTotals = StockMovementReceiptLine::query()
+                    ->selectRaw(
+                        'stock_movement_line_id, '
+                        . 'SUM(quantity) AS resolved_quantity'
+                    )
+                    ->whereIn(
+                        'stock_movement_line_id',
+                        $lineIds
+                    )
+                    ->groupBy('stock_movement_line_id')
+                    ->pluck(
+                        'resolved_quantity',
+                        'stock_movement_line_id'
+                    );
+
+                foreach ($movement->lines as $line) {
+                    $lineId = (int) $line->id;
+
+                    if (! isset($requested[$lineId])) {
+                        continue;
+                    }
+
+                    $request = $requested[$lineId];
+
+                    $receivedNow = (float) $request['received'];
+                    $damagedNow = (float) $request['damaged'];
+                    $missingNow = (float) $request['missing'];
+
+                    $resolveNow = round(
+                        $receivedNow + $damagedNow + $missingNow,
+                        6
+                    );
+
+                    $sent = round(
+                        (float) $line->done_quantity,
+                        6
+                    );
+
+                    $resolved = round(
+                        (float) (
+                            $resolvedTotals[$lineId] ?? 0
+                        ),
+                        6
+                    );
+
+                    $pending = round(
+                        max(0, $sent - $resolved),
+                        6
+                    );
+
+                    if ($resolveNow > $pending + 0.000001) {
+                        Notification::make()
+                            ->title('Cantidad mayor al pendiente')
+                            ->body(
+                                static::stockItemLabel(
+                                    (int) $line->product_id,
+                                    $line->product_variant_id
+                                        ? (int) $line->product_variant_id
+                                        : null
+                                )
+                                . ' tiene pendiente '
+                                . number_format($pending, 6)
+                                . ' y se intentó resolver '
+                                . number_format($resolveNow, 6)
+                                . '.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        throw new Halt();
+                    }
+
+                    if (
+                        ($damagedNow > 0 || $missingNow > 0)
+                        && $request['reason'] === ''
+                    ) {
+                        Notification::make()
+                            ->title('Motivo obligatorio')
+                            ->body(
+                                'Indica el motivo del daño o faltante en '
+                                . static::stockItemLabel(
+                                    (int) $line->product_id,
+                                    $line->product_variant_id
+                                        ? (int) $line->product_variant_id
+                                        : null
+                                )
+                                . '.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        throw new Halt();
+                    }
+
+                    if ($line->stock_serial_number_id) {
+                        $validSerialLine =
+                            abs($sent - 1.0) < 0.000001
+                            && abs($pending - 1.0) < 0.000001
+                            && abs($resolveNow - 1.0) < 0.000001;
+
+                        $validDisposition =
+                            (
+                                abs($receivedNow - 1.0) < 0.000001
+                                && $damagedNow == 0.0
+                                && $missingNow == 0.0
+                            )
+                            || (
+                                abs($damagedNow - 1.0) < 0.000001
+                                && $receivedNow == 0.0
+                                && $missingNow == 0.0
+                            )
+                            || (
+                                abs($missingNow - 1.0) < 0.000001
+                                && $receivedNow == 0.0
+                                && $damagedNow == 0.0
+                            );
+
+                        if (! $validSerialLine || ! $validDisposition) {
+                            Notification::make()
+                                ->title(
+                                    'Recepción inválida para número de serie'
+                                )
+                                ->body(
+                                    'Cada serie debe clasificarse '
+                                    . 'completa como recibida, dañada '
+                                    . 'o faltante.'
+                                )
+                                ->danger()
+                                ->send();
+
+                            throw new Halt();
+                        }
+                    }
+                }
+
+                $receipt = StockMovementReceipt::create([
+                    'stock_movement_id' => $movement->id,
+                    'company_id' => $movement->company_id,
+                    'received_by' => auth()->id(),
+                    'received_at' => now(),
+                    'notes' => filled($notes)
+                        ? trim((string) $notes)
+                        : null,
+                ]);
+
+                foreach ($movement->lines as $line) {
+                    $lineId = (int) $line->id;
+
+                    if (! isset($requested[$lineId])) {
+                        continue;
+                    }
+
+                    $request = $requested[$lineId];
+
+                    $productId = (int) $line->product_id;
+                    $variantId = $line->product_variant_id
+                        ? (int) $line->product_variant_id
+                        : null;
+                    $lotId = $line->lot_id
+                        ? (int) $line->lot_id
+                        : null;
+                    $unitCost = $line->unit_cost !== null
+                        ? (float) $line->unit_cost
+                        : null;
+
+                    $dispositions = [
+                        'received' => (float) $request['received'],
+                        'damaged' => (float) $request['damaged'],
+                        'missing' => (float) $request['missing'],
+                    ];
+
+                    foreach ($dispositions as $disposition => $qty) {
+                        $qty = round($qty, 6);
+
+                        if ($qty <= 0) {
+                            continue;
+                        }
+
+                        static::validateLineQuantity(
+                            $line,
+                            $qty
+                        );
+
+                        $targetWarehouseId = match ($disposition) {
+                            'received',
+                            'damaged' => (int) $movement
+                                ->destination_warehouse_id,
+                            'missing' => (int) $movement->warehouse_id,
+                            default => throw new \RuntimeException(
+                                'Disposición de recepción inválida.'
+                            ),
+                        };
+
+                        $targetLocationId = match ($disposition) {
+                            'received' => (int) $movement
+                                ->destination_location_id,
+                            'damaged' => static::
+                                transferExceptionLocationId(
+                                    (int) $movement->company_id,
+                                    (int) $movement
+                                        ->destination_warehouse_id,
+                                    'CUARENTENA'
+                                ),
+                            'missing' => static::
+                                transferExceptionLocationId(
+                                    (int) $movement->company_id,
+                                    null,
+                                    'FALTANTE_TRANSITO'
+                                ),
+                            default => throw new \RuntimeException(
+                                'Disposición de recepción inválida.'
+                            ),
+                        };
+
+                        static::decreaseQuant(
+                            companyId: (int) $movement->company_id,
+                            warehouseId: (int) $movement->warehouse_id,
+                            locationId: (int) $movement
+                                ->transit_location_id,
+                            productId: $productId,
+                            variantId: $variantId,
+                            lotId: $lotId,
+                            quantity: $qty,
+                            unitCost: $unitCost
+                        );
+
+                        static::increaseQuant(
+                            companyId: (int) $movement->company_id,
+                            warehouseId: $targetWarehouseId,
+                            locationId: $targetLocationId,
+                            productId: $productId,
+                            variantId: $variantId,
+                            lotId: $lotId,
+                            quantity: $qty,
+                            unitCost: $unitCost
+                        );
+
+                        $receiptLine = StockMovementReceiptLine::create([
+                            'stock_movement_receipt_id' => $receipt->id,
+                            'stock_movement_line_id' => $line->id,
+                            'quantity' => $qty,
+                            'disposition' => $disposition,
+                            'stock_serial_number_id' =>
+                                $line->stock_serial_number_id
+                                    ? (int) $line
+                                        ->stock_serial_number_id
+                                    : null,
+                            'reason' => in_array(
+                                $disposition,
+                                ['damaged', 'missing'],
+                                true
+                            )
+                                ? $request['reason']
+                                : null,
+                        ]);
+
+                        if (
+                            in_array(
+                                $disposition,
+                                ['damaged', 'missing'],
+                                true
+                            )
+                        ) {
+                            DB::table(
+                                'stock_movement_incidents'
+                            )->insert([
+                                'company_id' => $movement->company_id,
+                                'stock_movement_id' => $movement->id,
+                                'stock_movement_line_id' => $line->id,
+                                'stock_movement_receipt_id' =>
+                                    $receipt->id,
+                                'stock_movement_receipt_line_id' =>
+                                    $receiptLine->id,
+                                'stock_serial_number_id' =>
+                                    $line->stock_serial_number_id
+                                        ? (int) $line
+                                            ->stock_serial_number_id
+                                        : null,
+                                'incident_type' => $disposition,
+                                'quantity' => $qty,
+                                'status' => 'open',
+                                'reason' => $request['reason'],
+                                'created_by' => auth()->id(),
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                        }
+
+                        if ($line->stock_serial_number_id) {
+                            static::moveSerial(
+                                (int) $line->stock_serial_number_id,
+                                (int) $movement->company_id,
+                                $targetWarehouseId,
+                                $targetLocationId
+                            );
+
+                            if (
+                                in_array(
+                                    $disposition,
+                                    ['damaged', 'missing'],
+                                    true
+                                )
+                            ) {
+                                DB::table('stock_serial_numbers')
+                                    ->where(
+                                        'id',
+                                        (int) $line
+                                            ->stock_serial_number_id
+                                    )
+                                    ->where(
+                                        'company_id',
+                                        (int) $movement->company_id
+                                    )
+                                    ->update([
+                                        'status' => 'blocked',
+                                        'updated_at' => now(),
+                                    ]);
+                            }
+                        }
+                    }
+                }
+
+                $resolvedTotalsAfter =
+                    StockMovementReceiptLine::query()
+                        ->selectRaw(
+                            'stock_movement_line_id, '
+                            . 'SUM(quantity) AS resolved_quantity'
+                        )
+                        ->whereIn(
+                            'stock_movement_line_id',
+                            $lineIds
+                        )
+                        ->groupBy('stock_movement_line_id')
+                        ->pluck(
+                            'resolved_quantity',
+                            'stock_movement_line_id'
+                        );
+
+                $allResolved = true;
+
+                foreach ($movement->lines as $line) {
+                    $sent = round(
+                        (float) $line->done_quantity,
+                        6
+                    );
+
+                    $resolved = round(
+                        (float) (
+                            $resolvedTotalsAfter[
+                                (int) $line->id
+                            ] ?? 0
+                        ),
+                        6
+                    );
+
+                    if ($resolved + 0.000001 < $sent) {
+                        $allResolved = false;
+                        break;
+                    }
+                }
+
+                if ($allResolved) {
+                    $movement->update([
+                        'status' => 'done',
+                        'received_by' => auth()->id(),
+                        'received_at' => now(),
+                        'confirmed_by' => auth()->id(),
+                        'confirmed_at' => now(),
+                    ]);
+                } else {
+                    $movement->update([
+                        'status' => 'in_transit',
+                        'received_by' => null,
+                        'received_at' => null,
+                    ]);
+                }
+
+                return $receipt->fresh('lines');
+            }
+        );
+    }
+
+    protected static function transferExceptionLocationId(
+        int $companyId,
+        ?int $warehouseId,
+        string $code
+    ): int {
+        $query = DB::table('stock_locations')
+            ->where('company_id', $companyId)
+            ->whereRaw('upper(code) = ?', [strtoupper($code)])
+            ->where('is_active', true)
+            ->where('tracks_stock', true);
+
+        if ($warehouseId === null) {
+            $query->whereNull('warehouse_id');
+        } else {
+            $query->where('warehouse_id', $warehouseId);
+        }
+
+        $id = $query->orderBy('id')->value('id');
+
+        if (! $id) {
+            Notification::make()
+                ->title('Ubicación de incidencia no disponible')
+                ->body(
+                    'No se encontró la ubicación '
+                    . $code
+                    . ' para esta empresa/almacén.'
+                )
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        return (int) $id;
+    }
+
     public static function receiveMovement(
         StockMovement $movement,
         array $quantities,

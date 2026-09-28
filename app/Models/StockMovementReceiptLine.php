@@ -11,6 +11,9 @@ class StockMovementReceiptLine extends Model
         'stock_movement_receipt_id',
         'stock_movement_line_id',
         'quantity',
+        'disposition',
+        'stock_serial_number_id',
+        'reason',
     ];
 
     protected $casts = [
@@ -30,6 +33,14 @@ class StockMovementReceiptLine extends Model
         return $this->belongsTo(
             StockMovementLine::class,
             'stock_movement_line_id'
+        );
+    }
+
+    public function serialNumber(): BelongsTo
+    {
+        return $this->belongsTo(
+            StockSerialNumber::class,
+            'stock_serial_number_id'
         );
     }
 }
