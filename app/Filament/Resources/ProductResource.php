@@ -1568,13 +1568,40 @@ public static function canCreate(): bool
                                             ->helperText('Precio base de venta antes de impuestos.')
     ->disabled()
     ->dehydrated(false),
+                                        /*
+                                         * BEXIA_V5_83_6I3_SHOW_EFFECTIVE_SALE_TAX_RATE
+                                         *
+                                         * En variantes el IVA puede heredarse del padre.
+                                         * Mostramos el IVA efectivo para evitar que la ficha
+                                         * aparezca vacia aunque Bexia este calculando con 16%.
+                                         *
+                                         * No se persiste aqui ningun valor nuevo.
+                                         */
                                         Forms\Components\TextInput::make('sale_tax_rate')
                                             ->label('IVA venta %')
                                             ->numeric()
                                             ->minValue(0)
                                             ->default(16)
                                             ->step('0.0001')
-                                            ->live(onBlur: true),
+                                            ->live(onBlur: true)
+                                            ->afterStateHydrated(
+                                                function (
+                                                    Forms\Components\TextInput $component,
+                                                    ?Product $record
+                                                ): void {
+                                                    if (! $record) {
+                                                        return;
+                                                    }
+
+                                                    $component->state(
+                                                        static::effectiveSaleTaxRate(
+                                                            $record
+                                                        )
+                                                    );
+                                                }
+                                            )
+                                            ->disabled()
+                                            ->dehydrated(false),
 
                                         Forms\Components\Placeholder::make('sale_price_with_tax_preview')
                                             ->label('Precio de venta con IVA')
@@ -1644,9 +1671,8 @@ Forms\Components\Actions::make([
 
                             $base = (float) ($record->sale_price ?? 0);
 
-                            $taxRate = max(
-                                0,
-                                (float) ($record->sale_tax_rate ?? 0)
+                            $taxRate = static::effectiveSaleTaxRate(
+                                $record
                             );
 
                             $withTax = $base * (
@@ -1664,9 +1690,8 @@ Forms\Components\Actions::make([
                         ->content(
                             fn (?\App\Models\Product $record): string =>
                                 number_format(
-                                    max(
-                                        0,
-                                        (float) ($record?->sale_tax_rate ?? 0)
+                                    static::effectiveSaleTaxRate(
+                                        $record
                                     ),
                                     4
                                 ) . ' %'
@@ -1694,9 +1719,8 @@ Forms\Components\Actions::make([
                                 return;
                             }
 
-                            $taxRate = max(
-                                0,
-                                (float) ($record?->sale_tax_rate ?? 0)
+                            $taxRate = static::effectiveSaleTaxRate(
+                                $record
                             );
 
                             $withTax = round(
@@ -1738,9 +1762,8 @@ Forms\Components\Actions::make([
                                 return;
                             }
 
-                            $taxRate = max(
-                                0,
-                                (float) ($record?->sale_tax_rate ?? 0)
+                            $taxRate = static::effectiveSaleTaxRate(
+                                $record
                             );
 
                             $factor = 1 + (
@@ -1818,9 +1841,15 @@ Forms\Components\Actions::make([
                 return;
             }
 
-            $taxRate = max(
-                0,
-                (float) ($record->sale_tax_rate ?? 0)
+            /*
+             * BEXIA_V5_83_6I2_SAVE_EFFECTIVE_SALE_TAX_RATE
+             *
+             * El calculo final debe usar el mismo IVA efectivo que
+             * utiliza el modal. En variantes puede venir heredado
+             * del producto padre aunque sale_tax_rate propio sea 0.
+             */
+            $taxRate = static::effectiveSaleTaxRate(
+                $record
             );
 
             $factor = 1 + (
@@ -3624,9 +3653,31 @@ variants_inner_table')
 
 
                 Tables\Columns\TextColumn::make('sale_price')
-                    ->label('Precio venta')
+                    ->label('Precio sin IVA')
                     ->money('MXN')
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('sale_price_with_tax_display')
+                    ->label('Precio con IVA')
+                    ->getStateUsing(
+                        fn (Product $record): float =>
+                            round(
+                                (float) (
+                                    $record->sale_price
+                                    ?? 0
+                                )
+                                * (
+                                    1
+                                    + (
+                                        static::effectiveSaleTaxRate(
+                                            $record
+                                        ) / 100
+                                    )
+                                ),
+                                6
+                            )
+                    )
+                    ->money('MXN'),
 
                 Tables\Columns\TextColumn::make('standard_cost')
                     ->label('Costo')
@@ -5132,6 +5183,205 @@ public static function getPages(): array
 
         return $avg !== null ? (float) $avg : null;
     }
+
+    /*
+     * BEXIA_V5_83_6I1_EFFECTIVE_SALE_TAX_RATE
+     *
+     * Determina el IVA efectivo de venta.
+     *
+     * Prioridad:
+     * 1. Impuesto IVA vinculado directamente al producto.
+     * 2. sale_tax_rate propio.
+     * 3. En variantes sin IVA propio, hereda del padre.
+     */
+    protected static function effectiveSaleTaxRate(?Product $record): float
+    {
+        if (! $record) {
+            return 0.0;
+        }
+
+        $linkedRate = static::linkedSaleTaxRatePercent(
+            $record
+        );
+
+        if ($linkedRate !== null) {
+            return max(
+                0,
+                $linkedRate
+            );
+        }
+
+        $ownRate = max(
+            0,
+            (float) (
+                $record->sale_tax_rate
+                ?? 0
+            )
+        );
+
+        if ($ownRate > 0) {
+            return $ownRate;
+        }
+
+        if (
+            (bool) (
+                $record->is_variant
+                ?? false
+            )
+            && ! empty(
+                $record->parent_product_id
+            )
+        ) {
+            $parent = Product::query()->find(
+                (int) $record->parent_product_id
+            );
+
+            if ($parent) {
+                $parentLinkedRate =
+                    static::linkedSaleTaxRatePercent(
+                        $parent
+                    );
+
+                if ($parentLinkedRate !== null) {
+                    return max(
+                        0,
+                        $parentLinkedRate
+                    );
+                }
+
+                return max(
+                    0,
+                    (float) (
+                        $parent->sale_tax_rate
+                        ?? 0
+                    )
+                );
+            }
+        }
+
+        return $ownRate;
+    }
+
+    protected static function linkedSaleTaxRatePercent(
+        Product $record
+    ): ?float {
+        if (
+            ! Schema::hasTable('product_tax_rates')
+            || ! Schema::hasTable('tax_rates')
+        ) {
+            return null;
+        }
+
+        $rows = DB::table('product_tax_rates as ptr')
+            ->join(
+                'tax_rates as t',
+                't.id',
+                '=',
+                'ptr.tax_rate_id'
+            )
+            ->where(
+                'ptr.product_id',
+                $record->getKey()
+            )
+            ->where(
+                'ptr.usage_type',
+                'sale'
+            )
+            ->where(
+                'ptr.is_active',
+                true
+            )
+            ->where(
+                't.is_active',
+                true
+            )
+            ->get([
+                't.code',
+                't.name',
+                't.tax_type',
+                't.factor_type',
+                't.rate',
+                't.is_withholding',
+            ]);
+
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        $ivaRows = $rows->filter(
+            function ($tax): bool {
+                if (
+                    (bool) (
+                        $tax->is_withholding
+                        ?? false
+                    )
+                ) {
+                    return false;
+                }
+
+                $taxType = mb_strtolower(
+                    trim(
+                        (string) (
+                            $tax->tax_type
+                            ?? ''
+                        )
+                    )
+                );
+
+                $code = mb_strtolower(
+                    trim(
+                        (string) (
+                            $tax->code
+                            ?? ''
+                        )
+                    )
+                );
+
+                $name = mb_strtolower(
+                    trim(
+                        (string) (
+                            $tax->name
+                            ?? ''
+                        )
+                    )
+                );
+
+                return $taxType === 'iva'
+                    || str_contains($code, 'iva')
+                    || str_contains($name, 'iva');
+            }
+        );
+
+        if ($ivaRows->isEmpty()) {
+            return null;
+        }
+
+        return (float) $ivaRows->sum(
+            function ($tax): float {
+                if (
+                    mb_strtolower(
+                        trim(
+                            (string) (
+                                $tax->factor_type
+                                ?? ''
+                            )
+                        )
+                    ) === 'exento'
+                ) {
+                    return 0.0;
+                }
+
+                return max(
+                    0,
+                    (float) (
+                        $tax->rate
+                        ?? 0
+                    ) * 100
+                );
+            }
+        );
+    }
+
 
     protected static function salePriceWithTaxLabel(Forms\Get $get): string
     {
