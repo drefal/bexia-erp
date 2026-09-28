@@ -26,6 +26,8 @@ class InventoryAsOfDateService
 
         $this->seedCurrentQuants($balances, $filters, $qtyColumn);
         $this->reverseMovementsAfterCutoff($balances, $filters, $cutoff);
+        $this->reverseInterWarehouseTransfersAfterCutoff($balances, $filters, $cutoff);
+        $this->reverseSameWarehouseTransfersAfterCutoff($balances, $filters, $cutoff);
 
         if (! empty($filters['show_zero'])) {
             $this->seedCatalogZeroProducts($balances, $filters);
@@ -375,6 +377,7 @@ class InventoryAsOfDateService
             ->leftJoin('stock_operation_types as ot', 'ot.id', '=', 'm.stock_operation_type_id')
             ->leftJoin('companies as c', 'c.id', '=', 'm.company_id')
             ->leftJoin('warehouses as w', 'w.id', '=', 'm.warehouse_id')
+            ->leftJoin('warehouses as dw', 'dw.id', '=', 'm.destination_warehouse_id')
             ->leftJoin('products as p', 'p.id', '=', 'l.product_id')
             ->leftJoin('products as v', 'v.id', '=', 'l.product_variant_id')
             ->leftJoin('stock_lots as lot', 'lot.id', '=', 'l.lot_id')
@@ -384,6 +387,9 @@ class InventoryAsOfDateService
                 'c.name as company_name',
                 'm.warehouse_id',
                 'w.name as warehouse_name',
+                'm.destination_warehouse_id',
+                'dw.name as destination_warehouse_name',
+                'm.transit_location_id',
                 'm.source_location_id',
                 'm.destination_location_id',
                 'm.reference',
@@ -401,6 +407,18 @@ class InventoryAsOfDateService
             ]);
 
         $this->applyMovementFilters($query, $filters);
+
+        $query->where(function ($q): void {
+            $q->whereNull('m.destination_warehouse_id')
+                ->orWhere(function ($q): void {
+                    $q->whereColumn(
+                        'm.destination_warehouse_id',
+                        '<>',
+                        'm.warehouse_id'
+                    )
+                    ->whereNull('m.transit_location_id');
+                });
+        });
 
         foreach ($query->get() as $row) {
             $direction = $this->classifyDirection($row);
@@ -421,12 +439,499 @@ class InventoryAsOfDateService
         }
     }
 
+    protected function reverseSameWarehouseTransfersAfterCutoff(
+        array &$balances,
+        array $filters,
+        Carbon $cutoff
+    ): void {
+        $cutoffAt = $cutoff->format('Y-m-d H:i:s');
+
+        $query = DB::table('stock_movement_lines as l')
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
+            ->leftJoin('companies as c', 'c.id', '=', 'm.company_id')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'm.warehouse_id')
+            ->leftJoin('products as p', 'p.id', '=', 'l.product_id')
+            ->leftJoin('products as v', 'v.id', '=', 'l.product_variant_id')
+            ->leftJoin('stock_lots as lot', 'lot.id', '=', 'l.lot_id')
+            ->whereNotNull('m.destination_warehouse_id')
+            ->whereColumn('m.destination_warehouse_id', 'm.warehouse_id')
+            ->whereNotNull('m.source_location_id')
+            ->whereNotNull('m.destination_location_id')
+            ->whereNotNull('m.received_at')
+            ->where('m.received_at', '>', $cutoffAt)
+            ->select([
+                'm.id as stock_movement_id',
+                'm.company_id',
+                'c.name as company_name',
+                'm.warehouse_id',
+                'w.name as warehouse_name',
+                'm.destination_warehouse_id',
+                'm.source_location_id',
+                'm.destination_location_id',
+                'm.reference',
+                'm.origin_document',
+                'm.received_at',
+                'l.id as stock_movement_line_id',
+                'l.product_id',
+                'p.name as product_name',
+                'l.product_variant_id',
+                'v.name as variant_name',
+                'l.lot_id',
+                'lot.lot_number',
+                'l.done_quantity',
+            ]);
+
+        if (! empty($filters['company_id'])) {
+            $query->where(
+                'm.company_id',
+                (int) $filters['company_id']
+            );
+        }
+
+        if (! empty($filters['warehouse_id'])) {
+            $query->where(
+                'm.warehouse_id',
+                (int) $filters['warehouse_id']
+            );
+        }
+
+        if (! empty($filters['location_id'])) {
+            $locationId=(int) $filters['location_id'];
+
+            $query->where(function ($q) use ($locationId): void {
+                $q->where('m.source_location_id', $locationId)
+                    ->orWhere('m.destination_location_id', $locationId);
+            });
+        }
+
+        if (! empty($filters['product_id'])) {
+            $query->where(
+                'l.product_id',
+                (int) $filters['product_id']
+            );
+        }
+
+        if (! empty($filters['product_variant_id'])) {
+            $query->where(
+                'l.product_variant_id',
+                (int) $filters['product_variant_id']
+            );
+        }
+
+        if (! empty($filters['lot_id'])) {
+            $query->where(
+                'l.lot_id',
+                (int) $filters['lot_id']
+            );
+        }
+
+        foreach ($query
+            ->orderByDesc('m.received_at')
+            ->orderByDesc('m.id')
+            ->get() as $row) {
+
+            $qty=abs((float) ($row->done_quantity ?? 0));
+
+            if ($qty <= 0) {
+                continue;
+            }
+
+            /*
+             * Estado actual contiene el traslado ya aplicado.
+             * Para volver a antes de received_at:
+             *
+             * destino -qty
+             * origen  +qty
+             */
+
+            $destinationLocationId=
+                $row->destination_location_id ?: null;
+
+            $destinationMeta=$this->movementMeta(
+                $row,
+                $destinationLocationId,
+                $this->locationName($destinationLocationId),
+                ! empty($row->warehouse_id)
+                    ? (int) $row->warehouse_id
+                    : null,
+                $row->warehouse_name ?? null
+            );
+
+            if (
+                $this->transferMetaMatchesFilters(
+                    $destinationMeta,
+                    $filters
+                )
+            ) {
+                $this->addBalance(
+                    $balances,
+                    $this->keyFromMeta($destinationMeta),
+                    $destinationMeta,
+                    -1 * $qty
+                );
+            }
+
+            $sourceLocationId=
+                $row->source_location_id ?: null;
+
+            $sourceMeta=$this->movementMeta(
+                $row,
+                $sourceLocationId,
+                $this->locationName($sourceLocationId),
+                ! empty($row->warehouse_id)
+                    ? (int) $row->warehouse_id
+                    : null,
+                $row->warehouse_name ?? null
+            );
+
+            if (
+                $this->transferMetaMatchesFilters(
+                    $sourceMeta,
+                    $filters
+                )
+            ) {
+                $this->addBalance(
+                    $balances,
+                    $this->keyFromMeta($sourceMeta),
+                    $sourceMeta,
+                    $qty
+                );
+            }
+        }
+    }
+
+    protected function reverseInterWarehouseTransfersAfterCutoff(
+        array &$balances,
+        array $filters,
+        Carbon $cutoff
+    ): void {
+        if (
+            ! Schema::hasTable('stock_movement_receipts')
+            || ! Schema::hasTable('stock_movement_receipt_lines')
+        ) {
+            return;
+        }
+
+        $query = DB::table('stock_movement_lines as l')
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
+            ->leftJoin('companies as c', 'c.id', '=', 'm.company_id')
+            ->leftJoin('warehouses as w', 'w.id', '=', 'm.warehouse_id')
+            ->leftJoin('warehouses as dw', 'dw.id', '=', 'm.destination_warehouse_id')
+            ->leftJoin('products as p', 'p.id', '=', 'l.product_id')
+            ->leftJoin('products as v', 'v.id', '=', 'l.product_variant_id')
+            ->leftJoin('stock_lots as lot', 'lot.id', '=', 'l.lot_id')
+            ->whereNotNull('m.destination_warehouse_id')
+            ->whereColumn('m.destination_warehouse_id', '<>', 'm.warehouse_id')
+            ->whereNotNull('m.transit_location_id')
+            ->whereNotNull('m.dispatched_at')
+            ->select([
+                'm.id as stock_movement_id',
+                'm.company_id',
+                'c.name as company_name',
+                'm.warehouse_id',
+                'w.name as warehouse_name',
+                'm.destination_warehouse_id',
+                'dw.name as destination_warehouse_name',
+                'm.source_location_id',
+                'm.destination_location_id',
+                'm.transit_location_id',
+                'm.dispatched_at',
+                'm.received_at',
+                'm.reference',
+                'm.origin_document',
+                'l.id as stock_movement_line_id',
+                'l.product_id',
+                'p.name as product_name',
+                'l.product_variant_id',
+                'v.name as variant_name',
+                'l.lot_id',
+                'lot.lot_number',
+                'l.done_quantity',
+            ]);
+
+        if (! empty($filters['company_id'])) {
+            $query->where('m.company_id', (int) $filters['company_id']);
+        }
+
+        if (! empty($filters['warehouse_id'])) {
+            $warehouseId = (int) $filters['warehouse_id'];
+
+            $query->where(function ($q) use ($warehouseId): void {
+                $q->where('m.warehouse_id', $warehouseId)
+                    ->orWhere('m.destination_warehouse_id', $warehouseId);
+            });
+        }
+
+        if (! empty($filters['location_id'])) {
+            $locationId = (int) $filters['location_id'];
+
+            $query->where(function ($q) use ($locationId): void {
+                $q->where('m.source_location_id', $locationId)
+                    ->orWhere('m.destination_location_id', $locationId)
+                    ->orWhere('m.transit_location_id', $locationId);
+            });
+        }
+
+        if (! empty($filters['product_id'])) {
+            $query->where('l.product_id', (int) $filters['product_id']);
+        }
+
+        if (! empty($filters['product_variant_id'])) {
+            $query->where('l.product_variant_id', (int) $filters['product_variant_id']);
+        }
+
+        if (! empty($filters['lot_id'])) {
+            $query->where('l.lot_id', (int) $filters['lot_id']);
+        }
+
+        $cutoffAt = $cutoff->format('Y-m-d H:i:s');
+
+        foreach ($query->get() as $row) {
+            $doneQty = abs((float) ($row->done_quantity ?? 0));
+
+            if ($doneQty <= 0) {
+                continue;
+            }
+
+            /*
+             * Deshacer cada recepción que ocurrió después del corte:
+             * destino -> tránsito.
+             */
+            $receipts = DB::table('stock_movement_receipt_lines as rl')
+                ->join(
+                    'stock_movement_receipts as r',
+                    'r.id',
+                    '=',
+                    'rl.stock_movement_receipt_id'
+                )
+                ->where('r.stock_movement_id', (int) $row->stock_movement_id)
+                ->where(
+                    'rl.stock_movement_line_id',
+                    (int) $row->stock_movement_line_id
+                )
+                ->where('r.received_at', '>', $cutoffAt)
+                ->select([
+                    'r.received_at',
+                    'rl.quantity',
+                ])
+                ->orderByDesc('r.received_at')
+                ->get();
+
+            foreach ($receipts as $receipt) {
+                $receiptQty = abs((float) ($receipt->quantity ?? 0));
+
+                if ($receiptQty <= 0) {
+                    continue;
+                }
+
+                $this->reverseTransferReceipt(
+                    $balances,
+                    $row,
+                    $receiptQty,
+                    $filters
+                );
+            }
+
+            /*
+             * Si el despacho también ocurrió después del corte,
+             * deshacer origen -> tránsito.
+             */
+            if (
+                ! empty($row->dispatched_at)
+                && (string) $row->dispatched_at > $cutoffAt
+            ) {
+                $this->reverseTransferDispatch(
+                    $balances,
+                    $row,
+                    $doneQty,
+                    $filters
+                );
+            }
+        }
+    }
+
+    protected function reverseTransferReceipt(
+        array &$balances,
+        object $row,
+        float $qty,
+        array $filters
+    ): void {
+        $destinationLocationId = $row->destination_location_id ?: null;
+        $destinationLocationName = $this->locationName($destinationLocationId);
+
+        $destinationMeta = $this->movementMeta(
+            $row,
+            $destinationLocationId,
+            $destinationLocationName,
+            ! empty($row->destination_warehouse_id)
+                ? (int) $row->destination_warehouse_id
+                : null,
+            $row->destination_warehouse_name ?? null
+        );
+
+        /*
+         * Deshacer entrada al destino.
+         */
+        if ($this->transferMetaMatchesFilters($destinationMeta, $filters)) {
+            $this->addBalance(
+                $balances,
+                $this->keyFromMeta($destinationMeta),
+                $destinationMeta,
+                -1 * $qty
+            );
+        }
+
+        /*
+         * Regresar esa cantidad al tránsito.
+         */
+        $transitMeta = $this->transferTransitMeta($row);
+
+        if ($this->transferMetaMatchesFilters($transitMeta, $filters)) {
+            $this->addBalance(
+                $balances,
+                $this->keyFromMeta($transitMeta),
+                $transitMeta,
+                $qty
+            );
+        }
+    }
+
+    protected function reverseTransferDispatch(
+        array &$balances,
+        object $row,
+        float $qty,
+        array $filters
+    ): void {
+        /*
+         * Deshacer entrada a tránsito.
+         */
+        $transitMeta = $this->transferTransitMeta($row);
+
+        if ($this->transferMetaMatchesFilters($transitMeta, $filters)) {
+            $this->addBalance(
+                $balances,
+                $this->keyFromMeta($transitMeta),
+                $transitMeta,
+                -1 * $qty
+            );
+        }
+
+        /*
+         * Regresar cantidad al origen.
+         */
+        $sourceLocationId = $row->source_location_id ?: null;
+        $sourceLocationName = $this->locationName($sourceLocationId);
+
+        $sourceMeta = $this->movementMeta(
+            $row,
+            $sourceLocationId,
+            $sourceLocationName,
+            ! empty($row->warehouse_id)
+                ? (int) $row->warehouse_id
+                : null,
+            $row->warehouse_name ?? null
+        );
+
+        if ($this->transferMetaMatchesFilters($sourceMeta, $filters)) {
+            $this->addBalance(
+                $balances,
+                $this->keyFromMeta($sourceMeta),
+                $sourceMeta,
+                $qty
+            );
+        }
+    }
+
+    protected function transferMetaMatchesFilters(
+        array $meta,
+        array $filters
+    ): bool {
+        if (
+            ! empty($filters['company_id'])
+            && (int) ($meta['company_id'] ?? 0) !== (int) $filters['company_id']
+        ) {
+            return false;
+        }
+
+        if (
+            ! empty($filters['warehouse_id'])
+            && (int) ($meta['warehouse_id'] ?? 0) !== (int) $filters['warehouse_id']
+        ) {
+            return false;
+        }
+
+        if (
+            ! empty($filters['location_id'])
+            && (int) ($meta['location_id'] ?? 0) !== (int) $filters['location_id']
+        ) {
+            return false;
+        }
+
+        if (
+            ! empty($filters['product_id'])
+            && (int) ($meta['product_id'] ?? 0) !== (int) $filters['product_id']
+        ) {
+            return false;
+        }
+
+        if (
+            ! empty($filters['product_variant_id'])
+            && (int) ($meta['variant_id'] ?? 0) !== (int) $filters['product_variant_id']
+        ) {
+            return false;
+        }
+
+        if (
+            ! empty($filters['lot_id'])
+            && (int) ($meta['lot_id'] ?? 0) !== (int) $filters['lot_id']
+        ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function transferTransitMeta(object $row): array
+    {
+        $locationId = $row->transit_location_id ?: null;
+        $locationName = $this->locationName($locationId);
+
+        /*
+         * El tránsito pertenece operacionalmente al almacén origen
+         * durante el viaje, aun cuando la ubicación no tenga
+         * warehouse_id configurado.
+         */
+        return $this->movementMeta(
+            $row,
+            $locationId,
+            $locationName,
+            ! empty($row->warehouse_id)
+                ? (int) $row->warehouse_id
+                : null,
+            $row->warehouse_name ?? null
+        );
+    }
+
     protected function reverseInMovement(array &$balances, object $row, float $qty): void
     {
         $locationId = $row->destination_location_id ?: null;
         $locationName = $this->locationName($locationId);
 
-        $meta = $this->movementMeta($row, $locationId, $locationName);
+        $warehouseId = ! empty($row->destination_warehouse_id)
+            ? (int) $row->destination_warehouse_id
+            : (int) ($row->warehouse_id ?? 0);
+
+        $warehouseName = ! empty($row->destination_warehouse_name)
+            ? (string) $row->destination_warehouse_name
+            : (string) ($row->warehouse_name ?? '');
+
+        $meta = $this->movementMeta(
+            $row,
+            $locationId,
+            $locationName,
+            $warehouseId ?: null,
+            $warehouseName ?: null
+        );
 
         $this->addBalance($balances, $this->keyFromMeta($meta), $meta, $qty);
     }
@@ -441,13 +946,18 @@ class InventoryAsOfDateService
         $this->addBalance($balances, $this->keyFromMeta($meta), $meta, $qty);
     }
 
-    protected function movementMeta(object $row, ?int $locationId, ?string $locationName): array
-    {
+    protected function movementMeta(
+        object $row,
+        ?int $locationId,
+        ?string $locationName,
+        ?int $warehouseId = null,
+        ?string $warehouseName = null
+    ): array {
         return [
             'company_id' => $row->company_id,
             'company_name' => $row->company_name,
-            'warehouse_id' => $row->warehouse_id,
-            'warehouse_name' => $row->warehouse_name,
+            'warehouse_id' => $warehouseId ?? $row->warehouse_id,
+            'warehouse_name' => $warehouseName ?? $row->warehouse_name,
             'location_id' => $locationId,
             'location_name' => $locationName,
             'product_id' => $row->product_id,
@@ -491,7 +1001,12 @@ class InventoryAsOfDateService
         }
 
         if (! empty($filters['warehouse_id'])) {
-            $query->where('m.warehouse_id', (int) $filters['warehouse_id']);
+            $warehouseId = (int) $filters['warehouse_id'];
+
+            $query->where(function ($q) use ($warehouseId): void {
+                $q->where('m.warehouse_id', $warehouseId)
+                    ->orWhere('m.destination_warehouse_id', $warehouseId);
+            });
         }
 
         if (! empty($filters['location_id'])) {

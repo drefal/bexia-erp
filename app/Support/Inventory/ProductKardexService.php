@@ -29,6 +29,7 @@ class ProductKardexService
             ->leftJoin('stock_lots as lot', 'lot.id', '=', 'l.lot_id')
             ->leftJoin('stock_serial_numbers as serial', 'serial.id', '=', 'l.stock_serial_number_id')
             ->leftJoin('warehouses as w', 'w.id', '=', 'm.warehouse_id')
+            ->leftJoin('warehouses as dw', 'dw.id', '=', 'm.destination_warehouse_id')
             ->leftJoin('stock_locations as sl_from', 'sl_from.id', '=', 'm.source_location_id')
             ->leftJoin('stock_locations as sl_to', 'sl_to.id', '=', 'm.destination_location_id')
             ->select([
@@ -38,6 +39,9 @@ class ProductKardexService
                 'c.name as company_name',
                 'm.warehouse_id',
                 'w.name as warehouse_name',
+                'm.destination_warehouse_id',
+                'dw.name as destination_warehouse_name',
+                'm.transit_location_id',
                 'm.source_location_id',
                 'sl_from.name as source_location_name',
                 'm.destination_location_id',
@@ -93,9 +97,21 @@ class ProductKardexService
             ->get();
 
         $selectedMethod = $this->normalizeMethod((string) ($filters['valuation_method'] ?? self::METHOD_AUTO));
+        $warehouseFilter = ! empty($filters['warehouse_id']) ? (int) $filters['warehouse_id'] : null;
+        $locationFilter = ! empty($filters['location_id']) ? (int) $filters['location_id'] : null;
         $states = [];
 
-        return $records->map(function ($row) use (&$states, $selectedMethod) {
+        return $records->map(function ($row) use (&$states, $selectedMethod, $warehouseFilter, $locationFilter) {
+            if ($warehouseFilter !== null) {
+                $row->effective_warehouse_id = $warehouseFilter;
+                $row->effective_warehouse_name =
+                    (int) ($row->destination_warehouse_id ?? 0) === $warehouseFilter
+                        ? ($row->destination_warehouse_name ?? $row->warehouse_name)
+                        : $row->warehouse_name;
+            } else {
+                $row->effective_warehouse_id = $row->warehouse_id;
+                $row->effective_warehouse_name = $row->warehouse_name;
+            }
             $key = $this->balanceKey($row);
             $method = $selectedMethod === self::METHOD_AUTO
                 ? $this->effectiveCostingMethod($row)
@@ -105,14 +121,49 @@ class ProductKardexService
                 $states[$key] = $this->initialState($row);
             }
 
-            $direction = $this->direction($row);
+            $direction = $this->direction($row, $warehouseFilter, $locationFilter);
             $qty = abs((float) ($row->done_quantity ?? $row->requested_quantity ?? 0));
 
+            /*
+             * Un traslado entre ubicaciones del mismo almacén no cambia
+             * la cantidad ni el valor total del almacén.
+             *
+             * Conservamos $qty para mostrar el movimiento, pero usamos
+             * cero para el motor de valoración cuando direction=transfer.
+             *
+             * Si existe filtro de ubicación, direction() devuelve in/out
+             * y el movimiento sí afecta correctamente el saldo de esa
+             * ubicación.
+             */
+            $valuationQty = $direction === 'transfer'
+                ? 0.0
+                : $qty;
+
             $valuation = match ($method) {
-                self::METHOD_FIFO => $this->applyFifo($states[$key], $row, $direction, $qty),
-                self::METHOD_STANDARD => $this->applyStandard($states[$key], $row, $direction, $qty),
-                self::METHOD_RECORDED => $this->applyRecorded($states[$key], $row, $direction, $qty),
-                default => $this->applyAverage($states[$key], $row, $direction, $qty),
+                self::METHOD_FIFO => $this->applyFifo(
+                    $states[$key],
+                    $row,
+                    $direction,
+                    $valuationQty
+                ),
+                self::METHOD_STANDARD => $this->applyStandard(
+                    $states[$key],
+                    $row,
+                    $direction,
+                    $valuationQty
+                ),
+                self::METHOD_RECORDED => $this->applyRecorded(
+                    $states[$key],
+                    $row,
+                    $direction,
+                    $valuationQty
+                ),
+                default => $this->applyAverage(
+                    $states[$key],
+                    $row,
+                    $direction,
+                    $valuationQty
+                ),
             };
 
             return (object) [
@@ -125,7 +176,7 @@ class ProductKardexService
                 'reference' => $row->reference,
                 'origin_document' => $row->origin_document,
                 'status' => $row->status,
-                'warehouse_name' => $row->warehouse_name,
+                'warehouse_name' => $row->effective_warehouse_name ?? $row->warehouse_name,
                 'source_location_name' => $row->source_location_name,
                 'destination_location_name' => $row->destination_location_name,
                 'source_type' => $row->source_type,
@@ -334,7 +385,12 @@ class ProductKardexService
         }
 
         if (! empty($filters['warehouse_id'])) {
-            $query->where('m.warehouse_id', (int) $filters['warehouse_id']);
+            $warehouseId = (int) $filters['warehouse_id'];
+
+            $query->where(function ($q) use ($warehouseId): void {
+                $q->where('m.warehouse_id', $warehouseId)
+                    ->orWhere('m.destination_warehouse_id', $warehouseId);
+            });
         }
 
         if (! empty($filters['location_id'])) {
@@ -389,8 +445,48 @@ class ProductKardexService
         }
     }
 
-    protected function direction(object $row): string
+    protected function direction(
+        object $row,
+        ?int $warehouseFilter = null,
+        ?int $locationFilter = null
+    ): string
     {
+        $sameWarehouseTransfer =
+            ! empty($row->warehouse_id)
+            && ! empty($row->destination_warehouse_id)
+            && (int) $row->warehouse_id === (int) $row->destination_warehouse_id
+            && ! empty($row->source_location_id)
+            && ! empty($row->destination_location_id)
+            && (int) $row->source_location_id !== (int) $row->destination_location_id;
+
+        if ($sameWarehouseTransfer) {
+            if ($locationFilter !== null) {
+                if ((int) $row->source_location_id === $locationFilter) {
+                    return 'out';
+                }
+
+                if ((int) $row->destination_location_id === $locationFilter) {
+                    return 'in';
+                }
+            }
+
+            return 'transfer';
+        }
+
+        if (
+            $warehouseFilter !== null
+            && ! empty($row->destination_warehouse_id)
+            && (int) $row->destination_warehouse_id !== (int) $row->warehouse_id
+        ) {
+            if ((int) $row->destination_warehouse_id === $warehouseFilter) {
+                return 'in';
+            }
+
+            if ((int) $row->warehouse_id === $warehouseFilter) {
+                return 'out';
+            }
+        }
+
         $sourceType = strtolower((string) ($row->source_type ?? ''));
         $sourceLineType = strtolower((string) ($row->source_line_type ?? ''));
         $reference = strtoupper((string) ($row->reference ?? ''));
@@ -464,7 +560,7 @@ class ProductKardexService
     {
         return implode('|', [
             (int) ($row->company_id ?? $row->product_company_id ?? 0),
-            (int) ($row->warehouse_id ?? 0),
+            (int) ($row->effective_warehouse_id ?? $row->warehouse_id ?? 0),
             (int) ($row->product_id ?? 0),
             (int) ($row->product_variant_id ?? 0),
             (int) ($row->lot_id ?? 0),

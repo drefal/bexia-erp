@@ -30,13 +30,10 @@ class ListStockMovements extends ListRecords
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('status', 'done')),
 
             'en_transito' => Tab::make('En tránsito')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $query
-                    ->where('status', 'done')
-                    ->where(function (Builder $query): void {
-                        $query
-                            ->whereHas('sourceLocation.type', fn (Builder $query): Builder => $query->where('code', 'TRANSIT'))
-                            ->orWhereHas('destinationLocation.type', fn (Builder $query): Builder => $query->where('code', 'TRANSIT'));
-                    })),
+                ->modifyQueryUsing(
+                    fn (Builder $query): Builder =>
+                        $query->where('status', 'in_transit')
+                ),
 
             'todos' => Tab::make('Todos')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query),

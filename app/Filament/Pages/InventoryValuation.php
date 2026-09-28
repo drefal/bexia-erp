@@ -39,22 +39,21 @@ class InventoryValuation extends Page
 
     public function mount(): void
     {
-        $this->company_id = $this->currentCompanyId();
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            $this->currentCompanyId()
+        );
     }
 
     protected function currentCompanyId(): ?int
     {
-        foreach (['company_id', 'current_company_id', 'active_company_id', 'tenant_company_id'] as $key) {
-            if (session($key)) {
-                return (int) session($key);
-            }
-        }
-
-        return null;
+        return \App\Support\Security\InventoryTenantScope::currentCompanyId();
     }
 
     public function updatedCompanyId(): void
     {
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            (int) ($this->company_id ?? 0)
+        );
         $this->warehouse_id = null;
         $this->location_id = null;
         $this->clearProduct();
@@ -111,7 +110,9 @@ class InventoryValuation extends Page
 
     public function resetFilters(): void
     {
-        $this->company_id = $this->currentCompanyId();
+        $this->company_id = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            $this->currentCompanyId()
+        );
         $this->warehouse_id = null;
         $this->location_id = null;
         $this->clearProduct();
@@ -199,11 +200,7 @@ class InventoryValuation extends Page
     }
     public function companyOptions(): array
     {
-        if (! Schema::hasTable('companies')) {
-            return [];
-        }
-
-        return DB::table('companies')->orderBy('name')->pluck('name', 'id')->all();
+        return \App\Support\Security\InventoryTenantScope::companyOptions();
     }
 
     public function warehouseOptions(): array
@@ -234,9 +231,7 @@ class InventoryValuation extends Page
         }
 
         if ($this->company_id && Schema::hasColumn('stock_locations', 'company_id')) {
-            $query->where(function ($q): void {
-                $q->where('company_id', $this->company_id)->orWhereNull('company_id');
-            });
+            $query->where('company_id', $this->company_id);
         }
 
         return $query->orderBy('name')->limit(300)->pluck('name', 'id')->all();

@@ -19,6 +19,7 @@ class ProductTraceabilityService
             ->leftJoin('stock_operation_types as ot', 'ot.id', '=', 'm.stock_operation_type_id')
             ->leftJoin('companies as c', 'c.id', '=', 'm.company_id')
             ->leftJoin('warehouses as w', 'w.id', '=', 'm.warehouse_id')
+            ->leftJoin('warehouses as dw', 'dw.id', '=', 'm.destination_warehouse_id')
             ->leftJoin('stock_locations as src', 'src.id', '=', 'm.source_location_id')
             ->leftJoin('stock_locations as dst', 'dst.id', '=', 'm.destination_location_id')
             ->leftJoin('products as p', 'p.id', '=', 'l.product_id')
@@ -35,6 +36,9 @@ class ProductTraceabilityService
                 'c.name as company_name',
                 'm.warehouse_id',
                 'w.name as warehouse_name',
+                'm.destination_warehouse_id',
+                'dw.name as destination_warehouse_name',
+                'm.transit_location_id',
                 'm.source_location_id',
                 'src.name as source_location_name',
                 'm.destination_location_id',
@@ -76,8 +80,19 @@ class ProductTraceabilityService
             $query->where('m.company_id', (int) $filters['company_id']);
         }
 
-        if (! empty($filters['warehouse_id'])) {
-            $query->where('m.warehouse_id', (int) $filters['warehouse_id']);
+        $warehouseFilter = ! empty($filters['warehouse_id'])
+            ? (int) $filters['warehouse_id']
+            : null;
+
+        $locationFilter = ! empty($filters['location_id'])
+            ? (int) $filters['location_id']
+            : null;
+
+        if ($warehouseFilter !== null) {
+            $query->where(function ($q) use ($warehouseFilter): void {
+                $q->where('m.warehouse_id', $warehouseFilter)
+                    ->orWhere('m.destination_warehouse_id', $warehouseFilter);
+            });
         }
 
         if (! empty($filters['location_id'])) {
@@ -156,11 +171,17 @@ class ProductTraceabilityService
         }
 
         if (! empty($filters['date_from'])) {
-            $query->whereDate(DB::raw('coalesce(m.movement_at, m.created_at)'), '>=', (string) $filters['date_from']);
+            $query->whereRaw(
+                'coalesce(m.movement_at, m.created_at) >= ?',
+                [(string) $filters['date_from'] . ' 00:00:00']
+            );
         }
 
         if (! empty($filters['date_to'])) {
-            $query->whereDate(DB::raw('coalesce(m.movement_at, m.created_at)'), '<=', (string) $filters['date_to']);
+            $query->whereRaw(
+                'coalesce(m.movement_at, m.created_at) <= ?',
+                [(string) $filters['date_to'] . ' 23:59:59']
+            );
         }
 
         $limit = min(5000, max(50, (int) ($filters['limit'] ?? 500)));
@@ -170,7 +191,11 @@ class ProductTraceabilityService
             ->orderByDesc('l.id')
             ->limit($limit)
             ->get()
-            ->map(fn ($row) => $this->decorate($row));
+            ->map(fn ($row) => $this->decorate(
+                $row,
+                $warehouseFilter,
+                $locationFilter
+            ));
     }
 
     public function summary(array $filters = []): array
@@ -188,16 +213,35 @@ class ProductTraceabilityService
         ];
     }
 
-    protected function decorate(object $row): object
+    protected function decorate(
+        object $row,
+        ?int $warehouseFilter = null,
+        ?int $locationFilter = null
+    ): object
     {
-        $direction = $this->direction($row);
+        $direction = $this->direction($row, $warehouseFilter, $locationFilter);
+
+        if ($warehouseFilter !== null) {
+            if ((int) ($row->destination_warehouse_id ?? 0) === $warehouseFilter) {
+                $row->warehouse_name = $row->destination_warehouse_name ?? $row->warehouse_name;
+            }
+        }
         $qty = abs((float) ($row->done_quantity ?? 0));
-        $signedQty = $direction === 'out' ? -1 * $qty : $qty;
+        $signedQty = match ($direction) {
+            'out' => -1 * $qty,
+            'in' => $qty,
+            default => 0.0,
+        };
 
         $row->quantity_abs = $qty;
         $row->signed_quantity = $signedQty;
         $row->direction = $direction;
-        $row->direction_label = $direction === 'out' ? 'Salida' : 'Entrada';
+        $row->direction_label = match ($direction) {
+            'out' => 'Salida',
+            'in' => 'Entrada',
+            'transfer' => 'Traslado interno',
+            default => ucfirst($direction),
+        };
         $row->origin_label = $this->originLabel($row);
         $row->document_label = $this->documentLabel($row);
         $row->operation_label = $row->operation_name ?: $this->fallbackOperationLabel($row);
@@ -211,8 +255,48 @@ class ProductTraceabilityService
         return $row;
     }
 
-    protected function direction(object $row): string
+    protected function direction(
+        object $row,
+        ?int $warehouseFilter = null,
+        ?int $locationFilter = null
+    ): string
     {
+        $sameWarehouseTransfer =
+            ! empty($row->warehouse_id)
+            && ! empty($row->destination_warehouse_id)
+            && (int) $row->warehouse_id === (int) $row->destination_warehouse_id
+            && ! empty($row->source_location_id)
+            && ! empty($row->destination_location_id)
+            && (int) $row->source_location_id !== (int) $row->destination_location_id;
+
+        if ($sameWarehouseTransfer) {
+            if ($locationFilter !== null) {
+                if ((int) $row->source_location_id === $locationFilter) {
+                    return 'out';
+                }
+
+                if ((int) $row->destination_location_id === $locationFilter) {
+                    return 'in';
+                }
+            }
+
+            return 'transfer';
+        }
+
+        if (
+            $warehouseFilter !== null
+            && ! empty($row->destination_warehouse_id)
+            && (int) $row->destination_warehouse_id !== (int) $row->warehouse_id
+        ) {
+            if ((int) $row->destination_warehouse_id === $warehouseFilter) {
+                return 'in';
+            }
+
+            if ((int) $row->warehouse_id === $warehouseFilter) {
+                return 'out';
+            }
+        }
+
         $kind = strtolower((string) ($row->operation_kind ?? ''));
         $sourceType = strtolower((string) ($row->source_type ?? ''));
         $origin = strtolower((string) ($row->origin_document ?? ''));

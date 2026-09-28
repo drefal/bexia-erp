@@ -4,6 +4,8 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\StockMovementResource\Pages;
 use App\Models\StockMovement;
+use App\Models\StockMovementReceipt;
+use App\Models\StockMovementReceiptLine;
 use App\Models\StockMovementLine;
 use App\Models\StockQuant;
 use Filament\Facades\Filament;
@@ -41,7 +43,14 @@ class StockMovementResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         $query = StockMovement::query()
-            ->with(['operationType', 'warehouse', 'sourceLocation', 'destinationLocation'])
+            ->with([
+                'operationType',
+                'warehouse',
+                'destinationWarehouse',
+                'sourceLocation',
+                'destinationLocation',
+                'transitLocation',
+            ])
             ->withCount('lines');
 
         $companyId = static::currentCompanyId();
@@ -128,11 +137,17 @@ class StockMovementResource extends Resource
                                 }
 
                                 $set('warehouse_id', $operation->warehouse_id);
+                                $set('destination_warehouse_id', $operation->warehouse_id);
                                 $set('source_location_id', $operation->source_location_id);
-                                $set('destination_location_id', $operation->destination_location_id);
+                                $set('destination_location_id', null);
+                                $set('transit_location_id', null);
                                 $set('reference', null);
                             })
-                            ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
+                            ->disabled(
+                                fn (?\App\Models\StockMovement $record, Forms\Get $get): bool =>
+                                    filled($record?->id)
+                                    || static::movementIsDoneFromForm($get)
+                            )
                             ->columnSpan(3),
 
                         Forms\Components\Select::make('status')
@@ -140,6 +155,7 @@ class StockMovementResource extends Resource
                             ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-status-field'])
                             ->options([
                                 'draft' => 'Borrador',
+                                'in_transit' => 'En tránsito',
                                 'done' => 'Hecho',
                                 'cancelled' => 'Cancelado',
                             ])
@@ -148,43 +164,86 @@ class StockMovementResource extends Resource
                             ->dehydrated()
                             ->columnSpan(3),
 
-                        Forms\Components\Select::make('warehouse_id')
-                            ->label('Almacén')
-                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-warehouse-field'])
-                            ->options(fn (): array => static::warehouseOptions())
-                            ->searchable()
-                            ->native(false)
-                            ->required()
-                            ->live()
-                            ->afterStateUpdated(function (Forms\Set $set): void {
-                                $set('source_location_id', null);
-                                $set('destination_location_id', null);
-                                $set('reference', null);
-                            })
-                            ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
-                            ->columnSpan(4),
+                        Forms\Components\Fieldset::make('Origen')
+                            ->schema([
+                                Forms\Components\Select::make('warehouse_id')
+                                    ->label('Almacén origen')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-warehouse-field'])
+                                    ->options(fn (): array => static::warehouseOptions())
+                                    ->searchable()
+                                    ->native(false)
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function (Forms\Set $set, $state): void {
+                                        $set('destination_warehouse_id', $state ? (int) $state : null);
+                                        $set('source_location_id', null);
+                                        $set('destination_location_id', null);
+                                        $set('transit_location_id', null);
+                                        $set('reference', null);
+                                    })
+                                    ->disabled(
+                                fn (?\App\Models\StockMovement $record, Forms\Get $get): bool =>
+                                    filled($record?->id)
+                                    || static::movementIsDoneFromForm($get)
+                            ),
 
-                        Forms\Components\Select::make('source_location_id')
-                            ->label('Ubicación origen')
-                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-source-location-field'])
-                            ->options(fn (Forms\Get $get): array => static::locationOptions($get('warehouse_id')))
-                            ->searchable()
-                            ->native(false)
-                            ->live()
-                            ->afterStateUpdated(fn (Forms\Set $set): null => $set('reference', null))
-                            ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
-                            ->columnSpan(4),
+                                Forms\Components\Select::make('source_location_id')
+                                    ->label('Ubicación origen')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-source-location-field'])
+                                    ->options(fn (Forms\Get $get): array => static::movementLocationOptions($get('warehouse_id')))
+                                    ->searchable()
+                                    ->native(false)
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(fn (Forms\Set $set): null => $set('reference', null))
+                                    ->disabled(
+                                fn (?\App\Models\StockMovement $record, Forms\Get $get): bool =>
+                                    filled($record?->id)
+                                    || static::movementIsDoneFromForm($get)
+                            ),
+                            ])
+                            ->columns(1)
+                            ->columnSpan(6),
 
-                        Forms\Components\Select::make('destination_location_id')
-                            ->label('Ubicación destino')
-                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-destination-location-field'])
-                            ->options(fn (Forms\Get $get): array => static::locationOptions($get('warehouse_id')))
-                            ->searchable()
-                            ->native(false)
-                            ->live()
-                            ->afterStateUpdated(fn (Forms\Set $set): null => $set('reference', null))
-                            ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
-                            ->columnSpan(4),
+                        Forms\Components\Fieldset::make('Destino')
+                            ->schema([
+                                Forms\Components\Select::make('destination_warehouse_id')
+                                    ->label('Almacén destino')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-destination-warehouse-field'])
+                                    ->options(fn (): array => static::warehouseOptions())
+                                    ->searchable()
+                                    ->native(false)
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function (Forms\Set $set): void {
+                                        $set('destination_location_id', null);
+                                        $set('transit_location_id', null);
+                                    })
+                                    ->disabled(
+                                fn (?\App\Models\StockMovement $record, Forms\Get $get): bool =>
+                                    filled($record?->id)
+                                    || static::movementIsDoneFromForm($get)
+                            ),
+
+                                Forms\Components\Select::make('destination_location_id')
+                                    ->label('Ubicación destino')
+                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-destination-location-field'])
+                                    ->options(fn (Forms\Get $get): array => static::movementLocationOptions(
+                                        $get('destination_warehouse_id') ?: $get('warehouse_id')
+                                    ))
+                                    ->searchable()
+                                    ->native(false)
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(fn (Forms\Set $set): null => $set('reference', null))
+                                    ->disabled(
+                                fn (?\App\Models\StockMovement $record, Forms\Get $get): bool =>
+                                    filled($record?->id)
+                                    || static::movementIsDoneFromForm($get)
+                            ),
+                            ])
+                            ->columns(1)
+                            ->columnSpan(6),
 
                         Forms\Components\TextInput::make('origin_document')
                             ->label('Documento de origen')
@@ -205,77 +264,9 @@ class StockMovementResource extends Resource
 
                 Forms\Components\Section::make('Productos')
                     ->extraAttributes(['class' => 'bexia-stock-movement-section bexia-stock-movement-products-section'])
-                    ->description('Captura los productos que se trasladarán. Al confirmar, Bexia actualizará las existencias.')
+                    ->description('Selecciona productos con existencia disponible en el almacén y ubicación de origen.')
                     ->schema([
-                        Forms\Components\Repeater::make('lines')
-                            ->label('Líneas')
-                            ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-lines-repeater'])
-                            ->relationship()
-                            ->schema([
-                                Forms\Components\Select::make('product_id')
-                                    ->label('Producto')
-                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-product-field'])
-                                    ->searchable()
-                                    ->getSearchResultsUsing(fn (string $search): array => static::productSearchOptions($search))
-                                    ->getOptionLabelUsing(fn ($value): ?string => static::productLabel($value))
-                                    ->required()
-                                    ->live()
-                                    ->afterStateUpdated(function (Forms\Set $set): void {
-                                        $set('product_variant_id', null);
-                                    })
-                                    ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
-                                    ->columnSpan(4),
-
-                                Forms\Components\Select::make('product_variant_id')
-                                    ->label('Variante')
-                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-variant-field'])
-                                    ->options(fn (Forms\Get $get): array => static::variantOptions($get('product_id')))
-                                    ->searchable()
-                                    ->preload()
-                                    ->native(false)
-                                    ->placeholder('Sin variante')
-                                    ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
-                                    ->columnSpan(3),
-
-                                Forms\Components\TextInput::make('done_quantity')
-                                    ->label('Cantidad')
-                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-quantity-field'])
-                                    ->numeric()
-                                    ->minValue(0.000001)
-                                    ->default(1)
-                                    ->required()
-                                    ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
-                                    ->columnSpan(2),
-
-                                Forms\Components\TextInput::make('unit_cost')
-                                    ->label('Costo unit.')
-                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-unit-cost-field'])
-                                    ->numeric()
-                                    ->prefix('$')
-                                    ->helperText('Si se deja vacío, se tomará el costo promedio o costo del producto.')
-                                    ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
-                                    ->columnSpan(1),
-
-                                Forms\Components\Placeholder::make('source_stock')
-                                    ->label('Stock origen')
-                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-source-stock-field'])
-                                    ->content(fn (Forms\Get $get): string => static::sourceQuantityLabelFromForm($get))
-                                    ->columnSpan(2),
-
-                                Forms\Components\Textarea::make('notes')
-                                    ->label('Notas')
-                                    ->extraAttributes(['class' => 'bexia-stock-movement-field bexia-stock-movement-line-notes-field'])
-                                    ->rows(1)
-                                    ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
-                                    ->columnSpanFull(),
-                            ])
-                            ->columns(12)
-                            ->defaultItems(1)
-                            ->addActionLabel('Agregar producto')
-                            ->addable(fn (Forms\Get $get): bool => ! static::movementIsDoneFromForm($get))
-                            ->deletable(fn (Forms\Get $get): bool => ! static::movementIsDoneFromForm($get))
-                            ->reorderable(false)
-                            ->disabled(fn (Forms\Get $get): bool => static::movementIsDoneFromForm($get))
+                        Forms\Components\View::make('filament.components.stock-transfer-lines-inline-field')
                             ->columnSpanFull(),
                     ]),
             ]);
@@ -1087,6 +1078,7 @@ class StockMovementResource extends Resource
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'draft' => 'Borrador',
+                        'in_transit' => 'En tránsito',
                         'done' => 'Hecho',
                         'cancelled' => 'Cancelado',
                         default => (string) $state,
@@ -1098,6 +1090,7 @@ class StockMovementResource extends Resource
                     ->label('Estado')
                     ->options([
                         'draft' => 'Borrador',
+                        'in_transit' => 'En tránsito',
                         'done' => 'Hecho',
                         'cancelled' => 'Cancelado',
                     ]),
@@ -1299,9 +1292,58 @@ class StockMovementResource extends Resource
 
         $movement->load('lines');
 
+        static::validateTransfer($movement);
+
+        $sourceAffectsStock = static::locationAffectsStock(
+            (int) $movement->source_location_id
+        );
+        $destinationAffectsStock = static::locationAffectsStock(
+            (int) $movement->destination_location_id
+        );
+
+        if (! $sourceAffectsStock && ! $destinationAffectsStock) {
+            Notification::make()
+                ->title('Traslado sin efecto de inventario')
+                ->body(
+                    'El origen y el destino son ubicaciones virtuales. '
+                    . 'Selecciona al menos una ubicación física o de tránsito.'
+                )
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        /*
+         * Sólo usamos el flujo de tránsito cuando ambos extremos
+         * afectan stock y pertenecen a almacenes distintos.
+         *
+         * Una ubicación virtual final (cliente, proveedor, pérdida,
+         * producción, ajuste, etc.) no debe convertirse en tránsito
+         * únicamente porque destination_warehouse_id sea distinto.
+         */
+        if (
+            $sourceAffectsStock
+            && $destinationAffectsStock
+            && $movement->isInterWarehouseTransfer()
+        ) {
+            static::dispatchInterWarehouseTransfer($movement);
+
+            return;
+        }
+
+        static::completeDirectTransfer(
+            $movement,
+            $sourceAffectsStock,
+            $destinationAffectsStock
+        );
+    }
+
+    protected static function validateTransfer(StockMovement $movement): void
+    {
         if ($movement->lines->isEmpty()) {
             Notification::make()
-                ->title('No se puede confirmar')
+                ->title('No se puede procesar')
                 ->body('El traslado no tiene productos.')
                 ->danger()
                 ->send();
@@ -1309,21 +1351,27 @@ class StockMovementResource extends Resource
             throw new Halt();
         }
 
-        if (! $movement->source_location_id && ! $movement->destination_location_id) {
+        if (! $movement->warehouse_id || ! $movement->destination_warehouse_id) {
             Notification::make()
-                ->title('No se puede confirmar')
-                ->body('El traslado necesita una ubicación origen o destino.')
+                ->title('Almacenes incompletos')
+                ->body('Selecciona almacén origen y almacén destino.')
                 ->danger()
                 ->send();
 
             throw new Halt();
         }
 
-        if (
-            $movement->source_location_id
-            && $movement->destination_location_id
-            && (int) $movement->source_location_id === (int) $movement->destination_location_id
-        ) {
+        if (! $movement->source_location_id || ! $movement->destination_location_id) {
+            Notification::make()
+                ->title('Ubicaciones incompletas')
+                ->body('Selecciona ubicación origen y ubicación destino.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        if ((int) $movement->source_location_id === (int) $movement->destination_location_id) {
             Notification::make()
                 ->title('Origen y destino iguales')
                 ->body('La ubicación origen y destino no pueden ser la misma.')
@@ -1333,46 +1381,59 @@ class StockMovementResource extends Resource
             throw new Halt();
         }
 
-        $sourceAffectsStock = $movement->source_location_id
-            ? static::locationAffectsStock((int) $movement->source_location_id)
-            : false;
+        static::assertWarehouseCompany(
+            (int) $movement->company_id,
+            (int) $movement->warehouse_id
+        );
 
-        $destinationAffectsStock = $movement->destination_location_id
-            ? static::locationAffectsStock((int) $movement->destination_location_id)
-            : false;
+        static::assertWarehouseCompany(
+            (int) $movement->company_id,
+            (int) $movement->destination_warehouse_id
+        );
 
-        if (! $sourceAffectsStock && ! $destinationAffectsStock) {
-            Notification::make()
-                ->title('Movimiento sin impacto')
-                ->body('Ni el origen ni el destino afectan existencias. Revisa el tipo de operación.')
-                ->danger()
-                ->send();
+        static::assertMovementLocation(
+            (int) $movement->company_id,
+            (int) $movement->warehouse_id,
+            (int) $movement->source_location_id,
+            'origen'
+        );
 
-            throw new Halt();
-        }
+        static::assertMovementLocation(
+            (int) $movement->company_id,
+            (int) $movement->destination_warehouse_id,
+            (int) $movement->destination_location_id,
+            'destino'
+        );
+    }
 
-        DB::transaction(function () use ($movement, $sourceAffectsStock, $destinationAffectsStock): void {
+    protected static function completeDirectTransfer(
+        StockMovement $movement,
+        bool $sourceAffectsStock,
+        bool $destinationAffectsStock
+    ): void {
+        DB::transaction(function () use (
+            $movement,
+            $sourceAffectsStock,
+            $destinationAffectsStock
+        ): void {
             foreach ($movement->lines as $line) {
                 $qty = (float) $line->done_quantity;
 
-                if (! $line->product_id || $qty <= 0) {
-                    Notification::make()
-                        ->title('Cantidad inválida')
-                        ->body('Todas las líneas deben tener producto y cantidad mayor a cero.')
-                        ->danger()
-                        ->send();
-
-                    throw new Halt();
-                }
+                static::validateLineQuantity($line, $qty);
 
                 $productId = (int) $line->product_id;
-                $variantId = $line->product_variant_id ? (int) $line->product_variant_id : null;
+                $variantId = $line->product_variant_id
+                    ? (int) $line->product_variant_id
+                    : null;
+                $lotId = $line->lot_id
+                    ? (int) $line->lot_id
+                    : null;
 
                 $unitCost = $line->unit_cost !== null
                     ? (float) $line->unit_cost
                     : null;
 
-                if ($unitCost === null && $sourceAffectsStock && $movement->source_location_id) {
+                if ($sourceAffectsStock && $unitCost === null) {
                     $unitCost = static::averageCost(
                         (int) $movement->company_id,
                         (int) $movement->warehouse_id,
@@ -1382,36 +1443,54 @@ class StockMovementResource extends Resource
                     );
                 }
 
-                if ($unitCost === null) {
-                    $unitCost = static::productCost($productId, $variantId);
-                }
+                $unitCost ??= static::productCost(
+                    $productId,
+                    $variantId
+                );
 
-                if ($sourceAffectsStock && $movement->source_location_id) {
+                if ($sourceAffectsStock) {
                     static::decreaseQuant(
                         companyId: (int) $movement->company_id,
                         warehouseId: (int) $movement->warehouse_id,
                         locationId: (int) $movement->source_location_id,
                         productId: $productId,
                         variantId: $variantId,
+                        lotId: $lotId,
                         quantity: $qty,
                         unitCost: $unitCost
                     );
                 }
 
-                if ($destinationAffectsStock && $movement->destination_location_id) {
+                if ($destinationAffectsStock) {
+                    $destinationWarehouseId =
+                        $movement->destination_warehouse_id
+                            ? (int) $movement->destination_warehouse_id
+                            : (int) $movement->warehouse_id;
+
                     static::increaseQuant(
                         companyId: (int) $movement->company_id,
-                        warehouseId: (int) $movement->warehouse_id,
+                        warehouseId: $destinationWarehouseId,
                         locationId: (int) $movement->destination_location_id,
                         productId: $productId,
                         variantId: $variantId,
+                        lotId: $lotId,
                         quantity: $qty,
                         unitCost: $unitCost
+                    );
+
+                    static::moveSerial(
+                        $line->stock_serial_number_id
+                            ? (int) $line->stock_serial_number_id
+                            : null,
+                        (int) $movement->company_id,
+                        $destinationWarehouseId,
+                        (int) $movement->destination_location_id
                     );
                 }
 
                 $line->update([
-                    'requested_quantity' => $line->requested_quantity ?: $qty,
+                    'requested_quantity' =>
+                        $line->requested_quantity ?: $qty,
                     'done_quantity' => $qty,
                     'unit_cost' => $unitCost,
                 ]);
@@ -1421,8 +1500,347 @@ class StockMovementResource extends Resource
                 'status' => 'done',
                 'confirmed_by' => auth()->id(),
                 'confirmed_at' => now(),
+                'received_by' => auth()->id(),
+                'received_at' => now(),
             ]);
         });
+    }
+
+    protected static function dispatchInterWarehouseTransfer(StockMovement $movement): void
+    {
+        $transitLocationId = static::transitLocationId((int) $movement->company_id);
+
+        if (! $transitLocationId) {
+            Notification::make()
+                ->title('Falta ubicación de tránsito')
+                ->body('La empresa no tiene una ubicación TRANSITO activa.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        DB::transaction(function () use ($movement, $transitLocationId): void {
+            foreach ($movement->lines as $line) {
+                $qty = (float) $line->done_quantity;
+
+                static::validateLineQuantity($line, $qty);
+
+                $productId = (int) $line->product_id;
+                $variantId = $line->product_variant_id ? (int) $line->product_variant_id : null;
+                $lotId = $line->lot_id ? (int) $line->lot_id : null;
+
+                $unitCost = $line->unit_cost !== null
+                    ? (float) $line->unit_cost
+                    : static::averageCost(
+                        (int) $movement->company_id,
+                        (int) $movement->warehouse_id,
+                        (int) $movement->source_location_id,
+                        $productId,
+                        $variantId
+                    );
+
+                $unitCost ??= static::productCost($productId, $variantId);
+
+                static::decreaseQuant(
+                    companyId: (int) $movement->company_id,
+                    warehouseId: (int) $movement->warehouse_id,
+                    locationId: (int) $movement->source_location_id,
+                    productId: $productId,
+                    variantId: $variantId,
+                    lotId: $lotId,
+                    quantity: $qty,
+                    unitCost: $unitCost
+                );
+
+                /*
+                 * Mientras viaja, conservamos warehouse_id=origen.
+                 * Esto es compatible con los quants de tránsito históricos
+                 * existentes en Bexia.
+                 */
+                static::increaseQuant(
+                    companyId: (int) $movement->company_id,
+                    warehouseId: (int) $movement->warehouse_id,
+                    locationId: $transitLocationId,
+                    productId: $productId,
+                    variantId: $variantId,
+                    lotId: $lotId,
+                    quantity: $qty,
+                    unitCost: $unitCost
+                );
+
+                static::moveSerial(
+                    $line->stock_serial_number_id ? (int) $line->stock_serial_number_id : null,
+                    (int) $movement->company_id,
+                    (int) $movement->warehouse_id,
+                    $transitLocationId
+                );
+
+                $line->update([
+                    'requested_quantity' => $line->requested_quantity ?: $qty,
+                    'done_quantity' => $qty,
+                    'unit_cost' => $unitCost,
+                ]);
+            }
+
+            $movement->update([
+                'transit_location_id' => $transitLocationId,
+                'status' => 'in_transit',
+                'dispatched_by' => auth()->id(),
+                'dispatched_at' => now(),
+            ]);
+        });
+    }
+
+    public static function receiveMovement(
+        StockMovement $movement,
+        array $quantities,
+        ?string $notes = null
+    ): StockMovementReceipt {
+        if ($movement->status !== 'in_transit' || ! $movement->isInterWarehouseTransfer()) {
+            Notification::make()
+                ->title('Traslado no disponible para recepción')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        $movement->load('lines');
+
+        static::validateTransfer($movement);
+
+        if (! $movement->transit_location_id) {
+            Notification::make()
+                ->title('Traslado sin tránsito')
+                ->body('El traslado no tiene ubicación de tránsito registrada.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        $requested = [];
+
+        foreach ($quantities as $lineId => $quantity) {
+            $qty = round((float) $quantity, 6);
+
+            if ($qty > 0) {
+                $requested[(int) $lineId] = $qty;
+            }
+        }
+
+        if ($requested === []) {
+            Notification::make()
+                ->title('Sin cantidades para recibir')
+                ->body('Captura al menos una cantidad mayor a cero.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        return DB::transaction(function () use ($movement, $requested, $notes): StockMovementReceipt {
+            $movement = StockMovement::query()
+                ->whereKey($movement->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($movement->status !== 'in_transit') {
+                Notification::make()
+                    ->title('El traslado ya cambió de estado')
+                    ->danger()
+                    ->send();
+
+                throw new Halt();
+            }
+
+            $movement->load('lines');
+
+            $lineIds = $movement->lines
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+
+            foreach (array_keys($requested) as $lineId) {
+                if (! in_array((int) $lineId, $lineIds, true)) {
+                    Notification::make()
+                        ->title('Línea inválida')
+                        ->body('Una de las líneas no pertenece a este traslado.')
+                        ->danger()
+                        ->send();
+
+                    throw new Halt();
+                }
+            }
+
+            $receivedTotals = StockMovementReceiptLine::query()
+                ->selectRaw('stock_movement_line_id, SUM(quantity) AS received_quantity')
+                ->whereIn('stock_movement_line_id', $lineIds)
+                ->groupBy('stock_movement_line_id')
+                ->pluck('received_quantity', 'stock_movement_line_id');
+
+            foreach ($movement->lines as $line) {
+                $lineId = (int) $line->id;
+                $receiveNow = (float) ($requested[$lineId] ?? 0);
+
+                if ($receiveNow <= 0) {
+                    continue;
+                }
+
+                $sent = round((float) $line->done_quantity, 6);
+                $received = round((float) ($receivedTotals[$lineId] ?? 0), 6);
+                $pending = round(max(0, $sent - $received), 6);
+
+                if ($receiveNow > $pending + 0.000001) {
+                    Notification::make()
+                        ->title('Cantidad mayor al pendiente')
+                        ->body(
+                            static::stockItemLabel(
+                                (int) $line->product_id,
+                                $line->product_variant_id ? (int) $line->product_variant_id : null
+                            )
+                            . ' tiene pendiente '
+                            . number_format($pending, 6)
+                            . ' y se intentó recibir '
+                            . number_format($receiveNow, 6)
+                            . '.'
+                        )
+                        ->danger()
+                        ->send();
+
+                    throw new Halt();
+                }
+            }
+
+            $receipt = StockMovementReceipt::create([
+                'stock_movement_id' => $movement->id,
+                'company_id' => $movement->company_id,
+                'received_by' => auth()->id(),
+                'received_at' => now(),
+                'notes' => filled($notes) ? trim((string) $notes) : null,
+            ]);
+
+            foreach ($movement->lines as $line) {
+                $lineId = (int) $line->id;
+                $qty = (float) ($requested[$lineId] ?? 0);
+
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                static::validateLineQuantity($line, $qty);
+
+                $productId = (int) $line->product_id;
+                $variantId = $line->product_variant_id ? (int) $line->product_variant_id : null;
+                $lotId = $line->lot_id ? (int) $line->lot_id : null;
+                $unitCost = $line->unit_cost !== null ? (float) $line->unit_cost : null;
+
+                static::decreaseQuant(
+                    companyId: (int) $movement->company_id,
+                    warehouseId: (int) $movement->warehouse_id,
+                    locationId: (int) $movement->transit_location_id,
+                    productId: $productId,
+                    variantId: $variantId,
+                    lotId: $lotId,
+                    quantity: $qty,
+                    unitCost: $unitCost
+                );
+
+                static::increaseQuant(
+                    companyId: (int) $movement->company_id,
+                    warehouseId: (int) $movement->destination_warehouse_id,
+                    locationId: (int) $movement->destination_location_id,
+                    productId: $productId,
+                    variantId: $variantId,
+                    lotId: $lotId,
+                    quantity: $qty,
+                    unitCost: $unitCost
+                );
+
+                StockMovementReceiptLine::create([
+                    'stock_movement_receipt_id' => $receipt->id,
+                    'stock_movement_line_id' => $line->id,
+                    'quantity' => $qty,
+                ]);
+
+                /*
+                 * Un número de serie representa una unidad indivisible.
+                 * Sólo puede moverse cuando la línea queda totalmente recibida.
+                 */
+                if ($line->stock_serial_number_id) {
+                    $receivedAfter = StockMovementReceiptLine::query()
+                        ->where('stock_movement_line_id', $line->id)
+                        ->sum('quantity');
+
+                    if ((float) $receivedAfter + 0.000001 >= (float) $line->done_quantity) {
+                        static::moveSerial(
+                            (int) $line->stock_serial_number_id,
+                            (int) $movement->company_id,
+                            (int) $movement->destination_warehouse_id,
+                            (int) $movement->destination_location_id
+                        );
+                    }
+                }
+            }
+
+            $allReceived = true;
+
+            $receivedTotalsAfter = StockMovementReceiptLine::query()
+                ->selectRaw('stock_movement_line_id, SUM(quantity) AS received_quantity')
+                ->whereIn('stock_movement_line_id', $lineIds)
+                ->groupBy('stock_movement_line_id')
+                ->pluck('received_quantity', 'stock_movement_line_id');
+
+            foreach ($movement->lines as $line) {
+                $sent = round((float) $line->done_quantity, 6);
+                $received = round(
+                    (float) ($receivedTotalsAfter[(int) $line->id] ?? 0),
+                    6
+                );
+
+                if ($received + 0.000001 < $sent) {
+                    $allReceived = false;
+                    break;
+                }
+            }
+
+            if ($allReceived) {
+                $movement->update([
+                    'status' => 'done',
+                    'received_by' => auth()->id(),
+                    'received_at' => now(),
+                    'confirmed_by' => auth()->id(),
+                    'confirmed_at' => now(),
+                ]);
+            } else {
+                /*
+                 * received_by / received_at del encabezado representan
+                 * la recepción FINAL del traslado.
+                 * Cada parcialidad queda auditada en stock_movement_receipts.
+                 */
+                $movement->update([
+                    'status' => 'in_transit',
+                    'received_by' => null,
+                    'received_at' => null,
+                ]);
+            }
+
+            return $receipt->fresh('lines');
+        });
+    }
+
+    protected static function validateLineQuantity($line, float $qty): void
+    {
+        if (! $line->product_id || $qty <= 0) {
+            Notification::make()
+                ->title('Cantidad inválida')
+                ->body('Todas las líneas deben tener producto y cantidad mayor a cero.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
     }
 
     protected static function decreaseQuant(
@@ -1431,10 +1849,19 @@ class StockMovementResource extends Resource
         int $locationId,
         int $productId,
         ?int $variantId,
+        ?int $lotId,
         float $quantity,
         ?float $unitCost = null
     ): void {
-        $quant = static::findOrNewQuant($companyId, $warehouseId, $locationId, $productId, $variantId);
+        $quant = static::findOrNewQuant(
+            $companyId,
+            $warehouseId,
+            $locationId,
+            $productId,
+            $variantId,
+            $lotId
+        );
+
         $current = (float) $quant->quantity;
         $newQuantity = $current - $quantity;
 
@@ -1463,27 +1890,37 @@ class StockMovementResource extends Resource
         $quant->save();
     }
 
-
-
     protected static function increaseQuant(
         int $companyId,
         int $warehouseId,
         int $locationId,
         int $productId,
         ?int $variantId,
+        ?int $lotId,
         float $quantity,
         ?float $unitCost = null
     ): void {
-        $quant = static::findOrNewQuant($companyId, $warehouseId, $locationId, $productId, $variantId);
+        $quant = static::findOrNewQuant(
+            $companyId,
+            $warehouseId,
+            $locationId,
+            $productId,
+            $variantId,
+            $lotId
+        );
 
         $currentQuantity = (float) $quant->quantity;
         $newQuantity = $currentQuantity + $quantity;
 
         if ($unitCost !== null) {
-            $currentCost = $quant->average_cost !== null ? (float) $quant->average_cost : null;
+            $currentCost = $quant->average_cost !== null
+                ? (float) $quant->average_cost
+                : null;
 
             if ($currentCost !== null && $currentQuantity > 0 && $newQuantity > 0) {
-                $quant->average_cost = (($currentQuantity * $currentCost) + ($quantity * $unitCost)) / $newQuantity;
+                $quant->average_cost =
+                    (($currentQuantity * $currentCost) + ($quantity * $unitCost))
+                    / $newQuantity;
             } else {
                 $quant->average_cost = $unitCost;
             }
@@ -1493,8 +1930,14 @@ class StockMovementResource extends Resource
         $quant->save();
     }
 
-    protected static function findOrNewQuant(int $companyId, int $warehouseId, int $locationId, int $productId, ?int $variantId): StockQuant
-    {
+    protected static function findOrNewQuant(
+        int $companyId,
+        int $warehouseId,
+        int $locationId,
+        int $productId,
+        ?int $variantId,
+        ?int $lotId
+    ): StockQuant {
         $query = StockQuant::query()
             ->where('company_id', $companyId)
             ->where('warehouse_id', $warehouseId)
@@ -1505,13 +1948,19 @@ class StockMovementResource extends Resource
             ? $query->where('product_variant_id', $variantId)
             : $query->whereNull('product_variant_id');
 
+        if (Schema::hasColumn('stock_quants', 'lot_id')) {
+            $lotId
+                ? $query->where('lot_id', $lotId)
+                : $query->whereNull('lot_id');
+        }
+
         $quant = $query->first();
 
         if ($quant) {
             return $quant;
         }
 
-        return new StockQuant([
+        $quant = new StockQuant([
             'company_id' => $companyId,
             'warehouse_id' => $warehouseId,
             'location_id' => $locationId,
@@ -1520,33 +1969,198 @@ class StockMovementResource extends Resource
             'reserved_quantity' => 0,
             'quantity' => 0,
         ]);
+
+        if (Schema::hasColumn('stock_quants', 'lot_id')) {
+            $quant->lot_id = $lotId;
+        }
+
+        return $quant;
+    }
+
+    protected static function assertWarehouseCompany(
+        int $companyId,
+        int $warehouseId
+    ): void {
+        $valid = DB::table('warehouses')
+            ->where('id', $warehouseId)
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->exists();
+
+        if (! $valid) {
+            Notification::make()
+                ->title('Almacén inválido')
+                ->body('El almacén no pertenece a la empresa actual.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+    }
+
+    protected static function assertMovementLocation(
+        int $companyId,
+        int $warehouseId,
+        int $locationId,
+        string $label
+    ): void {
+        $location = DB::table('stock_locations')
+            ->where('id', $locationId)
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->first([
+                'id',
+                'warehouse_id',
+                'code',
+                'name',
+            ]);
+
+        $valid = $location
+            && (
+                $location->warehouse_id === null
+                || (int) $location->warehouse_id === $warehouseId
+            );
+
+        if (! $valid) {
+            Notification::make()
+                ->title('Ubicación inválida')
+                ->body(
+                    'La ubicación '
+                    . $label
+                    . ' no pertenece al almacén o a las ubicaciones virtuales de la empresa actual.'
+                )
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+    }
+
+    protected static function assertInternalLocation(
+        int $companyId,
+        int $warehouseId,
+        int $locationId,
+        string $label
+    ): void {
+        $valid = DB::table('stock_locations as sl')
+            ->leftJoin(
+                'stock_location_types as t',
+                't.id',
+                '=',
+                'sl.stock_location_type_id'
+            )
+            ->where('sl.id', $locationId)
+            ->where('sl.company_id', $companyId)
+            ->where('sl.warehouse_id', $warehouseId)
+            ->where('sl.is_active', true)
+            ->where(function ($query): void {
+                $query
+                    ->where('t.is_internal', true)
+                    ->orWhereNull('t.id');
+            })
+            ->exists();
+
+        if (! $valid) {
+            Notification::make()
+                ->title('Ubicación inválida')
+                ->body('La ubicación ' . $label . ' no pertenece al almacén seleccionado.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+    }
+
+    protected static function transitLocationId(int $companyId): ?int
+    {
+        $query = DB::table('stock_locations as sl')
+            ->leftJoin(
+                'stock_location_types as t',
+                't.id',
+                '=',
+                'sl.stock_location_type_id'
+            )
+            ->where('sl.company_id', $companyId)
+            ->whereNull('sl.warehouse_id')
+            ->where('sl.is_active', true)
+            ->where(function ($query): void {
+                $query
+                    ->where('t.code', 'TRANSIT')
+                    ->orWhereIn(DB::raw('upper(sl.code)'), ['TRANSIT', 'TRANSITO']);
+            });
+
+        $preferred = (clone $query)
+            ->whereRaw("upper(sl.code) = 'TRANSITO'")
+            ->value('sl.id');
+
+        if ($preferred) {
+            return (int) $preferred;
+        }
+
+        $id = $query->orderBy('sl.id')->value('sl.id');
+
+        return $id ? (int) $id : null;
+    }
+
+    protected static function moveSerial(
+        ?int $serialId,
+        int $companyId,
+        int $warehouseId,
+        int $locationId
+    ): void {
+        if (
+            ! $serialId
+            || ! Schema::hasTable('stock_serial_numbers')
+        ) {
+            return;
+        }
+
+        $values = [];
+
+        if (Schema::hasColumn('stock_serial_numbers', 'current_warehouse_id')) {
+            $values['current_warehouse_id'] = $warehouseId;
+        }
+
+        if (Schema::hasColumn('stock_serial_numbers', 'current_location_id')) {
+            $values['current_location_id'] = $locationId;
+        }
+
+        if ($values === []) {
+            return;
+        }
+
+        $query = DB::table('stock_serial_numbers')
+            ->where('id', $serialId);
+
+        if (Schema::hasColumn('stock_serial_numbers', 'company_id')) {
+            $query->where('company_id', $companyId);
+        }
+
+        $updated = $query->update($values);
+
+        if ($updated < 1) {
+            Notification::make()
+                ->title('Serie inválida')
+                ->body('No se pudo actualizar la serie #' . $serialId . '.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
     }
 
     protected static function locationAffectsStock(int $locationId): bool
     {
-        if (! Schema::hasTable('stock_locations')) {
+        if (
+            ! Schema::hasTable('stock_locations')
+            || ! Schema::hasColumn('stock_locations', 'tracks_stock')
+        ) {
             return false;
         }
 
-        $location = DB::table('stock_locations')
-            ->leftJoin('stock_location_types', 'stock_location_types.id', '=', 'stock_locations.stock_location_type_id')
-            ->where('stock_locations.id', $locationId)
-            ->select(
-                'stock_locations.warehouse_id',
-                'stock_location_types.code as type_code',
-                'stock_location_types.is_internal'
-            )
-            ->first();
-
-        if (! $location) {
-            return false;
-        }
-
-        if ((bool) $location->is_internal) {
-            return true;
-        }
-
-        return (string) $location->type_code === 'TRANSIT';
+        return (bool) DB::table('stock_locations')
+            ->where('id', $locationId)
+            ->value('tracks_stock');
     }
 
     protected static function locationAllowsNegativeStock(int $locationId): bool
@@ -1800,6 +2414,107 @@ class StockMovementResource extends Resource
             ->all();
     }
 
+    protected static function movementLocationOptions($warehouseId): array
+    {
+        if (! Schema::hasTable('stock_locations')) {
+            return [];
+        }
+
+        $companyId = static::currentCompanyId();
+
+        $query = DB::table('stock_locations as sl')
+            ->leftJoin(
+                'stock_location_types as t',
+                't.id',
+                '=',
+                'sl.stock_location_type_id'
+            )
+            ->where('sl.is_active', true)
+            ->where(function ($query) use ($warehouseId): void {
+                if ($warehouseId) {
+                    $query
+                        ->where('sl.warehouse_id', (int) $warehouseId)
+                        ->orWhereNull('sl.warehouse_id');
+                } else {
+                    $query->whereNull('sl.warehouse_id');
+                }
+            });
+
+        if ($companyId) {
+            $query->where('sl.company_id', $companyId);
+        } else {
+            $query->whereNull('sl.company_id');
+        }
+
+        return $query
+            ->orderByRaw('sl.warehouse_id nulls last')
+            ->orderBy('sl.name')
+            ->get([
+                'sl.id',
+                'sl.warehouse_id',
+                'sl.code',
+                'sl.name',
+                't.code as type_code',
+            ])
+            ->mapWithKeys(function ($location): array {
+                $isVirtual = $location->warehouse_id === null;
+
+                $prefix = $isVirtual ? 'Virtual / ' : '';
+
+                $label = trim(
+                    $prefix
+                    . ($location->code ? $location->code . ' - ' : '')
+                    . $location->name
+                );
+
+                return [
+                    $location->id => $label,
+                ];
+            })
+            ->all();
+    }
+
+    protected static function internalLocationOptions($warehouseId): array
+    {
+        if (! $warehouseId || ! Schema::hasTable('stock_locations')) {
+            return [];
+        }
+
+        $companyId = static::currentCompanyId();
+
+        $query = DB::table('stock_locations as sl')
+            ->leftJoin(
+                'stock_location_types as t',
+                't.id',
+                '=',
+                'sl.stock_location_type_id'
+            )
+            ->where('sl.warehouse_id', (int) $warehouseId)
+            ->where('sl.is_active', true)
+            ->where(function ($query): void {
+                $query
+                    ->where('t.is_internal', true)
+                    ->orWhereNull('t.id');
+            });
+
+        if ($companyId) {
+            $query->where('sl.company_id', $companyId);
+        } else {
+            $query->whereNull('sl.company_id');
+        }
+
+        return $query
+            ->orderBy('sl.name')
+            ->get(['sl.id', 'sl.code', 'sl.name'])
+            ->mapWithKeys(fn ($location): array => [
+                $location->id => trim(
+                    ($location->code ? $location->code . ' - ' : '')
+                    . $location->name
+                ),
+            ])
+            ->all();
+    }
+
     protected static function locationOptions($warehouseId): array
     {
         if (! Schema::hasTable('stock_locations')) {
@@ -1989,7 +2704,7 @@ class StockMovementResource extends Resource
     {
         $status = $get('status') ?: $get('../../status') ?: $get('../../../status');
 
-        return in_array($status, ['done', 'cancelled'], true);
+        return in_array($status, ['in_transit', 'done', 'cancelled'], true);
     }
 
     protected static function currentCompanyId(): ?int
@@ -2016,13 +2731,16 @@ public static function canCreate(): bool
 
     public static function canEdit(Model $record): bool
     {
-        if (
-            $record instanceof StockMovement
-            && in_array($record->status, ['done', 'cancelled'], true)
-        ) {
-            return false;
-        }
-
+        /*
+         * La ruta Edit funciona también como vista operativa/consulta.
+         *
+         * in_transit:
+         *   permite entrar para recibir.
+         *
+         * done / cancelled:
+         *   permite consultar y reimprimir PDF, pero el formulario
+         *   permanece bloqueado y no muestra acciones de guardado.
+         */
         return static::userCanPermission('inventory.movements.update');
     }
 
