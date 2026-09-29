@@ -42,6 +42,10 @@ class EmployeeAttendanceReportService
             ->leftJoin('hr_departments as d', 'd.id', '=', 'e.hr_department_id')
             ->leftJoin('hr_job_positions as p', 'p.id', '=', 'e.hr_job_position_id')
             ->leftJoin('hr_work_schedules as s', 's.id', '=', 'a.hr_work_schedule_id')
+            ->leftJoin('employee_attendance_breaks as b', function ($join): void {
+                $join->on('b.employee_attendance_id', '=', 'a.id')
+                    ->where('b.break_type', '=', 'meal');
+            })
             ->where('a.company_id', $filters['company_id'])
             ->whereDate('a.attendance_date', '>=', $filters['from'])
             ->whereDate('a.attendance_date', '<=', $filters['to'])
@@ -64,6 +68,12 @@ class EmployeeAttendanceReportService
                 'a.expected_end_at',
                 'a.clock_in_at',
                 'a.clock_out_at',
+                'a.clock_in_photo_path',
+                'a.clock_out_photo_path',
+                'b.started_at as meal_out_at',
+                'b.ended_at as meal_in_at',
+                'b.start_photo_path as meal_out_photo_path',
+                'b.end_photo_path as meal_in_photo_path',
                 'a.expected_hours',
                 'a.worked_hours',
                 'a.worked_minutes',
@@ -162,6 +172,9 @@ class EmployeeAttendanceReportService
             'Estado',
             'Entrada esperada',
             'Entrada real',
+            'Salida comida',
+            'Regreso comida',
+            'Minutos comida',
             'Salida esperada',
             'Salida real',
             'Horas esperadas',
@@ -184,6 +197,9 @@ class EmployeeAttendanceReportService
                 static::statusLabel($row->status),
                 static::timeOnly($row->expected_start_at),
                 static::timeOnly($row->clock_in_at),
+                static::timeOnly($row->meal_out_at),
+                static::timeOnly($row->meal_in_at),
+                static::mealMinutes($row->meal_out_at, $row->meal_in_at),
                 static::timeOnly($row->expected_end_at),
                 static::timeOnly($row->clock_out_at),
                 (float) ($row->expected_hours ?? 0),
@@ -197,6 +213,29 @@ class EmployeeAttendanceReportService
         }
 
         $writer->close();
+    }
+
+    public static function mealMinutes(mixed $startedAt, mixed $endedAt): int
+    {
+        if (! $startedAt || ! $endedAt) {
+            return 0;
+        }
+
+        try {
+            $start = \Carbon\Carbon::parse($startedAt);
+            $end = \Carbon\Carbon::parse($endedAt);
+
+            if ($end->lessThan($start)) {
+                return 0;
+            }
+
+            return max(
+                0,
+                (int) round($start->diffInMinutes($end))
+            );
+        } catch (\Throwable) {
+            return 0;
+        }
     }
 
     public static function dateOnly(mixed $value): string

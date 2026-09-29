@@ -4,7 +4,25 @@
         $rows = $this->rows();
     @endphp
 
-    <div class="space-y-6">
+    <div
+        class="space-y-6"
+        x-data="{
+            photoOpen: false,
+            photoUrl: '',
+            photoTitle: '',
+            openPhoto(url, title) {
+                this.photoUrl = url;
+                this.photoTitle = title;
+                this.photoOpen = true;
+            },
+            closePhoto() {
+                this.photoOpen = false;
+                this.photoUrl = '';
+                this.photoTitle = '';
+            }
+        }"
+        x-on:keydown.escape.window="closePhoto()"
+    >
         <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div class="grid gap-4 md:grid-cols-5">
                 <div>
@@ -118,10 +136,13 @@
                             <th class="px-4 py-3 text-left font-semibold">Puesto</th>
                             <th class="px-4 py-3 text-left font-semibold">Estado</th>
                             <th class="px-4 py-3 text-left font-semibold">Entrada</th>
+                            <th class="px-4 py-3 text-left font-semibold">Salida comida</th>
+                            <th class="px-4 py-3 text-left font-semibold">Regreso comida</th>
                             <th class="px-4 py-3 text-left font-semibold">Salida</th>
                             <th class="px-4 py-3 text-right font-semibold">Horas</th>
                             <th class="px-4 py-3 text-right font-semibold">Retardo</th>
                             <th class="px-4 py-3 text-right font-semibold">Extra</th>
+                            <th class="px-4 py-3 text-center font-semibold">Evidencia</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -140,22 +161,121 @@
                                     <div class="text-xs text-gray-500">Esp. {{ $this->timeOnly($row->expected_start_at) }}</div>
                                 </td>
                                 <td class="px-4 py-3">
+                                    {{ $this->timeOnly($row->meal_out_at) }}
+                                </td>
+                                <td class="px-4 py-3">
+                                    {{ $this->timeOnly($row->meal_in_at) }}
+                                </td>
+                                <td class="px-4 py-3">
                                     <div>{{ $this->timeOnly($row->clock_out_at) }}</div>
                                     <div class="text-xs text-gray-500">Esp. {{ $this->timeOnly($row->expected_end_at) }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-right">{{ number_format((float) $row->worked_hours, 2) }}</td>
                                 <td class="px-4 py-3 text-right">{{ (int) $row->late_minutes }} min</td>
                                 <td class="px-4 py-3 text-right">{{ (int) $row->overtime_minutes }} min</td>
+
+                                <td class="px-4 py-3 text-center">
+                                    <div class="flex flex-wrap justify-center gap-2">
+                                        @if ($row->clock_in_photo_path)
+                                            <button
+                                                type="button"
+                                                class="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-500"
+                                                x-on:click='openPhoto(
+                                                    @js($this->attendancePhotoUrl((int) $row->id, "in")),
+                                                    @js("Entrada · " . ($row->employee_name ?: "Empleado") . " · " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($row->clock_in_at))
+                                                )'
+                                            >
+                                                Entrada
+                                            </button>
+                                        @endif
+
+                                        @if ($row->meal_out_photo_path)
+                                            <button
+                                                type="button"
+                                                class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500"
+                                                x-on:click='openPhoto(
+                                                    @js($this->attendancePhotoUrl((int) $row->id, "meal_out")),
+                                                    @js("Salida a comida · " . ($row->employee_name ?: "Empleado") . " · " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($row->meal_out_at))
+                                                )'
+                                            >
+                                                Salida comida
+                                            </button>
+                                        @endif
+
+                                        @if ($row->meal_in_photo_path)
+                                            <button
+                                                type="button"
+                                                class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+                                                x-on:click='openPhoto(
+                                                    @js($this->attendancePhotoUrl((int) $row->id, "meal_in")),
+                                                    @js("Regreso de comida · " . ($row->employee_name ?: "Empleado") . " · " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($row->meal_in_at))
+                                                )'
+                                            >
+                                                Regreso comida
+                                            </button>
+                                        @endif
+
+                                        @if ($row->clock_out_photo_path)
+                                            <button
+                                                type="button"
+                                                class="rounded-lg bg-gray-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-600"
+                                                x-on:click='openPhoto(
+                                                    @js($this->attendancePhotoUrl((int) $row->id, "out")),
+                                                    @js("Salida · " . ($row->employee_name ?: "Empleado") . " · " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($row->clock_out_at))
+                                                )'
+                                            >
+                                                Salida
+                                            </button>
+                                        @endif
+
+                                        @if (! $row->clock_in_photo_path && ! $row->meal_out_photo_path && ! $row->meal_in_photo_path && ! $row->clock_out_photo_path)
+                                            <span class="text-xs text-gray-400">—</span>
+                                        @endif
+                                    </div>
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10" class="px-4 py-8 text-center text-gray-500">
+                                <td colspan="13" class="px-4 py-8 text-center text-gray-500">
                                     No hay asistencias para los filtros seleccionados.
                                 </td>
                             </tr>
                         @endforelse
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        <div
+            x-cloak
+            x-show="photoOpen"
+            x-transition.opacity
+            class="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 p-4"
+            x-on:click.self="closePhoto()"
+        >
+            <div class="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
+                <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+                    <div
+                        class="pr-4 text-sm font-semibold text-gray-950 dark:text-white"
+                        x-text="photoTitle"
+                    ></div>
+
+                    <button
+                        type="button"
+                        class="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                        x-on:click="closePhoto()"
+                    >
+                        Cerrar
+                    </button>
+                </div>
+
+                <div class="flex max-h-[80vh] items-center justify-center overflow-auto bg-gray-100 p-4 dark:bg-black">
+                    <img
+                        x-bind:src="photoUrl"
+                        x-bind:alt="photoTitle"
+                        class="max-h-[75vh] max-w-full rounded-lg object-contain shadow"
+                    >
+                </div>
             </div>
         </div>
     </div>
