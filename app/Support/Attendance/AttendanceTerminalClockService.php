@@ -20,6 +20,7 @@ class AttendanceTerminalClockService
     public function register(
         AttendanceTerminal $terminal,
         string $rawEmployeeQr,
+        string $requestedAction,
         UploadedFile $photo,
         string $ipAddress,
         string $userAgent,
@@ -78,6 +79,7 @@ class AttendanceTerminalClockService
             DB::transaction(function () use (
                 $terminal,
                 $employee,
+                $requestedAction,
                 $photo,
                 $ipAddress,
                 $userAgent,
@@ -137,27 +139,19 @@ class AttendanceTerminalClockService
                     }
                 }
 
-                if (! $attendance || ! $attendance->clock_in_at) {
-                    $direction = 'clock_in';
-                } elseif (
+                $requestedAction = strtolower(trim($requestedAction));
+                $allowedActions = $this->allowedActions(
+                    $attendance,
                     $mealBreak
-                    && $mealBreak->started_at
-                    && ! $mealBreak->ended_at
-                ) {
-                    /*
-                     * Una vez iniciada la comida, el break abierto es
-                     * la fuente de verdad. No volvemos a depender de
-                     * break_minutes para reconocer el regreso.
-                     */
-                    $direction = 'meal_in';
-                } elseif (
-                    (int) ($attendance->break_minutes ?? 0) > 0
-                    && ! $mealBreak
-                ) {
-                    $direction = 'meal_out';
-                } else {
-                    $direction = 'clock_out';
+                );
+
+                if (! in_array($requestedAction, $allowedActions, true)) {
+                    throw ValidationException::withMessages([
+                        'action' => 'La accion seleccionada ya no esta disponible. Escanea nuevamente tu credencial.',
+                    ]);
                 }
+
+                $direction = $requestedAction;
 
                 $storedPhotoPath = $this->storePhoto(
                     photo: $photo,
@@ -350,6 +344,158 @@ class AttendanceTerminalClockService
                 'branch_id' => $terminal->branch_id,
             ],
         ];
+    }
+
+    public function preview(
+        AttendanceTerminal $terminal,
+        string $rawEmployeeQr,
+    ): array {
+        if (! $terminal->active || $terminal->isBlocked()) {
+            throw ValidationException::withMessages([
+                'terminal' => 'Esta terminal esta bloqueada o desactivada.',
+            ]);
+        }
+
+        if (! $terminal->branch_id) {
+            throw ValidationException::withMessages([
+                'terminal' => 'La terminal no tiene una sucursal fisica asignada.',
+            ]);
+        }
+
+        $employeeToken = $this->normalizeEmployeeToken($rawEmployeeQr);
+
+        if ($employeeToken === '') {
+            throw ValidationException::withMessages([
+                'employee_qr' => 'La credencial QR no contiene un token valido.',
+            ]);
+        }
+
+        $employee = Employee::query()
+            ->with('company')
+            ->where('attendance_qr_token', $employeeToken)
+            ->where('attendance_qr_enabled', true)
+            ->where('active', true)
+            ->first();
+
+        if (! $employee) {
+            throw ValidationException::withMessages([
+                'employee_qr' => 'Credencial no reconocida o desactivada.',
+            ]);
+        }
+
+        if ((int) $employee->company_id !== (int) $terminal->company_id) {
+            throw ValidationException::withMessages([
+                'employee_qr' => 'Esta credencial no pertenece a la empresa autorizada para esta terminal.',
+            ]);
+        }
+
+        if (
+            $employee->company
+            && isset($employee->company->attendance_qr_enabled)
+            && ! (bool) $employee->company->attendance_qr_enabled
+        ) {
+            throw ValidationException::withMessages([
+                'employee_qr' => 'El registro de asistencia por QR esta desactivado para esta empresa.',
+            ]);
+        }
+
+        $attendance = EmployeeAttendance::query()
+            ->where('employee_id', $employee->getKey())
+            ->whereDate('attendance_date', now()->toDateString())
+            ->first();
+
+        $mealBreak = null;
+
+        if ($attendance?->getKey()) {
+            $mealBreak = EmployeeAttendanceBreak::query()
+                ->where('employee_attendance_id', $attendance->getKey())
+                ->where('break_type', 'meal')
+                ->first();
+        }
+
+        $actions = $this->allowedActions(
+            $attendance,
+            $mealBreak
+        );
+
+        return [
+            'employee_id' => $employee->getKey(),
+            'employee_name' => (string) $employee->name,
+            'employee_number' => (string) ($employee->employee_number ?? ''),
+            'attendance_id' => $attendance?->getKey(),
+            'complete' => (bool) ($attendance?->clock_out_at),
+            'break_minutes' => (int) ($attendance?->break_minutes ?? 0),
+            'attendance' => [
+                'clock_in' => $attendance?->clock_in_at?->format('H:i:s'),
+                'meal_out' => $mealBreak?->started_at?->format('H:i:s'),
+                'meal_in' => $mealBreak?->ended_at?->format('H:i:s'),
+                'clock_out' => $attendance?->clock_out_at?->format('H:i:s'),
+            ],
+            'allowed_actions' => array_map(
+                fn (string $action): array => [
+                    'action' => $action,
+                    'label' => $this->selectionLabel($action),
+                ],
+                $actions
+            ),
+        ];
+    }
+
+    protected function allowedActions(
+        ?EmployeeAttendance $attendance,
+        ?EmployeeAttendanceBreak $mealBreak = null,
+    ): array {
+        if (! $attendance || ! $attendance->clock_in_at) {
+            return ['clock_in'];
+        }
+
+        if ($attendance->clock_out_at) {
+            return [];
+        }
+
+        /*
+         * Si existe una comida abierta, siempre permitimos regresar
+         * de comida o terminar jornada.
+         */
+        if (
+            $mealBreak
+            && $mealBreak->started_at
+            && ! $mealBreak->ended_at
+        ) {
+            return ['meal_in', 'clock_out'];
+        }
+
+        /*
+         * Sin comida programada se conserva el flujo historico
+         * Entrada -> Salida.
+         */
+        if ((int) ($attendance->break_minutes ?? 0) <= 0) {
+            return ['clock_out'];
+        }
+
+        /*
+         * Tiene comida programada y aun no ha salido:
+         * el empleado decide entre comida o terminar jornada.
+         */
+        if (! $mealBreak) {
+            return ['meal_out', 'clock_out'];
+        }
+
+        /*
+         * La comida ya fue completada.
+         */
+        return ['clock_out'];
+    }
+
+    protected function selectionLabel(string $action): string
+    {
+        return match ($action) {
+            'clock_in' => 'Registrar entrada',
+            'meal_out' => 'Salir a comer',
+            'meal_in' => 'Regresar de comida',
+            'clock_out' => 'Terminar jornada',
+            default => 'Registrar',
+        };
     }
 
     public function normalizeEmployeeToken(string $raw): string
