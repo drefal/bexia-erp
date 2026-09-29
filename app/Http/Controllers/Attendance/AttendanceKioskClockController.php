@@ -25,7 +25,7 @@ class AttendanceKioskClockController extends Controller
                 'string',
                 'in:preview,clock_in,meal_out,meal_in,clock_out',
             ],
-            'photo' => ['required', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:4096'],
+            'photo' => ['nullable', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:4096'],
         ]);
 
         $uuid = trim((string) ($request->header('X-Bexia-Terminal-UUID') ?: ($data['terminal_uuid'] ?? '')));
