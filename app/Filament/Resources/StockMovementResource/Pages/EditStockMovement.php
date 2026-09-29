@@ -471,6 +471,48 @@ class EditStockMovement extends EditRecord
                     );
                 }),
 
+            Actions\Action::make('cancel_transfer')
+                ->label('Cancelar traslado')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading('Cancelar traslado')
+                ->modalDescription(
+                    'Si el traslado ya fue despachado y no tiene recepciones, '
+                    . 'las existencias en tránsito regresarán al origen.'
+                )
+                ->form([
+                    \Filament\Forms\Components\Textarea::make(
+                        'reason'
+                    )
+                        ->label('Motivo')
+                        ->required()
+                        ->maxLength(500),
+                ])
+                ->visible(fn (): bool =>
+                    $this->record instanceof StockMovement
+                    && in_array(
+                        $this->record->status,
+                        ['draft', 'in_transit'],
+                        true
+                    )
+                )
+                ->action(function (array $data): void {
+                    StockMovementResource::cancelTransfer(
+                        $this->record,
+                        (string) ($data['reason'] ?? '')
+                    );
+
+                    Notification::make()
+                        ->title('Traslado cancelado')
+                        ->success()
+                        ->send();
+
+                    $this->redirect(
+                        $this->getResource()::getUrl('index')
+                    );
+                }),
+
             Actions\DeleteAction::make()
                 ->label('Eliminar borrador')
                 ->visible(fn (): bool => $this->record instanceof StockMovement && $this->record->status === 'draft'),

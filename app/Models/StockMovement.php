@@ -33,6 +33,12 @@ class StockMovement extends Model
         'dispatched_at',
         'received_by',
         'received_at',
+        'reverses_stock_movement_id',
+        'reversed_by_stock_movement_id',
+        'reversal_reason',
+        'cancelled_by',
+        'cancelled_at',
+        'cancellation_reason',
     ];
 
     protected $casts = [

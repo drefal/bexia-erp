@@ -1592,6 +1592,250 @@ class StockMovementResource extends Resource
         });
     }
 
+    public static function cancelTransfer(
+        StockMovement $movement,
+        string $reason
+    ): void {
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw new \RuntimeException(
+                'El motivo de cancelación es obligatorio.'
+            );
+        }
+
+        $companyId = static::currentCompanyId();
+
+        if ($companyId <= 0) {
+            throw new \RuntimeException(
+                'No se pudo determinar la empresa activa.'
+            );
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(
+            function () use ($movement, $reason, $companyId): void {
+                $movement = StockMovement::query()
+                    ->whereKey($movement->getKey())
+                    ->where('company_id', $companyId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if (! static::stockMovementIsInternalTransfer($movement)) {
+                    throw new \RuntimeException(
+                        'Solo se pueden cancelar traslados internos.'
+                    );
+                }
+
+                if (! in_array(
+                    $movement->status,
+                    ['draft', 'in_transit'],
+                    true
+                )) {
+                    throw new \RuntimeException(
+                        'El traslado ya no puede cancelarse directamente.'
+                    );
+                }
+
+                $hasReceipts = \Illuminate\Support\Facades\DB::table(
+                    'stock_movement_receipts'
+                )
+                    ->where('stock_movement_id', $movement->id)
+                    ->exists();
+
+                if ($hasReceipts) {
+                    throw new \RuntimeException(
+                        'El traslado ya tiene recepciones. Debe utilizar una reversa controlada.'
+                    );
+                }
+
+                $openIncidents = \Illuminate\Support\Facades\DB::table(
+                    'stock_movement_incidents'
+                )
+                    ->where('stock_movement_id', $movement->id)
+                    ->where('status', 'open')
+                    ->exists();
+
+                if ($openIncidents) {
+                    throw new \RuntimeException(
+                        'El traslado tiene incidencias abiertas y no puede cancelarse directamente.'
+                    );
+                }
+
+                if ($movement->status === 'in_transit') {
+                    $movement->loadMissing('lines');
+
+                    $transitLocationId = (int) (
+                        $movement->transit_location_id ?? 0
+                    );
+
+                    $sourceLocationId = (int) (
+                        $movement->source_location_id ?? 0
+                    );
+
+                    if (
+                        $transitLocationId <= 0
+                        || $sourceLocationId <= 0
+                    ) {
+                        throw new \RuntimeException(
+                            'El traslado no tiene ubicaciones válidas para regresar el tránsito.'
+                        );
+                    }
+
+                    $transitLocation =
+                        \Illuminate\Support\Facades\DB::table(
+                            'stock_locations'
+                        )
+                            ->where('id', $transitLocationId)
+                            ->where('company_id', $companyId)
+                            ->where('tracks_stock', true)
+                            ->first();
+
+                    $sourceLocation =
+                        \Illuminate\Support\Facades\DB::table(
+                            'stock_locations'
+                        )
+                            ->where('id', $sourceLocationId)
+                            ->where('company_id', $companyId)
+                            ->where('tracks_stock', true)
+                            ->first();
+
+                    if (! $transitLocation || ! $sourceLocation) {
+                        throw new \RuntimeException(
+                            'Las ubicaciones del traslado no pertenecen a la empresa activa o no controlan existencias.'
+                        );
+                    }
+
+                    foreach ($movement->lines as $line) {
+                        $qty = round(
+                            (float) $line->done_quantity,
+                            6
+                        );
+
+                        if ($qty <= 0) {
+                            continue;
+                        }
+
+                        $productId = (int) $line->product_id;
+                        $variantId = $line->product_variant_id
+                            ? (int) $line->product_variant_id
+                            : null;
+                        $lotId = $line->lot_id
+                            ? (int) $line->lot_id
+                            : null;
+                        $unitCost = $line->unit_cost !== null
+                            ? (float) $line->unit_cost
+                            : null;
+
+                        static::decreaseQuant(
+                            companyId: $companyId,
+                            warehouseId: (int) $movement->warehouse_id,
+                            locationId: $transitLocationId,
+                            productId: $productId,
+                            variantId: $variantId,
+                            lotId: $lotId,
+                            quantity: $qty,
+                            unitCost: $unitCost
+                        );
+
+                        static::increaseQuant(
+                            companyId: $companyId,
+                            warehouseId: (int) $movement->warehouse_id,
+                            locationId: $sourceLocationId,
+                            productId: $productId,
+                            variantId: $variantId,
+                            lotId: $lotId,
+                            quantity: $qty,
+                            unitCost: $unitCost
+                        );
+
+                        static::returnTransferSerialsToOrigin(
+                            $movement,
+                            $line,
+                            $companyId,
+                            $transitLocationId,
+                            $sourceLocationId
+                        );
+                    }
+                }
+
+                $movement->forceFill([
+                    'status' => 'cancelled',
+                    'cancelled_by' => auth()->id(),
+                    'cancelled_at' => now(),
+                    'cancellation_reason' => $reason,
+                ])->save();
+            }
+        );
+    }
+
+
+    protected static function returnTransferSerialsToOrigin(
+        StockMovement $movement,
+        $line,
+        int $companyId,
+        int $transitLocationId,
+        int $sourceLocationId
+    ): void {
+        if (! $line->stock_serial_number_id) {
+            return;
+        }
+
+        $serialId = (int) $line->stock_serial_number_id;
+
+        $serial = \Illuminate\Support\Facades\DB::table(
+            'stock_serial_numbers'
+        )
+            ->where('id', $serialId)
+            ->where('company_id', $companyId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $serial) {
+            throw new \RuntimeException(
+                'No se encontró la serie #' . $serialId
+                . ' para cancelar el traslado.'
+            );
+        }
+
+        if (
+            isset($serial->current_location_id)
+            && (int) $serial->current_location_id !== $transitLocationId
+        ) {
+            throw new \RuntimeException(
+                'La serie #' . $serialId
+                . ' ya no se encuentra en la ubicación de tránsito.'
+            );
+        }
+
+        if (
+            isset($serial->current_warehouse_id)
+            && (int) $serial->current_warehouse_id
+                !== (int) $movement->warehouse_id
+        ) {
+            throw new \RuntimeException(
+                'La serie #' . $serialId
+                . ' no pertenece al almacén origen durante el tránsito.'
+            );
+        }
+
+        static::moveSerial(
+            $serialId,
+            $companyId,
+            (int) $movement->warehouse_id,
+            $sourceLocationId
+        );
+
+        \Illuminate\Support\Facades\DB::table(
+            'stock_serial_numbers'
+        )
+            ->where('id', $serialId)
+            ->where('company_id', $companyId)
+            ->update([
+                'status' => 'available',
+                'updated_at' => now(),
+            ]);
+    }
+
     public static function receiveMovementWithIncidents(
         StockMovement $movement,
         array $items,
