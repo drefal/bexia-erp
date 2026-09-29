@@ -471,6 +471,305 @@ class EditStockMovement extends EditRecord
                     );
                 }),
 
+            Actions\Action::make('resolve_incident')
+                ->label('Resolver incidencia')
+                ->icon('heroicon-o-wrench-screwdriver')
+                ->color('warning')
+                ->modalHeading('Resolver incidencia de recepción')
+                ->modalDescription(
+                    'Selecciona una incidencia pendiente y define cómo se resolvió. '
+                    . 'La resolución moverá físicamente la existencia o confirmará '
+                    . 'la pérdida según corresponda.'
+                )
+                ->modalSubmitActionLabel('Resolver incidencia')
+                ->modalWidth('2xl')
+                ->visible(function (): bool {
+                    if (! $this->record instanceof StockMovement) {
+                        return false;
+                    }
+
+                    return \Illuminate\Support\Facades\DB::table(
+                        'stock_movement_incidents'
+                    )
+                        ->where(
+                            'company_id',
+                            (int) $this->record->company_id
+                        )
+                        ->where(
+                            'stock_movement_id',
+                            (int) $this->record->id
+                        )
+                        ->where('status', 'open')
+                        ->exists();
+                })
+                ->form(function (): array {
+                    /** @var StockMovement $movement */
+                    $movement = $this->record;
+
+                    $incidents = \Illuminate\Support\Facades\DB::table(
+                        'stock_movement_incidents as i'
+                    )
+                        ->leftJoin(
+                            'stock_movement_lines as sml',
+                            'sml.id',
+                            '=',
+                            'i.stock_movement_line_id'
+                        )
+                        ->leftJoin(
+                            'products as p',
+                            'p.id',
+                            '=',
+                            'sml.product_id'
+                        )
+                        ->where(
+                            'i.company_id',
+                            (int) $movement->company_id
+                        )
+                        ->where(
+                            'i.stock_movement_id',
+                            (int) $movement->id
+                        )
+                        ->where('i.status', 'open')
+                        ->orderBy('i.id')
+                        ->get([
+                            'i.id',
+                            'i.incident_type',
+                            'i.quantity',
+                            'i.reason',
+                            'sml.product_id',
+                            'p.name as product_name',
+                            'p.internal_reference',
+                        ]);
+
+                    $incidentOptions = [];
+
+                    foreach ($incidents as $incident) {
+                        $type = match (
+                            (string) $incident->incident_type
+                        ) {
+                            'damaged' => 'Dañado',
+                            'missing' => 'Faltante',
+                            default => (string) $incident->incident_type,
+                        };
+
+                        $product = trim(
+                            (string) (
+                                $incident->product_name
+                                ?: (
+                                    'Producto #'
+                                    . (string) $incident->product_id
+                                )
+                            )
+                        );
+
+                        $sku = trim(
+                            (string) (
+                                $incident->internal_reference ?? ''
+                            )
+                        );
+
+                        $label = '#'
+                            . (int) $incident->id
+                            . ' · '
+                            . $type
+                            . ' · '
+                            . $product;
+
+                        if ($sku !== '') {
+                            $label .= ' [' . $sku . ']';
+                        }
+
+                        $label .= ' · Cant. '
+                            . number_format(
+                                (float) $incident->quantity,
+                                2
+                            );
+
+                        if (
+                            trim(
+                                (string) ($incident->reason ?? '')
+                            ) !== ''
+                        ) {
+                            $label .= ' · '
+                                . trim(
+                                    (string) $incident->reason
+                                );
+                        }
+
+                        $incidentOptions[
+                            (string) $incident->id
+                        ] = $label;
+                    }
+
+                    return [
+                        Forms\Components\Select::make('incident_id')
+                            ->label('Incidencia pendiente')
+                            ->options($incidentOptions)
+                            ->required()
+                            ->live()
+                            ->searchable()
+                            ->native(false),
+
+                        Forms\Components\Select::make(
+                            'resolution_type'
+                        )
+                            ->label('Resolución')
+                            ->options(function (
+                                Forms\Get $get
+                            ) use ($incidents): array {
+                                $incidentId = (int) (
+                                    $get('incident_id') ?? 0
+                                );
+
+                                if ($incidentId <= 0) {
+                                    return [];
+                                }
+
+                                $incident = $incidents->first(
+                                    fn ($row): bool =>
+                                        (int) $row->id
+                                        === $incidentId
+                                );
+
+                                if (! $incident) {
+                                    return [];
+                                }
+
+                                return match (
+                                    (string) $incident->incident_type
+                                ) {
+                                    'damaged' => [
+                                        'recovered' =>
+                                            'Recuperado y liberado a existencias',
+                                        'loss' =>
+                                            'Confirmar pérdida / baja',
+                                    ],
+                                    'missing' => [
+                                        'found_received' =>
+                                            'Encontrado y recibido en destino',
+                                        'returned_origin' =>
+                                            'Devuelto al origen',
+                                        'confirmed_loss' =>
+                                            'Confirmar pérdida / baja',
+                                    ],
+                                    default => [],
+                                };
+                            })
+                            ->required()
+                            ->native(false),
+
+                        Forms\Components\Textarea::make(
+                            'resolution_notes'
+                        )
+                            ->label('Notas de resolución')
+                            ->rows(4)
+                            ->maxLength(1000)
+                            ->helperText(
+                                'Describe cómo se comprobó o resolvió '
+                                . 'la incidencia.'
+                            ),
+                    ];
+                })
+                ->action(function (array $data): void {
+                    /** @var StockMovement $movement */
+                    $movement = $this->record;
+
+                    $incidentId = (int) (
+                        $data['incident_id'] ?? 0
+                    );
+
+                    $resolutionType = trim(
+                        (string) (
+                            $data['resolution_type'] ?? ''
+                        )
+                    );
+
+                    $notes = trim(
+                        (string) (
+                            $data['resolution_notes'] ?? ''
+                        )
+                    );
+
+                    if (
+                        $incidentId <= 0
+                        || $resolutionType === ''
+                    ) {
+                        Notification::make()
+                            ->title(
+                                'Selecciona una incidencia y su resolución'
+                            )
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    /*
+                     * Defensa UI adicional.
+                     *
+                     * El motor resolveTransferIncident() vuelve a validar
+                     * company_id, estado abierto, movimiento y resolución
+                     * dentro de transacción. Aquí evitamos incluso enviar
+                     * a ese motor un ID que no pertenezca al traslado
+                     * actualmente abierto.
+                     */
+                    $belongsToMovement =
+                        \Illuminate\Support\Facades\DB::table(
+                            'stock_movement_incidents'
+                        )
+                            ->where('id', $incidentId)
+                            ->where(
+                                'company_id',
+                                (int) $movement->company_id
+                            )
+                            ->where(
+                                'stock_movement_id',
+                                (int) $movement->id
+                            )
+                            ->where('status', 'open')
+                            ->exists();
+
+                    if (! $belongsToMovement) {
+                        Notification::make()
+                            ->title(
+                                'La incidencia ya no está disponible'
+                            )
+                            ->body(
+                                'Actualiza el traslado e inténtalo '
+                                . 'nuevamente.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    $resolutionMovementId =
+                        StockMovementResource::
+                            resolveTransferIncident(
+                                $incidentId,
+                                $resolutionType,
+                                $notes !== '' ? $notes : null
+                            );
+
+                    Notification::make()
+                        ->title('Incidencia resuelta')
+                        ->body(
+                            'Se generó el movimiento de resolución #'
+                            . $resolutionMovementId
+                            . '.'
+                        )
+                        ->success()
+                        ->send();
+
+                    $this->redirect(
+                        $this->getResource()::getUrl(
+                            'edit',
+                            ['record' => $movement]
+                        )
+                    );
+                }),
+
             Actions\Action::make('cancel_transfer')
                 ->label('Cancelar traslado')
                 ->icon('heroicon-o-x-circle')

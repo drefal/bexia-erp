@@ -2408,6 +2408,533 @@ class StockMovementResource extends Resource
         return (int) $id;
     }
 
+    public static function resolveTransferIncident(
+        int $incidentId,
+        string $resolutionType,
+        ?string $notes = null
+    ): int {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId) {
+            throw new \RuntimeException(
+                'No hay empresa seleccionada.'
+            );
+        }
+
+        $resolutionType = trim($resolutionType);
+        $notes = trim((string) $notes);
+
+        $allowed = [
+            'recovered',
+            'loss',
+            'found_received',
+            'returned_origin',
+            'confirmed_loss',
+        ];
+
+        if (! in_array($resolutionType, $allowed, true)) {
+            throw new \RuntimeException(
+                'Tipo de resolución inválido.'
+            );
+        }
+
+        return DB::transaction(function () use (
+            $incidentId,
+            $resolutionType,
+            $notes,
+            $companyId
+        ): int {
+            $incident = DB::table(
+                'stock_movement_incidents'
+            )
+                ->where('id', $incidentId)
+                ->where('company_id', $companyId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $incident) {
+                throw new \RuntimeException(
+                    'La incidencia no existe o no pertenece a la empresa seleccionada.'
+                );
+            }
+
+            if ((string) $incident->status !== 'open') {
+                throw new \RuntimeException(
+                    'La incidencia ya fue resuelta o cancelada.'
+                );
+            }
+
+            $incidentType = (string) $incident->incident_type;
+
+            $allowedForIncident = match ($incidentType) {
+                'damaged' => [
+                    'recovered',
+                    'loss',
+                ],
+                'missing' => [
+                    'found_received',
+                    'returned_origin',
+                    'confirmed_loss',
+                ],
+                default => [],
+            };
+
+            if (
+                ! in_array(
+                    $resolutionType,
+                    $allowedForIncident,
+                    true
+                )
+            ) {
+                throw new \RuntimeException(
+                    'La resolución seleccionada no corresponde al tipo de incidencia.'
+                );
+            }
+
+            $movement = StockMovement::query()
+                ->whereKey($incident->stock_movement_id)
+                ->where('company_id', $companyId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $movement) {
+                throw new \RuntimeException(
+                    'No se encontró el traslado de la incidencia.'
+                );
+            }
+
+            $line = DB::table('stock_movement_lines')
+                ->where('id', $incident->stock_movement_line_id)
+                ->where(
+                    'stock_movement_id',
+                    $movement->getKey()
+                )
+                ->lockForUpdate()
+                ->first();
+
+            if (! $line || ! $line->product_id) {
+                throw new \RuntimeException(
+                    'No se encontró la línea de inventario de la incidencia.'
+                );
+            }
+
+            $quantity = round(
+                (float) $incident->quantity,
+                6
+            );
+
+            if ($quantity <= 0) {
+                throw new \RuntimeException(
+                    'La incidencia no tiene cantidad válida.'
+                );
+            }
+
+            $productId = (int) $line->product_id;
+
+            $variantId = $line->product_variant_id
+                ? (int) $line->product_variant_id
+                : null;
+
+            $lotId = $line->lot_id
+                ? (int) $line->lot_id
+                : null;
+
+            $serialId = $incident->stock_serial_number_id
+                ? (int) $incident->stock_serial_number_id
+                : null;
+
+            if ($serialId && abs($quantity - 1.0) > 0.000001) {
+                throw new \RuntimeException(
+                    'Una incidencia con serie debe resolverse por una sola unidad.'
+                );
+            }
+
+            $unitCost = $line->unit_cost !== null
+                ? (float) $line->unit_cost
+                : null;
+
+            $originWarehouseId =
+                (int) $movement->warehouse_id;
+
+            $destinationWarehouseId =
+                (int) $movement->destination_warehouse_id;
+
+            $originLocationId =
+                (int) $movement->source_location_id;
+
+            $destinationLocationId =
+                (int) $movement->destination_location_id;
+
+            $sourceWarehouseId = match ($incidentType) {
+                'damaged' => $destinationWarehouseId,
+                'missing' => $originWarehouseId,
+                default => throw new \RuntimeException(
+                    'Tipo de incidencia inválido.'
+                ),
+            };
+
+            $sourceLocationCode = match ($incidentType) {
+                'damaged' => 'CUARENTENA',
+                'missing' => 'FALTANTE_TRANSITO',
+                default => throw new \RuntimeException(
+                    'Tipo de incidencia inválido.'
+                ),
+            };
+
+            $sourceLocationId =
+                static::transferExceptionLocationId(
+                    $companyId,
+                    $incidentType === 'damaged'
+                        ? $destinationWarehouseId
+                        : null,
+                    $sourceLocationCode
+                );
+
+            if (! $sourceLocationId) {
+                throw new \RuntimeException(
+                    'No se encontró la ubicación origen de la incidencia.'
+                );
+            }
+
+            $isLoss = in_array(
+                $resolutionType,
+                ['loss', 'confirmed_loss'],
+                true
+            );
+
+            if ($isLoss) {
+                $destination = DB::table(
+                    'stock_locations as l'
+                )
+                    ->leftJoin(
+                        'stock_location_types as t',
+                        't.id',
+                        '=',
+                        'l.stock_location_type_id'
+                    )
+                    ->select([
+                        'l.id',
+                        'l.company_id',
+                        'l.warehouse_id',
+                        'l.code',
+                        'l.name',
+                        'l.is_active',
+                        'l.tracks_stock',
+                        't.code as type_code',
+                    ])
+                    ->where('l.company_id', $companyId)
+                    ->where('l.is_active', true)
+                    ->where(function ($query): void {
+                        $query
+                            ->where('t.code', 'LOSS')
+                            ->orWhere('l.code', 'PERDIDA');
+                    })
+                    ->orderByRaw(
+                        "CASE WHEN l.code='PERDIDA' THEN 0 ELSE 1 END"
+                    )
+                    ->orderBy('l.id')
+                    ->first();
+
+                if (! $destination) {
+                    throw new \RuntimeException(
+                        'La empresa no tiene ubicación de pérdida activa.'
+                    );
+                }
+
+                $targetLocationId =
+                    (int) $destination->id;
+
+                $targetWarehouseId =
+                    $destination->warehouse_id
+                        ? (int) $destination->warehouse_id
+                        : 0;
+            } else {
+                [$targetWarehouseId, $targetLocationId] =
+                    match ($resolutionType) {
+                        'recovered',
+                        'found_received' => [
+                            $destinationWarehouseId,
+                            $destinationLocationId,
+                        ],
+                        'returned_origin' => [
+                            $originWarehouseId,
+                            $originLocationId,
+                        ],
+                        default => throw new \RuntimeException(
+                            'Resolución física inválida.'
+                        ),
+                    };
+            }
+
+            static::decreaseQuant(
+                companyId: $companyId,
+                warehouseId: $sourceWarehouseId,
+                locationId: $sourceLocationId,
+                productId: $productId,
+                variantId: $variantId,
+                lotId: $lotId,
+                quantity: $quantity,
+                unitCost: $unitCost
+            );
+
+            /*
+             * PERDIDA es virtual y tracks_stock=false.
+             * Una baja disminuye inventario real pero no genera
+             * un quant destino.
+             */
+            if (! $isLoss) {
+                static::increaseQuant(
+                    companyId: $companyId,
+                    warehouseId: $targetWarehouseId,
+                    locationId: $targetLocationId,
+                    productId: $productId,
+                    variantId: $variantId,
+                    lotId: $lotId,
+                    quantity: $quantity,
+                    unitCost: $unitCost
+                );
+            }
+
+            $operationTypeId = DB::table(
+                'stock_operation_types'
+            )
+                ->where('company_id', $companyId)
+                ->where(
+                    'warehouse_id',
+                    $sourceWarehouseId
+                )
+                ->where(
+                    'operation_kind',
+                    'inventory_adjustment'
+                )
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->value('id');
+
+            $resolutionMovement =
+                StockMovement::create([
+                    'company_id' => $companyId,
+                    'warehouse_id' => $sourceWarehouseId,
+                    'destination_warehouse_id' =>
+                        $isLoss
+                            ? null
+                            : $targetWarehouseId,
+                    'stock_operation_type_id' =>
+                        $operationTypeId
+                            ? (int) $operationTypeId
+                            : null,
+                    'source_location_id' =>
+                        $sourceLocationId,
+                    'destination_location_id' =>
+                        $targetLocationId,
+                    'movement_at' => now(),
+                    'status' => 'done',
+                    'origin_document' =>
+                        'transfer_incident:'
+                        . $incident->id,
+                    'notes' =>
+                        'Resolución de incidencia #'
+                        . $incident->id
+                        . ' · '
+                        . $resolutionType
+                        . (
+                            $notes !== ''
+                                ? ' · ' . $notes
+                                : ''
+                        ),
+                    'confirmed_by' => auth()->id(),
+                    'confirmed_at' => now(),
+                    'received_by' => auth()->id(),
+                    'received_at' => now(),
+                ]);
+
+            DB::table('stock_movement_lines')->insert([
+                'stock_movement_id' =>
+                    $resolutionMovement->getKey(),
+                'product_id' => $productId,
+                'product_variant_id' => $variantId,
+                'lot_id' => $lotId,
+                'stock_serial_number_id' => $serialId,
+                'requested_quantity' => $quantity,
+                'done_quantity' => $quantity,
+                'unit_cost' => $unitCost,
+                'notes' =>
+                    'Resolución incidencia #'
+                    . $incident->id
+                    . ' · '
+                    . $resolutionType,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            if ($serialId) {
+                $serial = DB::table(
+                    'stock_serial_numbers'
+                )
+                    ->where('id', $serialId)
+                    ->where('company_id', $companyId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $serial) {
+                    throw new \RuntimeException(
+                        'No se encontró la serie de la incidencia.'
+                    );
+                }
+
+                if (
+                    (int) $serial->current_location_id
+                    !== $sourceLocationId
+                ) {
+                    throw new \RuntimeException(
+                        'La serie ya no se encuentra en la ubicación de la incidencia.'
+                    );
+                }
+
+                if ($isLoss) {
+                    DB::table(
+                        'stock_serial_numbers'
+                    )
+                        ->where('id', $serialId)
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
+                        ->update([
+                            'status' => 'scrapped',
+                            'current_warehouse_id' =>
+                                $targetWarehouseId > 0
+                                    ? $targetWarehouseId
+                                    : null,
+                            'current_location_id' =>
+                                $targetLocationId,
+                            'updated_at' => now(),
+                        ]);
+
+                    if (
+                        Schema::hasTable(
+                            'stock_serial_special_movements'
+                        )
+                    ) {
+                        $special = [
+                            'company_id' => $companyId,
+                            'stock_serial_number_id' =>
+                                $serialId,
+                            'product_id' => $productId,
+                            'product_variant_id' =>
+                                $variantId,
+                            'lot_id' => $lotId,
+                            'movement_type' =>
+                                \App\Models\StockSerialSpecialMovement::TYPE_SCRAP_LOSS,
+                            'status' => 'confirmed',
+                            'serial_number_before' =>
+                                $serial->serial_number,
+                            'serial_number_after' => null,
+                            'source_warehouse_id' =>
+                                $serial
+                                    ->current_warehouse_id,
+                            'source_location_id' =>
+                                $sourceLocationId,
+                            'destination_warehouse_id' =>
+                                $targetWarehouseId > 0
+                                    ? $targetWarehouseId
+                                    : null,
+                            'destination_location_id' =>
+                                $targetLocationId,
+                            'reason' =>
+                                $notes !== ''
+                                    ? $notes
+                                    : 'Resolución de incidencia de traslado.',
+                            'reference' =>
+                                $resolutionMovement
+                                    ->reference,
+                            'notes' =>
+                                'Incidencia #'
+                                . $incident->id,
+                            'created_by' =>
+                                auth()->id(),
+                            'confirmed_by' =>
+                                auth()->id(),
+                            'confirmed_at' => now(),
+                            'metadata' => json_encode(
+                                [
+                                    'incident_id' =>
+                                        (int) $incident->id,
+                                    'resolution_type' =>
+                                        $resolutionType,
+                                    'source' =>
+                                        'StockMovementResource.resolveTransferIncident',
+                                ],
+                                JSON_UNESCAPED_UNICODE
+                                | JSON_UNESCAPED_SLASHES
+                            ),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+
+                        $special = array_intersect_key(
+                            $special,
+                            array_flip(
+                                Schema::getColumnListing(
+                                    'stock_serial_special_movements'
+                                )
+                            )
+                        );
+
+                        DB::table(
+                            'stock_serial_special_movements'
+                        )->insert($special);
+                    }
+                } else {
+                    static::moveSerial(
+                        $serialId,
+                        $companyId,
+                        $targetWarehouseId,
+                        $targetLocationId
+                    );
+
+                    DB::table(
+                        'stock_serial_numbers'
+                    )
+                        ->where('id', $serialId)
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
+                        ->update([
+                            'status' => 'available',
+                            'updated_at' => now(),
+                        ]);
+                }
+            }
+
+            DB::table(
+                'stock_movement_incidents'
+            )
+                ->where('id', $incident->id)
+                ->where('company_id', $companyId)
+                ->update([
+                    'status' => 'resolved',
+                    'resolution_type' =>
+                        $resolutionType,
+                    'resolution_location_id' =>
+                        $targetLocationId,
+                    'resolution_stock_movement_id' =>
+                        $resolutionMovement->getKey(),
+                    'resolution_notes' =>
+                        $notes !== ''
+                            ? $notes
+                            : null,
+                    'resolved_by' => auth()->id(),
+                    'resolved_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            return (int) $resolutionMovement->getKey();
+        });
+    }
+
+
     public static function receiveMovement(
         StockMovement $movement,
         array $quantities,
