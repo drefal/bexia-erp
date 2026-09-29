@@ -5,6 +5,8 @@ namespace App\Support;
 use App\Models\Employee;
 use App\Models\EmployeeAttendance;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class EmployeeAttendanceCalculator
 {
@@ -135,11 +137,57 @@ class EmployeeAttendanceCalculator
             $clockOut = $clockOut->addDay();
         }
 
-        $breakMinutes = max(0, (int) ($attendance->break_minutes ?? 0));
-        $minutes = max(0, (int) round($clockIn->diffInMinutes($clockOut)) - $breakMinutes);
+        $actualBreakMinutes = self::actualMealBreakMinutes($attendance);
+
+        $breakMinutes = $actualBreakMinutes !== null
+            ? $actualBreakMinutes
+            : max(0, (int) ($attendance->break_minutes ?? 0));
+
+        $minutes = max(
+            0,
+            (int) round($clockIn->diffInMinutes($clockOut)) - $breakMinutes
+        );
 
         $attendance->worked_minutes = (int) round($minutes);
         $attendance->worked_hours = round($minutes / 60, 2);
+    }
+
+    protected static function actualMealBreakMinutes(
+        EmployeeAttendance $attendance
+    ): ?int {
+        if (
+            ! $attendance->getKey()
+            || ! Schema::hasTable('employee_attendance_breaks')
+        ) {
+            return null;
+        }
+
+        $break = DB::table('employee_attendance_breaks')
+            ->where('employee_attendance_id', $attendance->getKey())
+            ->where('break_type', 'meal')
+            ->whereNotNull('started_at')
+            ->whereNotNull('ended_at')
+            ->first(['started_at', 'ended_at']);
+
+        if (! $break) {
+            return null;
+        }
+
+        try {
+            $startedAt = CarbonImmutable::parse($break->started_at);
+            $endedAt = CarbonImmutable::parse($break->ended_at);
+
+            if ($endedAt->lessThan($startedAt)) {
+                return null;
+            }
+
+            return max(
+                0,
+                (int) round($startedAt->diffInMinutes($endedAt))
+            );
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     protected static function positiveMinutesAfterTolerance(CarbonImmutable $expected, CarbonImmutable $actual, int $tolerance): int

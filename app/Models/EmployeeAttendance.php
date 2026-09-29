@@ -134,6 +134,22 @@ class EmployeeAttendance extends Model
         return $this->belongsTo(\App\Models\AttendanceTerminal::class, 'clock_out_attendance_terminal_id');
     }
 
+    public function breaks()
+    {
+        return $this->hasMany(
+            \App\Models\EmployeeAttendanceBreak::class,
+            'employee_attendance_id'
+        );
+    }
+
+    public function mealBreak()
+    {
+        return $this->hasOne(
+            \App\Models\EmployeeAttendanceBreak::class,
+            'employee_attendance_id'
+        )->where('break_type', 'meal');
+    }
+
     public function mobileReviewedBy()
     {
         return $this->belongsTo(\App\Models\User::class, 'mobile_reviewed_by_user_id');

@@ -797,3 +797,82 @@ Route::post('/admin/{tenant}/dashboard-section-settings/{section}', [\App\Http\C
 )->name(
     'service.repair-orders.exit-document'
 );
+
+/*
+|--------------------------------------------------------------------------
+| Bexia RRHH - Evidencia fotografica privada de asistencia
+|--------------------------------------------------------------------------
+*/
+Route::get(
+    '/admin/{tenant}/rrhh/asistencia/{attendance}/foto/{direction}',
+    function (
+        int $tenant,
+        \App\Models\EmployeeAttendance $attendance,
+        string $direction
+    ) {
+        $user = auth()->user();
+
+        abort_unless($user, 403);
+
+        $allowed = (bool) ($user->is_system_admin ?? false)
+            || ($user->email ?? null) === 'admin@bexiaerp.com'
+            || $user->can('rrhh.asistencias.ver');
+
+        abort_unless($allowed, 403);
+
+        /*
+         * PHOTO_TENANT_ACCESS_V5836J2E2
+         *
+         * 1) La asistencia debe pertenecer al tenant solicitado.
+         * 2) El usuario autenticado debe tener acceso real a ese tenant
+         *    según el mismo mecanismo multiempresa de Filament/Bexia.
+         */
+        abort_unless((int) $attendance->company_id === $tenant, 404);
+
+        $tenantCompany = \App\Models\Company::query()->find($tenant);
+
+        abort_unless($tenantCompany, 404);
+
+        $canAccessTenant = (bool) ($user->is_system_admin ?? false)
+            || ($user->email ?? null) === 'admin@bexiaerp.com'
+            || (
+                method_exists($user, 'canAccessTenant')
+                && $user->canAccessTenant($tenantCompany)
+            );
+
+        abort_unless($canAccessTenant, 403);
+
+        $path = match ($direction) {
+            'in' => $attendance->clock_in_photo_path,
+            'out' => $attendance->clock_out_photo_path,
+            'meal_out' => \Illuminate\Support\Facades\DB::table('employee_attendance_breaks')
+                ->where('employee_attendance_id', $attendance->id)
+                ->where('break_type', 'meal')
+                ->value('start_photo_path'),
+            'meal_in' => \Illuminate\Support\Facades\DB::table('employee_attendance_breaks')
+                ->where('employee_attendance_id', $attendance->id)
+                ->where('break_type', 'meal')
+                ->value('end_photo_path'),
+            default => null,
+        };
+
+        abort_unless(filled($path), 404);
+
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+
+        abort_unless($disk->exists($path), 404);
+
+        return response()->file(
+            $disk->path($path),
+            [
+                'Cache-Control' => 'private, no-store, max-age=0',
+                'Pragma' => 'no-cache',
+            ]
+        );
+    }
+)
+    ->middleware('auth')
+    ->whereNumber('tenant')
+    ->whereNumber('attendance')
+    ->whereIn('direction', ['in', 'meal_out', 'meal_in', 'out'])
+    ->name('rrhh.attendance.photo');

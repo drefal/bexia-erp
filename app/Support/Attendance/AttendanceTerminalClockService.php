@@ -5,6 +5,7 @@ namespace App\Support\Attendance;
 use App\Models\AttendanceTerminal;
 use App\Models\Employee;
 use App\Models\EmployeeAttendance;
+use App\Models\EmployeeAttendanceBreak;
 use App\Support\EmployeeAttendanceIncidentSync;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -100,24 +101,62 @@ class AttendanceTerminalClockService
                     ->lockForUpdate()
                     ->first();
 
+                $mealBreak = null;
+
+                if ($attendance?->getKey()) {
+                    $mealBreak = EmployeeAttendanceBreak::query()
+                        ->where('employee_attendance_id', $attendance->getKey())
+                        ->where('break_type', 'meal')
+                        ->lockForUpdate()
+                        ->first();
+                }
+
                 if ($attendance && $attendance->clock_in_at && $attendance->clock_out_at) {
                     throw ValidationException::withMessages([
                         'employee_qr' => 'Ya tienes entrada y salida registradas para hoy.',
                     ]);
                 }
 
-                if ($attendance && $attendance->clock_in_at && ! $attendance->clock_out_at) {
-                    $secondsSinceEntry = $attendance->clock_in_at->diffInSeconds($clockedAt);
+                $lastEventAt = $attendance?->clock_in_at;
 
-                    if ($secondsSinceEntry < self::DUPLICATE_WINDOW_SECONDS) {
+                if ($mealBreak?->started_at && (! $lastEventAt || $mealBreak->started_at->greaterThan($lastEventAt))) {
+                    $lastEventAt = $mealBreak->started_at;
+                }
+
+                if ($mealBreak?->ended_at && (! $lastEventAt || $mealBreak->ended_at->greaterThan($lastEventAt))) {
+                    $lastEventAt = $mealBreak->ended_at;
+                }
+
+                if ($lastEventAt) {
+                    $secondsSinceLastEvent = $lastEventAt->diffInSeconds($clockedAt);
+
+                    if ($secondsSinceLastEvent < self::DUPLICATE_WINDOW_SECONDS) {
                         throw ValidationException::withMessages([
                             'employee_qr' => 'Registro duplicado. Espera un momento antes de volver a pasar tu tarjeta.',
                         ]);
                     }
+                }
 
-                    $direction = 'clock_out';
-                } else {
+                if (! $attendance || ! $attendance->clock_in_at) {
                     $direction = 'clock_in';
+                } elseif (
+                    $mealBreak
+                    && $mealBreak->started_at
+                    && ! $mealBreak->ended_at
+                ) {
+                    /*
+                     * Una vez iniciada la comida, el break abierto es
+                     * la fuente de verdad. No volvemos a depender de
+                     * break_minutes para reconocer el regreso.
+                     */
+                    $direction = 'meal_in';
+                } elseif (
+                    (int) ($attendance->break_minutes ?? 0) > 0
+                    && ! $mealBreak
+                ) {
+                    $direction = 'meal_out';
+                } else {
+                    $direction = 'clock_out';
                 }
 
                 $storedPhotoPath = $this->storePhoto(
@@ -132,8 +171,11 @@ class AttendanceTerminalClockService
                     $attendance = new EmployeeAttendance();
                 }
 
-                $prefix = $direction === 'clock_out' ? 'clock_out' : 'clock_in';
-                $deviceFingerprint = hash('sha256', 'attendance-terminal|' . (string) $terminal->uuid);
+                $deviceFingerprint = hash(
+                    'sha256',
+                    'attendance-terminal|' . (string) $terminal->uuid
+                );
+
                 $deviceInfo = [
                     'device_type' => 'attendance_terminal',
                     'terminal_id' => $terminal->getKey(),
@@ -144,48 +186,118 @@ class AttendanceTerminalClockService
                     'physical_branch_id' => $terminal->branch_id,
                 ];
 
-                $evidence = [
-                    $prefix . '_attendance_terminal_id' => $terminal->getKey(),
-                    $prefix . '_photo_path' => $storedPhotoPath,
-                    $prefix . '_method' => 'terminal_qr',
-                    $prefix . '_ip_address' => substr($ipAddress, 0, 255),
-                    $prefix . '_user_agent' => substr($userAgent, 0, 1000),
-                    $prefix . '_device_fingerprint' => $deviceFingerprint,
-                    $prefix . '_device_info' => $deviceInfo,
-                    $prefix . '_device_guard_status' => 'authorized_terminal',
-                    $prefix . '_device_guard_message' => null,
-                    $prefix . '_location_status' => 'terminal_authorized',
-                    'mobile_review_status' => 'accepted',
-                ];
+                if ($direction === 'clock_in' || $direction === 'clock_out') {
+                    $prefix = $direction;
 
-                if ($direction === 'clock_in') {
-                    $attendance->forceFill(array_merge([
+                    $evidence = [
+                        $prefix . '_attendance_terminal_id' => $terminal->getKey(),
+                        $prefix . '_photo_path' => $storedPhotoPath,
+                        $prefix . '_method' => 'terminal_qr',
+                        $prefix . '_ip_address' => substr($ipAddress, 0, 255),
+                        $prefix . '_user_agent' => substr($userAgent, 0, 1000),
+                        $prefix . '_device_fingerprint' => $deviceFingerprint,
+                        $prefix . '_device_info' => $deviceInfo,
+                        $prefix . '_device_guard_status' => 'authorized_terminal',
+                        $prefix . '_device_guard_message' => null,
+                        $prefix . '_location_status' => 'terminal_authorized',
+                        'mobile_review_status' => 'accepted',
+                    ];
+
+                    if ($direction === 'clock_in') {
+                        $attendance->forceFill(array_merge([
+                            'company_id' => $employee->company_id,
+                            'employee_id' => $employee->getKey(),
+                            'attendance_date' => $today,
+                            'clock_in_at' => $clockedAt,
+                            'source' => 'terminal',
+                            'notes' => $this->appendNote(
+                                $attendance->notes,
+                                'Entrada registrada en terminal '
+                                . $terminal->code
+                                . ' / '
+                                . $terminal->name
+                                . '.'
+                            ),
+                            'created_by_user_id' => null,
+                            'updated_by_user_id' => null,
+                        ], $evidence));
+                    } else {
+                        $attendance->forceFill(array_merge([
+                            'clock_out_at' => $clockedAt,
+                            'source' => $attendance->source ?: 'terminal',
+                            'notes' => $this->appendNote(
+                                $attendance->notes,
+                                'Salida registrada en terminal '
+                                . $terminal->code
+                                . ' / '
+                                . $terminal->name
+                                . '.'
+                            ),
+                            'updated_by_user_id' => null,
+                        ], $evidence));
+                    }
+
+                    $attendance->save();
+                } elseif ($direction === 'meal_out') {
+                    $mealBreak = new EmployeeAttendanceBreak();
+
+                    $mealBreak->forceFill([
+                        'employee_attendance_id' => $attendance->getKey(),
                         'company_id' => $employee->company_id,
-                        'employee_id' => $employee->getKey(),
-                        'attendance_date' => $today,
-                        'clock_in_at' => $clockedAt,
-                        'source' => 'terminal',
-                        'notes' => $this->appendNote(
-                            $attendance->notes,
-                            'Entrada registrada en terminal ' . $terminal->code . ' / ' . $terminal->name . '.'
-                        ),
-                        'created_by_user_id' => null,
-                        'updated_by_user_id' => null,
-                    ], $evidence));
-                } else {
-                    $attendance->forceFill(array_merge([
-                        'clock_out_at' => $clockedAt,
-                        'source' => $attendance->source ?: 'terminal',
-                        'notes' => $this->appendNote(
-                            $attendance->notes,
-                            'Salida registrada en terminal ' . $terminal->code . ' / ' . $terminal->name . '.'
-                        ),
-                        'updated_by_user_id' => null,
-                    ], $evidence));
-                }
+                        'break_type' => 'meal',
+                        'started_at' => $clockedAt,
+                        'start_attendance_terminal_id' => $terminal->getKey(),
+                        'start_method' => 'terminal_qr',
+                        'start_photo_path' => $storedPhotoPath,
+                        'start_ip_address' => substr($ipAddress, 0, 45),
+                        'start_user_agent' => substr($userAgent, 0, 1000),
+                        'start_device_fingerprint' => $deviceFingerprint,
+                        'start_device_info' => $deviceInfo,
+                        'start_device_guard_status' => 'authorized_terminal',
+                    ])->save();
 
-                $attendance->save();
-            }, 3);
+                    $attendance->forceFill([
+                        'notes' => $this->appendNote(
+                            $attendance->notes,
+                            'Salida a comida registrada en terminal '
+                            . $terminal->code
+                            . ' / '
+                            . $terminal->name
+                            . '.'
+                        ),
+                        'updated_by_user_id' => null,
+                    ])->save();
+                } elseif ($direction === 'meal_in') {
+                    if (! $mealBreak) {
+                        throw ValidationException::withMessages([
+                            'employee_qr' => 'No existe una salida a comida pendiente.',
+                        ]);
+                    }
+
+                    $mealBreak->forceFill([
+                        'ended_at' => $clockedAt,
+                        'end_attendance_terminal_id' => $terminal->getKey(),
+                        'end_method' => 'terminal_qr',
+                        'end_photo_path' => $storedPhotoPath,
+                        'end_ip_address' => substr($ipAddress, 0, 45),
+                        'end_user_agent' => substr($userAgent, 0, 1000),
+                        'end_device_fingerprint' => $deviceFingerprint,
+                        'end_device_info' => $deviceInfo,
+                        'end_device_guard_status' => 'authorized_terminal',
+                    ])->save();
+
+                    $attendance->forceFill([
+                        'notes' => $this->appendNote(
+                            $attendance->notes,
+                            'Regreso de comida registrado en terminal '
+                            . $terminal->code
+                            . ' / '
+                            . $terminal->name
+                            . '.'
+                        ),
+                        'updated_by_user_id' => null,
+                    ])->save();
+                }            }, 3);
         } catch (\Throwable $e) {
             if ($storedPhotoPath) {
                 Storage::disk('local')->delete($storedPhotoPath);
@@ -216,7 +328,13 @@ class AttendanceTerminalClockService
         return [
             'attendance_id' => $attendance?->getKey(),
             'direction' => $direction,
-            'direction_label' => $direction === 'clock_out' ? 'SALIDA' : 'ENTRADA',
+            'direction_label' => match ($direction) {
+                'clock_in' => 'ENTRADA',
+                'meal_out' => 'SALIDA A COMIDA',
+                'meal_in' => 'REGRESO DE COMIDA',
+                'clock_out' => 'SALIDA',
+                default => strtoupper((string) $direction),
+            },
             'employee_id' => $employee->getKey(),
             'employee_name' => (string) $employee->name,
             'employee_number' => (string) ($employee->employee_number ?? ''),
@@ -283,7 +401,13 @@ class AttendanceTerminalClockService
             '%s_employee-%d_%s_%s.%s',
             $clockedAt->format('His'),
             $employee->getKey(),
-            $direction === 'clock_out' ? 'out' : 'in',
+            match ($direction) {
+                'clock_in' => 'in',
+                'meal_out' => 'meal-out',
+                'meal_in' => 'meal-in',
+                'clock_out' => 'out',
+                default => 'event',
+            },
             Str::lower((string) Str::uuid()),
             $extension,
         );

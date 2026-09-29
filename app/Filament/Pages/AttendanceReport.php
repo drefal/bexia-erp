@@ -193,6 +193,17 @@ class AttendanceReport extends Page
         return EmployeeAttendanceReportService::minutesToHours($minutes);
     }
 
+    public function attendancePhotoUrl(int $attendanceId, string $direction): string
+    {
+        $direction = $direction === 'out' ? 'out' : 'in';
+
+        return route('rrhh.attendance.photo', [
+            'tenant' => $this->companyId(),
+            'attendance' => $attendanceId,
+            'direction' => $direction,
+        ]);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
