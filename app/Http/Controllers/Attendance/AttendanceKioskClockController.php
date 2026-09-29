@@ -20,6 +20,11 @@ class AttendanceKioskClockController extends Controller
             'terminal_uuid' => ['nullable', 'uuid'],
             'terminal_token' => ['nullable', 'string', 'min:32', 'max:255'],
             'employee_qr' => ['required', 'string', 'max:2048'],
+            'action' => [
+                'nullable',
+                'string',
+                'in:preview,clock_in,meal_out,meal_in,clock_out',
+            ],
             'photo' => ['required', 'file', 'image', 'mimes:jpeg,jpg,png,webp', 'max:4096'],
         ]);
 
@@ -52,10 +57,43 @@ class AttendanceKioskClockController extends Controller
             ], 403);
         }
 
+        $action = strtolower(
+            trim((string) ($data['action'] ?? 'preview'))
+        );
+
+        if ($action === '') {
+            $action = 'preview';
+        }
+
         try {
+            if ($action === 'preview') {
+                $result = $clock->preview(
+                    terminal: $terminal,
+                    rawEmployeeQr: (string) $data['employee_qr'],
+                );
+
+                return response()->json(array_merge([
+                    'ok' => true,
+                    'mode' => 'preview',
+                    'message' => 'Selecciona el registro a realizar.',
+                    'server_time' => now()->toIso8601String(),
+                ], $result));
+            }
+
+            $photo = $request->file('photo');
+
+            if (! $photo) {
+                return response()->json([
+                    'ok' => false,
+                    'code' => 'photo_required',
+                    'message' => 'Se requiere fotografia para registrar la asistencia.',
+                ], 422);
+            }
+
             $result = $clock->register(
                 terminal: $terminal,
                 rawEmployeeQr: (string) $data['employee_qr'],
+                requestedAction: $action,
                 photo: $request->file('photo'),
                 ipAddress: (string) $request->ip(),
                 userAgent: (string) $request->userAgent(),
@@ -82,6 +120,7 @@ class AttendanceKioskClockController extends Controller
 
         return response()->json(array_merge([
             'ok' => true,
+            'mode' => 'registered',
             'message' => 'Registro correcto.',
             'server_time' => now()->toIso8601String(),
         ], $result));
