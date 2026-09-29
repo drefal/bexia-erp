@@ -150,7 +150,13 @@
                             <tr>
                                 <td class="px-4 py-3">{{ $this->dateOnly($row->attendance_date) }}</td>
                                 <td class="px-4 py-3">
-                                    <div class="font-medium">{{ $row->employee_name ?: '-' }}</div>
+                                    <a
+                                        href="{{ $this->employeeEditUrl((int) $row->employee_id) }}"
+                                        class="font-medium text-primary-600 hover:underline dark:text-primary-400"
+                                        title="Abrir ficha de {{ $row->employee_name ?: 'empleado' }}"
+                                    >
+                                        {{ $row->employee_name ?: '-' }}
+                                    </a>
                                     <div class="text-xs text-gray-500">{{ $row->employee_number ?: '' }}</div>
                                 </td>
                                 <td class="px-4 py-3">{{ $row->department_name ?: '-' }}</td>

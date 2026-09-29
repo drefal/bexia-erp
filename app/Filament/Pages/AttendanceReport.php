@@ -193,6 +193,14 @@ class AttendanceReport extends Page
         return EmployeeAttendanceReportService::minutesToHours($minutes);
     }
 
+    public function employeeEditUrl(int $employeeId): string
+    {
+        return \App\Filament\Resources\EmployeeResource::getUrl(
+            'edit',
+            ['record' => $employeeId],
+            tenant: \Filament\Facades\Filament::getTenant(),
+        );
+    }
     public function attendancePhotoUrl(int $attendanceId, string $direction): string
     {
         abort_unless(
