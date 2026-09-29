@@ -195,7 +195,10 @@ class AttendanceReport extends Page
 
     public function attendancePhotoUrl(int $attendanceId, string $direction): string
     {
-        $direction = $direction === 'out' ? 'out' : 'in';
+        abort_unless(
+            in_array($direction, ['in', 'meal_out', 'meal_in', 'out'], true),
+            404
+        );
 
         return route('rrhh.attendance.photo', [
             'tenant' => $this->companyId(),
