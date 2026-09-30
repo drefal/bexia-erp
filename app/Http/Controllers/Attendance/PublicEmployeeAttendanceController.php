@@ -113,7 +113,11 @@ class PublicEmployeeAttendanceController extends Controller
 
         $attendance->save();
 
-        if ($direction === 'clock_out') {
+        if (in_array($direction, ['clock_in', 'clock_out'], true)) {
+            /*
+             * El retardo ya puede conocerse al registrar la entrada.
+             * Salida temprana / jornada incompleta aparecerán al salir.
+             */
             $this->syncIncidentAfterClockOut($attendance);
         }
 

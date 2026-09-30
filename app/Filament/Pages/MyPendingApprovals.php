@@ -26,7 +26,28 @@ class MyPendingApprovals extends Page
     protected static string $view = 'filament.pages.my-pending-approvals';
 protected static function canUseApprovalsPage(): bool
 {
-    return auth()->user()?->can('approvals.approve') ?? false;
+    $user = auth()->user();
+
+    if (! $user) {
+        return false;
+    }
+
+    /*
+     * V5.83.6J2AP1A
+     *
+     * RRHH entra por approvals.approve.
+     *
+     * Un jefe directo puede no tener ese permiso global;
+     * debe poder entrar únicamente cuando exista una
+     * aprobación pendiente que realmente pueda atender.
+     */
+    if ($user->can('approvals.approve')) {
+        return true;
+    }
+
+    return static::pendingCountForUser(
+        (int) $user->id
+    ) > 0;
 }
 
 public static function shouldRegisterNavigation(): bool
@@ -83,21 +104,46 @@ if (! static::canUseApprovalsPage()) {
             return 0;
         }
 
+        $user = \App\Models\User::query()->find($userId);
+
+        if (! $user) {
+            return 0;
+        }
+
         return DB::table('approval_request_steps as steps')
-            ->join('approval_requests as requests', 'requests.id', '=', 'steps.approval_request_id')
+            ->join(
+                'approval_requests as requests',
+                'requests.id',
+                '=',
+                'steps.approval_request_id'
+            )
             ->where('steps.status', 'pending')
             ->where('requests.status', 'pending')
-            ->whereColumn('steps.step_order', 'requests.current_step_order')
-            ->where('steps.approver_user_id', $userId)
+            ->whereColumn(
+                'steps.step_order',
+                'requests.current_step_order'
+            )
+            ->select([
+                'steps.approver_user_id',
+                'steps.approver_role_name',
+                'requests.company_id',
+            ])
+            ->get()
+            ->filter(
+                fn ($row): bool =>
+                    static::userCanActOnApproval($user, $row)
+            )
             ->count();
     }
 
     public function refreshRows(): void
     {
-        $userId = (int) auth()->id();
+        $user = auth()->user();
+        $userId = (int) ($user?->id ?? 0);
 
         if (
-            $userId <= 0
+            ! $user
+            || $userId <= 0
             || ! Schema::hasTable('approval_requests')
             || ! Schema::hasTable('approval_request_steps')
         ) {
@@ -106,17 +152,27 @@ if (! static::canUseApprovalsPage()) {
         }
 
         $rows = DB::table('approval_request_steps as steps')
-            ->join('approval_requests as requests', 'requests.id', '=', 'steps.approval_request_id')
+            ->join(
+                'approval_requests as requests',
+                'requests.id',
+                '=',
+                'steps.approval_request_id'
+            )
             ->where('steps.status', 'pending')
             ->where('requests.status', 'pending')
-            ->whereColumn('steps.step_order', 'requests.current_step_order')
-            ->where('steps.approver_user_id', $userId)
+            ->whereColumn(
+                'steps.step_order',
+                'requests.current_step_order'
+            )
             ->orderBy('requests.sent_at')
             ->orderBy('steps.step_order')
             ->select([
                 'steps.id as step_id',
                 'steps.step_name',
                 'steps.step_order',
+                'steps.approver_type',
+                'steps.approver_user_id',
+                'steps.approver_role_name',
                 'requests.id as request_id',
                 'requests.company_id',
                 'requests.approvable_type',
@@ -129,23 +185,41 @@ if (! static::canUseApprovalsPage()) {
                 'requests.sent_at',
                 'requests.current_step_order',
             ])
-            ->get();
+            ->get()
+            ->filter(
+                fn ($row): bool =>
+                    static::userCanActOnApproval($user, $row)
+            )
+            ->values();
 
         $this->rows = $rows
             ->map(fn ($row): array => [
                 'step_id' => (int) $row->step_id,
                 'request_id' => (int) $row->request_id,
                 'company_id' => (int) ($row->company_id ?? 0),
-                'document_type' => $this->documentLabel((string) ($row->document_type ?? '')),
+                'document_type' => $this->documentLabel(
+                    (string) ($row->document_type ?? '')
+                ),
                 'open_url' => $this->serviceApprovalRepairUrl($row),
-                'document_label' => $this->documentLabel((string) ($row->document_type ?? '')),
-                'document_number' => (string) ($row->document_number ?? ''),
-                'approvable_id' => (int) ($row->approvable_id ?? 0),
-                'step_name' => (string) ($row->step_name ?? ''),
-                'requester_name' => (string) ($row->requester_name ?? '—'),
-                'amount_total' => (float) ($row->amount_total ?? 0),
-                'amount_display' => number_format((float) ($row->amount_total ?? 0), 2),
-                'sent_at' => (string) ($row->sent_at ?? ''),
+                'document_label' => $this->documentLabel(
+                    (string) ($row->document_type ?? '')
+                ),
+                'document_number' =>
+                    (string) ($row->document_number ?? ''),
+                'approvable_id' =>
+                    (int) ($row->approvable_id ?? 0),
+                'step_name' =>
+                    (string) ($row->step_name ?? ''),
+                'requester_name' =>
+                    (string) ($row->requester_name ?? '—'),
+                'amount_total' =>
+                    (float) ($row->amount_total ?? 0),
+                'amount_display' => number_format(
+                    (float) ($row->amount_total ?? 0),
+                    2
+                ),
+                'sent_at' =>
+                    (string) ($row->sent_at ?? ''),
                 'url' => $this->documentUrl($row),
             ])
             ->values()
@@ -266,8 +340,17 @@ try {
                 throw new \RuntimeException('La solicitud de aprobación ya no está pendiente.');
             }
 
-            if ((int) ($step->approver_user_id ?? 0) !== (int) $user->id) {
-                throw new \RuntimeException('Tu usuario no es el aprobador asignado a esta etapa.');
+            $authorizationRow = (object) array_merge(
+                (array) $step,
+                [
+                    'company_id' => (int) ($request->company_id ?? 0),
+                ]
+            );
+
+            if (! static::userCanActOnApproval($user, $authorizationRow)) {
+                throw new \RuntimeException(
+                    'Tu usuario no es aprobador de esta incidencia.'
+                );
             }
 
             if ($decision === 'approved') {
@@ -976,6 +1059,62 @@ if ($reason === '') {
     }
 
 
+    protected static function userCanActOnApproval(
+        object $user,
+        object $row
+    ): bool {
+        if (
+            ! empty($row->approver_user_id)
+            && (int) $row->approver_user_id === (int) $user->id
+        ) {
+            return true;
+        }
+
+        $roleName = trim(
+            (string) ($row->approver_role_name ?? '')
+        );
+
+        if ($roleName === '') {
+            return false;
+        }
+
+        if (
+            ! Schema::hasTable('roles')
+            || ! Schema::hasTable('model_has_roles')
+        ) {
+            return false;
+        }
+
+        $query = DB::table('model_has_roles as mr')
+            ->join(
+                'roles as r',
+                'r.id',
+                '=',
+                'mr.role_id'
+            )
+            ->where('mr.model_id', (int) $user->id)
+            ->where(
+                'mr.model_type',
+                \App\Models\User::class
+            )
+            ->where('r.name', $roleName);
+
+        $companyId = (int) ($row->company_id ?? 0);
+
+        if (
+            $companyId > 0
+            && Schema::hasColumn('roles', 'company_id')
+        ) {
+            $query->where(function ($query) use ($companyId): void {
+                $query
+                    ->where('r.company_id', $companyId)
+                    ->orWhereNull('r.company_id');
+            });
+        }
+
+        return $query->exists();
+    }
+
     protected function currentPendingStepForUserOrFail(int $requestId): object
     {
         $request = DB::table('approval_requests')
@@ -984,28 +1123,62 @@ if ($reason === '') {
             ->first();
 
         if (! $request) {
-            throw new \RuntimeException('Esta solicitud ya no está pendiente o ya fue procesada.');
+            throw new \RuntimeException(
+                'Esta solicitud ya no está pendiente o ya fue procesada.'
+            );
         }
 
-        $step = DB::table('approval_request_steps')
-            ->where('approval_request_id', $request->id)
+        $user = auth()->user();
+
+        if (! $user) {
+            throw new \RuntimeException(
+                'Sesión no válida.'
+            );
+        }
+
+        $steps = DB::table('approval_request_steps')
+            ->where(
+                'approval_request_id',
+                $request->id
+            )
             ->where('status', 'pending')
-            ->orderBy('step_order')
+            ->where(
+                'step_order',
+                (int) ($request->current_step_order ?? 0)
+            )
             ->orderBy('id')
-            ->first();
+            ->get();
+
+        if ($steps->isEmpty()) {
+            throw new \RuntimeException(
+                'No hay una etapa pendiente para esta solicitud.'
+            );
+        }
+
+        $step = $steps->first(
+            function ($candidate) use (
+                $user,
+                $request
+            ): bool {
+                $row = (object) array_merge(
+                    (array) $candidate,
+                    [
+                        'company_id' =>
+                            (int) ($request->company_id ?? 0),
+                    ]
+                );
+
+                return static::userCanActOnApproval(
+                    $user,
+                    $row
+                );
+            }
+        );
 
         if (! $step) {
-            throw new \RuntimeException('No hay una etapa pendiente para esta solicitud.');
-        }
-
-        if ((int) ($request->current_step_order ?? 0) !== (int) ($step->step_order ?? 0)) {
-            throw new \RuntimeException('La etapa pendiente no coincide con la etapa actual de la solicitud. Recarga la página.');
-        }
-
-        $authId = (int) auth()->id();
-
-        if ((int) ($step->approver_user_id ?? 0) !== $authId) {
-            throw new \RuntimeException('Esta aprobación ya no corresponde a tu usuario. Recarga la bandeja.');
+            throw new \RuntimeException(
+                'Esta aprobación no corresponde a tu usuario o rol.'
+            );
         }
 
         return $step;

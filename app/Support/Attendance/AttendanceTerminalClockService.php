@@ -300,7 +300,14 @@ class AttendanceTerminalClockService
             throw $e;
         }
 
-        if ($direction === 'clock_out' && $attendance) {
+        if (
+            in_array(
+                $direction,
+                ['clock_in', 'meal_in', 'clock_out'],
+                true
+            )
+            && $attendance
+        ) {
             try {
                 EmployeeAttendanceIncidentSync::syncAll($attendance->fresh(), null, true);
             } catch (\Throwable $e) {

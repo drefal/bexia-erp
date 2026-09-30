@@ -12,6 +12,8 @@ class EmployeeIncidentApprovalWorkflow
 {
     public const DOCUMENT_TYPE = 'employee_incident';
 
+    public const HR_APPROVER_ROLE = 'RRHH Aprobador Incidencias';
+
     public static function hasApplicableWorkflow(EmployeeIncident $incident): bool
     {
         return static::findWorkflow($incident) !== null;
@@ -218,6 +220,30 @@ class EmployeeIncidentApprovalWorkflow
             'created_at' => now(),
             'updated_at' => now(),
         ];
+
+        /*
+         * V5.83.6J2AP1
+         *
+         * Incidencias de asistencia:
+         * una sola etapa puede ser atendida por:
+         *
+         *  - jefe directo del empleado (supervisor_user_id), O
+         *  - cualquier usuario con el rol RRHH Aprobador Incidencias.
+         *
+         * Se conserva UNA sola fila de approval_request_steps.
+         * approver_user_id representa al jefe directo y
+         * approver_role_name representa a RRHH.
+         *
+         * No son dos aprobaciones. Es una relación OR.
+         */
+        if (
+            (string) $base['approver_type'] === 'role'
+            && trim((string) ($base['approver_role_name'] ?? '')) === self::HR_APPROVER_ROLE
+        ) {
+            $base['approver_user_id'] = static::requesterManagerId($incident);
+
+            return [$base];
+        }
 
         $userIds = static::approverUserIds($step, $incident);
 
@@ -485,7 +511,10 @@ class EmployeeIncidentApprovalWorkflow
 
     protected static function notifyCurrentApprovers(object $request): void
     {
-        if (! class_exists(\App\Support\BexiaUserNotification::class) || ! Schema::hasTable('approval_request_steps')) {
+        if (
+            ! class_exists(\App\Support\BexiaUserNotification::class)
+            || ! Schema::hasTable('approval_request_steps')
+        ) {
             return;
         }
 
@@ -493,12 +522,33 @@ class EmployeeIncidentApprovalWorkflow
             ->where('approval_request_id', $request->id)
             ->where('step_order', $request->current_step_order)
             ->where('status', 'pending')
-            ->whereNotNull('approver_user_id')
             ->get();
 
+        $userIds = collect();
+
         foreach ($steps as $step) {
+            if (! empty($step->approver_user_id)) {
+                $userIds->push((int) $step->approver_user_id);
+            }
+
+            $roleName = trim((string) ($step->approver_role_name ?? ''));
+
+            if ($roleName !== '') {
+                foreach (
+                    static::userIdsWithAnyRole(
+                        [$roleName],
+                        (int) ($request->company_id ?? 0),
+                        true
+                    ) as $roleUserId
+                ) {
+                    $userIds->push((int) $roleUserId);
+                }
+            }
+        }
+
+        foreach ($userIds->filter()->unique()->values() as $userId) {
             \App\Support\BexiaUserNotification::send(
-                (int) $step->approver_user_id,
+                (int) $userId,
                 'Incidencia RRHH pendiente de aprobación',
                 'Tienes una incidencia pendiente: ' . $request->document_number,
                 static::documentUrl($request),

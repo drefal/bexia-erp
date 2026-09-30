@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\EmployeeAttendance;
+use App\Models\EmployeeAttendanceBreak;
 use App\Models\EmployeeIncident;
 use App\Models\HrIncidentType;
 use Illuminate\Support\Facades\DB;
@@ -101,6 +102,13 @@ class EmployeeAttendanceIncidentSync
 
         if (static::incompleteWorkdayMinutes($attendance) > 0) {
             $codes[] = 'JORNADA_INCOMPLETA';
+        }
+
+        // V5.83.6J2AP2
+        // La comida se compara contra los minutos permitidos que quedaron
+        // registrados en la propia asistencia al resolver el horario.
+        if (static::mealExcessMinutes($attendance) > 0) {
+            $codes[] = 'EXCESO_COMIDA';
         }
 
         return array_values(array_unique($codes));
@@ -202,6 +210,7 @@ class EmployeeAttendanceIncidentSync
             'RETARDO' => 'Retardo - ' . $date,
             'SALIDA_TEMPRANA' => 'Salida temprana - ' . $date,
             'JORNADA_INCOMPLETA' => 'Jornada incompleta - ' . $date,
+            'EXCESO_COMIDA' => 'Exceso de comida - ' . $date,
             'FALTA' => 'Falta - ' . $date,
             default => 'Incidencia asistencia - ' . $date,
         };
@@ -213,6 +222,7 @@ class EmployeeAttendanceIncidentSync
             'RETARDO' => (float) max(1, (int) $attendance->late_minutes),
             'SALIDA_TEMPRANA' => (float) max(1, (int) $attendance->early_leave_minutes),
             'JORNADA_INCOMPLETA' => (float) max(1, static::incompleteWorkdayMinutes($attendance)),
+            'EXCESO_COMIDA' => (float) max(1, static::mealExcessMinutes($attendance)),
             'FALTA' => 1.0,
             default => 1.0,
         };
@@ -221,7 +231,7 @@ class EmployeeAttendanceIncidentSync
     protected static function quantityUnit(string $code): string
     {
         return match ($code) {
-            'RETARDO', 'SALIDA_TEMPRANA', 'JORNADA_INCOMPLETA' => 'minutes',
+            'RETARDO', 'SALIDA_TEMPRANA', 'JORNADA_INCOMPLETA', 'EXCESO_COMIDA' => 'minutes',
             'FALTA' => 'days',
             default => 'units',
         };
@@ -251,6 +261,19 @@ class EmployeeAttendanceIncidentSync
             $parts[] = 'Jornada esperada: ' . $expected . ' min.';
             $parts[] = 'Jornada trabajada: ' . $worked . ' min.';
             $parts[] = 'Minutos no cubiertos: ' . $missing . ' min.';
+        }
+
+        if ($code === 'EXCESO_COMIDA') {
+            $meal = static::mealBreak($attendance);
+            $allowed = max(0, (int) ($attendance->break_minutes ?? 0));
+            $actual = $meal?->actualMinutes();
+            $excess = static::mealExcessMinutes($attendance);
+
+            $parts[] = 'Comida permitida: ' . $allowed . ' min.';
+            $parts[] = 'Salida a comida: ' . ($meal?->started_at?->format('H:i') ?: '-');
+            $parts[] = 'Regreso de comida: ' . ($meal?->ended_at?->format('H:i') ?: '-');
+            $parts[] = 'Duración real de comida: ' . ($actual !== null ? $actual . ' min.' : '-');
+            $parts[] = 'Exceso de comida: ' . $excess . ' min.';
         }
 
         if ($code === 'FALTA') {
@@ -337,6 +360,64 @@ class EmployeeAttendanceIncidentSync
         return PHP_EOL . PHP_EOL . 'Detalle geocerca / ubicación:' . PHP_EOL . implode(PHP_EOL, $lines);
     }
 
+
+    /**
+     * V5.83.6J2AP2
+     *
+     * Obtiene la comida asociada a la asistencia.
+     * Actualmente el flujo operativo permite una comida por jornada.
+     */
+    public static function mealBreak(EmployeeAttendance $attendance): ?EmployeeAttendanceBreak
+    {
+        if (! $attendance->getKey()) {
+            return null;
+        }
+
+        return EmployeeAttendanceBreak::query()
+            ->where('employee_attendance_id', $attendance->getKey())
+            ->where('company_id', $attendance->company_id)
+            ->where('break_type', 'meal')
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * Minutos reales consumidos en comida.
+     * Una comida todavía abierta no genera exceso hasta registrar regreso.
+     */
+    public static function mealActualMinutes(EmployeeAttendance $attendance): ?int
+    {
+        $meal = static::mealBreak($attendance);
+
+        if (! $meal || ! $meal->started_at || ! $meal->ended_at) {
+            return null;
+        }
+
+        return $meal->actualMinutes();
+    }
+
+    /**
+     * Minutos excedidos contra el break_minutes calculado desde el horario.
+     *
+     * break_minutes <= 0 significa que ese día no tiene comida programada,
+     * por lo que este concepto no genera incidencia.
+     */
+    public static function mealExcessMinutes(EmployeeAttendance $attendance): int
+    {
+        $allowed = max(0, (int) ($attendance->break_minutes ?? 0));
+
+        if ($allowed <= 0) {
+            return 0;
+        }
+
+        $actual = static::mealActualMinutes($attendance);
+
+        if ($actual === null) {
+            return 0;
+        }
+
+        return max(0, $actual - $allowed);
+    }
 
     protected static function expectedWorkMinutes(EmployeeAttendance $attendance): int
     {
