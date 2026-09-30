@@ -16,6 +16,12 @@ class CreateStockMovement extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         /*
+         * La cabecera siempre nace en borrador.
+         * El estado no se acepta desde el cliente.
+         */
+        $data['status'] = 'draft';
+
+        /*
          * Esta pantalla crea únicamente la cabecera/borrador.
          *
          * Si el usuario ya seleccionó un tipo de operación, respetarlo.

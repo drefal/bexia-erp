@@ -818,6 +818,18 @@ class EditStockMovement extends EditRecord
         ];
     }
 
+    protected function mutateFormDataBeforeSave(
+        array $data
+    ): array {
+        /*
+         * Las transiciones de estado pertenecen al motor.
+         * Nunca aceptar status desde el formulario de edición.
+         */
+        unset($data['status']);
+
+        return $data;
+    }
+
     protected function getFormActions(): array
     {
         if ($this->record instanceof StockMovement && in_array($this->record->status, ['in_transit', 'done', 'cancelled'], true)) {

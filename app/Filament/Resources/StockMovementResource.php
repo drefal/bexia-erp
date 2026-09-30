@@ -161,7 +161,7 @@ class StockMovementResource extends Resource
                             ])
                             ->default('draft')
                             ->disabled()
-                            ->dehydrated()
+                            ->dehydrated(false)
                             ->columnSpan(3),
 
                         Forms\Components\Fieldset::make('Origen')
@@ -3209,7 +3209,7 @@ class StockMovementResource extends Resource
         float $quantity,
         ?float $unitCost = null
     ): void {
-        $quant = static::findOrNewQuant(
+        $quant = static::findQuantForUpdate(
             $companyId,
             $warehouseId,
             $locationId,
@@ -3218,18 +3218,66 @@ class StockMovementResource extends Resource
             $lotId
         );
 
+        /*
+         * Si no existe quant y la ubicación no permite negativos,
+         * el disponible real es cero y no debemos crear una fila
+         * vacía solamente para lanzar el error.
+         */
+        if (! $quant) {
+            if (! static::locationAllowsNegativeStock($locationId)) {
+                Notification::make()
+                    ->title('Existencia insuficiente')
+                    ->body(
+                        static::stockItemLabel(
+                            $productId,
+                            $variantId
+                        )
+                        . ' no tiene existencia suficiente en '
+                        . static::locationLabel($locationId)
+                        . '. Disponible: 0.00'
+                        . ', solicitado: '
+                        . number_format($quantity, 2)
+                        . '.'
+                    )
+                    ->danger()
+                    ->send();
+
+                throw new Halt();
+            }
+
+            $quant = static::findOrNewQuant(
+                $companyId,
+                $warehouseId,
+                $locationId,
+                $productId,
+                $variantId,
+                $lotId
+            );
+        }
+
         $current = (float) $quant->quantity;
         $newQuantity = $current - $quantity;
 
-        if ($newQuantity < 0 && ! static::locationAllowsNegativeStock($locationId)) {
+        if (
+            $newQuantity < 0
+            && ! static::locationAllowsNegativeStock(
+                $locationId
+            )
+        ) {
             Notification::make()
                 ->title('Existencia insuficiente')
                 ->body(
-                    static::stockItemLabel($productId, $variantId)
+                    static::stockItemLabel(
+                        $productId,
+                        $variantId
+                    )
                     . ' no tiene existencia suficiente en '
                     . static::locationLabel($locationId)
-                    . '. Disponible: ' . number_format($current, 2)
-                    . ', solicitado: ' . number_format($quantity, 2) . '.'
+                    . '. Disponible: '
+                    . number_format($current, 2)
+                    . ', solicitado: '
+                    . number_format($quantity, 2)
+                    . '.'
                 )
                 ->danger()
                 ->send();
@@ -3239,7 +3287,10 @@ class StockMovementResource extends Resource
 
         $quant->quantity = $newQuantity;
 
-        if ($unitCost !== null && $quant->average_cost === null) {
+        if (
+            $unitCost !== null
+            && $quant->average_cost === null
+        ) {
             $quant->average_cost = $unitCost;
         }
 
@@ -3286,6 +3337,50 @@ class StockMovementResource extends Resource
         $quant->save();
     }
 
+    protected static function findQuantForUpdate(
+        int $companyId,
+        int $warehouseId,
+        int $locationId,
+        int $productId,
+        ?int $variantId,
+        ?int $lotId
+    ): ?StockQuant {
+        $query = StockQuant::query()
+            ->where('company_id', $companyId)
+            ->where('warehouse_id', $warehouseId)
+            ->where('location_id', $locationId)
+            ->where('product_id', $productId);
+
+        $variantId
+            ? $query->where(
+                'product_variant_id',
+                $variantId
+            )
+            : $query->whereNull(
+                'product_variant_id'
+            );
+
+        if (
+            Schema::hasColumn(
+                'stock_quants',
+                'lot_id'
+            )
+        ) {
+            $lotId
+                ? $query->where(
+                    'lot_id',
+                    $lotId
+                )
+                : $query->whereNull(
+                    'lot_id'
+                );
+        }
+
+        return $query
+            ->lockForUpdate()
+            ->first();
+    }
+
     protected static function findOrNewQuant(
         int $companyId,
         int $warehouseId,
@@ -3294,31 +3389,28 @@ class StockMovementResource extends Resource
         ?int $variantId,
         ?int $lotId
     ): StockQuant {
-        $query = StockQuant::query()
-            ->where('company_id', $companyId)
-            ->where('warehouse_id', $warehouseId)
-            ->where('location_id', $locationId)
-            ->where('product_id', $productId);
-
-        $variantId
-            ? $query->where('product_variant_id', $variantId)
-            : $query->whereNull('product_variant_id');
-
-        if (Schema::hasColumn('stock_quants', 'lot_id')) {
+        $quant = static::findQuantForUpdate(
+            $companyId,
+            $warehouseId,
+            $locationId,
+            $productId,
+            $variantId,
             $lotId
-                ? $query->where('lot_id', $lotId)
-                : $query->whereNull('lot_id');
-        }
-
-        $quant = $query
-            ->lockForUpdate()
-            ->first();
+        );
 
         if ($quant) {
             return $quant;
         }
 
-        $quant = new StockQuant([
+        /*
+         * La identidad lógica del quant está protegida por
+         * stock_quants_logical_unique.
+         *
+         * Si dos transacciones intentan crear el mismo quant,
+         * PostgreSQL deja que una lo cree y la otra hace
+         * ON CONFLICT DO NOTHING mediante insertOrIgnore().
+         */
+        $attributes = [
             'company_id' => $companyId,
             'warehouse_id' => $warehouseId,
             'location_id' => $locationId,
@@ -3326,10 +3418,30 @@ class StockMovementResource extends Resource
             'product_variant_id' => $variantId,
             'reserved_quantity' => 0,
             'quantity' => 0,
-        ]);
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
 
         if (Schema::hasColumn('stock_quants', 'lot_id')) {
-            $quant->lot_id = $lotId;
+            $attributes['lot_id'] = $lotId;
+        }
+
+        DB::table('stock_quants')
+            ->insertOrIgnore($attributes);
+
+        $quant = static::findQuantForUpdate(
+            $companyId,
+            $warehouseId,
+            $locationId,
+            $productId,
+            $variantId,
+            $lotId
+        );
+
+        if (! $quant) {
+            throw new \RuntimeException(
+                'No fue posible obtener el quant después de crearlo.'
+            );
         }
 
         return $quant;
