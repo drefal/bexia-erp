@@ -326,34 +326,142 @@ $this->rejectIncidentWithExplanation((string) ($data['explanation'] ?? ''));
 
     protected function canCurrentUserActOnCurrentApprovalStep(): bool
     {
-        $recordId = (int) ($this->record?->id ?? 0);
+        $user = auth()->user();
 
-        if ($recordId <= 0) {
+        if (! $user || ! $this->record) {
             return false;
         }
 
-        $request = \Illuminate\Support\Facades\DB::table('approval_requests')
-            ->where('document_type', 'employee_incident')
-            ->where('approvable_id', $recordId)
-            ->where('status', 'pending')
-            ->orderByDesc('id')
-            ->first();
+        $request = $this->pendingApprovalRequest();
 
-        if (! $request) {
+        if (
+            ! $request
+            || (string) ($request->status ?? '') !== 'pending'
+        ) {
             return false;
         }
 
-        $step = \Illuminate\Support\Facades\DB::table('approval_request_steps')
-            ->where('approval_request_id', $request->id)
-            ->where('step_order', $request->current_step_order)
-            ->where('status', 'pending')
-            ->first();
+        $step = $this->currentPendingStep($request);
 
-        if (! $step) {
+        if (
+            ! $step
+            || (string) ($step->status ?? '') !== 'pending'
+        ) {
             return false;
         }
 
-        return (int) ($step->approver_user_id ?? 0) === (int) auth()->id();
+        /*
+         * V5.83.6J2AP3F
+         *
+         * Una incidencia puede ser resuelta por:
+         *
+         * 1. approver_user_id
+         *    = jefe directo materializado al crear la solicitud
+         *
+         * O
+         *
+         * 2. approver_role_name
+         *    = RRHH Aprobador Incidencias
+         *
+         * No se requieren ambas aprobaciones.
+         */
+
+        if (
+            ! empty($step->approver_user_id)
+            && (int) $step->approver_user_id
+                === (int) $user->id
+        ) {
+            return true;
+        }
+
+        $roleName = trim(
+            (string) (
+                $step->approver_role_name ?? ''
+            )
+        );
+
+        if ($roleName === '') {
+            return false;
+        }
+
+        if (
+            ! \Illuminate\Support\Facades\Schema::hasTable(
+                'roles'
+            )
+            || ! \Illuminate\Support\Facades\Schema::hasTable(
+                'model_has_roles'
+            )
+        ) {
+            return false;
+        }
+
+        $companyId = (int) (
+            $request->company_id
+            ?? $this->record->company_id
+            ?? 0
+        );
+
+        $query = \Illuminate\Support\Facades\DB::table(
+                'model_has_roles as mr'
+            )
+            ->join(
+                'roles as r',
+                'r.id',
+                '=',
+                'mr.role_id'
+            )
+            ->where(
+                'mr.model_id',
+                (int) $user->id
+            )
+            ->where(
+                'mr.model_type',
+                \App\Models\User::class
+            )
+            ->where(
+                'r.name',
+                $roleName
+            );
+
+        /*
+         * Spatie Permission Teams:
+         * model_has_roles.company_id también debe coincidir.
+         */
+        if (
+            $companyId > 0
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'model_has_roles',
+                'company_id'
+            )
+        ) {
+            $query->where(
+                'mr.company_id',
+                $companyId
+            );
+        }
+
+        if (
+            $companyId > 0
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'roles',
+                'company_id'
+            )
+        ) {
+            $query->where(function ($query) use (
+                $companyId
+            ): void {
+                $query
+                    ->where(
+                        'r.company_id',
+                        $companyId
+                    )
+                    ->orWhereNull(
+                        'r.company_id'
+                    );
+            });
+        }
+
+        return $query->exists();
     }
     protected function notifyApprovalStepNoLongerAvailable(): void
     {
@@ -461,7 +569,6 @@ $this->rejectIncidentWithExplanation((string) ($data['explanation'] ?? ''));
             $updated = \Illuminate\Support\Facades\DB::table('approval_request_steps')
                 ->where('id', $stepId)
                 ->where('status', 'pending')
-                ->where('approver_user_id', auth()->id())
                 ->update($payload);
 
             if ($updated < 1) {
