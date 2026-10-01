@@ -521,6 +521,12 @@ class EditStockMovement extends EditRecord
                             '=',
                             'sml.product_id'
                         )
+                        ->leftJoin(
+                            'stock_serial_numbers as ssn',
+                            'ssn.id',
+                            '=',
+                            'i.stock_serial_number_id'
+                        )
                         ->where(
                             'i.company_id',
                             (int) $movement->company_id
@@ -539,6 +545,7 @@ class EditStockMovement extends EditRecord
                             'sml.product_id',
                             'p.name as product_name',
                             'p.internal_reference',
+                            'ssn.serial_number',
                         ]);
 
                     $incidentOptions = [];
@@ -577,6 +584,14 @@ class EditStockMovement extends EditRecord
 
                         if ($sku !== '') {
                             $label .= ' [' . $sku . ']';
+                        }
+
+                        $serialNumber = trim(
+                            (string) ($incident->serial_number ?? '')
+                        );
+
+                        if ($serialNumber !== '') {
+                            $label .= ' · Serie ' . $serialNumber;
                         }
 
                         $label .= ' · Cant. '
