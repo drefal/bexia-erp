@@ -34,6 +34,7 @@ class EmployeeAttendanceCalculator
             $attendance->expected_start_at = null;
             $attendance->expected_end_at = null;
             $attendance->break_minutes = 0;
+            $attendance->break_sessions_allowed = 0;
             $attendance->expected_hours = 0;
             self::calculateWorkedTime($attendance);
             $attendance->late_minutes = 0;
@@ -48,6 +49,10 @@ class EmployeeAttendanceCalculator
         $attendance->expected_start_at = $schedule['start_at'] ?? null;
         $attendance->expected_end_at = $schedule['end_at'] ?? null;
         $attendance->break_minutes = (int) ($schedule['break_minutes'] ?? 0);
+        $attendance->break_sessions_allowed = max(
+            0,
+            (int) ($schedule['break_sessions_allowed'] ?? 0)
+        );
         $attendance->expected_hours = round((float) ($schedule['expected_hours'] ?? 0), 2);
 
         self::calculateWorkedTime($attendance);
@@ -97,8 +102,43 @@ class EmployeeAttendanceCalculator
             ? self::positiveMinutesBeforeTolerance($clockOut, $expectedEnd, (int) ($schedule['tolerance_early_leave_minutes'] ?? 0))
             : 0;
 
-        $expectedMinutes = (int) round(((float) ($attendance->expected_hours ?? 0)) * 60);
-        $attendance->overtime_minutes = max(0, (int) ($attendance->worked_minutes ?? 0) - $expectedMinutes);
+        $expectedMinutes = (int) round(
+            ((float) ($attendance->expected_hours ?? 0)) * 60
+        );
+
+        /*
+         * AR19C
+         *
+         * No tomar todo el descanso disponible no convierte ese tiempo
+         * automáticamente en horas extra.
+         *
+         * Ejemplo:
+         * descanso permitido = 90
+         * descanso usado = 60
+         * los 30 no usados no son tiempo extra por sí mismos.
+         */
+        $actualBreakMinutes = self::actualMealBreakMinutes(
+            $attendance
+        );
+
+        $allowedBreakMinutes = max(
+            0,
+            (int) ($attendance->break_minutes ?? 0)
+        );
+
+        $unusedBreakMinutes = $actualBreakMinutes !== null
+            ? max(
+                0,
+                $allowedBreakMinutes - $actualBreakMinutes
+            )
+            : 0;
+
+        $attendance->overtime_minutes = max(
+            0,
+            (int) ($attendance->worked_minutes ?? 0)
+                - $expectedMinutes
+                - $unusedBreakMinutes
+        );
 
         if ($attendance->late_minutes > 0 && $attendance->early_leave_minutes > 0) {
             $attendance->status = 'late_early_leave';
@@ -162,32 +202,44 @@ class EmployeeAttendanceCalculator
             return null;
         }
 
-        $break = DB::table('employee_attendance_breaks')
+        $breaks = DB::table('employee_attendance_breaks')
             ->where('employee_attendance_id', $attendance->getKey())
             ->where('break_type', 'meal')
             ->whereNotNull('started_at')
             ->whereNotNull('ended_at')
-            ->first(['started_at', 'ended_at']);
+            ->get(['started_at', 'ended_at']);
 
-        if (! $break) {
-            return null;
+        /*
+         * La tabla existe y la asistencia ya existe:
+         * si no tomó descansos reales, el consumo real es cero.
+         */
+        if ($breaks->isEmpty()) {
+            return 0;
         }
 
-        try {
-            $startedAt = CarbonImmutable::parse($break->started_at);
-            $endedAt = CarbonImmutable::parse($break->ended_at);
+        $total = 0;
 
-            if ($endedAt->lessThan($startedAt)) {
-                return null;
+        foreach ($breaks as $break) {
+            try {
+                $startedAt = CarbonImmutable::parse($break->started_at);
+                $endedAt = CarbonImmutable::parse($break->ended_at);
+
+                if ($endedAt->lessThan($startedAt)) {
+                    continue;
+                }
+
+                $total += max(
+                    0,
+                    (int) round(
+                        $startedAt->diffInMinutes($endedAt)
+                    )
+                );
+            } catch (\Throwable) {
+                continue;
             }
-
-            return max(
-                0,
-                (int) round($startedAt->diffInMinutes($endedAt))
-            );
-        } catch (\Throwable) {
-            return null;
         }
+
+        return $total;
     }
 
     protected static function positiveMinutesAfterTolerance(CarbonImmutable $expected, CarbonImmutable $actual, int $tolerance): int

@@ -18,6 +18,10 @@ class HrWorkSchedule extends Model
         'work_days',
         'hours_per_day',
         'hours_per_week',
+        'break_minutes',
+        'break_sessions_allowed',
+        'tolerance_late_minutes',
+        'tolerance_early_leave_minutes',
         'is_active',
     ];
 
@@ -25,6 +29,10 @@ class HrWorkSchedule extends Model
         'work_days' => 'array',
         'hours_per_day' => 'decimal:2',
         'hours_per_week' => 'decimal:2',
+        'break_minutes' => 'integer',
+        'break_sessions_allowed' => 'integer',
+        'tolerance_late_minutes' => 'integer',
+        'tolerance_early_leave_minutes' => 'integer',
         'is_active' => 'boolean',
     ];
 

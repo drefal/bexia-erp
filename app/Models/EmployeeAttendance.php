@@ -22,6 +22,7 @@ class EmployeeAttendance extends Model
         'clock_in_photo_path',
         'clock_out_photo_path',
         'break_minutes',
+        'break_sessions_allowed',
         'expected_hours',
         'worked_minutes',
         'worked_hours',
@@ -71,6 +72,7 @@ class EmployeeAttendance extends Model
         'clock_in_at' => 'datetime',
         'clock_out_at' => 'datetime',
         'break_minutes' => 'integer',
+        'break_sessions_allowed' => 'integer',
         'expected_hours' => 'decimal:2',
         'worked_minutes' => 'integer',
         'worked_hours' => 'decimal:2',
@@ -148,6 +150,17 @@ class EmployeeAttendance extends Model
             \App\Models\EmployeeAttendanceBreak::class,
             'employee_attendance_id'
         )->where('break_type', 'meal');
+    }
+
+    public function mealBreaks()
+    {
+        return $this->hasMany(
+            \App\Models\EmployeeAttendanceBreak::class,
+            'employee_attendance_id'
+        )
+            ->where('break_type', 'meal')
+            ->orderBy('started_at')
+            ->orderBy('id');
     }
 
     public function mobileReviewedBy()

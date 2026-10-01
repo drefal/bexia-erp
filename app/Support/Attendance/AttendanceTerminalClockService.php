@@ -103,14 +103,34 @@ class AttendanceTerminalClockService
                     ->lockForUpdate()
                     ->first();
 
-                $mealBreak = null;
+                $mealBreaks = collect();
+                $openMealBreak = null;
+                $mealBreakCount = 0;
 
                 if ($attendance?->getKey()) {
-                    $mealBreak = EmployeeAttendanceBreak::query()
-                        ->where('employee_attendance_id', $attendance->getKey())
+                    $mealBreaks = EmployeeAttendanceBreak::query()
+                        ->where(
+                            'employee_attendance_id',
+                            $attendance->getKey()
+                        )
                         ->where('break_type', 'meal')
+                        ->orderBy('id')
                         ->lockForUpdate()
-                        ->first();
+                        ->get();
+
+                    $openMealBreak = $mealBreaks
+                        ->first(
+                            fn (EmployeeAttendanceBreak $break): bool =>
+                                (bool) $break->started_at
+                                && ! $break->ended_at
+                        );
+
+                    $mealBreakCount = $mealBreaks
+                        ->filter(
+                            fn (EmployeeAttendanceBreak $break): bool =>
+                                (bool) $break->started_at
+                        )
+                        ->count();
                 }
 
                 if ($attendance && $attendance->clock_in_at && $attendance->clock_out_at) {
@@ -121,12 +141,30 @@ class AttendanceTerminalClockService
 
                 $lastEventAt = $attendance?->clock_in_at;
 
-                if ($mealBreak?->started_at && (! $lastEventAt || $mealBreak->started_at->greaterThan($lastEventAt))) {
-                    $lastEventAt = $mealBreak->started_at;
-                }
+                foreach ($mealBreaks as $mealBreak) {
+                    if (
+                        $mealBreak->started_at
+                        && (
+                            ! $lastEventAt
+                            || $mealBreak->started_at->greaterThan(
+                                $lastEventAt
+                            )
+                        )
+                    ) {
+                        $lastEventAt = $mealBreak->started_at;
+                    }
 
-                if ($mealBreak?->ended_at && (! $lastEventAt || $mealBreak->ended_at->greaterThan($lastEventAt))) {
-                    $lastEventAt = $mealBreak->ended_at;
+                    if (
+                        $mealBreak->ended_at
+                        && (
+                            ! $lastEventAt
+                            || $mealBreak->ended_at->greaterThan(
+                                $lastEventAt
+                            )
+                        )
+                    ) {
+                        $lastEventAt = $mealBreak->ended_at;
+                    }
                 }
 
                 if ($lastEventAt) {
@@ -142,7 +180,8 @@ class AttendanceTerminalClockService
                 $requestedAction = strtolower(trim($requestedAction));
                 $allowedActions = $this->allowedActions(
                     $attendance,
-                    $mealBreak
+                    $openMealBreak,
+                    $mealBreakCount
                 );
 
                 if (! in_array($requestedAction, $allowedActions, true)) {
@@ -196,6 +235,34 @@ class AttendanceTerminalClockService
                         $prefix . '_location_status' => 'terminal_authorized',
                         'mobile_review_status' => 'accepted',
                     ];
+
+                    /*
+                     * Si termina jornada estando en descanso, ese descanso
+                     * concluye en la misma hora de salida.
+                     */
+                    if (
+                        $direction === 'clock_out'
+                        && $openMealBreak
+                        && ! $openMealBreak->ended_at
+                    ) {
+                        $openMealBreak->forceFill([
+                            'ended_at' => $clockedAt,
+                            'end_attendance_terminal_id' => $terminal->getKey(),
+                            'end_method' => 'terminal_qr',
+                            'end_photo_path' => $storedPhotoPath,
+                            'end_ip_address' => substr($ipAddress, 0, 45),
+                            'end_user_agent' => substr($userAgent, 0, 1000),
+                            'end_device_fingerprint' => $deviceFingerprint,
+                            'end_device_info' => $deviceInfo,
+                            'end_device_guard_status' => 'authorized_terminal',
+                        ])->save();
+
+                        $attendance->notes = $this->appendNote(
+                            $attendance->notes,
+                            'Descanso abierto cerrado automáticamente '
+                            . 'al terminar jornada.'
+                        );
+                    }
 
                     if ($direction === 'clock_in') {
                         $attendance->forceFill(array_merge([
@@ -253,7 +320,7 @@ class AttendanceTerminalClockService
                     $attendance->forceFill([
                         'notes' => $this->appendNote(
                             $attendance->notes,
-                            'Salida a comida registrada en terminal '
+                            'Salida a descanso registrada en terminal '
                             . $terminal->code
                             . ' / '
                             . $terminal->name
@@ -262,11 +329,13 @@ class AttendanceTerminalClockService
                         'updated_by_user_id' => null,
                     ])->save();
                 } elseif ($direction === 'meal_in') {
-                    if (! $mealBreak) {
+                    if (! $openMealBreak) {
                         throw ValidationException::withMessages([
-                            'employee_qr' => 'No existe una salida a comida pendiente.',
+                            'employee_qr' => 'No existe una salida a descanso pendiente.',
                         ]);
                     }
+
+                    $mealBreak = $openMealBreak;
 
                     $mealBreak->forceFill([
                         'ended_at' => $clockedAt,
@@ -283,7 +352,7 @@ class AttendanceTerminalClockService
                     $attendance->forceFill([
                         'notes' => $this->appendNote(
                             $attendance->notes,
-                            'Regreso de comida registrado en terminal '
+                            'Regreso de descanso registrado en terminal '
                             . $terminal->code
                             . ' / '
                             . $terminal->name
@@ -331,8 +400,8 @@ class AttendanceTerminalClockService
             'direction' => $direction,
             'direction_label' => match ($direction) {
                 'clock_in' => 'ENTRADA',
-                'meal_out' => 'SALIDA A COMIDA',
-                'meal_in' => 'REGRESO DE COMIDA',
+                'meal_out' => 'SALIDA A DESCANSO',
+                'meal_in' => 'REGRESO DE DESCANSO',
                 'clock_out' => 'SALIDA',
                 default => strtoupper((string) $direction),
             },
@@ -411,18 +480,55 @@ class AttendanceTerminalClockService
             ->whereDate('attendance_date', now()->toDateString())
             ->first();
 
-        $mealBreak = null;
+        $mealBreaks = collect();
+        $openMealBreak = null;
+        $mealBreakCount = 0;
 
         if ($attendance?->getKey()) {
-            $mealBreak = EmployeeAttendanceBreak::query()
-                ->where('employee_attendance_id', $attendance->getKey())
+            $mealBreaks = EmployeeAttendanceBreak::query()
+                ->where(
+                    'employee_attendance_id',
+                    $attendance->getKey()
+                )
                 ->where('break_type', 'meal')
-                ->first();
+                ->orderBy('started_at')
+                ->orderBy('id')
+                ->get();
+
+            $openMealBreak = $mealBreaks
+                ->first(
+                    fn (EmployeeAttendanceBreak $break): bool =>
+                        (bool) $break->started_at
+                        && ! $break->ended_at
+                );
+
+            $mealBreakCount = $mealBreaks
+                ->filter(
+                    fn (EmployeeAttendanceBreak $break): bool =>
+                        (bool) $break->started_at
+                )
+                ->count();
         }
 
         $actions = $this->allowedActions(
             $attendance,
-            $mealBreak
+            $openMealBreak,
+            $mealBreakCount
+        );
+
+        $breakMinutesUsed = $mealBreaks->sum(
+            fn (EmployeeAttendanceBreak $break): int =>
+                (int) ($break->actualMinutes() ?? 0)
+        );
+
+        $breakMinutesAllowed = max(
+            0,
+            (int) ($attendance?->break_minutes ?? 0)
+        );
+
+        $breakSessionsAllowed = max(
+            0,
+            (int) ($attendance?->break_sessions_allowed ?? 0)
         );
 
         return [
@@ -431,11 +537,36 @@ class AttendanceTerminalClockService
             'employee_number' => (string) ($employee->employee_number ?? ''),
             'attendance_id' => $attendance?->getKey(),
             'complete' => (bool) ($attendance?->clock_out_at),
-            'break_minutes' => (int) ($attendance?->break_minutes ?? 0),
+            'break_minutes' => $breakMinutesAllowed,
+            'break_sessions_allowed' => $breakSessionsAllowed,
+            'break_sessions_used' => $mealBreakCount,
+            'break_minutes_used' => $breakMinutesUsed,
+            'break_minutes_remaining' => max(
+                0,
+                $breakMinutesAllowed - $breakMinutesUsed
+            ),
             'attendance' => [
                 'clock_in' => $attendance?->clock_in_at?->format('H:i:s'),
-                'meal_out' => $mealBreak?->started_at?->format('H:i:s'),
-                'meal_in' => $mealBreak?->ended_at?->format('H:i:s'),
+                'meal_out' => $mealBreaks->first()?->started_at?->format('H:i:s'),
+                'meal_in' => $mealBreaks->last()?->ended_at?->format('H:i:s'),
+                'breaks' => $mealBreaks
+                    ->values()
+                    ->map(
+                        fn (
+                            EmployeeAttendanceBreak $break,
+                            int $index
+                        ): array => [
+                            'number' => $index + 1,
+                            'out' => $break->started_at?->format('H:i:s'),
+                            'in' => $break->ended_at?->format('H:i:s'),
+                            'minutes' => $break->actualMinutes(),
+                            'open' => (bool) (
+                                $break->started_at
+                                && ! $break->ended_at
+                            ),
+                        ]
+                    )
+                    ->all(),
                 'clock_out' => $attendance?->clock_out_at?->format('H:i:s'),
             ],
             'allowed_actions' => array_map(
@@ -450,7 +581,8 @@ class AttendanceTerminalClockService
 
     protected function allowedActions(
         ?EmployeeAttendance $attendance,
-        ?EmployeeAttendanceBreak $mealBreak = null,
+        ?EmployeeAttendanceBreak $openMealBreak = null,
+        int $mealBreakCount = 0,
     ): array {
         if (! $attendance || ! $attendance->clock_in_at) {
             return ['clock_in'];
@@ -461,36 +593,36 @@ class AttendanceTerminalClockService
         }
 
         /*
-         * Si existe una comida abierta, siempre permitimos regresar
-         * de comida o terminar jornada.
+         * Un descanso abierto siempre debe poder cerrarse.
+         * También se permite terminar jornada; en ese caso se cierra
+         * automáticamente con la misma hora.
          */
         if (
-            $mealBreak
-            && $mealBreak->started_at
-            && ! $mealBreak->ended_at
+            $openMealBreak
+            && $openMealBreak->started_at
+            && ! $openMealBreak->ended_at
         ) {
             return ['meal_in', 'clock_out'];
         }
 
-        /*
-         * Sin comida programada se conserva el flujo historico
-         * Entrada -> Salida.
-         */
-        if ((int) ($attendance->break_minutes ?? 0) <= 0) {
+        $minutesAllowed = max(
+            0,
+            (int) ($attendance->break_minutes ?? 0)
+        );
+
+        $sessionsAllowed = max(
+            0,
+            (int) ($attendance->break_sessions_allowed ?? 0)
+        );
+
+        if ($minutesAllowed <= 0 || $sessionsAllowed <= 0) {
             return ['clock_out'];
         }
 
-        /*
-         * Tiene comida programada y aun no ha salido:
-         * el empleado decide entre comida o terminar jornada.
-         */
-        if (! $mealBreak) {
+        if ($mealBreakCount < $sessionsAllowed) {
             return ['meal_out', 'clock_out'];
         }
 
-        /*
-         * La comida ya fue completada.
-         */
         return ['clock_out'];
     }
 
@@ -498,8 +630,8 @@ class AttendanceTerminalClockService
     {
         return match ($action) {
             'clock_in' => 'Registrar entrada',
-            'meal_out' => 'Salir a comer',
-            'meal_in' => 'Regresar de comida',
+            'meal_out' => 'Salir a descanso',
+            'meal_in' => 'Regresar de descanso',
             'clock_out' => 'Terminar jornada',
             default => 'Registrar',
         };

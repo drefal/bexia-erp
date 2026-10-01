@@ -91,6 +91,7 @@ class Employee extends Model
         'work_permit_file',
 
         'active',
+        'is_key_personnel',
         'plain_pos_pin',
         'pos_active',
         'is_pos_cashier',
@@ -108,6 +109,7 @@ class Employee extends Model
         'is_pos_seller' => 'boolean',
         'is_pos_cashier' => 'boolean',
         'active' => 'boolean',
+        'is_key_personnel' => 'boolean',
         'flexible_hours' => 'boolean',
         'attendance_qr_enabled' => 'boolean',
         'attendance_qr_generated_at' => 'datetime',
