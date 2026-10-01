@@ -86,6 +86,225 @@ class EmployeeAttendanceReportService
             ->get();
     }
 
+
+    /**
+     * V5.83.6J2AR3
+     *
+     * Resumen de incidencias por asistencia para el reporte RRHH.
+     *
+     * Ejecuta una sola consulta para todas las asistencias visibles.
+     * No modifica datos.
+     */
+    public static function incidentSummaryByAttendance(
+        $rows
+    ): array {
+        $rows = collect($rows);
+
+        $attendanceIds = $rows
+            ->pluck('id')
+            ->filter()
+            ->map(
+                fn ($id): int => (int) $id
+            )
+            ->unique()
+            ->values();
+
+        $result = [];
+
+        foreach ($rows as $row) {
+            $attendanceId = (int) ($row->id ?? 0);
+
+            if ($attendanceId <= 0) {
+                continue;
+            }
+
+            $clockIn = $row->clock_in_at ?? null;
+            $clockOut = $row->clock_out_at ?? null;
+
+            $incompletePunch = '—';
+
+            if (! $clockIn && ! $clockOut) {
+                $incompletePunch = 'Entrada y salida';
+            } elseif (! $clockIn) {
+                $incompletePunch = 'Sin entrada';
+            } elseif (! $clockOut) {
+                $incompletePunch = 'Sin salida';
+            }
+
+            $result[$attendanceId] = [
+                'retardo' => 0,
+                'comida_excedida' => 0,
+                'salida_antes' => 0,
+                'falta' => 0,
+                'jornada_incompleta' => 0,
+
+                'retardo_label' => '—',
+                'comida_excedida_label' => '—',
+                'salida_antes_label' => '—',
+                'falta_label' => '—',
+                'jornada_incompleta_label' => '—',
+
+                'marcaje_incompleto' => $incompletePunch,
+
+                'total' => 0,
+                'approved' => 0,
+                'rejected' => 0,
+                'pending' => 0,
+            ];
+        }
+
+        if ($attendanceIds->isEmpty()) {
+            return $result;
+        }
+
+        $incidents = \Illuminate\Support\Facades\DB::table(
+            'employee_incidents as incidents'
+        )
+            ->leftJoin(
+                'hr_incident_types as types',
+                'types.id',
+                '=',
+                'incidents.hr_incident_type_id'
+            )
+            ->whereIn(
+                'incidents.employee_attendance_id',
+                $attendanceIds->all()
+            )
+            ->select([
+                'incidents.id',
+                'incidents.employee_attendance_id',
+                'incidents.status',
+                'incidents.quantity',
+                'incidents.quantity_unit',
+                'types.code',
+                'types.name as type_name',
+            ])
+            ->orderBy('incidents.id')
+            ->get();
+
+        foreach ($incidents as $incident) {
+            $attendanceId = (int) (
+                $incident->employee_attendance_id ?? 0
+            );
+
+            if (
+                $attendanceId <= 0
+                || ! isset($result[$attendanceId])
+            ) {
+                continue;
+            }
+
+            $result[$attendanceId]['total']++;
+
+            $status = strtolower(
+                trim(
+                    (string) ($incident->status ?? '')
+                )
+            );
+
+            if (
+                in_array(
+                    $status,
+                    ['approved', 'rejected', 'pending'],
+                    true
+                )
+            ) {
+                $result[$attendanceId][$status]++;
+            }
+
+            $code = strtoupper(
+                trim(
+                    (string) ($incident->code ?? '')
+                )
+            );
+
+            $quantity = (float) (
+                $incident->quantity ?? 0
+            );
+
+            switch ($code) {
+                case 'RETARDO':
+                    $result[$attendanceId]['retardo']
+                        += $quantity;
+                    break;
+
+                case 'EXCESO_COMIDA':
+                    $result[$attendanceId]['comida_excedida']
+                        += $quantity;
+                    break;
+
+                case 'SALIDA_TEMPRANA':
+                    $result[$attendanceId]['salida_antes']
+                        += $quantity;
+                    break;
+
+                case 'FALTA':
+                    $result[$attendanceId]['falta']
+                        += $quantity;
+                    break;
+
+                case 'JORNADA_INCOMPLETA':
+                    $result[$attendanceId]['jornada_incompleta']
+                        += $quantity;
+                    break;
+            }
+        }
+
+        foreach ($result as $attendanceId => &$row) {
+            if ($row['retardo'] > 0) {
+                $row['retardo_label'] =
+                    (int) round($row['retardo'])
+                    . ' min';
+            }
+
+            if ($row['comida_excedida'] > 0) {
+                $row['comida_excedida_label'] =
+                    (int) round($row['comida_excedida'])
+                    . ' min';
+            }
+
+            if ($row['salida_antes'] > 0) {
+                $row['salida_antes_label'] =
+                    (int) round($row['salida_antes'])
+                    . ' min';
+            }
+
+            if ($row['falta'] > 0) {
+                $days = (float) $row['falta'];
+
+                $formatted =
+                    abs($days - round($days)) < 0.00001
+                        ? (string) ((int) round($days))
+                        : number_format(
+                            $days,
+                            2,
+                            '.',
+                            ''
+                        );
+
+                $row['falta_label'] =
+                    $formatted
+                    . (
+                        abs($days - 1.0) < 0.00001
+                            ? ' día'
+                            : ' días'
+                    );
+            }
+
+            if ($row['jornada_incompleta'] > 0) {
+                $row['jornada_incompleta_label'] =
+                    (int) round(
+                        $row['jornada_incompleta']
+                    )
+                    . ' min';
+            }
+        }
+
+        unset($row);
+
+        return $result;
+    }
+
     public static function summary(Collection $rows): array
     {
         $employeeIds = $rows
@@ -120,6 +339,7 @@ class EmployeeAttendanceReportService
         return [
             'filters' => $filters,
             'rows' => $rows,
+            'incidentMap' => static::incidentSummaryByAttendance($rows),
             'summary' => static::summary($rows),
             'statusOptions' => EmployeeAttendance::statusOptions(),
             'generatedAt' => now(),
@@ -141,6 +361,7 @@ class EmployeeAttendanceReportService
         $data = static::data($filters);
         $summary = $data['summary'];
         $rows = $data['rows'];
+        $incidentMap = $data['incidentMap'] ?? [];
 
         $writer = new Writer();
         $writer->openToFile($path);
@@ -182,11 +403,34 @@ class EmployeeAttendanceReportService
             'Minutos retardo',
             'Minutos salida temprana',
             'Minutos extra',
+            'Incidencia retardo',
+            'Comida excedida',
+            'Salida antes',
+            'Falta',
+            'Jornada incompleta',
+            'Marcaje incompleto',
+            'Total incidencias',
+            'Aprobadas',
+            'Rechazadas',
+            'Pendientes',
             'Origen',
             'Notas',
         ]));
 
         foreach ($rows as $row) {
+            $incident = $incidentMap[(int) $row->id] ?? [
+                'retardo_label' => '—',
+                'comida_excedida_label' => '—',
+                'salida_antes_label' => '—',
+                'falta_label' => '—',
+                'jornada_incompleta_label' => '—',
+                'marcaje_incompleto' => '—',
+                'total' => 0,
+                'approved' => 0,
+                'rejected' => 0,
+                'pending' => 0,
+            ];
+
             $writer->addRow(Row::fromValues([
                 static::dateOnly($row->attendance_date),
                 $row->employee_name,
@@ -207,6 +451,16 @@ class EmployeeAttendanceReportService
                 (int) ($row->late_minutes ?? 0),
                 (int) ($row->early_leave_minutes ?? 0),
                 (int) ($row->overtime_minutes ?? 0),
+                $incident['retardo_label'],
+                $incident['comida_excedida_label'],
+                $incident['salida_antes_label'],
+                $incident['falta_label'],
+                $incident['jornada_incompleta_label'],
+                $incident['marcaje_incompleto'],
+                (int) $incident['total'],
+                (int) $incident['approved'],
+                (int) $incident['rejected'],
+                (int) $incident['pending'],
                 $row->source,
                 $row->notes,
             ]));
