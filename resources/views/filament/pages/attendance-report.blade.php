@@ -2,6 +2,10 @@
     @php
         $summary = $this->summary();
         $rows = $this->rows();
+        $employeeSearchOptions =
+            $this->employeeSearchOptions();
+        $selectedEmployees =
+            $this->selectedEmployeeOptions();
     @endphp
 
     <div
@@ -36,16 +40,6 @@
                 </div>
 
                 <div>
-                    <label class="text-sm font-medium text-gray-700 dark:text-gray-200">Empleado</label>
-                    <select wire:model.live="employee_id" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                        <option value="">Todos</option>
-                        @foreach ($this->employeeOptions() as $id => $name)
-                            <option value="{{ $id }}">{{ $name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-
-                <div>
                     <label class="text-sm font-medium text-gray-700 dark:text-gray-200">Departamento</label>
                     <select wire:model.live="department_id" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
                         <option value="">Todos</option>
@@ -64,12 +58,171 @@
                         @endforeach
                     </select>
                 </div>
+
+                {{-- BEXIA_V5836J2AR31C_KEY_PERSONNEL_FILTER --}}
+                <div
+                    x-data="{
+                        keyOnly: $wire.entangle('only_key_personnel').live
+                    }"
+                >
+                    <label
+                        class="text-sm font-medium text-gray-700 dark:text-gray-200"
+                    >
+                        Personal Clave
+                    </label>
+
+                    <div class="mt-1 flex h-[42px] items-center">
+                        <button
+                            type="button"
+                            x-on:click="keyOnly = ! keyOnly"
+                            class="inline-flex items-center gap-3 text-left"
+                            x-bind:aria-pressed="keyOnly ? 'true' : 'false'"
+                        >
+                        <span
+                            class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-all duration-200"
+                            x-bind:style="
+                                keyOnly
+                                    ? 'background-color:#2563eb;'
+                                    : 'background-color:#d1d5db;'
+                            "
+                        >
+                            <span
+                                class="absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-all duration-200"
+                                x-bind:style="
+                                    keyOnly
+                                        ? 'transform:translateX(24px); left:0;'
+                                        : 'transform:translateX(4px); left:0;'
+                                "
+                            ></span>
+                        </span>
+
+                        <span class="min-w-0">
+                            <span
+                                class="block truncate text-sm font-medium text-gray-800 dark:text-gray-100"
+                            >
+                                Solo Personal Clave
+                            </span>
+                        </span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <div class="mt-4 flex justify-end">
-                <button type="button" wire:click="clearFilters" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800">
-                    Limpiar filtros
-                </button>
+            {{-- BEXIA_V5836J2AR31_MULTI_EMPLOYEE_FILTER --}}
+            <div class="mt-4 flex flex-col gap-4 md:flex-row md:items-end">
+                <div class="min-w-0 flex-1">
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-200">
+                        Buscar empleados
+                    </label>
+
+                    <div class="relative mt-1">
+                        <input
+                            type="text"
+                            wire:model.live.debounce.300ms="employee_search"
+                            placeholder="Escribe nombre o numero de empleado..."
+                            autocomplete="off"
+                            class="w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800"
+                        >
+
+                        @if (
+                            mb_strlen(trim($employee_search ?? '')) >= 2
+                            && count($employeeSearchOptions) > 0
+                        )
+                            <div
+                                class="absolute left-0 right-0 mt-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900"
+                                style="z-index: 100;"
+                            >
+                                @foreach ($employeeSearchOptions as $employee)
+                                    <button
+                                        type="button"
+                                        wire:click="addEmployee({{ (int) $employee['id'] }})"
+                                        class="block w-full border-b border-gray-100 px-4 py-3 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800"
+                                    >
+                                        <div class="text-sm font-semibold text-gray-900 dark:text-white">
+                                            {{ $employee['name'] }}
+                                        </div>
+
+                                        <div class="mt-0.5 text-xs text-gray-500">
+                                            @if ($employee['employee_number'])
+                                                No. {{ $employee['employee_number'] }}
+                                            @endif
+
+                                            @if (
+                                                $employee['employee_number']
+                                                && $employee['department_name']
+                                            )
+                                                ·
+                                            @endif
+
+                                            @if ($employee['department_name'])
+                                                {{ $employee['department_name'] }}
+                                            @endif
+                                        </div>
+                                    </button>
+                                @endforeach
+                            </div>
+                        @elseif (
+                            mb_strlen(trim($employee_search ?? '')) >= 2
+                            && count($employeeSearchOptions) === 0
+                        )
+                            <div
+                                class="absolute left-0 right-0 mt-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-500 shadow-xl dark:border-gray-700 dark:bg-gray-900"
+                                style="z-index: 100;"
+                            >
+                                No hay empleados que coincidan.
+                            </div>
+                        @endif
+                    </div>
+
+                    @if (count($selectedEmployees) > 0)
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            @foreach ($selectedEmployees as $employee)
+                                <button
+                                    type="button"
+                                    wire:click="removeEmployee({{ (int) $employee['id'] }})"
+                                    class="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-950 dark:text-primary-300"
+                                    title="Quitar {{ $employee['name'] }}"
+                                >
+                                    <span>
+                                        {{ $employee['name'] }}
+
+                                        @if ($employee['department_name'])
+                                            · {{ $employee['department_name'] }}
+                                        @endif
+                                    </span>
+
+                                    <span
+                                        aria-hidden="true"
+                                        class="text-base leading-none"
+                                    >
+                                        ×
+                                    </span>
+                                </button>
+                            @endforeach
+                        </div>
+
+                        <div class="mt-2 text-xs text-gray-500">
+                            {{ count($selectedEmployees) }}
+                            {{ count($selectedEmployees) === 1 ? 'empleado seleccionado' : 'empleados seleccionados' }}.
+                            Haz clic en una etiqueta para quitarla.
+                        </div>
+                    @else
+                        <div class="mt-2 text-xs text-gray-500">
+                            Sin empleados seleccionados se muestran todos.
+                            Puedes agregar empleados de distintas areas.
+                        </div>
+                    @endif
+                </div>
+
+                <div class="shrink-0">
+                    <button
+                        type="button"
+                        wire:click="clearFilters"
+                        class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                        Limpiar filtros
+                    </button>
+                </div>
             </div>
         </div>
 

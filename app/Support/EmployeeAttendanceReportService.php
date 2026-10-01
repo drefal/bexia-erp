@@ -19,11 +19,37 @@ class EmployeeAttendanceReportService
             [$from, $to] = [$to, $from];
         }
 
+        $employeeIds = collect(
+            $filters['employee_ids'] ?? []
+        )
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        /*
+         * Compatibilidad temporal con llamadas antiguas que
+         * todavia pudieran enviar employee_id individual.
+         */
+        if (
+            $employeeIds === []
+            && filled($filters['employee_id'] ?? null)
+        ) {
+            $employeeIds[] = (int) $filters['employee_id'];
+        }
+
         return [
             'company_id' => (int) ($filters['company_id'] ?? 0),
             'from' => $from,
             'to' => $to,
-            'employee_id' => filled($filters['employee_id'] ?? null) ? (int) $filters['employee_id'] : null,
+            'employee_ids' => $employeeIds,
+            'employee_id' => count($employeeIds) === 1
+                ? $employeeIds[0]
+                : null,
+            'only_key_personnel' => (bool) (
+                $filters['only_key_personnel'] ?? false
+            ),
             'department_id' => filled($filters['department_id'] ?? null) ? (int) $filters['department_id'] : null,
             'status' => filled($filters['status'] ?? null) ? (string) $filters['status'] : null,
         ];
@@ -49,7 +75,20 @@ class EmployeeAttendanceReportService
             ->where('a.company_id', $filters['company_id'])
             ->whereDate('a.attendance_date', '>=', $filters['from'])
             ->whereDate('a.attendance_date', '<=', $filters['to'])
-            ->when($filters['employee_id'], fn ($query, $value) => $query->where('a.employee_id', $value))
+            ->when(
+                $filters['employee_ids'] !== [],
+                fn ($query) => $query->whereIn(
+                    'a.employee_id',
+                    $filters['employee_ids']
+                )
+            )
+            ->when(
+                $filters['only_key_personnel'],
+                fn ($query) => $query->where(
+                    'e.is_key_personnel',
+                    true
+                )
+            )
             ->when($filters['department_id'], fn ($query, $value) => $query->where('e.hr_department_id', $value))
             ->when($filters['status'], fn ($query, $value) => $query->where('a.status', $value))
             ->orderBy('a.attendance_date')
