@@ -97,7 +97,27 @@
         tr {
             page-break-inside: avoid;
         }
-    </style>
+    
+        /* AR6B INCIDENT TABLE */
+        table.detail {
+            table-layout: fixed;
+            width: 100%;
+            font-size: 6.5px;
+        }
+
+        table.detail th,
+        table.detail td {
+            padding: 3px 2px;
+            vertical-align: top;
+            word-wrap: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        table.detail thead tr:first-child th {
+            text-align: center;
+            font-size: 6.5px;
+        }
+</style>
 </head>
 
 <body>
@@ -157,80 +177,59 @@
     <table class="detail">
         <thead>
             <tr>
-                <th style="width:6%;">Fecha</th>
-                <th style="width:15%;">Empleado</th>
-                <th style="width:8%;">Depto.</th>
-                <th style="width:8%;">Puesto</th>
-                <th style="width:8%;">Estado</th>
-                <th style="width:7%;">Entrada</th>
-                <th style="width:7%;">Salida comida</th>
-                <th style="width:7%;">Regreso comida</th>
-                <th style="width:6%;">Comida</th>
-                <th style="width:7%;">Salida</th>
-                <th style="width:5%;">Horas</th>
-                <th style="width:5%;">Retardo</th>
-                <th style="width:5%;">Extra</th>
-                <th style="width:6%;">Evidencia</th>
+                <th colspan="11">Datos de asistencia</th>
+                <th colspan="6">Incidencias</th>
+                <th colspan="4">Resolución</th>
+            </tr>
+            <tr>
+                <th>Fecha</th>
+                <th>Empleado</th>
+                <th>Depto.</th>
+                <th>Puesto</th>
+                <th>Estado</th>
+                <th>Entrada</th>
+                <th>Comida S.</th>
+                <th>Comida R.</th>
+                <th>Salida</th>
+                <th>Horas</th>
+                <th>Extra</th>
+
+                <th>Retardo</th>
+                <th>Comida exc.</th>
+                <th>Salida antes</th>
+                <th>Falta</th>
+                <th>Jornada inc.</th>
+                <th>Marcaje inc.</th>
+
+                <th>Total</th>
+                <th>Aprob.</th>
+                <th>Rech.</th>
+                <th>Pend.</th>
             </tr>
         </thead>
 
         <tbody>
             @forelse ($rows as $row)
                 @php
-                    $mealMinutes = \App\Support\EmployeeAttendanceReportService::mealMinutes(
-                        $row->meal_out_at,
-                        $row->meal_in_at
-                    );
-
-                    /*
-                     * PDF_REAL_PHOTO_ONLY_PRODUCTION_V5836J2E2
-                     *
-                     * DEV:
-                     *   Las evidencias actuales son artificiales, por lo que
-                     *   siempre dejamos placeholder.
-                     *
-                     * PROD:
-                     *   Usa la foto real de entrada guardada por la terminal.
-                     *   Si no existe o no puede leerse, conserva placeholder.
-                     */
-                    $evidenceDataUri = null;
-
-                    if (
-                        app()->environment('production')
-                        && ! empty($row->clock_in_photo_path)
-                    ) {
-                        try {
-                            $evidenceDisk =
-                                \Illuminate\Support\Facades\Storage::disk('local');
-
-                            if ($evidenceDisk->exists($row->clock_in_photo_path)) {
-                                $evidenceBytes =
-                                    $evidenceDisk->get($row->clock_in_photo_path);
-
-                                $evidenceMime =
-                                    $evidenceDisk->mimeType($row->clock_in_photo_path)
-                                    ?: 'image/jpeg';
-
-                                $evidenceDataUri =
-                                    'data:'
-                                    .$evidenceMime
-                                    .';base64,'
-                                    .base64_encode($evidenceBytes);
-                            }
-                        } catch (\Throwable) {
-                            $evidenceDataUri = null;
-                        }
-                    }
+                    $incident = $incidentMap[(int) $row->id] ?? [
+                        'retardo_label' => '—',
+                        'comida_excedida_label' => '—',
+                        'salida_antes_label' => '—',
+                        'falta_label' => '—',
+                        'jornada_incompleta_label' => '—',
+                        'marcaje_incompleto' => '—',
+                        'total' => 0,
+                        'approved' => 0,
+                        'rejected' => 0,
+                        'pending' => 0,
+                    ];
                 @endphp
 
                 <tr>
-                    <td class="nowrap">
-                        {{ \App\Support\EmployeeAttendanceReportService::dateOnly($row->attendance_date) }}
-                    </td>
+                    <td>{{ \App\Support\EmployeeAttendanceReportService::dateOnly($row->attendance_date) }}</td>
 
                     <td>
-                        {{ $row->employee_name ?: '-' }}
-
+                        <strong>{{ $row->employee_name }}</strong>
                         @if ($row->employee_number)
                             <br>
                             <span class="muted">
@@ -239,95 +238,55 @@
                         @endif
                     </td>
 
-                    <td>{{ $row->department_name ?: '-' }}</td>
+                    <td>{{ $row->department_name ?: '—' }}</td>
 
-                    <td>{{ $row->position_name ?: '-' }}</td>
+                    <td>{{ $row->position_name ?: '—' }}</td>
 
                     <td>
-                        {{ $statusOptions[$row->status] ?? $row->status }}
+                        {{ \App\Support\EmployeeAttendanceReportService::statusLabel($row->status) }}
                     </td>
 
-                    <td class="center">
-                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_in_at) }}
-
-                        <br>
-
-                        <span class="muted">
-                            Esp.
-                            {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->expected_start_at) }}
-                        </span>
+                    <td>
+                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_in_at) ?: '—' }}
                     </td>
 
-                    <td class="center">
-                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->meal_out_at) }}
+                    <td>
+                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->meal_out_at) ?: '—' }}
                     </td>
 
-                    <td class="center">
-                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->meal_in_at) }}
+                    <td>
+                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->meal_in_at) ?: '—' }}
                     </td>
 
-                    <td class="right">
-                        {{ $mealMinutes }} min
+                    <td>
+                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_out_at) ?: '—' }}
                     </td>
 
-                    <td class="center">
-                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_out_at) }}
-
-                        <br>
-
-                        <span class="muted">
-                            Esp.
-                            {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->expected_end_at) }}
-                        </span>
+                    <td>
+                        {{ number_format((float) ($row->worked_hours ?? 0), 2) }}
                     </td>
 
-                    <td class="right">
-                        {{ number_format((float) $row->worked_hours, 2) }}
+                    {{-- PDF_EXTRA_AR6C --}}
+                    <td>
+                        {{ (int) ($row->overtime_minutes ?? 0) }} min
                     </td>
 
-                    <td class="right">
-                        {{ (int) $row->late_minutes }} min
-                    </td>
+                    <td>{{ $incident['retardo_label'] }}</td>
+                    <td>{{ $incident['comida_excedida_label'] }}</td>
+                    <td>{{ $incident['salida_antes_label'] }}</td>
+                    <td>{{ $incident['falta_label'] }}</td>
+                    <td>{{ $incident['jornada_incompleta_label'] }}</td>
+                    <td>{{ $incident['marcaje_incompleto'] }}</td>
 
-                    <td class="right">
-                        {{ (int) $row->overtime_minutes }} min
-                    </td>
-
-                    <td class="center">
-                        @if ($evidenceDataUri)
-                            <div class="evidence">
-                                <img
-                                    src="{{ $evidenceDataUri }}"
-                                    alt="Evidencia de entrada"
-                                    style="
-                                        width: 50px;
-                                        height: 42px;
-                                        object-fit: cover;
-                                    "
-                                >
-                            </div>
-                        @else
-                            <div class="evidence">
-                                <div class="evidence-inner">
-                                    EVIDENCIA<br>
-                                    FOTOGRAFICA
-                                </div>
-                            </div>
-                        @endif
-
-                        <div class="evidence-time">
-                            Entrada
-                            {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_in_at) }}
-                        </div>
-                    </td>
+                    <td>{{ (int) $incident['total'] }}</td>
+                    <td>{{ (int) $incident['approved'] }}</td>
+                    <td>{{ (int) $incident['rejected'] }}</td>
+                    <td>{{ (int) $incident['pending'] }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td
-                        colspan="14"
-                        style="text-align:center; padding:16px;"
-                    >
-                        No hay asistencias para los filtros seleccionados.
+                    <td colspan="21">
+                        No hay registros para los filtros seleccionados.
                     </td>
                 </tr>
             @endforelse

@@ -127,9 +127,34 @@
             </div>
 
             <div class="overflow-x-auto">
+@php
+    $attendanceIncidentMap =
+        \App\Support\EmployeeAttendanceReportService::incidentSummaryByAttendance(
+            $rows
+        );
+@endphp
+
                 <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
                     <thead class="bg-gray-50 dark:bg-gray-800">
-                        <tr>
+                        
+                        <tr class="border-b border-gray-200 bg-gray-100/80 text-[11px] uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-800/80 dark:text-gray-400">
+                            <th colspan="11" class="px-4 py-2 text-left font-semibold">
+                                Datos de asistencia
+                            </th>
+
+                            <th colspan="6" class="border-l border-gray-200 px-4 py-2 text-center font-semibold dark:border-gray-700">
+                                Incidencias
+                            </th>
+
+                            <th colspan="4" class="border-l border-gray-200 px-4 py-2 text-center font-semibold dark:border-gray-700">
+                                Resolución
+                            </th>
+
+                            <th colspan="1" class="border-l border-gray-200 px-4 py-2 text-center font-semibold dark:border-gray-700">
+                                Evidencia
+                            </th>
+                        </tr>
+<tr>
                             <th class="px-4 py-3 text-left font-semibold">Fecha</th>
                             <th class="px-4 py-3 text-left font-semibold">Empleado</th>
                             <th class="px-4 py-3 text-left font-semibold">Departamento</th>
@@ -140,14 +165,43 @@
                             <th class="px-4 py-3 text-left font-semibold">Regreso comida</th>
                             <th class="px-4 py-3 text-left font-semibold">Salida</th>
                             <th class="px-4 py-3 text-right font-semibold">Horas</th>
-                            <th class="px-4 py-3 text-right font-semibold">Retardo</th>
                             <th class="px-4 py-3 text-right font-semibold">Extra</th>
+                            <th class="px-4 py-3 text-right font-semibold">Retardo</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Comida excedida</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Salida antes</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Falta</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Jornada incompleta</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Marcaje incompleto</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Total</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Aprobadas</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Rechazadas</th>
+                            <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Pendientes</th>
                             <th class="px-4 py-3 text-center font-semibold">Evidencia</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                         @forelse ($rows as $row)
                             <tr>
+                                @php
+                                    $incident =
+                                        $attendanceIncidentMap[
+                                            (int) $row->id
+                                        ]
+                                        ?? [
+                                            'retardo_label' => '—',
+                                            'comida_excedida_label' => '—',
+                                            'salida_antes_label' => '—',
+                                            'falta_label' => '—',
+                                            'jornada_incompleta_label' => '—',
+                                            'marcaje_incompleto' => '—',
+                                            'total' => 0,
+                                            'approved' => 0,
+                                            'rejected' => 0,
+                                            'pending' => 0,
+                                        ];
+                                @endphp
+
+                                <td class="px-4 py-3 text-right">{{ (int) $row->overtime_minutes }} min</td>
                                 <td class="px-4 py-3">{{ $this->dateOnly($row->attendance_date) }}</td>
                                 <td class="px-4 py-3">
                                     <a
@@ -177,8 +231,94 @@
                                     <div class="text-xs text-gray-500">Esp. {{ $this->timeOnly($row->expected_end_at) }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-right">{{ number_format((float) $row->worked_hours, 2) }}</td>
-                                <td class="px-4 py-3 text-right">{{ (int) $row->late_minutes }} min</td>
-                                <td class="px-4 py-3 text-right">{{ (int) $row->overtime_minutes }} min</td>
+                                <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    @if($incident['retardo_label'] !== '—')
+                                        <span class="inline-flex rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                                            {{ $incident['retardo_label'] }}
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
+                                </td>
+
+                                
+
+                                <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    @if($incident['comida_excedida_label'] !== '—')
+                                        <span class="inline-flex rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                                            {{ $incident['comida_excedida_label'] }}
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
+                                </td>
+
+                                <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    @if($incident['salida_antes_label'] !== '—')
+                                        <span class="inline-flex rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                                            {{ $incident['salida_antes_label'] }}
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
+                                </td>
+
+                                <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    @if($incident['falta_label'] !== '—')
+                                        <span class="inline-flex rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                                            {{ $incident['falta_label'] }}
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
+                                </td>
+
+                                <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    @if($incident['jornada_incompleta_label'] !== '—')
+                                        <span class="inline-flex rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                                            {{ $incident['jornada_incompleta_label'] }}
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
+                                </td>
+
+                                <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    @if($incident['marcaje_incompleto'] !== '—')
+                                        <span class="inline-flex rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                                            {{ $incident['marcaje_incompleto'] }}
+                                        </span>
+                                    @else
+                                        <span class="text-gray-400">—</span>
+                                    @endif
+                                </td>
+
+                                <td class="px-3 py-3 text-center">
+                                    <span class="inline-flex min-w-8 justify-center rounded-lg bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                                        {{ $incident['total'] }}
+                                    </span>
+                                </td>
+
+                                <td class="px-3 py-3 text-center">
+                                    <span class="inline-flex min-w-8 justify-center rounded-lg bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-950 dark:text-green-300">
+                                        {{ $incident['approved'] }}
+                                    </span>
+                                </td>
+
+                                <td class="px-3 py-3 text-center">
+                                    <span class="inline-flex min-w-8 justify-center rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                                        {{ $incident['rejected'] }}
+                                    </span>
+                                </td>
+
+                                <td class="px-3 py-3 text-center">
+                                    <span class="inline-flex min-w-8 justify-center rounded-lg px-2 py-1 text-xs font-semibold
+                                        {{ $incident['pending'] > 0
+                                            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                                            : 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300' }}">
+                                        {{ $incident['pending'] }}
+                                    </span>
+                                </td>
 
                                 <td class="px-4 py-3 text-center">
                                     <div class="flex flex-wrap justify-center gap-2">
@@ -242,7 +382,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="13" class="px-4 py-8 text-center text-gray-500">
+                                <td colspan="22" class="px-4 py-8 text-center text-gray-500">
                                     No hay asistencias para los filtros seleccionados.
                                 </td>
                             </tr>
