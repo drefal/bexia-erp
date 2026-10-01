@@ -161,7 +161,7 @@ class StockMovementResource extends Resource
                             ])
                             ->default('draft')
                             ->disabled()
-                            ->dehydrated()
+                            ->dehydrated(false)
                             ->columnSpan(3),
 
                         Forms\Components\Fieldset::make('Origen')
@@ -1592,11 +1592,1366 @@ class StockMovementResource extends Resource
         });
     }
 
+    public static function cancelTransfer(
+        StockMovement $movement,
+        string $reason
+    ): void {
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw new \RuntimeException(
+                'El motivo de cancelación es obligatorio.'
+            );
+        }
+
+        $companyId = static::currentCompanyId();
+
+        if ($companyId <= 0) {
+            throw new \RuntimeException(
+                'No se pudo determinar la empresa activa.'
+            );
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(
+            function () use ($movement, $reason, $companyId): void {
+                $movement = StockMovement::query()
+                    ->whereKey($movement->getKey())
+                    ->where('company_id', $companyId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if (! static::stockMovementIsInternalTransfer($movement)) {
+                    throw new \RuntimeException(
+                        'Solo se pueden cancelar traslados internos.'
+                    );
+                }
+
+                if (! in_array(
+                    $movement->status,
+                    ['draft', 'in_transit'],
+                    true
+                )) {
+                    throw new \RuntimeException(
+                        'El traslado ya no puede cancelarse directamente.'
+                    );
+                }
+
+                $hasReceipts = \Illuminate\Support\Facades\DB::table(
+                    'stock_movement_receipts'
+                )
+                    ->where('stock_movement_id', $movement->id)
+                    ->exists();
+
+                if ($hasReceipts) {
+                    throw new \RuntimeException(
+                        'El traslado ya tiene recepciones. Debe utilizar una reversa controlada.'
+                    );
+                }
+
+                $openIncidents = \Illuminate\Support\Facades\DB::table(
+                    'stock_movement_incidents'
+                )
+                    ->where('stock_movement_id', $movement->id)
+                    ->where('status', 'open')
+                    ->exists();
+
+                if ($openIncidents) {
+                    throw new \RuntimeException(
+                        'El traslado tiene incidencias abiertas y no puede cancelarse directamente.'
+                    );
+                }
+
+                if ($movement->status === 'in_transit') {
+                    $movement->loadMissing('lines');
+
+                    $transitLocationId = (int) (
+                        $movement->transit_location_id ?? 0
+                    );
+
+                    $sourceLocationId = (int) (
+                        $movement->source_location_id ?? 0
+                    );
+
+                    if (
+                        $transitLocationId <= 0
+                        || $sourceLocationId <= 0
+                    ) {
+                        throw new \RuntimeException(
+                            'El traslado no tiene ubicaciones válidas para regresar el tránsito.'
+                        );
+                    }
+
+                    $transitLocation =
+                        \Illuminate\Support\Facades\DB::table(
+                            'stock_locations'
+                        )
+                            ->where('id', $transitLocationId)
+                            ->where('company_id', $companyId)
+                            ->where('tracks_stock', true)
+                            ->first();
+
+                    $sourceLocation =
+                        \Illuminate\Support\Facades\DB::table(
+                            'stock_locations'
+                        )
+                            ->where('id', $sourceLocationId)
+                            ->where('company_id', $companyId)
+                            ->where('tracks_stock', true)
+                            ->first();
+
+                    if (! $transitLocation || ! $sourceLocation) {
+                        throw new \RuntimeException(
+                            'Las ubicaciones del traslado no pertenecen a la empresa activa o no controlan existencias.'
+                        );
+                    }
+
+                    foreach ($movement->lines as $line) {
+                        $qty = round(
+                            (float) $line->done_quantity,
+                            6
+                        );
+
+                        if ($qty <= 0) {
+                            continue;
+                        }
+
+                        $productId = (int) $line->product_id;
+                        $variantId = $line->product_variant_id
+                            ? (int) $line->product_variant_id
+                            : null;
+                        $lotId = $line->lot_id
+                            ? (int) $line->lot_id
+                            : null;
+                        $unitCost = $line->unit_cost !== null
+                            ? (float) $line->unit_cost
+                            : null;
+
+                        static::decreaseQuant(
+                            companyId: $companyId,
+                            warehouseId: (int) $movement->warehouse_id,
+                            locationId: $transitLocationId,
+                            productId: $productId,
+                            variantId: $variantId,
+                            lotId: $lotId,
+                            quantity: $qty,
+                            unitCost: $unitCost
+                        );
+
+                        static::increaseQuant(
+                            companyId: $companyId,
+                            warehouseId: (int) $movement->warehouse_id,
+                            locationId: $sourceLocationId,
+                            productId: $productId,
+                            variantId: $variantId,
+                            lotId: $lotId,
+                            quantity: $qty,
+                            unitCost: $unitCost
+                        );
+
+                        static::returnTransferSerialsToOrigin(
+                            $movement,
+                            $line,
+                            $companyId,
+                            $transitLocationId,
+                            $sourceLocationId
+                        );
+                    }
+                }
+
+                $movement->forceFill([
+                    'status' => 'cancelled',
+                    'cancelled_by' => auth()->id(),
+                    'cancelled_at' => now(),
+                    'cancellation_reason' => $reason,
+                ])->save();
+            }
+        );
+    }
+
+
+    protected static function returnTransferSerialsToOrigin(
+        StockMovement $movement,
+        $line,
+        int $companyId,
+        int $transitLocationId,
+        int $sourceLocationId
+    ): void {
+        if (! $line->stock_serial_number_id) {
+            return;
+        }
+
+        $serialId = (int) $line->stock_serial_number_id;
+
+        $serial = \Illuminate\Support\Facades\DB::table(
+            'stock_serial_numbers'
+        )
+            ->where('id', $serialId)
+            ->where('company_id', $companyId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $serial) {
+            throw new \RuntimeException(
+                'No se encontró la serie #' . $serialId
+                . ' para cancelar el traslado.'
+            );
+        }
+
+        if (
+            isset($serial->current_location_id)
+            && (int) $serial->current_location_id !== $transitLocationId
+        ) {
+            throw new \RuntimeException(
+                'La serie #' . $serialId
+                . ' ya no se encuentra en la ubicación de tránsito.'
+            );
+        }
+
+        if (
+            isset($serial->current_warehouse_id)
+            && (int) $serial->current_warehouse_id
+                !== (int) $movement->warehouse_id
+        ) {
+            throw new \RuntimeException(
+                'La serie #' . $serialId
+                . ' no pertenece al almacén origen durante el tránsito.'
+            );
+        }
+
+        static::moveSerial(
+            $serialId,
+            $companyId,
+            (int) $movement->warehouse_id,
+            $sourceLocationId
+        );
+
+        \Illuminate\Support\Facades\DB::table(
+            'stock_serial_numbers'
+        )
+            ->where('id', $serialId)
+            ->where('company_id', $companyId)
+            ->update([
+                'status' => 'available',
+                'updated_at' => now(),
+            ]);
+    }
+
+    public static function receiveMovementWithIncidents(
+        StockMovement $movement,
+        array $items,
+        ?string $notes = null
+    ): StockMovementReceipt {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId || (int) $movement->company_id !== $companyId) {
+            Notification::make()
+                ->title('Traslado no disponible')
+                ->body('El traslado no pertenece a la empresa seleccionada.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        if (
+            $movement->status !== 'in_transit'
+            || ! $movement->isInterWarehouseTransfer()
+        ) {
+            Notification::make()
+                ->title('Traslado no disponible para recepción')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        if (
+            ! Schema::hasTable('stock_movement_incidents')
+            || ! Schema::hasColumn(
+                'stock_movement_receipt_lines',
+                'disposition'
+            )
+        ) {
+            Notification::make()
+                ->title('Esquema de incidencias no disponible')
+                ->body('Falta aplicar la estructura H9M4D1.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        $movement->load('lines');
+
+        static::validateTransfer($movement);
+
+        if (! $movement->transit_location_id) {
+            Notification::make()
+                ->title('Traslado sin tránsito')
+                ->body(
+                    'El traslado no tiene ubicación de tránsito registrada.'
+                )
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        $requested = [];
+
+        foreach ($items as $lineId => $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $received = round(
+                max(0, (float) ($item['received'] ?? 0)),
+                6
+            );
+
+            $damaged = round(
+                max(0, (float) ($item['damaged'] ?? 0)),
+                6
+            );
+
+            $missing = round(
+                max(0, (float) ($item['missing'] ?? 0)),
+                6
+            );
+
+            $reason = trim((string) ($item['reason'] ?? ''));
+
+            if (($received + $damaged + $missing) <= 0) {
+                continue;
+            }
+
+            $requested[(int) $lineId] = [
+                'received' => $received,
+                'damaged' => $damaged,
+                'missing' => $missing,
+                'reason' => $reason,
+            ];
+        }
+
+        if ($requested === []) {
+            Notification::make()
+                ->title('Sin mercancía para procesar')
+                ->body(
+                    'Captura al menos una unidad como recibida, '
+                    . 'dañada o faltante.'
+                )
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        return DB::transaction(
+            function () use (
+                $movement,
+                $requested,
+                $notes,
+                $companyId
+            ): StockMovementReceipt {
+                $movement = StockMovement::query()
+                    ->whereKey($movement->getKey())
+                    ->where('company_id', $companyId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($movement->status !== 'in_transit') {
+                    Notification::make()
+                        ->title('El traslado ya cambió de estado')
+                        ->danger()
+                        ->send();
+
+                    throw new Halt();
+                }
+
+                $movement->load('lines');
+
+                $lineIds = $movement->lines
+                    ->pluck('id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->all();
+
+                foreach (array_keys($requested) as $lineId) {
+                    if (! in_array((int) $lineId, $lineIds, true)) {
+                        Notification::make()
+                            ->title('Línea inválida')
+                            ->body(
+                                'Una de las líneas no pertenece '
+                                . 'a este traslado.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        throw new Halt();
+                    }
+                }
+
+                $resolvedTotals = StockMovementReceiptLine::query()
+                    ->selectRaw(
+                        'stock_movement_line_id, '
+                        . 'SUM(quantity) AS resolved_quantity'
+                    )
+                    ->whereIn(
+                        'stock_movement_line_id',
+                        $lineIds
+                    )
+                    ->groupBy('stock_movement_line_id')
+                    ->pluck(
+                        'resolved_quantity',
+                        'stock_movement_line_id'
+                    );
+
+                foreach ($movement->lines as $line) {
+                    $lineId = (int) $line->id;
+
+                    if (! isset($requested[$lineId])) {
+                        continue;
+                    }
+
+                    $request = $requested[$lineId];
+
+                    $receivedNow = (float) $request['received'];
+                    $damagedNow = (float) $request['damaged'];
+                    $missingNow = (float) $request['missing'];
+
+                    $resolveNow = round(
+                        $receivedNow + $damagedNow + $missingNow,
+                        6
+                    );
+
+                    $sent = round(
+                        (float) $line->done_quantity,
+                        6
+                    );
+
+                    $resolved = round(
+                        (float) (
+                            $resolvedTotals[$lineId] ?? 0
+                        ),
+                        6
+                    );
+
+                    $pending = round(
+                        max(0, $sent - $resolved),
+                        6
+                    );
+
+                    if ($resolveNow > $pending + 0.000001) {
+                        Notification::make()
+                            ->title('Cantidad mayor al pendiente')
+                            ->body(
+                                static::stockItemLabel(
+                                    (int) $line->product_id,
+                                    $line->product_variant_id
+                                        ? (int) $line->product_variant_id
+                                        : null
+                                )
+                                . ' tiene pendiente '
+                                . number_format($pending, 6)
+                                . ' y se intentó resolver '
+                                . number_format($resolveNow, 6)
+                                . '.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        throw new Halt();
+                    }
+
+                    if (
+                        ($damagedNow > 0 || $missingNow > 0)
+                        && $request['reason'] === ''
+                    ) {
+                        Notification::make()
+                            ->title('Motivo obligatorio')
+                            ->body(
+                                'Indica el motivo del daño o faltante en '
+                                . static::stockItemLabel(
+                                    (int) $line->product_id,
+                                    $line->product_variant_id
+                                        ? (int) $line->product_variant_id
+                                        : null
+                                )
+                                . '.'
+                            )
+                            ->danger()
+                            ->send();
+
+                        throw new Halt();
+                    }
+
+                    if ($line->stock_serial_number_id) {
+                        $validSerialLine =
+                            abs($sent - 1.0) < 0.000001
+                            && abs($pending - 1.0) < 0.000001
+                            && abs($resolveNow - 1.0) < 0.000001;
+
+                        $validDisposition =
+                            (
+                                abs($receivedNow - 1.0) < 0.000001
+                                && $damagedNow == 0.0
+                                && $missingNow == 0.0
+                            )
+                            || (
+                                abs($damagedNow - 1.0) < 0.000001
+                                && $receivedNow == 0.0
+                                && $missingNow == 0.0
+                            )
+                            || (
+                                abs($missingNow - 1.0) < 0.000001
+                                && $receivedNow == 0.0
+                                && $damagedNow == 0.0
+                            );
+
+                        if (! $validSerialLine || ! $validDisposition) {
+                            Notification::make()
+                                ->title(
+                                    'Recepción inválida para número de serie'
+                                )
+                                ->body(
+                                    'Cada serie debe clasificarse '
+                                    . 'completa como recibida, dañada '
+                                    . 'o faltante.'
+                                )
+                                ->danger()
+                                ->send();
+
+                            throw new Halt();
+                        }
+                    }
+                }
+
+                $receipt = StockMovementReceipt::create([
+                    'stock_movement_id' => $movement->id,
+                    'company_id' => $movement->company_id,
+                    'received_by' => auth()->id(),
+                    'received_at' => now(),
+                    'notes' => filled($notes)
+                        ? trim((string) $notes)
+                        : null,
+                ]);
+
+                foreach ($movement->lines as $line) {
+                    $lineId = (int) $line->id;
+
+                    if (! isset($requested[$lineId])) {
+                        continue;
+                    }
+
+                    $request = $requested[$lineId];
+
+                    $productId = (int) $line->product_id;
+                    $variantId = $line->product_variant_id
+                        ? (int) $line->product_variant_id
+                        : null;
+                    $lotId = $line->lot_id
+                        ? (int) $line->lot_id
+                        : null;
+                    $unitCost = $line->unit_cost !== null
+                        ? (float) $line->unit_cost
+                        : null;
+
+                    $dispositions = [
+                        'received' => (float) $request['received'],
+                        'damaged' => (float) $request['damaged'],
+                        'missing' => (float) $request['missing'],
+                    ];
+
+                    foreach ($dispositions as $disposition => $qty) {
+                        $qty = round($qty, 6);
+
+                        if ($qty <= 0) {
+                            continue;
+                        }
+
+                        static::validateLineQuantity(
+                            $line,
+                            $qty
+                        );
+
+                        $targetWarehouseId = match ($disposition) {
+                            'received',
+                            'damaged' => (int) $movement
+                                ->destination_warehouse_id,
+                            'missing' => (int) $movement->warehouse_id,
+                            default => throw new \RuntimeException(
+                                'Disposición de recepción inválida.'
+                            ),
+                        };
+
+                        $targetLocationId = match ($disposition) {
+                            'received' => (int) $movement
+                                ->destination_location_id,
+                            'damaged' => static::
+                                transferExceptionLocationId(
+                                    (int) $movement->company_id,
+                                    (int) $movement
+                                        ->destination_warehouse_id,
+                                    'CUARENTENA'
+                                ),
+                            'missing' => static::
+                                transferExceptionLocationId(
+                                    (int) $movement->company_id,
+                                    null,
+                                    'FALTANTE_TRANSITO'
+                                ),
+                            default => throw new \RuntimeException(
+                                'Disposición de recepción inválida.'
+                            ),
+                        };
+
+                        static::decreaseQuant(
+                            companyId: (int) $movement->company_id,
+                            warehouseId: (int) $movement->warehouse_id,
+                            locationId: (int) $movement
+                                ->transit_location_id,
+                            productId: $productId,
+                            variantId: $variantId,
+                            lotId: $lotId,
+                            quantity: $qty,
+                            unitCost: $unitCost
+                        );
+
+                        static::increaseQuant(
+                            companyId: (int) $movement->company_id,
+                            warehouseId: $targetWarehouseId,
+                            locationId: $targetLocationId,
+                            productId: $productId,
+                            variantId: $variantId,
+                            lotId: $lotId,
+                            quantity: $qty,
+                            unitCost: $unitCost
+                        );
+
+                        $receiptLine = StockMovementReceiptLine::create([
+                            'stock_movement_receipt_id' => $receipt->id,
+                            'stock_movement_line_id' => $line->id,
+                            'quantity' => $qty,
+                            'disposition' => $disposition,
+                            'stock_serial_number_id' =>
+                                $line->stock_serial_number_id
+                                    ? (int) $line
+                                        ->stock_serial_number_id
+                                    : null,
+                            'reason' => in_array(
+                                $disposition,
+                                ['damaged', 'missing'],
+                                true
+                            )
+                                ? $request['reason']
+                                : null,
+                        ]);
+
+                        if (
+                            in_array(
+                                $disposition,
+                                ['damaged', 'missing'],
+                                true
+                            )
+                        ) {
+                            DB::table(
+                                'stock_movement_incidents'
+                            )->insert([
+                                'company_id' => $movement->company_id,
+                                'stock_movement_id' => $movement->id,
+                                'stock_movement_line_id' => $line->id,
+                                'stock_movement_receipt_id' =>
+                                    $receipt->id,
+                                'stock_movement_receipt_line_id' =>
+                                    $receiptLine->id,
+                                'stock_serial_number_id' =>
+                                    $line->stock_serial_number_id
+                                        ? (int) $line
+                                            ->stock_serial_number_id
+                                        : null,
+                                'incident_type' => $disposition,
+                                'quantity' => $qty,
+                                'status' => 'open',
+                                'reason' => $request['reason'],
+                                'created_by' => auth()->id(),
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                        }
+
+                        if ($line->stock_serial_number_id) {
+                            static::moveSerial(
+                                (int) $line->stock_serial_number_id,
+                                (int) $movement->company_id,
+                                $targetWarehouseId,
+                                $targetLocationId
+                            );
+
+                            if (
+                                in_array(
+                                    $disposition,
+                                    ['damaged', 'missing'],
+                                    true
+                                )
+                            ) {
+                                DB::table('stock_serial_numbers')
+                                    ->where(
+                                        'id',
+                                        (int) $line
+                                            ->stock_serial_number_id
+                                    )
+                                    ->where(
+                                        'company_id',
+                                        (int) $movement->company_id
+                                    )
+                                    ->update([
+                                        'status' => 'blocked',
+                                        'updated_at' => now(),
+                                    ]);
+                            }
+                        }
+                    }
+                }
+
+                $resolvedTotalsAfter =
+                    StockMovementReceiptLine::query()
+                        ->selectRaw(
+                            'stock_movement_line_id, '
+                            . 'SUM(quantity) AS resolved_quantity'
+                        )
+                        ->whereIn(
+                            'stock_movement_line_id',
+                            $lineIds
+                        )
+                        ->groupBy('stock_movement_line_id')
+                        ->pluck(
+                            'resolved_quantity',
+                            'stock_movement_line_id'
+                        );
+
+                $allResolved = true;
+
+                foreach ($movement->lines as $line) {
+                    $sent = round(
+                        (float) $line->done_quantity,
+                        6
+                    );
+
+                    $resolved = round(
+                        (float) (
+                            $resolvedTotalsAfter[
+                                (int) $line->id
+                            ] ?? 0
+                        ),
+                        6
+                    );
+
+                    if ($resolved + 0.000001 < $sent) {
+                        $allResolved = false;
+                        break;
+                    }
+                }
+
+                if ($allResolved) {
+                    $movement->update([
+                        'status' => 'done',
+                        'received_by' => auth()->id(),
+                        'received_at' => now(),
+                        'confirmed_by' => auth()->id(),
+                        'confirmed_at' => now(),
+                    ]);
+                } else {
+                    $movement->update([
+                        'status' => 'in_transit',
+                        'received_by' => null,
+                        'received_at' => null,
+                    ]);
+                }
+
+                return $receipt->fresh('lines');
+            }
+        );
+    }
+
+    protected static function transferExceptionLocationId(
+        int $companyId,
+        ?int $warehouseId,
+        string $code
+    ): int {
+        $query = DB::table('stock_locations')
+            ->where('company_id', $companyId)
+            ->whereRaw('upper(code) = ?', [strtoupper($code)])
+            ->where('is_active', true)
+            ->where('tracks_stock', true);
+
+        if ($warehouseId === null) {
+            $query->whereNull('warehouse_id');
+        } else {
+            $query->where('warehouse_id', $warehouseId);
+        }
+
+        $id = $query->orderBy('id')->value('id');
+
+        if (! $id) {
+            Notification::make()
+                ->title('Ubicación de incidencia no disponible')
+                ->body(
+                    'No se encontró la ubicación '
+                    . $code
+                    . ' para esta empresa/almacén.'
+                )
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        return (int) $id;
+    }
+
+    public static function resolveTransferIncident(
+        int $incidentId,
+        string $resolutionType,
+        ?string $notes = null
+    ): int {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId) {
+            throw new \RuntimeException(
+                'No hay empresa seleccionada.'
+            );
+        }
+
+        $resolutionType = trim($resolutionType);
+        $notes = trim((string) $notes);
+
+        $allowed = [
+            'recovered',
+            'loss',
+            'found_received',
+            'returned_origin',
+            'confirmed_loss',
+        ];
+
+        if (! in_array($resolutionType, $allowed, true)) {
+            throw new \RuntimeException(
+                'Tipo de resolución inválido.'
+            );
+        }
+
+        return DB::transaction(function () use (
+            $incidentId,
+            $resolutionType,
+            $notes,
+            $companyId
+        ): int {
+            $incident = DB::table(
+                'stock_movement_incidents'
+            )
+                ->where('id', $incidentId)
+                ->where('company_id', $companyId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $incident) {
+                throw new \RuntimeException(
+                    'La incidencia no existe o no pertenece a la empresa seleccionada.'
+                );
+            }
+
+            if ((string) $incident->status !== 'open') {
+                throw new \RuntimeException(
+                    'La incidencia ya fue resuelta o cancelada.'
+                );
+            }
+
+            $incidentType = (string) $incident->incident_type;
+
+            $allowedForIncident = match ($incidentType) {
+                'damaged' => [
+                    'recovered',
+                    'loss',
+                ],
+                'missing' => [
+                    'found_received',
+                    'returned_origin',
+                    'confirmed_loss',
+                ],
+                default => [],
+            };
+
+            if (
+                ! in_array(
+                    $resolutionType,
+                    $allowedForIncident,
+                    true
+                )
+            ) {
+                throw new \RuntimeException(
+                    'La resolución seleccionada no corresponde al tipo de incidencia.'
+                );
+            }
+
+            $movement = StockMovement::query()
+                ->whereKey($incident->stock_movement_id)
+                ->where('company_id', $companyId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $movement) {
+                throw new \RuntimeException(
+                    'No se encontró el traslado de la incidencia.'
+                );
+            }
+
+            $line = DB::table('stock_movement_lines')
+                ->where('id', $incident->stock_movement_line_id)
+                ->where(
+                    'stock_movement_id',
+                    $movement->getKey()
+                )
+                ->lockForUpdate()
+                ->first();
+
+            if (! $line || ! $line->product_id) {
+                throw new \RuntimeException(
+                    'No se encontró la línea de inventario de la incidencia.'
+                );
+            }
+
+            $quantity = round(
+                (float) $incident->quantity,
+                6
+            );
+
+            if ($quantity <= 0) {
+                throw new \RuntimeException(
+                    'La incidencia no tiene cantidad válida.'
+                );
+            }
+
+            $productId = (int) $line->product_id;
+
+            $variantId = $line->product_variant_id
+                ? (int) $line->product_variant_id
+                : null;
+
+            $lotId = $line->lot_id
+                ? (int) $line->lot_id
+                : null;
+
+            $serialId = $incident->stock_serial_number_id
+                ? (int) $incident->stock_serial_number_id
+                : null;
+
+            if ($serialId && abs($quantity - 1.0) > 0.000001) {
+                throw new \RuntimeException(
+                    'Una incidencia con serie debe resolverse por una sola unidad.'
+                );
+            }
+
+            $unitCost = $line->unit_cost !== null
+                ? (float) $line->unit_cost
+                : null;
+
+            $originWarehouseId =
+                (int) $movement->warehouse_id;
+
+            $destinationWarehouseId =
+                (int) $movement->destination_warehouse_id;
+
+            $originLocationId =
+                (int) $movement->source_location_id;
+
+            $destinationLocationId =
+                (int) $movement->destination_location_id;
+
+            $sourceWarehouseId = match ($incidentType) {
+                'damaged' => $destinationWarehouseId,
+                'missing' => $originWarehouseId,
+                default => throw new \RuntimeException(
+                    'Tipo de incidencia inválido.'
+                ),
+            };
+
+            $sourceLocationCode = match ($incidentType) {
+                'damaged' => 'CUARENTENA',
+                'missing' => 'FALTANTE_TRANSITO',
+                default => throw new \RuntimeException(
+                    'Tipo de incidencia inválido.'
+                ),
+            };
+
+            $sourceLocationId =
+                static::transferExceptionLocationId(
+                    $companyId,
+                    $incidentType === 'damaged'
+                        ? $destinationWarehouseId
+                        : null,
+                    $sourceLocationCode
+                );
+
+            if (! $sourceLocationId) {
+                throw new \RuntimeException(
+                    'No se encontró la ubicación origen de la incidencia.'
+                );
+            }
+
+            $isLoss = in_array(
+                $resolutionType,
+                ['loss', 'confirmed_loss'],
+                true
+            );
+
+            if ($isLoss) {
+                $destination = DB::table(
+                    'stock_locations as l'
+                )
+                    ->leftJoin(
+                        'stock_location_types as t',
+                        't.id',
+                        '=',
+                        'l.stock_location_type_id'
+                    )
+                    ->select([
+                        'l.id',
+                        'l.company_id',
+                        'l.warehouse_id',
+                        'l.code',
+                        'l.name',
+                        'l.is_active',
+                        'l.tracks_stock',
+                        't.code as type_code',
+                    ])
+                    ->where('l.company_id', $companyId)
+                    ->where('l.is_active', true)
+                    ->where(function ($query): void {
+                        $query
+                            ->where('t.code', 'LOSS')
+                            ->orWhere('l.code', 'PERDIDA');
+                    })
+                    ->orderByRaw(
+                        "CASE WHEN l.code='PERDIDA' THEN 0 ELSE 1 END"
+                    )
+                    ->orderBy('l.id')
+                    ->first();
+
+                if (! $destination) {
+                    throw new \RuntimeException(
+                        'La empresa no tiene ubicación de pérdida activa.'
+                    );
+                }
+
+                $targetLocationId =
+                    (int) $destination->id;
+
+                $targetWarehouseId =
+                    $destination->warehouse_id
+                        ? (int) $destination->warehouse_id
+                        : 0;
+            } else {
+                [$targetWarehouseId, $targetLocationId] =
+                    match ($resolutionType) {
+                        'recovered',
+                        'found_received' => [
+                            $destinationWarehouseId,
+                            $destinationLocationId,
+                        ],
+                        'returned_origin' => [
+                            $originWarehouseId,
+                            $originLocationId,
+                        ],
+                        default => throw new \RuntimeException(
+                            'Resolución física inválida.'
+                        ),
+                    };
+            }
+
+            static::decreaseQuant(
+                companyId: $companyId,
+                warehouseId: $sourceWarehouseId,
+                locationId: $sourceLocationId,
+                productId: $productId,
+                variantId: $variantId,
+                lotId: $lotId,
+                quantity: $quantity,
+                unitCost: $unitCost
+            );
+
+            /*
+             * PERDIDA es virtual y tracks_stock=false.
+             * Una baja disminuye inventario real pero no genera
+             * un quant destino.
+             */
+            if (! $isLoss) {
+                static::increaseQuant(
+                    companyId: $companyId,
+                    warehouseId: $targetWarehouseId,
+                    locationId: $targetLocationId,
+                    productId: $productId,
+                    variantId: $variantId,
+                    lotId: $lotId,
+                    quantity: $quantity,
+                    unitCost: $unitCost
+                );
+            }
+
+            $operationTypeId = DB::table(
+                'stock_operation_types'
+            )
+                ->where('company_id', $companyId)
+                ->where(
+                    'warehouse_id',
+                    $sourceWarehouseId
+                )
+                ->where(
+                    'operation_kind',
+                    'inventory_adjustment'
+                )
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->value('id');
+
+            $resolutionMovement =
+                StockMovement::create([
+                    'company_id' => $companyId,
+                    'warehouse_id' => $sourceWarehouseId,
+                    'destination_warehouse_id' =>
+                        $isLoss
+                            ? null
+                            : $targetWarehouseId,
+                    'stock_operation_type_id' =>
+                        $operationTypeId
+                            ? (int) $operationTypeId
+                            : null,
+                    'source_location_id' =>
+                        $sourceLocationId,
+                    'destination_location_id' =>
+                        $targetLocationId,
+                    'movement_at' => now(),
+                    'status' => 'done',
+                    'origin_document' =>
+                        'transfer_incident:'
+                        . $incident->id,
+                    'notes' =>
+                        'Resolución de incidencia #'
+                        . $incident->id
+                        . ' · '
+                        . $resolutionType
+                        . (
+                            $notes !== ''
+                                ? ' · ' . $notes
+                                : ''
+                        ),
+                    'confirmed_by' => auth()->id(),
+                    'confirmed_at' => now(),
+                    'received_by' => auth()->id(),
+                    'received_at' => now(),
+                ]);
+
+            DB::table('stock_movement_lines')->insert([
+                'stock_movement_id' =>
+                    $resolutionMovement->getKey(),
+                'product_id' => $productId,
+                'product_variant_id' => $variantId,
+                'lot_id' => $lotId,
+                'stock_serial_number_id' => $serialId,
+                'requested_quantity' => $quantity,
+                'done_quantity' => $quantity,
+                'unit_cost' => $unitCost,
+                'notes' =>
+                    'Resolución incidencia #'
+                    . $incident->id
+                    . ' · '
+                    . $resolutionType,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            if ($serialId) {
+                $serial = DB::table(
+                    'stock_serial_numbers'
+                )
+                    ->where('id', $serialId)
+                    ->where('company_id', $companyId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $serial) {
+                    throw new \RuntimeException(
+                        'No se encontró la serie de la incidencia.'
+                    );
+                }
+
+                if (
+                    (int) $serial->current_location_id
+                    !== $sourceLocationId
+                ) {
+                    throw new \RuntimeException(
+                        'La serie ya no se encuentra en la ubicación de la incidencia.'
+                    );
+                }
+
+                if ($isLoss) {
+                    DB::table(
+                        'stock_serial_numbers'
+                    )
+                        ->where('id', $serialId)
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
+                        ->update([
+                            'status' => 'scrapped',
+                            'current_warehouse_id' =>
+                                $targetWarehouseId > 0
+                                    ? $targetWarehouseId
+                                    : null,
+                            'current_location_id' =>
+                                $targetLocationId,
+                            'updated_at' => now(),
+                        ]);
+
+                    if (
+                        Schema::hasTable(
+                            'stock_serial_special_movements'
+                        )
+                    ) {
+                        $special = [
+                            'company_id' => $companyId,
+                            'stock_serial_number_id' =>
+                                $serialId,
+                            'product_id' => $productId,
+                            'product_variant_id' =>
+                                $variantId,
+                            'lot_id' => $lotId,
+                            'movement_type' =>
+                                \App\Models\StockSerialSpecialMovement::TYPE_SCRAP_LOSS,
+                            'status' => 'confirmed',
+                            'serial_number_before' =>
+                                $serial->serial_number,
+                            'serial_number_after' => null,
+                            'source_warehouse_id' =>
+                                $serial
+                                    ->current_warehouse_id,
+                            'source_location_id' =>
+                                $sourceLocationId,
+                            'destination_warehouse_id' =>
+                                $targetWarehouseId > 0
+                                    ? $targetWarehouseId
+                                    : null,
+                            'destination_location_id' =>
+                                $targetLocationId,
+                            'reason' =>
+                                $notes !== ''
+                                    ? $notes
+                                    : 'Resolución de incidencia de traslado.',
+                            'reference' =>
+                                $resolutionMovement
+                                    ->reference,
+                            'notes' =>
+                                'Incidencia #'
+                                . $incident->id,
+                            'created_by' =>
+                                auth()->id(),
+                            'confirmed_by' =>
+                                auth()->id(),
+                            'confirmed_at' => now(),
+                            'metadata' => json_encode(
+                                [
+                                    'incident_id' =>
+                                        (int) $incident->id,
+                                    'resolution_type' =>
+                                        $resolutionType,
+                                    'source' =>
+                                        'StockMovementResource.resolveTransferIncident',
+                                ],
+                                JSON_UNESCAPED_UNICODE
+                                | JSON_UNESCAPED_SLASHES
+                            ),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+
+                        $special = array_intersect_key(
+                            $special,
+                            array_flip(
+                                Schema::getColumnListing(
+                                    'stock_serial_special_movements'
+                                )
+                            )
+                        );
+
+                        DB::table(
+                            'stock_serial_special_movements'
+                        )->insert($special);
+                    }
+                } else {
+                    static::moveSerial(
+                        $serialId,
+                        $companyId,
+                        $targetWarehouseId,
+                        $targetLocationId
+                    );
+
+                    DB::table(
+                        'stock_serial_numbers'
+                    )
+                        ->where('id', $serialId)
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
+                        ->update([
+                            'status' => 'available',
+                            'updated_at' => now(),
+                        ]);
+                }
+            }
+
+            DB::table(
+                'stock_movement_incidents'
+            )
+                ->where('id', $incident->id)
+                ->where('company_id', $companyId)
+                ->update([
+                    'status' => 'resolved',
+                    'resolution_type' =>
+                        $resolutionType,
+                    'resolution_location_id' =>
+                        $targetLocationId,
+                    'resolution_stock_movement_id' =>
+                        $resolutionMovement->getKey(),
+                    'resolution_notes' =>
+                        $notes !== ''
+                            ? $notes
+                            : null,
+                    'resolved_by' => auth()->id(),
+                    'resolved_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            return (int) $resolutionMovement->getKey();
+        });
+    }
+
+
     public static function receiveMovement(
         StockMovement $movement,
         array $quantities,
         ?string $notes = null
     ): StockMovementReceipt {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId || (int) $movement->company_id !== $companyId) {
+            Notification::make()
+                ->title('Traslado no disponible')
+                ->body('El traslado no pertenece a la empresa seleccionada.')
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
         if ($movement->status !== 'in_transit' || ! $movement->isInterWarehouseTransfer()) {
             Notification::make()
                 ->title('Traslado no disponible para recepción')
@@ -1640,9 +2995,10 @@ class StockMovementResource extends Resource
             throw new Halt();
         }
 
-        return DB::transaction(function () use ($movement, $requested, $notes): StockMovementReceipt {
+        return DB::transaction(function () use ($movement, $requested, $notes, $companyId): StockMovementReceipt {
             $movement = StockMovement::query()
                 ->whereKey($movement->getKey())
+                ->where('company_id', $companyId)
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -1853,7 +3209,7 @@ class StockMovementResource extends Resource
         float $quantity,
         ?float $unitCost = null
     ): void {
-        $quant = static::findOrNewQuant(
+        $quant = static::findQuantForUpdate(
             $companyId,
             $warehouseId,
             $locationId,
@@ -1862,18 +3218,66 @@ class StockMovementResource extends Resource
             $lotId
         );
 
+        /*
+         * Si no existe quant y la ubicación no permite negativos,
+         * el disponible real es cero y no debemos crear una fila
+         * vacía solamente para lanzar el error.
+         */
+        if (! $quant) {
+            if (! static::locationAllowsNegativeStock($locationId)) {
+                Notification::make()
+                    ->title('Existencia insuficiente')
+                    ->body(
+                        static::stockItemLabel(
+                            $productId,
+                            $variantId
+                        )
+                        . ' no tiene existencia suficiente en '
+                        . static::locationLabel($locationId)
+                        . '. Disponible: 0.00'
+                        . ', solicitado: '
+                        . number_format($quantity, 2)
+                        . '.'
+                    )
+                    ->danger()
+                    ->send();
+
+                throw new Halt();
+            }
+
+            $quant = static::findOrNewQuant(
+                $companyId,
+                $warehouseId,
+                $locationId,
+                $productId,
+                $variantId,
+                $lotId
+            );
+        }
+
         $current = (float) $quant->quantity;
         $newQuantity = $current - $quantity;
 
-        if ($newQuantity < 0 && ! static::locationAllowsNegativeStock($locationId)) {
+        if (
+            $newQuantity < 0
+            && ! static::locationAllowsNegativeStock(
+                $locationId
+            )
+        ) {
             Notification::make()
                 ->title('Existencia insuficiente')
                 ->body(
-                    static::stockItemLabel($productId, $variantId)
+                    static::stockItemLabel(
+                        $productId,
+                        $variantId
+                    )
                     . ' no tiene existencia suficiente en '
                     . static::locationLabel($locationId)
-                    . '. Disponible: ' . number_format($current, 2)
-                    . ', solicitado: ' . number_format($quantity, 2) . '.'
+                    . '. Disponible: '
+                    . number_format($current, 2)
+                    . ', solicitado: '
+                    . number_format($quantity, 2)
+                    . '.'
                 )
                 ->danger()
                 ->send();
@@ -1883,7 +3287,10 @@ class StockMovementResource extends Resource
 
         $quant->quantity = $newQuantity;
 
-        if ($unitCost !== null && $quant->average_cost === null) {
+        if (
+            $unitCost !== null
+            && $quant->average_cost === null
+        ) {
             $quant->average_cost = $unitCost;
         }
 
@@ -1930,6 +3337,50 @@ class StockMovementResource extends Resource
         $quant->save();
     }
 
+    protected static function findQuantForUpdate(
+        int $companyId,
+        int $warehouseId,
+        int $locationId,
+        int $productId,
+        ?int $variantId,
+        ?int $lotId
+    ): ?StockQuant {
+        $query = StockQuant::query()
+            ->where('company_id', $companyId)
+            ->where('warehouse_id', $warehouseId)
+            ->where('location_id', $locationId)
+            ->where('product_id', $productId);
+
+        $variantId
+            ? $query->where(
+                'product_variant_id',
+                $variantId
+            )
+            : $query->whereNull(
+                'product_variant_id'
+            );
+
+        if (
+            Schema::hasColumn(
+                'stock_quants',
+                'lot_id'
+            )
+        ) {
+            $lotId
+                ? $query->where(
+                    'lot_id',
+                    $lotId
+                )
+                : $query->whereNull(
+                    'lot_id'
+                );
+        }
+
+        return $query
+            ->lockForUpdate()
+            ->first();
+    }
+
     protected static function findOrNewQuant(
         int $companyId,
         int $warehouseId,
@@ -1938,29 +3389,28 @@ class StockMovementResource extends Resource
         ?int $variantId,
         ?int $lotId
     ): StockQuant {
-        $query = StockQuant::query()
-            ->where('company_id', $companyId)
-            ->where('warehouse_id', $warehouseId)
-            ->where('location_id', $locationId)
-            ->where('product_id', $productId);
-
-        $variantId
-            ? $query->where('product_variant_id', $variantId)
-            : $query->whereNull('product_variant_id');
-
-        if (Schema::hasColumn('stock_quants', 'lot_id')) {
+        $quant = static::findQuantForUpdate(
+            $companyId,
+            $warehouseId,
+            $locationId,
+            $productId,
+            $variantId,
             $lotId
-                ? $query->where('lot_id', $lotId)
-                : $query->whereNull('lot_id');
-        }
-
-        $quant = $query->first();
+        );
 
         if ($quant) {
             return $quant;
         }
 
-        $quant = new StockQuant([
+        /*
+         * La identidad lógica del quant está protegida por
+         * stock_quants_logical_unique.
+         *
+         * Si dos transacciones intentan crear el mismo quant,
+         * PostgreSQL deja que una lo cree y la otra hace
+         * ON CONFLICT DO NOTHING mediante insertOrIgnore().
+         */
+        $attributes = [
             'company_id' => $companyId,
             'warehouse_id' => $warehouseId,
             'location_id' => $locationId,
@@ -1968,10 +3418,30 @@ class StockMovementResource extends Resource
             'product_variant_id' => $variantId,
             'reserved_quantity' => 0,
             'quantity' => 0,
-        ]);
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
 
         if (Schema::hasColumn('stock_quants', 'lot_id')) {
-            $quant->lot_id = $lotId;
+            $attributes['lot_id'] = $lotId;
+        }
+
+        DB::table('stock_quants')
+            ->insertOrIgnore($attributes);
+
+        $quant = static::findQuantForUpdate(
+            $companyId,
+            $warehouseId,
+            $locationId,
+            $productId,
+            $variantId,
+            $lotId
+        );
+
+        if (! $quant) {
+            throw new \RuntimeException(
+                'No fue posible obtener el quant después de crearlo.'
+            );
         }
 
         return $quant;
@@ -2088,6 +3558,10 @@ class StockMovementResource extends Resource
                     ->where('t.code', 'TRANSIT')
                     ->orWhereIn(DB::raw('upper(sl.code)'), ['TRANSIT', 'TRANSITO']);
             });
+
+        if (Schema::hasColumn('stock_locations', 'tracks_stock')) {
+            $query->where('sl.tracks_stock', true);
+        }
 
         $preferred = (clone $query)
             ->whereRaw("upper(sl.code) = 'TRANSITO'")
@@ -2354,13 +3828,11 @@ class StockMovementResource extends Resource
 
         $companyId = static::currentCompanyId();
 
-        $query->where(function ($query) use ($companyId): void {
-            $query->whereNull('stock_operation_types.company_id');
+        if (! $companyId) {
+            return [];
+        }
 
-            if ($companyId) {
-                $query->orWhere('stock_operation_types.company_id', $companyId);
-            }
-        });
+        $query->where('stock_operation_types.company_id', $companyId);
 
         return $query
             ->orderBy('warehouses.name')
@@ -2386,7 +3858,18 @@ class StockMovementResource extends Resource
             return null;
         }
 
-        return DB::table('stock_operation_types')->where('id', $id)->first();
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId) {
+            return null;
+        }
+
+        return DB::table('stock_operation_types')
+            ->where('id', $id)
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->where('operation_kind', 'internal_transfer')
+            ->first();
     }
 
     protected static function warehouseOptions(): array
@@ -2724,7 +4207,19 @@ class StockMovementResource extends Resource
         return null;
     }
 
-public static function canCreate(): bool
+    protected static function recordBelongsToCurrentCompany(Model $record): bool
+    {
+        if (! $record instanceof StockMovement) {
+            return false;
+        }
+
+        $companyId = static::currentCompanyId();
+
+        return $companyId !== null
+            && (int) $record->company_id === $companyId;
+    }
+
+    public static function canCreate(): bool
     {
         return static::userCanPermission('inventory.movements.create');
     }
@@ -2741,16 +4236,16 @@ public static function canCreate(): bool
          *   permite consultar y reimprimir PDF, pero el formulario
          *   permanece bloqueado y no muestra acciones de guardado.
          */
-        return static::userCanPermission('inventory.movements.update');
+        return static::recordBelongsToCurrentCompany($record)
+            && static::userCanPermission('inventory.movements.update');
     }
 
     public static function canDelete(Model $record): bool
     {
         return $record instanceof StockMovement
+            && static::recordBelongsToCurrentCompany($record)
             && $record->status === 'draft'
-            && (
-                static::userCanPermission('inventory.movements.delete')
-            );
+            && static::userCanPermission('inventory.movements.delete');
     }
 
     public static function canDeleteAny(): bool

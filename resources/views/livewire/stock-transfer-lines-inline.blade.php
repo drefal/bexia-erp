@@ -40,12 +40,14 @@
                 <thead class="bg-gray-50 dark:bg-white/5">
                     <tr>
                         <th class="px-3 py-2 text-left">Producto</th>
+                        <th class="px-3 py-2 text-left">Control</th>
                         <th class="px-3 py-2 text-right">Existencia</th>
                         <th class="px-3 py-2 text-right">Reservado</th>
                         <th class="px-3 py-2 text-right">Disponible</th>
                         <th class="px-3 py-2"></th>
                     </tr>
                 </thead>
+
                 <tbody class="divide-y divide-gray-200 dark:divide-white/10">
                     @forelse ($this->products as $product)
                         <tr>
@@ -58,6 +60,22 @@
                                     <div class="text-xs text-gray-500">
                                         {{ $product['sku'] }}
                                     </div>
+                                @endif
+                            </td>
+
+                            <td class="px-3 py-2">
+                                @if ($product['tracking_mode'] === 'serial')
+                                    <span class="rounded-md bg-primary-50 px-2 py-1 text-xs font-medium text-primary-700 dark:bg-primary-500/10 dark:text-primary-400">
+                                        Serie
+                                    </span>
+                                @elseif ($product['tracking_mode'] === 'lot')
+                                    <span class="rounded-md bg-warning-50 px-2 py-1 text-xs font-medium text-warning-700 dark:bg-warning-500/10 dark:text-warning-400">
+                                        Lote
+                                    </span>
+                                @else
+                                    <span class="text-xs text-gray-500">
+                                        Cantidad
+                                    </span>
                                 @endif
                             </td>
 
@@ -85,7 +103,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-3 py-4 text-center text-gray-500">
+                            <td colspan="6" class="px-3 py-4 text-center text-gray-500">
                                 No se encontraron productos.
                             </td>
                         </tr>
@@ -95,11 +113,12 @@
         </div>
     @endif
 
-    <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-white/10">
+    <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-white/10">
         <table class="w-full table-auto divide-y divide-gray-200 text-sm dark:divide-white/10">
             <thead class="bg-gray-50 dark:bg-white/5">
                 <tr>
                     <th class="px-3 py-2 text-left">Producto / SKU</th>
+                    <th class="px-3 py-2 text-left">Serie / Lote</th>
                     <th class="px-3 py-2 text-right">Existencia</th>
                     <th class="px-3 py-2 text-right">Reservado</th>
                     <th class="px-3 py-2 text-right">Disponible</th>
@@ -110,7 +129,9 @@
 
             <tbody class="divide-y divide-gray-200 dark:divide-white/10">
                 @forelse ($lines as $index => $line)
-                    <tr wire:key="transfer-line-{{ $index }}-{{ $line['product_id'] }}">
+                    <tr
+                        wire:key="transfer-line-{{ $index }}-{{ $line['product_id'] }}-{{ $line['stock_serial_number_id'] ?? 'x' }}-{{ $line['lot_id'] ?? 'x' }}"
+                    >
                         <td class="px-3 py-3">
                             <div class="font-medium">
                                 {{ $line['name'] }}
@@ -120,6 +141,73 @@
                                 <div class="text-xs text-gray-500">
                                     {{ $line['sku'] }}
                                 </div>
+                            @endif
+
+                            @if (($line['tracking_mode'] ?? 'none') === 'serial')
+                                <div class="mt-1 text-xs font-medium text-primary-600">
+                                    Control por número de serie
+                                </div>
+                            @elseif (($line['tracking_mode'] ?? 'none') === 'lot')
+                                <div class="mt-1 text-xs font-medium text-warning-600">
+                                    Control por lote
+                                </div>
+                            @endif
+                        </td>
+
+                        <td class="min-w-64 px-3 py-3">
+                            @if (($line['tracking_mode'] ?? 'none') === 'serial')
+                                <select
+                                    wire:model.live="lines.{{ $index }}.stock_serial_number_id"
+                                    class="fi-select-input block w-full rounded-lg border-none bg-white py-2 pl-3 pr-8 text-sm text-gray-950 shadow-sm ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-inset focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/20"
+                                >
+                                    <option value="">
+                                        Seleccionar número de serie
+                                    </option>
+
+                                    @foreach ($this->serialOptionsForLine($index) as $serialId => $serialLabel)
+                                        <option value="{{ $serialId }}">
+                                            {{ $serialLabel }}
+                                        </option>
+                                    @endforeach
+                                </select>
+
+                                @if (!empty($line['lot_number']))
+                                    <div class="mt-1 text-xs text-gray-500">
+                                        Lote: {{ $line['lot_number'] }}
+                                    </div>
+                                @endif
+
+                                @error("lines.$index.stock_serial_number_id")
+                                    <div class="mt-1 text-xs text-danger-600">
+                                        {{ $message }}
+                                    </div>
+                                @enderror
+
+                            @elseif (($line['tracking_mode'] ?? 'none') === 'lot')
+                                <select
+                                    wire:model.live="lines.{{ $index }}.lot_id"
+                                    class="fi-select-input block w-full rounded-lg border-none bg-white py-2 pl-3 pr-8 text-sm text-gray-950 shadow-sm ring-1 ring-inset ring-gray-950/10 focus:ring-2 focus:ring-inset focus:ring-primary-600 dark:bg-white/5 dark:text-white dark:ring-white/20"
+                                >
+                                    <option value="">
+                                        Seleccionar lote
+                                    </option>
+
+                                    @foreach ($this->lotOptionsForLine($index) as $lotId => $lotLabel)
+                                        <option value="{{ $lotId }}">
+                                            {{ $lotLabel }}
+                                        </option>
+                                    @endforeach
+                                </select>
+
+                                @error("lines.$index.lot_id")
+                                    <div class="mt-1 text-xs text-danger-600">
+                                        {{ $message }}
+                                    </div>
+                                @enderror
+                            @else
+                                <span class="text-xs text-gray-500">
+                                    Sin seguimiento
+                                </span>
                             @endif
                         </td>
 
@@ -136,14 +224,27 @@
                         </td>
 
                         <td class="px-3 py-3 text-right align-middle">
-                            <input
-                                type="number"
-                                min="0.0001"
-                                step="0.0001"
-                                max="{{ $line['available_quantity'] }}"
-                                wire:model.blur="lines.{{ $index }}.quantity"
-                                class="fi-input ml-auto block w-32 rounded-lg border-none bg-white px-3 py-2 text-right text-sm text-gray-950 shadow-sm ring-1 ring-inset ring-gray-950/10 dark:bg-white/5 dark:text-white dark:ring-white/20"
-                            />
+                            @if (($line['tracking_mode'] ?? 'none') === 'serial')
+                                <input
+                                    type="number"
+                                    value="1"
+                                    disabled
+                                    class="fi-input ml-auto block w-32 rounded-lg border-none bg-gray-50 px-3 py-2 text-right text-sm text-gray-500 shadow-sm ring-1 ring-inset ring-gray-950/10 dark:bg-white/5 dark:text-gray-400 dark:ring-white/20"
+                                />
+
+                                <div class="mt-1 text-xs text-gray-500">
+                                    1 por serie
+                                </div>
+                            @else
+                                <input
+                                    type="number"
+                                    min="0.0001"
+                                    step="0.0001"
+                                    max="{{ $line['available_quantity'] }}"
+                                    wire:model.blur="lines.{{ $index }}.quantity"
+                                    class="fi-input ml-auto block w-32 rounded-lg border-none bg-white px-3 py-2 text-right text-sm text-gray-950 shadow-sm ring-1 ring-inset ring-gray-950/10 dark:bg-white/5 dark:text-white dark:ring-white/20"
+                                />
+                            @endif
 
                             @error("lines.$index.quantity")
                                 <div class="mt-1 text-xs text-danger-600">
@@ -164,7 +265,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6" class="px-3 py-6 text-center text-gray-500">
+                        <td colspan="7" class="px-3 py-6 text-center text-gray-500">
                             Agrega productos al traslado.
                         </td>
                     </tr>
