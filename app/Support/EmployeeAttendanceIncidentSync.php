@@ -574,6 +574,13 @@ class EmployeeAttendanceIncidentSync
                 return 0;
             }
 
+            if (
+                $schedule
+                && (string) ($schedule->schedule_type ?? '') === 'open'
+            ) {
+                return 0;
+            }
+
             if (isset($schedule->hours_per_day) && is_numeric($schedule->hours_per_day) && (float) $schedule->hours_per_day > 0) {
                 return (int) round(((float) $schedule->hours_per_day) * 60);
             }
@@ -586,6 +593,22 @@ class EmployeeAttendanceIncidentSync
 
     protected static function incompleteWorkdayMinutes(EmployeeAttendance $attendance): int
     {
+        try {
+            $schedule = $attendance->hr_work_schedule_id
+                ? \App\Models\HrWorkSchedule::query()
+                    ->find($attendance->hr_work_schedule_id)
+                : null;
+
+            if (
+                $schedule
+                && (string) ($schedule->schedule_type ?? '') === 'open'
+            ) {
+                return 0;
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         $expected = static::expectedWorkMinutes($attendance);
 
         if ($expected <= 0 || ! $attendance->clock_in_at || ! $attendance->clock_out_at) {
