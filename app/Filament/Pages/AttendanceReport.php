@@ -32,7 +32,11 @@ class AttendanceReport extends Page
 
     public string $to = '';
 
-    public ?string $employee_id = null;
+    public array $employee_ids = [];
+
+    public string $employee_search = '';
+
+    public bool $only_key_personnel = false;
 
     public ?string $department_id = null;
 
@@ -74,7 +78,8 @@ class AttendanceReport extends Page
             'company_id' => $this->companyId(),
             'from' => $this->from,
             'to' => $this->to,
-            'employee_id' => $this->employee_id,
+            'employee_ids' => $this->employee_ids,
+            'only_key_personnel' => $this->only_key_personnel,
             'department_id' => $this->department_id,
             'status' => $this->status,
         ];
@@ -90,19 +95,162 @@ class AttendanceReport extends Page
         return EmployeeAttendanceReportService::summary($this->rows());
     }
 
-    public function employeeOptions(): array
+    public function employeeSearchOptions(): array
     {
         $companyId = $this->companyId();
+        $search = trim($this->employee_search);
 
-        if (! $companyId) {
+        if (! $companyId || mb_strlen($search) < 2) {
             return [];
         }
 
-        return Employee::query()
+        $selectedIds = collect($this->employee_ids)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        return DB::table('employees as e')
+            ->leftJoin(
+                'hr_departments as d',
+                'd.id',
+                '=',
+                'e.hr_department_id'
+            )
+            ->where('e.company_id', $companyId)
+            ->when(
+                $selectedIds !== [],
+                fn ($query) => $query->whereNotIn(
+                    'e.id',
+                    $selectedIds
+                )
+            )
+            ->where(function ($query) use ($search): void {
+                $query
+                    ->where('e.name', 'ilike', '%' . $search . '%')
+                    ->orWhere(
+                        'e.employee_number',
+                        'ilike',
+                        '%' . $search . '%'
+                    );
+            })
+            ->orderBy('e.name')
+            ->limit(12)
+            ->get([
+                'e.id',
+                'e.name',
+                'e.employee_number',
+                'd.name as department_name',
+            ])
+            ->map(fn ($row): array => [
+                'id' => (int) $row->id,
+                'name' => (string) ($row->name ?: 'Empleado'),
+                'employee_number' => (string) (
+                    $row->employee_number ?? ''
+                ),
+                'department_name' => (string) (
+                    $row->department_name ?? ''
+                ),
+            ])
+            ->all();
+    }
+
+    public function selectedEmployeeOptions(): array
+    {
+        $companyId = $this->companyId();
+
+        $ids = collect($this->employee_ids)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+
+        if (! $companyId || $ids->isEmpty()) {
+            return [];
+        }
+
+        $rows = DB::table('employees as e')
+            ->leftJoin(
+                'hr_departments as d',
+                'd.id',
+                '=',
+                'e.hr_department_id'
+            )
+            ->where('e.company_id', $companyId)
+            ->whereIn('e.id', $ids->all())
+            ->get([
+                'e.id',
+                'e.name',
+                'e.employee_number',
+                'd.name as department_name',
+            ])
+            ->keyBy('id');
+
+        return $ids
+            ->map(function (int $id) use ($rows): ?array {
+                $row = $rows->get($id);
+
+                if (! $row) {
+                    return null;
+                }
+
+                return [
+                    'id' => (int) $row->id,
+                    'name' => (string) (
+                        $row->name ?: 'Empleado'
+                    ),
+                    'employee_number' => (string) (
+                        $row->employee_number ?? ''
+                    ),
+                    'department_name' => (string) (
+                        $row->department_name ?? ''
+                    ),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    public function addEmployee(int $employeeId): void
+    {
+        $companyId = $this->companyId();
+
+        if (! $companyId || $employeeId <= 0) {
+            return;
+        }
+
+        $exists = Employee::query()
             ->where('company_id', $companyId)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->toArray();
+            ->whereKey($employeeId)
+            ->exists();
+
+        if (! $exists) {
+            return;
+        }
+
+        $this->employee_ids = collect($this->employee_ids)
+            ->push($employeeId)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $this->employee_search = '';
+    }
+
+    public function removeEmployee(int $employeeId): void
+    {
+        $this->employee_ids = collect($this->employee_ids)
+            ->map(fn ($id): int => (int) $id)
+            ->reject(
+                fn (int $id): bool => $id === $employeeId
+            )
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function departmentOptions(): array
@@ -129,7 +277,9 @@ class AttendanceReport extends Page
     {
         $this->from = now()->startOfMonth()->toDateString();
         $this->to = now()->toDateString();
-        $this->employee_id = null;
+        $this->employee_ids = [];
+        $this->employee_search = '';
+        $this->only_key_personnel = false;
         $this->department_id = null;
         $this->status = null;
     }
