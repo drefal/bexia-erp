@@ -88,6 +88,56 @@ class HrWorkScheduleResource extends Resource
                         ->live()
                         ->afterStateUpdated(fn (Forms\Get $get, Forms\Set $set) => self::updateCalculatedHours($get, $set)),
 
+                    Forms\Components\TextInput::make('break_minutes')
+                        ->extraAttributes([
+                            'class' => 'bexia-hrws-field bexia-hrws-break-minutes-field bexia-hrws-compact-field',
+                        ])
+                        ->label('Minutos de descanso por jornada')
+                        ->numeric()
+                        ->integer()
+                        ->minValue(0)
+                        ->default(0)
+                        ->suffix('min')
+                        ->live()
+                        ->afterStateUpdated(fn (Forms\Get $get, Forms\Set $set) => self::updateCalculatedHours($get, $set))
+                        ->helperText('Tiempo total de descanso disponible durante la jornada.'),
+
+                    Forms\Components\TextInput::make('break_sessions_allowed')
+                        ->extraAttributes([
+                            'class' => 'bexia-hrws-field bexia-hrws-break-sessions-field bexia-hrws-compact-field',
+                        ])
+                        ->label('Salidas a descanso por defecto')
+                        ->numeric()
+                        ->integer()
+                        ->minValue(0)
+                        ->maxValue(20)
+                        ->default(0)
+                        ->helperText('Cantidad máxima de salidas a descanso permitidas por jornada.'),
+
+                    Forms\Components\TextInput::make('tolerance_late_minutes')
+                        ->extraAttributes([
+                            'class' => 'bexia-hrws-field bexia-hrws-tolerance-late-field bexia-hrws-compact-field',
+                        ])
+                        ->label('Tolerancia de entrada')
+                        ->numeric()
+                        ->integer()
+                        ->minValue(0)
+                        ->default(0)
+                        ->suffix('min')
+                        ->helperText('Valor general que se copia al crear el detalle de cada día.'),
+
+                    Forms\Components\TextInput::make('tolerance_early_leave_minutes')
+                        ->extraAttributes([
+                            'class' => 'bexia-hrws-field bexia-hrws-tolerance-exit-field bexia-hrws-compact-field',
+                        ])
+                        ->label('Tolerancia de salida')
+                        ->numeric()
+                        ->integer()
+                        ->minValue(0)
+                        ->default(0)
+                        ->suffix('min')
+                        ->helperText('Valor general que se copia al crear el detalle de cada día.'),
+
                     Forms\Components\CheckboxList::make('work_days')
                         ->extraAttributes([
                             'class' => 'bexia-hrws-field bexia-hrws-days-field bexia-hrws-full-field bexia-hrws-checklist-field',
@@ -150,14 +200,33 @@ class HrWorkScheduleResource extends Resource
      */
     public static function calculateScheduleHours(array $data, ?HrWorkSchedule $record = null): array
     {
-        $startTime = $data['start_time'] ?? null;
-        $endTime = $data['end_time'] ?? null;
+        $startTime = $data['start_time'] ?? $record?->start_time;
+        $endTime = $data['end_time'] ?? $record?->end_time;
 
         $workDays = array_values(array_filter(
-            is_array($data['work_days'] ?? null) ? $data['work_days'] : []
+            is_array($data['work_days'] ?? null)
+                ? $data['work_days']
+                : (
+                    is_array($record?->work_days)
+                        ? $record->work_days
+                        : []
+                )
         ));
 
-        if (blank($startTime) || blank($endTime) || count($workDays) === 0) {
+        $headerBreakMinutes = max(
+            0,
+            (int) (
+                $data['break_minutes']
+                ?? $record?->break_minutes
+                ?? 0
+            )
+        );
+
+        if (
+            blank($startTime)
+            || blank($endTime)
+            || count($workDays) === 0
+        ) {
             return [
                 'hours_per_day' => 0.0,
                 'hours_per_week' => 0.0,
@@ -165,7 +234,6 @@ class HrWorkScheduleResource extends Resource
         }
 
         $dailyHours = [];
-
         $details = collect();
 
         if ($record && $record->exists) {
@@ -179,17 +247,37 @@ class HrWorkScheduleResource extends Resource
         foreach ($workDays as $day) {
             $detail = $details->get($day);
 
-            $breakMinutes = $detail && $detail->is_working_day
-                ? max(0, (int) ($detail->break_minutes ?? 0))
+            if ($detail && ! $detail->is_working_day) {
+                $dailyHours[$day] = 0.0;
+                continue;
+            }
+
+            $dayStart = $detail && filled($detail->start_time)
+                ? $detail->start_time
+                : $startTime;
+
+            $dayEnd = $detail && filled($detail->end_time)
+                ? $detail->end_time
+                : $endTime;
+
+            $breakApplies = $detail
+                ? (bool) ($detail->break_applies ?? false)
+                : $headerBreakMinutes > 0;
+
+            $breakMinutes = $breakApplies
+                ? $headerBreakMinutes
                 : 0;
 
             $hours = HrWorkScheduleDay::calculateExpectedHours(
-                $startTime,
-                $endTime,
+                $dayStart,
+                $dayEnd,
                 $breakMinutes
             );
 
-            $dailyHours[$day] = max(0, (float) ($hours ?? 0));
+            $dailyHours[$day] = max(
+                0,
+                (float) ($hours ?? 0)
+            );
         }
 
         $hoursPerWeek = round(array_sum($dailyHours), 2);
@@ -220,6 +308,7 @@ class HrWorkScheduleResource extends Resource
             'start_time' => $get('start_time'),
             'end_time' => $get('end_time'),
             'work_days' => $get('work_days'),
+            'break_minutes' => $get('break_minutes'),
         ]);
 
         $set('hours_per_day', number_format($hours['hours_per_day'], 2, '.', ''));

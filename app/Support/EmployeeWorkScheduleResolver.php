@@ -104,12 +104,26 @@ class EmployeeWorkScheduleResolver
             $endAt = $endAt->addDay();
         }
 
+        $breakApplies =
+            $isWorkingDay
+            && (bool) ($detail->break_applies ?? false);
+
+        $breakMinutes = $breakApplies
+            ? max(0, (int) ($schedule->break_minutes ?? 0))
+            : 0;
+
+        $breakSessionsAllowed = $breakApplies
+            ? max(0, (int) ($detail->break_sessions_allowed ?? 0))
+            : 0;
+
         $expectedHours = $isWorkingDay
-            ? (float) ($detail->expected_hours ?? HrWorkScheduleDay::calculateExpectedHours(
-                $detail->start_time,
-                $detail->end_time,
-                (int) ($detail->break_minutes ?? 0),
-            ) ?? 0)
+            ? (float) (
+                HrWorkScheduleDay::calculateExpectedHours(
+                    $detail->start_time,
+                    $detail->end_time,
+                    $breakMinutes,
+                ) ?? 0
+            )
             : 0.0;
 
         return [
@@ -123,10 +137,12 @@ class EmployeeWorkScheduleResolver
             'end_at' => $endAt,
             'start_time' => $detail->start_time,
             'end_time' => $detail->end_time,
-            'break_minutes' => (int) ($detail->break_minutes ?? 0),
+            'break_applies' => $breakApplies,
+            'break_minutes' => $breakMinutes,
+            'break_sessions_allowed' => $breakSessionsAllowed,
             'expected_hours' => $expectedHours,
-            'tolerance_late_minutes' => (int) ($detail->tolerance_late_minutes ?? 0),
-            'tolerance_early_leave_minutes' => (int) ($detail->tolerance_early_leave_minutes ?? 0),
+            'tolerance_late_minutes' => (int) ($detail->tolerance_late_minutes ?? $schedule->tolerance_late_minutes ?? 0),
+            'tolerance_early_leave_minutes' => (int) ($detail->tolerance_early_leave_minutes ?? $schedule->tolerance_early_leave_minutes ?? 0),
             'source' => 'detail',
         ];
     }
@@ -163,10 +179,19 @@ class EmployeeWorkScheduleResolver
             'end_at' => $endAt,
             'start_time' => $schedule->start_time,
             'end_time' => $schedule->end_time,
-            'break_minutes' => 0,
+            'break_applies' =>
+                $isWorkingDay
+                && (int) ($schedule->break_minutes ?? 0) > 0
+                && (int) ($schedule->break_sessions_allowed ?? 0) > 0,
+            'break_minutes' => $isWorkingDay
+                ? max(0, (int) ($schedule->break_minutes ?? 0))
+                : 0,
+            'break_sessions_allowed' => $isWorkingDay
+                ? max(0, (int) ($schedule->break_sessions_allowed ?? 0))
+                : 0,
             'expected_hours' => $isWorkingDay ? (float) ($schedule->hours_per_day ?? 0) : 0.0,
-            'tolerance_late_minutes' => 0,
-            'tolerance_early_leave_minutes' => 0,
+            'tolerance_late_minutes' => max(0, (int) ($schedule->tolerance_late_minutes ?? 0)),
+            'tolerance_early_leave_minutes' => max(0, (int) ($schedule->tolerance_early_leave_minutes ?? 0)),
             'source' => 'schedule',
         ];
     }

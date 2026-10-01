@@ -17,6 +17,8 @@ class HrWorkScheduleDay extends Model
         'start_time',
         'end_time',
         'break_minutes',
+        'break_applies',
+        'break_sessions_allowed',
         'tolerance_late_minutes',
         'tolerance_early_leave_minutes',
         'expected_hours',
@@ -26,6 +28,8 @@ class HrWorkScheduleDay extends Model
     protected $casts = [
         'is_working_day' => 'boolean',
         'break_minutes' => 'integer',
+        'break_applies' => 'boolean',
+        'break_sessions_allowed' => 'integer',
         'tolerance_late_minutes' => 'integer',
         'tolerance_early_leave_minutes' => 'integer',
         'expected_hours' => 'decimal:2',
@@ -63,15 +67,23 @@ class HrWorkScheduleDay extends Model
                     ->value('company_id');
             }
 
-            if ($day->is_working_day && blank($day->expected_hours)) {
+            /*
+             * AR18G
+             * Las horas esperadas siempre reflejan la configuración
+             * real del día. No se conserva un valor viejo cuando
+             * cambia entrada, salida o descanso.
+             */
+            if ($day->is_working_day) {
+                $effectiveBreakMinutes = (bool) ($day->break_applies ?? false)
+                    ? max(0, (int) ($day->break_minutes ?? 0))
+                    : 0;
+
                 $day->expected_hours = self::calculateExpectedHours(
                     $day->start_time,
                     $day->end_time,
-                    (int) ($day->break_minutes ?? 0),
+                    $effectiveBreakMinutes,
                 );
-            }
-
-            if (! $day->is_working_day) {
+            } else {
                 $day->expected_hours = 0;
             }
         });

@@ -318,6 +318,10 @@ protected static function bexiaCanEmployeePermission(string $permission): bool
                             ->label('Activo en PDV')
                             ->default(true),
 
+                        Forms\Components\Toggle::make('is_key_personnel')
+                            ->label('Personal Clave')
+                            ->default(false),
+
                         Forms\Components\Toggle::make('is_pos_cashier')
                             ->label('Es cajero PDV')
                             ->helperText('Habilita al empleado como candidato para cobrar en cajas donde tenga permiso.'),
@@ -1025,6 +1029,7 @@ protected static function bexiaCanEmployeePermission(string $permission): bool
                                             Toggle::make('active')
                                                 ->label('Activo')
                                                 ->default(true),
+
                                         ])
                                         ->columns(2),
 

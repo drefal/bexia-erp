@@ -659,13 +659,63 @@
         const a = data?.attendance || {};
         const parts = [];
 
-        if (a.clock_in) parts.push(`Entrada: ${a.clock_in}`);
-        if (a.meal_out) parts.push(`Salida comida: ${a.meal_out}`);
-        if (a.meal_in) parts.push(`Regreso comida: ${a.meal_in}`);
-        if (a.clock_out) parts.push(`Salida: ${a.clock_out}`);
+        if (a.clock_in) {
+            parts.push(`Entrada: ${a.clock_in}`);
+        }
 
-        if (Number(data?.break_minutes || 0) > 0) {
-            parts.push(`Comida programada: ${data.break_minutes} min`);
+        const breaks = Array.isArray(a.breaks)
+            ? a.breaks
+            : [];
+
+        if (breaks.length) {
+            for (const item of breaks) {
+                const number = item.number || '';
+                const out = item.out || '-';
+                const inside = item.in || 'pendiente';
+
+                let label =
+                    `Descanso ${number}: ${out} - ${inside}`;
+
+                if (item.minutes !== null && item.minutes !== undefined) {
+                    label += ` (${item.minutes} min)`;
+                }
+
+                parts.push(label);
+            }
+        } else {
+            if (a.meal_out) {
+                parts.push(`Salida descanso: ${a.meal_out}`);
+            }
+
+            if (a.meal_in) {
+                parts.push(`Regreso descanso: ${a.meal_in}`);
+            }
+        }
+
+        if (a.clock_out) {
+            parts.push(`Salida: ${a.clock_out}`);
+        }
+
+        const allowedMinutes =
+            Number(data?.break_minutes || 0);
+
+        const usedMinutes =
+            Number(data?.break_minutes_used || 0);
+
+        const allowedSessions =
+            Number(data?.break_sessions_allowed || 0);
+
+        const usedSessions =
+            Number(data?.break_sessions_used || 0);
+
+        if (allowedMinutes > 0 || allowedSessions > 0) {
+            parts.push(
+                `Descansos: ${usedSessions}/${allowedSessions}`
+            );
+
+            parts.push(
+                `Tiempo: ${usedMinutes}/${allowedMinutes} min`
+            );
         }
 
         return parts.join(' · ');
