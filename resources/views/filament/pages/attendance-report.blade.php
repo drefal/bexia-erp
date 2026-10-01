@@ -201,7 +201,6 @@
                                         ];
                                 @endphp
 
-                                <td class="px-4 py-3 text-right">{{ (int) $row->overtime_minutes }} min</td>
                                 <td class="px-4 py-3">{{ $this->dateOnly($row->attendance_date) }}</td>
                                 <td class="px-4 py-3">
                                     <a
@@ -231,6 +230,7 @@
                                     <div class="text-xs text-gray-500">Esp. {{ $this->timeOnly($row->expected_end_at) }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-right">{{ number_format((float) $row->worked_hours, 2) }}</td>
+                                <td class="px-4 py-3 text-right">{{ (int) $row->overtime_minutes }} min</td>
                                 <td class="px-3 py-3 text-center whitespace-nowrap">
                                     @if($incident['retardo_label'] !== '—')
                                         <span class="inline-flex rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
