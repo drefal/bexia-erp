@@ -51,7 +51,11 @@ class DaysRelationManager extends RelationManager
                             ->label('Salida')
                             ->seconds(false)
                             ->default(fn () => $this->getOwnerRecord()->end_time)
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_working_day')),
+                            ->visible(
+                                fn (Forms\Get $get): bool =>
+                                    (bool) $get('is_working_day')
+                                    && (string) ($this->getOwnerRecord()->schedule_type ?? '') !== 'open'
+                            ),
 
                         Forms\Components\Toggle::make('break_applies')
                             ->label('Aplica descanso')
@@ -84,7 +88,11 @@ class DaysRelationManager extends RelationManager
                             ->numeric()
                             ->step('0.01')
                             ->helperText('Si se deja vacío, se calcula con entrada, salida y comida.')
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_working_day')),
+                            ->visible(
+                                fn (Forms\Get $get): bool =>
+                                    (bool) $get('is_working_day')
+                                    && (string) ($this->getOwnerRecord()->schedule_type ?? '') !== 'open'
+                            ),
 
                         Forms\Components\TextInput::make('tolerance_late_minutes')
                             ->label('Tolerancia entrada tarde')
@@ -106,7 +114,11 @@ class DaysRelationManager extends RelationManager
                                     (int) ($this->getOwnerRecord()->tolerance_early_leave_minutes ?? 0)
                             )
                             ->suffix('min')
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_working_day')),
+                            ->visible(
+                                fn (Forms\Get $get): bool =>
+                                    (bool) $get('is_working_day')
+                                    && (string) ($this->getOwnerRecord()->schedule_type ?? '') !== 'open'
+                            ),
 
                         Forms\Components\Textarea::make('notes')
                             ->label('Notas')
@@ -169,8 +181,15 @@ class DaysRelationManager extends RelationManager
                     ->label('Agregar día')
                     ->mutateFormDataUsing(function (array $data): array {
                         $schedule = $this->getOwnerRecord();
+                        $isOpenSchedule =
+                            (string) ($schedule->schedule_type ?? '') === 'open';
 
                         $data['company_id'] = $schedule->company_id;
+
+                        if ($isOpenSchedule) {
+                            $data['end_time'] = null;
+                            $data['tolerance_early_leave_minutes'] = 0;
+                        }
 
                         $breakApplies =
                             (bool) ($data['is_working_day'] ?? true)
@@ -216,8 +235,9 @@ class DaysRelationManager extends RelationManager
                             )
                         );
 
-                        $data['expected_hours'] =
-                            HrWorkScheduleDay::calculateExpectedHours(
+                        $data['expected_hours'] = $isOpenSchedule
+                            ? null
+                            : HrWorkScheduleDay::calculateExpectedHours(
                                 $data['start_time'] ?? $schedule->start_time,
                                 $data['end_time'] ?? $schedule->end_time,
                                 $data['break_minutes'],
@@ -233,8 +253,15 @@ class DaysRelationManager extends RelationManager
                 Tables\Actions\EditAction::make()
                     ->mutateFormDataUsing(function (array $data): array {
                         $schedule = $this->getOwnerRecord();
+                        $isOpenSchedule =
+                            (string) ($schedule->schedule_type ?? '') === 'open';
 
                         $data['company_id'] = $schedule->company_id;
+
+                        if ($isOpenSchedule) {
+                            $data['end_time'] = null;
+                            $data['tolerance_early_leave_minutes'] = 0;
+                        }
 
                         $breakApplies =
                             (bool) ($data['is_working_day'] ?? true)
@@ -263,8 +290,9 @@ class DaysRelationManager extends RelationManager
                             (int) ($data['tolerance_early_leave_minutes'] ?? 0)
                         );
 
-                        $data['expected_hours'] =
-                            HrWorkScheduleDay::calculateExpectedHours(
+                        $data['expected_hours'] = $isOpenSchedule
+                            ? null
+                            : HrWorkScheduleDay::calculateExpectedHours(
                                 $data['start_time'] ?? $schedule->start_time,
                                 $data['end_time'] ?? $schedule->end_time,
                                 $data['break_minutes'],
@@ -296,13 +324,18 @@ class DaysRelationManager extends RelationManager
             ->where('is_working_day', true)
             ->values();
 
-        $weekHours = round(
-            $workingDays->sum(
-                fn (HrWorkScheduleDay $day): float =>
-                    (float) ($day->expected_hours ?? 0)
-            ),
-            2
-        );
+        $isOpenSchedule =
+            (string) ($schedule->schedule_type ?? '') === 'open';
+
+        $weekHours = $isOpenSchedule
+            ? 0.0
+            : round(
+                $workingDays->sum(
+                    fn (HrWorkScheduleDay $day): float =>
+                        (float) ($day->expected_hours ?? 0)
+                ),
+                2
+            );
 
         $count = $workingDays->count();
 

@@ -173,6 +173,21 @@
             background: #2563eb;
             color: #fff;
         }
+        /* BEXIA_V5836J2AR26A_MULTI_BREAK_NOTICE */
+        .multi-break-notice {
+            margin: 10px 0 14px;
+            padding: 12px 14px;
+            border: 1px solid #dbeafe;
+            border-radius: 12px;
+            background: #eff6ff;
+            font-size: 17px;
+            line-height: 1.5;
+        }
+
+        .multi-break-notice strong {
+            font-weight: 900;
+        }
+
         .action-button.meal_in {
             background: #16a34a;
         }
@@ -742,6 +757,26 @@
         actionStatus.textContent = attendanceSummary(data);
         actionButtons.innerHTML = '';
 
+        const allowedBreakSessions =
+            Number(data?.break_sessions_allowed || 0);
+
+        const usedBreakSessions =
+            Number(data?.break_sessions_used || 0);
+
+        if (allowedBreakSessions > 1) {
+            const notice = document.createElement('div');
+
+            notice.className = 'multi-break-notice';
+            notice.innerHTML =
+                '<strong>Salidas permitidas:</strong> '
+                + allowedBreakSessions
+                + '<br>'
+                + '<strong>Salidas usadas hoy:</strong> '
+                + usedBreakSessions;
+
+            actionButtons.appendChild(notice);
+        }
+
         for (const item of actions) {
             const button = document.createElement('button');
             button.type = 'button';
@@ -778,8 +813,35 @@
         }
 
         actionCancel.disabled = true;
-        actionStatus.textContent =
-            'Mira hacia la camara. Registrando...';
+
+        if (
+            action === 'meal_out'
+            && Number(
+                pendingPreview?.break_sessions_allowed || 0
+            ) > 1
+        ) {
+            const allowed =
+                Number(
+                    pendingPreview.break_sessions_allowed || 0
+                );
+
+            const used =
+                Number(
+                    pendingPreview.break_sessions_used || 0
+                );
+
+            const next =
+                Math.min(allowed, used + 1);
+
+            actionStatus.textContent =
+                'Registrando salida '
+                + next
+                + ' de '
+                + allowed;
+        } else {
+            actionStatus.textContent =
+                'Mira hacia la camara. Registrando...';
+        }
 
         try {
             if (! navigator.onLine) {
@@ -1045,5 +1107,7 @@
     boot();
 })();
 </script>
+
+
 </body>
 </html>

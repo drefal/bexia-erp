@@ -22,6 +22,7 @@ class EditHrWorkSchedule extends EditRecord
         $record = $this->record;
 
         $this->originalPolicy = [
+            'schedule_type' => $record->getOriginal('schedule_type'),
             'start_time' => $record->getOriginal('start_time'),
             'end_time' => $record->getOriginal('end_time'),
             'break_minutes' => (int) ($record->getOriginal('break_minutes') ?? 0),
@@ -38,6 +39,13 @@ class EditHrWorkSchedule extends EditRecord
                 $record->getOriginal('work_days')
             ),
         ];
+
+        if (($data['schedule_type'] ?? null) === 'open') {
+            $data['end_time'] = null;
+            $data['tolerance_early_leave_minutes'] = 0;
+            $data['hours_per_day'] = 0;
+            $data['hours_per_week'] = 0;
+        }
 
         return $data;
     }
@@ -69,10 +77,15 @@ class EditHrWorkSchedule extends EditRecord
             (int) ($schedule->tolerance_late_minutes ?? 0)
         );
 
-        $newTolOut = max(
-            0,
-            (int) ($schedule->tolerance_early_leave_minutes ?? 0)
-        );
+        $isOpenSchedule =
+            (string) ($schedule->schedule_type ?? '') === 'open';
+
+        $newTolOut = $isOpenSchedule
+            ? 0
+            : max(
+                0,
+                (int) ($schedule->tolerance_early_leave_minutes ?? 0)
+            );
 
         $oldStart = $this->normalizeTime(
             $this->originalPolicy['start_time'] ?? null
@@ -142,7 +155,9 @@ class EditHrWorkSchedule extends EditRecord
                 $day->forceFill([
                     'is_working_day' => true,
                     'start_time' => $schedule->start_time,
-                    'end_time' => $schedule->end_time,
+                    'end_time' => $isOpenSchedule
+                        ? null
+                        : $schedule->end_time,
                     'break_applies' => $breakApplies,
                     'break_sessions_allowed' => $breakApplies
                         ? $newSessions
@@ -174,7 +189,9 @@ class EditHrWorkSchedule extends EditRecord
                 $day->start_time = $schedule->start_time;
             }
 
-            if ($currentEnd === $oldEnd) {
+            if ($isOpenSchedule) {
+                $day->end_time = null;
+            } elseif ($currentEnd === $oldEnd) {
                 $day->end_time = $schedule->end_time;
             }
 
@@ -205,7 +222,9 @@ class EditHrWorkSchedule extends EditRecord
                 $day->tolerance_late_minutes = $newTolIn;
             }
 
-            if (
+            if ($isOpenSchedule) {
+                $day->tolerance_early_leave_minutes = 0;
+            } elseif (
                 (int) ($day->tolerance_early_leave_minutes ?? 0)
                 === $oldTolOut
             ) {
@@ -259,13 +278,18 @@ class EditHrWorkSchedule extends EditRecord
             ->orderBy('day_index')
             ->get();
 
-        $weekHours = round(
-            $workingDays->sum(
-                fn (HrWorkScheduleDay $day): float =>
-                    (float) ($day->expected_hours ?? 0)
-            ),
-            2
-        );
+        $isOpenSchedule =
+            (string) ($schedule->schedule_type ?? '') === 'open';
+
+        $weekHours = $isOpenSchedule
+            ? 0.0
+            : round(
+                $workingDays->sum(
+                    fn (HrWorkScheduleDay $day): float =>
+                        (float) ($day->expected_hours ?? 0)
+                ),
+                2
+            );
 
         $count = $workingDays->count();
 

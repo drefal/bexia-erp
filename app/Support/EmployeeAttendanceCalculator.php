@@ -55,6 +55,14 @@ class EmployeeAttendanceCalculator
         );
         $attendance->expected_hours = round((float) ($schedule['expected_hours'] ?? 0), 2);
 
+        $isOpenSchedule =
+            (string) ($schedule['schedule_type'] ?? '') === 'open';
+
+        if ($isOpenSchedule) {
+            $attendance->expected_end_at = null;
+            $attendance->expected_hours = 0;
+        }
+
         self::calculateWorkedTime($attendance);
 
         $isWorkingDay = (bool) ($schedule['is_working_day'] ?? false);
@@ -133,12 +141,14 @@ class EmployeeAttendanceCalculator
             )
             : 0;
 
-        $attendance->overtime_minutes = max(
-            0,
-            (int) ($attendance->worked_minutes ?? 0)
-                - $expectedMinutes
-                - $unusedBreakMinutes
-        );
+        $attendance->overtime_minutes = $isOpenSchedule
+            ? 0
+            : max(
+                0,
+                (int) ($attendance->worked_minutes ?? 0)
+                    - $expectedMinutes
+                    - $unusedBreakMinutes
+            );
 
         if ($attendance->late_minutes > 0 && $attendance->early_leave_minutes > 0) {
             $attendance->status = 'late_early_leave';

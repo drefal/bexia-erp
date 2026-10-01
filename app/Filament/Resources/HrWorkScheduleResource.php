@@ -67,8 +67,18 @@ class HrWorkScheduleResource extends Resource
                             'fixed' => 'Fijo',
                             'flexible' => 'Flexible',
                             'rotating' => 'Rotativo',
+                            'open' => 'Jornada Abierta',
                         ])
-                        ->default('fixed'),
+                        ->default('fixed')
+                        ->live()
+                        ->afterStateUpdated(function ($state, Forms\Set $set): void {
+                            if ($state === 'open') {
+                                $set('end_time', null);
+                                $set('tolerance_early_leave_minutes', 0);
+                                $set('hours_per_day', '0.00');
+                                $set('hours_per_week', '0.00');
+                            }
+                        }),
 
                     Forms\Components\TimePicker::make('start_time')
                         ->extraAttributes([
@@ -76,6 +86,10 @@ class HrWorkScheduleResource extends Resource
                         ])
                         ->label('Entrada')
                         ->seconds(false)
+                        ->required(
+                            fn (Forms\Get $get): bool =>
+                                $get('schedule_type') === 'open'
+                        )
                         ->live()
                         ->afterStateUpdated(fn (Forms\Get $get, Forms\Set $set) => self::updateCalculatedHours($get, $set)),
 
@@ -85,6 +99,10 @@ class HrWorkScheduleResource extends Resource
                         ])
                         ->label('Salida')
                         ->seconds(false)
+                        ->visible(
+                            fn (Forms\Get $get): bool =>
+                                $get('schedule_type') !== 'open'
+                        )
                         ->live()
                         ->afterStateUpdated(fn (Forms\Get $get, Forms\Set $set) => self::updateCalculatedHours($get, $set)),
 
@@ -136,6 +154,10 @@ class HrWorkScheduleResource extends Resource
                         ->minValue(0)
                         ->default(0)
                         ->suffix('min')
+                        ->visible(
+                            fn (Forms\Get $get): bool =>
+                                $get('schedule_type') !== 'open'
+                        )
                         ->helperText('Valor general que se copia al crear el detalle de cada día.'),
 
                     Forms\Components\CheckboxList::make('work_days')
@@ -200,6 +222,18 @@ class HrWorkScheduleResource extends Resource
      */
     public static function calculateScheduleHours(array $data, ?HrWorkSchedule $record = null): array
     {
+        $scheduleType =
+            $data['schedule_type']
+            ?? $record?->schedule_type
+            ?? 'fixed';
+
+        if ($scheduleType === 'open') {
+            return [
+                'hours_per_day' => 0.0,
+                'hours_per_week' => 0.0,
+            ];
+        }
+
         $startTime = $data['start_time'] ?? $record?->start_time;
         $endTime = $data['end_time'] ?? $record?->end_time;
 
@@ -305,6 +339,7 @@ class HrWorkScheduleResource extends Resource
     protected static function updateCalculatedHours(Forms\Get $get, Forms\Set $set): void
     {
         $hours = self::calculateScheduleHours([
+            'schedule_type' => $get('schedule_type'),
             'start_time' => $get('start_time'),
             'end_time' => $get('end_time'),
             'work_days' => $get('work_days'),
