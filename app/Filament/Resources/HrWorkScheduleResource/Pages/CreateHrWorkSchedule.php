@@ -12,6 +12,7 @@ class CreateHrWorkSchedule extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $data['company_id'] = HrWorkScheduleResource::currentCompanyId();
+        $data = HrWorkScheduleResource::applyCalculatedHours($data);
 
         return $data;
     }
