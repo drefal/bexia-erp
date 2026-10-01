@@ -38,13 +38,15 @@ class ApprovalSummaryWidget extends StatsOverviewWidget
         $unread = 0;
 
         if ($userId > 0 && Schema::hasTable('approval_requests') && Schema::hasTable('approval_request_steps')) {
-            $pendingToApprove = DB::table('approval_request_steps as steps')
-                ->join('approval_requests as requests', 'requests.id', '=', 'steps.approval_request_id')
-                ->where('steps.status', 'pending')
-                ->where('requests.status', 'pending')
-                ->whereColumn('steps.step_order', 'requests.current_step_order')
-                ->where('steps.approver_user_id', $userId)
-                ->count();
+            /*
+             * V5.83.6J2AP3S2K
+             *
+             * Centralizar autorizacion con Mis aprobaciones:
+             * usuario explicito OR rol aprobador.
+             */
+            $pendingToApprove = \App\Filament\Pages\MyPendingApprovals::pendingCountForUser(
+                $userId
+            );
 
             $sentPending = DB::table('approval_requests')
                 ->where('requester_user_id', $userId)
