@@ -369,7 +369,22 @@ try {
             $this->currentPendingStepForUserOrFail((int) $request->id);
         }
 
-$comment = $this->approvalComment($request, 'approved');
+        $isPurchaseRequest = (string) ($request->document_type ?? '') === 'purchase_request';
+
+        if ($isPurchaseRequest) {
+            \Illuminate\Support\Facades\Log::info(
+                'purchase_request.approval.start',
+                [
+                    'purchase_request_id' => (int) ($request->approvable_id ?? 0),
+                    'approval_request_id' => (int) $request->id,
+                    'approval_step_id' => (int) $step->id,
+                    'actor_user_id' => (int) $user->id,
+                    'source' => 'my_pending_approvals',
+                ]
+            );
+        }
+
+        $comment = $this->approvalComment($request, 'approved');
 
         $stepUpdate = [
             'status' => 'approved',
@@ -424,6 +439,20 @@ $comment = $this->approvalComment($request, 'approved');
                 $comment
             );
 
+            if ($isPurchaseRequest) {
+                \Illuminate\Support\Facades\Log::info(
+                    'purchase_request.approval.step_approved',
+                    [
+                        'purchase_request_id' => (int) ($request->approvable_id ?? 0),
+                        'approval_request_id' => (int) $request->id,
+                        'approval_step_id' => (int) $step->id,
+                        'actor_user_id' => (int) $user->id,
+                        'next_step_order' => (int) $nextStep->step_order,
+                        'source' => 'my_pending_approvals',
+                    ]
+                );
+            }
+
             return;
         }
 
@@ -453,6 +482,19 @@ $comment = $this->approvalComment($request, 'approved');
         }
 
         $this->markDocumentApproved($request, $user, $comment);
+
+        if ($isPurchaseRequest) {
+            \Illuminate\Support\Facades\Log::info(
+                'purchase_request.approval.completed',
+                [
+                    'purchase_request_id' => (int) ($request->approvable_id ?? 0),
+                    'approval_request_id' => (int) $request->id,
+                    'approval_step_id' => (int) $step->id,
+                    'actor_user_id' => (int) $user->id,
+                    'source' => 'my_pending_approvals',
+                ]
+            );
+        }
     }
 
     protected function rejectCurrentStep(object $step, object $request, object $user, string $reason): void
@@ -462,7 +504,22 @@ $comment = $this->approvalComment($request, 'approved');
             $this->currentPendingStepForUserOrFail((int) $request->id);
         }
 
-if ($reason === '') {
+        $isPurchaseRequest = (string) ($request->document_type ?? '') === 'purchase_request';
+
+        if ($isPurchaseRequest) {
+            \Illuminate\Support\Facades\Log::info(
+                'purchase_request.approval.reject_start',
+                [
+                    'purchase_request_id' => (int) ($request->approvable_id ?? 0),
+                    'approval_request_id' => (int) $request->id,
+                    'approval_step_id' => (int) $step->id,
+                    'actor_user_id' => (int) $user->id,
+                    'source' => 'my_pending_approvals',
+                ]
+            );
+        }
+
+        if ($reason === '') {
             throw new \RuntimeException('El motivo de rechazo es obligatorio.');
         }
 
@@ -515,6 +572,20 @@ if ($reason === '') {
         }
 
         $this->markDocumentRejected($request, $user, $reason);
+
+        if ($isPurchaseRequest) {
+            \Illuminate\Support\Facades\Log::info(
+                'purchase_request.approval.rejected',
+                [
+                    'purchase_request_id' => (int) ($request->approvable_id ?? 0),
+                    'approval_request_id' => (int) $request->id,
+                    'approval_step_id' => (int) $step->id,
+                    'actor_user_id' => (int) $user->id,
+                    'reason_length' => mb_strlen($reason),
+                    'source' => 'my_pending_approvals',
+                ]
+            );
+        }
     }
 
     protected function markDocumentApproved(object $request, object $user, string $comment): void

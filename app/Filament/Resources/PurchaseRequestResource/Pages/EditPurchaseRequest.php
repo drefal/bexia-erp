@@ -94,7 +94,10 @@ class EditPurchaseRequest extends EditRecord
                 ->label('Aprobar')
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->visible(fn (): bool => in_array($this->record->status, ['draft', 'review'], true) && (! PurchaseRequestResource::hasApplicableApprovalWorkflow($this->record) || $this->record->status === 'review'))
+                ->visible(fn (): bool =>
+                    in_array($this->record->status, ['draft', 'review'], true)
+                    && ! PurchaseRequestResource::hasApplicableApprovalWorkflow($this->record)
+                )
                 ->requiresConfirmation()
                 ->action(function (): void {
                     PurchaseRequestResource::recalculateTotals($this->record);
