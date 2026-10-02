@@ -89,16 +89,16 @@ class TerminationsRelationManager extends RelationManager
 
                                 DatePicker::make('termination_date')
                                     ->label('Fecha de baja')
-                                    ->native(false)
+                                    ->native(true)
                                     ->required(),
 
                                 DatePicker::make('last_working_day')
                                     ->label('Último día laborado')
-                                    ->native(false),
+                                    ->native(true),
 
                                 DatePicker::make('notice_date')
                                     ->label('Fecha de aviso')
-                                    ->native(false),
+                                    ->native(true),
 
                                 Toggle::make('rehire_eligible')
                                     ->label('Recontratable')

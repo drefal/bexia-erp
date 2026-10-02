@@ -167,18 +167,18 @@ class EmployeeTerminationResource extends Resource
                                 DatePicker::make('termination_date')
                                     ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-date bexia-eterm-field-termination-date'])
                                     ->label('Fecha de baja')
-                                    ->native(false)
+                                    ->native(true)
                                     ->required(),
 
                                 DatePicker::make('last_working_day')
                                     ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-date bexia-eterm-field-last-day'])
                                     ->label('Último día laborado')
-                                    ->native(false),
+                                    ->native(true),
 
                                 DatePicker::make('notice_date')
                                     ->extraAttributes(['class' => 'bexia-eterm-field bexia-eterm-field-date bexia-eterm-field-notice-date'])
                                     ->label('Fecha de aviso')
-                                    ->native(false),
+                                    ->native(true),
 
                                 Toggle::make('rehire_eligible')
                                     ->extraAttributes(['class' => 'bexia-eterm-toggle bexia-eterm-toggle-rehire'])
