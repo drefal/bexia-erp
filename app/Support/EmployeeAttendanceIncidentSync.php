@@ -151,6 +151,16 @@ class EmployeeAttendanceIncidentSync
         $status = (string) $attendance->status;
         $codes = [];
 
+        /*
+         * AR34 - Flexible / Solo asistencia.
+         *
+         * En este horario los marcajes son evidencia informativa.
+         * No se generan incidencias automáticas por asistencia.
+         */
+        if (static::isFlexibleAttendance($attendance)) {
+            return [];
+        }
+
         if ($status === 'absence') {
             return ['FALTA'];
         }
@@ -553,6 +563,24 @@ class EmployeeAttendanceIncidentSync
         );
     }
 
+    protected static function isFlexibleAttendance(
+        EmployeeAttendance $attendance
+    ): bool {
+        if (! $attendance->hr_work_schedule_id) {
+            return false;
+        }
+
+        try {
+            return (string) DB::table('hr_work_schedules')
+                ->where('id', $attendance->hr_work_schedule_id)
+                ->value('schedule_type') === 'flexible';
+        } catch (\Throwable $e) {
+            report($e);
+
+            return false;
+        }
+    }
+
     protected static function expectedWorkMinutes(EmployeeAttendance $attendance): int
     {
         if ((float) ($attendance->expected_hours ?? 0) > 0) {
@@ -576,7 +604,11 @@ class EmployeeAttendanceIncidentSync
 
             if (
                 $schedule
-                && (string) ($schedule->schedule_type ?? '') === 'open'
+                && in_array(
+                    (string) ($schedule->schedule_type ?? ''),
+                    ['open', 'flexible'],
+                    true
+                )
             ) {
                 return 0;
             }
@@ -601,7 +633,11 @@ class EmployeeAttendanceIncidentSync
 
             if (
                 $schedule
-                && (string) ($schedule->schedule_type ?? '') === 'open'
+                && in_array(
+                    (string) ($schedule->schedule_type ?? ''),
+                    ['open', 'flexible'],
+                    true
+                )
             ) {
                 return 0;
             }

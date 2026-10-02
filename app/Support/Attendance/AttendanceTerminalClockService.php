@@ -540,6 +540,9 @@ class AttendanceTerminalClockService
             'break_minutes' => $breakMinutesAllowed,
             'break_sessions_allowed' => $breakSessionsAllowed,
             'break_sessions_used' => $mealBreakCount,
+            'unlimited_breaks' =>
+                $breakSessionsAllowed
+                    >= \App\Support\EmployeeWorkScheduleResolver::FLEXIBLE_BREAK_SESSIONS,
             'break_minutes_used' => $breakMinutesUsed,
             'break_minutes_remaining' => max(
                 0,

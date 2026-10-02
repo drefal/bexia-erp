@@ -723,7 +723,10 @@
         const usedSessions =
             Number(data?.break_sessions_used || 0);
 
-        if (allowedMinutes > 0 || allowedSessions > 0) {
+        if (
+            ! Boolean(data?.unlimited_breaks)
+            && (allowedMinutes > 0 || allowedSessions > 0)
+        ) {
             parts.push(
                 `Descansos: ${usedSessions}/${allowedSessions}`
             );
@@ -763,7 +766,10 @@
         const usedBreakSessions =
             Number(data?.break_sessions_used || 0);
 
-        if (allowedBreakSessions > 1) {
+        const unlimitedBreaks =
+            Boolean(data?.unlimited_breaks);
+
+        if (! unlimitedBreaks && allowedBreakSessions > 1) {
             const notice = document.createElement('div');
 
             notice.className = 'multi-break-notice';
@@ -781,7 +787,15 @@
             const button = document.createElement('button');
             button.type = 'button';
             button.className = `action-button ${item.action || ''}`;
-            button.textContent = item.label || item.action || 'Registrar';
+
+            button.textContent =
+                unlimitedBreaks && item.action === 'meal_out'
+                    ? 'Registrar salida intermedia'
+                    : (
+                        unlimitedBreaks && item.action === 'meal_in'
+                            ? 'Registrar regreso'
+                            : (item.label || item.action || 'Registrar')
+                    );
 
             button.addEventListener('click', () => {
                 submitSelectedAction(item.action);
@@ -815,6 +829,14 @@
         actionCancel.disabled = true;
 
         if (
+            action === 'meal_out'
+            && Boolean(
+                pendingPreview?.unlimited_breaks
+            )
+        ) {
+            actionStatus.textContent =
+                'Registrando salida intermedia';
+        } else if (
             action === 'meal_out'
             && Number(
                 pendingPreview?.break_sessions_allowed || 0

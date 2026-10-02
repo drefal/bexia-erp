@@ -58,6 +58,31 @@ class EmployeeAttendanceCalculator
         $isOpenSchedule =
             (string) ($schedule['schedule_type'] ?? '') === 'open';
 
+        $isFlexibleSchedule =
+            (string) ($schedule['schedule_type'] ?? '') === 'flexible';
+
+        if ($isFlexibleSchedule) {
+            $attendance->expected_start_at = null;
+            $attendance->expected_end_at = null;
+            $attendance->expected_hours = 0;
+            $attendance->break_minutes = 0;
+            $attendance->break_sessions_allowed =
+                EmployeeWorkScheduleResolver::FLEXIBLE_BREAK_SESSIONS;
+
+            self::calculateWorkedTime($attendance);
+
+            $attendance->late_minutes = 0;
+            $attendance->early_leave_minutes = 0;
+            $attendance->overtime_minutes = 0;
+
+            $attendance->status =
+                $attendance->clock_in_at || $attendance->clock_out_at
+                    ? 'present'
+                    : 'absence';
+
+            return;
+        }
+
         if ($isOpenSchedule) {
             $attendance->expected_end_at = null;
             $attendance->expected_hours = 0;
