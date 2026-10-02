@@ -24,6 +24,8 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
+            // BEXIA_LIGHT_ONLY_V5_83_6K3
+            ->darkMode(false)
             ->brandName('Bexia ERP')
             ->brandLogo(asset('logo.png'))
             ->brandLogoHeight('3rem')
