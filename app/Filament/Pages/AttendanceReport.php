@@ -268,6 +268,86 @@ class AttendanceReport extends Page
             ->toArray();
     }
 
+    /**
+     * V5.83.6J2AR41
+     *
+     * Indicador operativo de Personal Clave para el dia actual.
+     *
+     * El denominador considera empleados activos marcados como Personal Clave.
+     * El numerador considera a quienes ya registraron entrada hoy.
+     *
+     * Respeta empresa y departamento, pero deliberadamente no usa:
+     * - rango Desde/Hasta
+     * - empleados seleccionados
+     * - estado
+     * - switch Solo Personal Clave
+     */
+    public function keyPersonnelAttendanceSnapshot(): array
+    {
+        $companyId = $this->companyId();
+        $departmentId = filled($this->department_id)
+            ? (int) $this->department_id
+            : null;
+
+        $now = now();
+        $today = $now->toDateString();
+
+        if ($companyId <= 0) {
+            return [
+                'attended' => 0,
+                'total' => 0,
+                'date' => $today,
+                'as_of' => $now->format('h:i A'),
+            ];
+        }
+
+        $employees = DB::table('employees as e')
+            ->where('e.company_id', $companyId)
+            ->where('e.is_key_personnel', true)
+            ->where('e.active', true)
+            ->when(
+                $departmentId,
+                fn ($query, $value) => $query->where(
+                    'e.hr_department_id',
+                    $value
+                )
+            );
+
+        $total = (clone $employees)
+            ->distinct()
+            ->count('e.id');
+
+        $attended = DB::table('employee_attendances as a')
+            ->join(
+                'employees as e',
+                'e.id',
+                '=',
+                'a.employee_id'
+            )
+            ->where('a.company_id', $companyId)
+            ->where('e.company_id', $companyId)
+            ->where('e.is_key_personnel', true)
+            ->where('e.active', true)
+            ->whereDate('a.attendance_date', $today)
+            ->whereNotNull('a.clock_in_at')
+            ->when(
+                $departmentId,
+                fn ($query, $value) => $query->where(
+                    'e.hr_department_id',
+                    $value
+                )
+            )
+            ->distinct()
+            ->count('a.employee_id');
+
+        return [
+            'attended' => (int) $attended,
+            'total' => (int) $total,
+            'date' => $today,
+            'as_of' => $now->format('h:i A'),
+        ];
+    }
+
     public function statusOptions(): array
     {
         return EmployeeAttendance::statusOptions();

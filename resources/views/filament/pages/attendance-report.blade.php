@@ -6,6 +6,9 @@
             $this->employeeSearchOptions();
         $selectedEmployees =
             $this->selectedEmployeeOptions();
+
+        $keyPersonnelSnapshot =
+            $this->keyPersonnelAttendanceSnapshot();
     @endphp
 
     <div
@@ -96,11 +99,39 @@
                             ></span>
                         </span>
 
-                        <span class="min-w-0">
+                        <span
+                            class="min-w-0"
+                            wire:poll.60s
+                        >
                             <span
-                                class="block truncate text-sm font-medium text-gray-800 dark:text-gray-100"
+                                class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
                             >
-                                Solo Personal Clave
+                                <span
+                                    class="font-medium text-gray-800 dark:text-gray-100"
+                                >
+                                    Solo Personal Clave
+                                </span>
+
+                                {{-- BEXIA_V5836J2AR41_KEY_PERSONNEL_ATTENDANCE --}}
+                                <span
+                                    class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                    title="Personal Clave con entrada registrada hoy / total de Personal Clave activos"
+                                >
+                                    {{ $keyPersonnelSnapshot['attended'] }}
+                                    /
+                                    {{ $keyPersonnelSnapshot['total'] }}
+                                </span>
+
+                                <span
+                                    class="text-xs font-normal text-gray-500 dark:text-gray-400"
+                                    title="Fecha y hora de corte"
+                                >
+                                    · Hoy
+                                    {{ \Carbon\Carbon::parse(
+                                        $keyPersonnelSnapshot['date']
+                                    )->format('d/m/Y') }}
+                                    · {{ $keyPersonnelSnapshot['as_of'] }}
+                                </span>
                             </span>
                         </span>
                         </button>
