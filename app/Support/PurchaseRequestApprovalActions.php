@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class PurchaseRequestApprovalActions
@@ -47,6 +48,11 @@ class PurchaseRequestApprovalActions
 
     public static function approve(int $purchaseRequestId, int $userId): string
     {
+        Log::info('purchase_request.approval.start', [
+            'purchase_request_id' => $purchaseRequestId,
+            'actor_user_id' => $userId,
+        ]);
+
         return DB::transaction(function () use ($purchaseRequestId, $userId): string {
             $user = DB::table('users')->where('id', $userId)->first();
 
@@ -121,6 +127,14 @@ class PurchaseRequestApprovalActions
                     $comment
                 );
 
+                Log::info('purchase_request.approval.step_approved', [
+                    'purchase_request_id' => $purchaseRequestId,
+                    'approval_request_id' => $approvalRequest->id,
+                    'approval_step_id' => $approvalStep->id,
+                    'actor_user_id' => $userId,
+                    'next_step_order' => $nextStep->step_order,
+                ]);
+
                 return 'Etapa aprobada. La solicitud continúa en el siguiente nivel.';
             }
 
@@ -153,12 +167,24 @@ class PurchaseRequestApprovalActions
                 $comment
             );
 
+            Log::info('purchase_request.approval.completed', [
+                'purchase_request_id' => $purchaseRequestId,
+                'approval_request_id' => $approvalRequest->id,
+                'approval_step_id' => $approvalStep->id,
+                'actor_user_id' => $userId,
+            ]);
+
             return 'Solicitud de compra aprobada.';
         });
     }
 
     public static function reject(int $purchaseRequestId, int $userId, string $reason): string
     {
+        Log::info('purchase_request.approval.reject_start', [
+            'purchase_request_id' => $purchaseRequestId,
+            'actor_user_id' => $userId,
+        ]);
+
         $reason = trim($reason);
 
         if (mb_strlen($reason) < 5) {
@@ -245,6 +271,14 @@ class PurchaseRequestApprovalActions
                 'purchase_request_rejected',
                 $reason
             );
+
+            Log::info('purchase_request.approval.rejected', [
+                'purchase_request_id' => $purchaseRequestId,
+                'approval_request_id' => $approvalRequest->id,
+                'approval_step_id' => $approvalStep->id,
+                'actor_user_id' => $userId,
+                'reason' => $reason,
+            ]);
 
             return 'Solicitud rechazada. Regresa a borrador.';
         });

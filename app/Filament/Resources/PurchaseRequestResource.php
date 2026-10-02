@@ -458,7 +458,10 @@ public static function form(Form $form): Form
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (PurchaseRequest $record): bool => in_array($record->status, ['draft', 'review'], true) && (! static::hasApplicableApprovalWorkflow($record) || $record->status === 'review'))
+                    ->visible(fn (PurchaseRequest $record): bool =>
+                        in_array($record->status, ['draft', 'review'], true)
+                        && ! static::hasApplicableApprovalWorkflow($record)
+                    )
                     ->action(fn (PurchaseRequest $record): bool => $record->update(['status' => 'approved'])),
 
                 Tables\Actions\Action::make('cancel')
