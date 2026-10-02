@@ -45,7 +45,11 @@ class DaysRelationManager extends RelationManager
                             ->label('Entrada')
                             ->seconds(false)
                             ->default(fn () => $this->getOwnerRecord()->start_time)
-                            ->visible(fn (Forms\Get $get): bool => (bool) $get('is_working_day')),
+                            ->visible(
+                                fn (Forms\Get $get): bool =>
+                                    (bool) $get('is_working_day')
+                                    && (string) ($this->getOwnerRecord()->schedule_type ?? '') !== 'flexible'
+                            ),
 
                         Forms\Components\TimePicker::make('end_time')
                             ->label('Salida')
@@ -54,11 +58,19 @@ class DaysRelationManager extends RelationManager
                             ->visible(
                                 fn (Forms\Get $get): bool =>
                                     (bool) $get('is_working_day')
-                                    && (string) ($this->getOwnerRecord()->schedule_type ?? '') !== 'open'
+                                    && ! in_array(
+                                        (string) ($this->getOwnerRecord()->schedule_type ?? ''),
+                                        ['open', 'flexible'],
+                                        true
+                                    )
                             ),
 
                         Forms\Components\Toggle::make('break_applies')
                             ->label('Aplica descanso')
+                            ->hidden(
+                                fn (): bool =>
+                                    (string) ($this->getOwnerRecord()->schedule_type ?? '') === 'flexible'
+                            )
                             ->default(
                                 fn (): bool =>
                                     (int) ($this->getOwnerRecord()->break_minutes ?? 0) > 0
@@ -91,11 +103,19 @@ class DaysRelationManager extends RelationManager
                             ->visible(
                                 fn (Forms\Get $get): bool =>
                                     (bool) $get('is_working_day')
-                                    && (string) ($this->getOwnerRecord()->schedule_type ?? '') !== 'open'
+                                    && ! in_array(
+                                        (string) ($this->getOwnerRecord()->schedule_type ?? ''),
+                                        ['open', 'flexible'],
+                                        true
+                                    )
                             ),
 
                         Forms\Components\TextInput::make('tolerance_late_minutes')
                             ->label('Tolerancia entrada tarde')
+                            ->hidden(
+                                fn (): bool =>
+                                    (string) ($this->getOwnerRecord()->schedule_type ?? '') === 'flexible'
+                            )
                             ->numeric()
                             ->minValue(0)
                             ->default(
@@ -117,7 +137,11 @@ class DaysRelationManager extends RelationManager
                             ->visible(
                                 fn (Forms\Get $get): bool =>
                                     (bool) $get('is_working_day')
-                                    && (string) ($this->getOwnerRecord()->schedule_type ?? '') !== 'open'
+                                    && ! in_array(
+                                        (string) ($this->getOwnerRecord()->schedule_type ?? ''),
+                                        ['open', 'flexible'],
+                                        true
+                                    )
                             ),
 
                         Forms\Components\Textarea::make('notes')
@@ -327,7 +351,10 @@ class DaysRelationManager extends RelationManager
         $isOpenSchedule =
             (string) ($schedule->schedule_type ?? '') === 'open';
 
-        $weekHours = $isOpenSchedule
+        $isFlexibleSchedule =
+            (string) ($schedule->schedule_type ?? '') === 'flexible';
+
+        $weekHours = ($isOpenSchedule || $isFlexibleSchedule)
             ? 0.0
             : round(
                 $workingDays->sum(

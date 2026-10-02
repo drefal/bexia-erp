@@ -11,6 +11,14 @@ use Illuminate\Support\Facades\Schema;
 
 class EmployeeWorkScheduleResolver
 {
+    /**
+     * Flexible / Solo asistencia.
+     *
+     * Smallint max. Se usa únicamente en el snapshot de asistencia para
+     * permitir salidas intermedias sin imponer un límite operativo normal.
+     */
+    public const FLEXIBLE_BREAK_SESSIONS = 32767;
+
     public static function scheduleForEmployee(Employee $employee, mixed $date): ?array
     {
         $date = CarbonImmutable::parse($date)->startOfDay();
@@ -92,11 +100,20 @@ class EmployeeWorkScheduleResolver
     ): array {
         $isWorkingDay = (bool) $detail->is_working_day;
 
-        $startAt = $isWorkingDay && filled($detail->start_time)
+        $isFlexibleSchedule =
+            (string) ($schedule->schedule_type ?? '') === 'flexible';
+
+        $startAt =
+            ! $isFlexibleSchedule
+            && $isWorkingDay
+            && filled($detail->start_time)
             ? self::combineDateAndTime($date, (string) $detail->start_time)
             : null;
 
-        $endAt = $isWorkingDay && filled($detail->end_time)
+        $endAt =
+            ! $isFlexibleSchedule
+            && $isWorkingDay
+            && filled($detail->end_time)
             ? self::combineDateAndTime($date, (string) $detail->end_time)
             : null;
 
@@ -106,25 +123,44 @@ class EmployeeWorkScheduleResolver
 
         $breakApplies =
             $isWorkingDay
-            && (bool) ($detail->break_applies ?? false);
+            && (
+                $isFlexibleSchedule
+                || (bool) ($detail->break_applies ?? false)
+            );
 
-        $breakMinutes = $breakApplies
-            ? max(0, (int) ($schedule->break_minutes ?? 0))
-            : 0;
+        $breakMinutes = $isFlexibleSchedule
+            ? 0
+            : (
+                $breakApplies
+                    ? max(0, (int) ($schedule->break_minutes ?? 0))
+                    : 0
+            );
 
-        $breakSessionsAllowed = $breakApplies
-            ? max(0, (int) ($detail->break_sessions_allowed ?? 0))
-            : 0;
+        $breakSessionsAllowed =
+            $isFlexibleSchedule && $isWorkingDay
+                ? self::FLEXIBLE_BREAK_SESSIONS
+                : (
+                    $breakApplies
+                        ? max(
+                            0,
+                            (int) ($detail->break_sessions_allowed ?? 0)
+                        )
+                        : 0
+                );
 
-        $expectedHours = $isWorkingDay
-            ? (float) (
-                HrWorkScheduleDay::calculateExpectedHours(
-                    $detail->start_time,
-                    $detail->end_time,
-                    $breakMinutes,
-                ) ?? 0
-            )
-            : 0.0;
+        $expectedHours = $isFlexibleSchedule
+            ? 0.0
+            : (
+                $isWorkingDay
+                    ? (float) (
+                        HrWorkScheduleDay::calculateExpectedHours(
+                            $detail->start_time,
+                            $detail->end_time,
+                            $breakMinutes,
+                        ) ?? 0
+                    )
+                    : 0.0
+            );
 
         return [
             'employee_id' => $employee->id,
@@ -142,8 +178,12 @@ class EmployeeWorkScheduleResolver
             'break_minutes' => $breakMinutes,
             'break_sessions_allowed' => $breakSessionsAllowed,
             'expected_hours' => $expectedHours,
-            'tolerance_late_minutes' => (int) ($detail->tolerance_late_minutes ?? $schedule->tolerance_late_minutes ?? 0),
-            'tolerance_early_leave_minutes' => (int) ($detail->tolerance_early_leave_minutes ?? $schedule->tolerance_early_leave_minutes ?? 0),
+            'tolerance_late_minutes' => $isFlexibleSchedule
+                ? 0
+                : (int) ($detail->tolerance_late_minutes ?? $schedule->tolerance_late_minutes ?? 0),
+            'tolerance_early_leave_minutes' => $isFlexibleSchedule
+                ? 0
+                : (int) ($detail->tolerance_early_leave_minutes ?? $schedule->tolerance_early_leave_minutes ?? 0),
             'source' => 'detail',
         ];
     }
@@ -157,11 +197,20 @@ class EmployeeWorkScheduleResolver
         $workDays = is_array($schedule->work_days) ? $schedule->work_days : [];
         $isWorkingDay = in_array($dayKey, $workDays, true);
 
-        $startAt = $isWorkingDay && filled($schedule->start_time)
+        $isFlexibleSchedule =
+            (string) ($schedule->schedule_type ?? '') === 'flexible';
+
+        $startAt =
+            ! $isFlexibleSchedule
+            && $isWorkingDay
+            && filled($schedule->start_time)
             ? self::combineDateAndTime($date, (string) $schedule->start_time)
             : null;
 
-        $endAt = $isWorkingDay && filled($schedule->end_time)
+        $endAt =
+            ! $isFlexibleSchedule
+            && $isWorkingDay
+            && filled($schedule->end_time)
             ? self::combineDateAndTime($date, (string) $schedule->end_time)
             : null;
 
@@ -183,17 +232,41 @@ class EmployeeWorkScheduleResolver
             'end_time' => $schedule->end_time,
             'break_applies' =>
                 $isWorkingDay
-                && (int) ($schedule->break_minutes ?? 0) > 0
-                && (int) ($schedule->break_sessions_allowed ?? 0) > 0,
-            'break_minutes' => $isWorkingDay
-                ? max(0, (int) ($schedule->break_minutes ?? 0))
-                : 0,
-            'break_sessions_allowed' => $isWorkingDay
-                ? max(0, (int) ($schedule->break_sessions_allowed ?? 0))
-                : 0,
-            'expected_hours' => $isWorkingDay ? (float) ($schedule->hours_per_day ?? 0) : 0.0,
-            'tolerance_late_minutes' => max(0, (int) ($schedule->tolerance_late_minutes ?? 0)),
-            'tolerance_early_leave_minutes' => max(0, (int) ($schedule->tolerance_early_leave_minutes ?? 0)),
+                && (
+                    $isFlexibleSchedule
+                    || (
+                        (int) ($schedule->break_minutes ?? 0) > 0
+                        && (int) ($schedule->break_sessions_allowed ?? 0) > 0
+                    )
+                ),
+            'break_minutes' => $isFlexibleSchedule
+                ? 0
+                : (
+                    $isWorkingDay
+                        ? max(0, (int) ($schedule->break_minutes ?? 0))
+                        : 0
+                ),
+            'break_sessions_allowed' =>
+                $isFlexibleSchedule && $isWorkingDay
+                    ? self::FLEXIBLE_BREAK_SESSIONS
+                    : (
+                        $isWorkingDay
+                            ? max(0, (int) ($schedule->break_sessions_allowed ?? 0))
+                            : 0
+                    ),
+            'expected_hours' => $isFlexibleSchedule
+                ? 0.0
+                : (
+                    $isWorkingDay
+                        ? (float) ($schedule->hours_per_day ?? 0)
+                        : 0.0
+                ),
+            'tolerance_late_minutes' => $isFlexibleSchedule
+                ? 0
+                : max(0, (int) ($schedule->tolerance_late_minutes ?? 0)),
+            'tolerance_early_leave_minutes' => $isFlexibleSchedule
+                ? 0
+                : max(0, (int) ($schedule->tolerance_early_leave_minutes ?? 0)),
             'source' => 'schedule',
         ];
     }

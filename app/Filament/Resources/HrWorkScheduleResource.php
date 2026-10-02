@@ -65,13 +65,26 @@ class HrWorkScheduleResource extends Resource
                         ->required()
                         ->options([
                             'fixed' => 'Fijo',
-                            'flexible' => 'Flexible',
+                            'flexible' => 'Flexible / Solo asistencia',
                             'rotating' => 'Rotativo',
                             'open' => 'Jornada Abierta',
                         ])
                         ->default('fixed')
                         ->live()
                         ->afterStateUpdated(function ($state, Forms\Set $set): void {
+                            if ($state === 'flexible') {
+                                $set('start_time', null);
+                                $set('end_time', null);
+                                $set('break_minutes', 0);
+                                $set('break_sessions_allowed', 0);
+                                $set('tolerance_late_minutes', 0);
+                                $set('tolerance_early_leave_minutes', 0);
+                                $set('hours_per_day', '0.00');
+                                $set('hours_per_week', '0.00');
+
+                                return;
+                            }
+
                             if ($state === 'open') {
                                 $set('end_time', null);
                                 $set('tolerance_early_leave_minutes', 0);
@@ -86,6 +99,10 @@ class HrWorkScheduleResource extends Resource
                         ])
                         ->label('Entrada')
                         ->seconds(false)
+                        ->visible(
+                            fn (Forms\Get $get): bool =>
+                                $get('schedule_type') !== 'flexible'
+                        )
                         ->required(
                             fn (Forms\Get $get): bool =>
                                 $get('schedule_type') === 'open'
@@ -101,7 +118,11 @@ class HrWorkScheduleResource extends Resource
                         ->seconds(false)
                         ->visible(
                             fn (Forms\Get $get): bool =>
-                                $get('schedule_type') !== 'open'
+                                ! in_array(
+                                    $get('schedule_type'),
+                                    ['open', 'flexible'],
+                                    true
+                                )
                         )
                         ->live()
                         ->afterStateUpdated(fn (Forms\Get $get, Forms\Set $set) => self::updateCalculatedHours($get, $set)),
@@ -111,6 +132,10 @@ class HrWorkScheduleResource extends Resource
                             'class' => 'bexia-hrws-field bexia-hrws-break-minutes-field bexia-hrws-compact-field',
                         ])
                         ->label('Minutos de descanso por jornada')
+                        ->visible(
+                            fn (Forms\Get $get): bool =>
+                                $get('schedule_type') !== 'flexible'
+                        )
                         ->numeric()
                         ->integer()
                         ->minValue(0)
@@ -125,6 +150,10 @@ class HrWorkScheduleResource extends Resource
                             'class' => 'bexia-hrws-field bexia-hrws-break-sessions-field bexia-hrws-compact-field',
                         ])
                         ->label('Salidas a descanso por defecto')
+                        ->visible(
+                            fn (Forms\Get $get): bool =>
+                                $get('schedule_type') !== 'flexible'
+                        )
                         ->numeric()
                         ->integer()
                         ->minValue(0)
@@ -137,6 +166,10 @@ class HrWorkScheduleResource extends Resource
                             'class' => 'bexia-hrws-field bexia-hrws-tolerance-late-field bexia-hrws-compact-field',
                         ])
                         ->label('Tolerancia de entrada')
+                        ->visible(
+                            fn (Forms\Get $get): bool =>
+                                $get('schedule_type') !== 'flexible'
+                        )
                         ->numeric()
                         ->integer()
                         ->minValue(0)
@@ -156,7 +189,11 @@ class HrWorkScheduleResource extends Resource
                         ->suffix('min')
                         ->visible(
                             fn (Forms\Get $get): bool =>
-                                $get('schedule_type') !== 'open'
+                                ! in_array(
+                                    $get('schedule_type'),
+                                    ['open', 'flexible'],
+                                    true
+                                )
                         )
                         ->helperText('Valor general que se copia al crear el detalle de cada día.'),
 
@@ -227,7 +264,7 @@ class HrWorkScheduleResource extends Resource
             ?? $record?->schedule_type
             ?? 'fixed';
 
-        if ($scheduleType === 'open') {
+        if (in_array($scheduleType, ['open', 'flexible'], true)) {
             return [
                 'hours_per_day' => 0.0,
                 'hours_per_week' => 0.0,

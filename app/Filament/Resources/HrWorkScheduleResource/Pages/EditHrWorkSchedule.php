@@ -40,7 +40,16 @@ class EditHrWorkSchedule extends EditRecord
             ),
         ];
 
-        if (($data['schedule_type'] ?? null) === 'open') {
+        if (($data['schedule_type'] ?? null) === 'flexible') {
+            $data['start_time'] = null;
+            $data['end_time'] = null;
+            $data['break_minutes'] = 0;
+            $data['break_sessions_allowed'] = 0;
+            $data['tolerance_late_minutes'] = 0;
+            $data['tolerance_early_leave_minutes'] = 0;
+            $data['hours_per_day'] = 0;
+            $data['hours_per_week'] = 0;
+        } elseif (($data['schedule_type'] ?? null) === 'open') {
             $data['end_time'] = null;
             $data['tolerance_early_leave_minutes'] = 0;
             $data['hours_per_day'] = 0;
@@ -80,7 +89,16 @@ class EditHrWorkSchedule extends EditRecord
         $isOpenSchedule =
             (string) ($schedule->schedule_type ?? '') === 'open';
 
-        $newTolOut = $isOpenSchedule
+        $isFlexibleSchedule =
+            (string) ($schedule->schedule_type ?? '') === 'flexible';
+
+        if ($isFlexibleSchedule) {
+            $newBreakMinutes = 0;
+            $newSessions = 0;
+            $newTolIn = 0;
+        }
+
+        $newTolOut = ($isOpenSchedule || $isFlexibleSchedule)
             ? 0
             : max(
                 0,
@@ -149,13 +167,16 @@ class EditHrWorkSchedule extends EditRecord
              */
             if (! $selectedBefore || ! (bool) $day->is_working_day) {
                 $breakApplies =
-                    $newBreakMinutes > 0
+                    ! $isFlexibleSchedule
+                    && $newBreakMinutes > 0
                     && $newSessions > 0;
 
                 $day->forceFill([
                     'is_working_day' => true,
-                    'start_time' => $schedule->start_time,
-                    'end_time' => $isOpenSchedule
+                    'start_time' => $isFlexibleSchedule
+                        ? null
+                        : $schedule->start_time,
+                    'end_time' => ($isOpenSchedule || $isFlexibleSchedule)
                         ? null
                         : $schedule->end_time,
                     'break_applies' => $breakApplies,
@@ -165,8 +186,13 @@ class EditHrWorkSchedule extends EditRecord
                     'break_minutes' => $breakApplies
                         ? $newBreakMinutes
                         : 0,
-                    'tolerance_late_minutes' => $newTolIn,
+                    'tolerance_late_minutes' => $isFlexibleSchedule
+                        ? 0
+                        : $newTolIn,
                     'tolerance_early_leave_minutes' => $newTolOut,
+                    'expected_hours' => $isFlexibleSchedule
+                        ? null
+                        : $day->expected_hours,
                 ])->save();
 
                 continue;
@@ -185,11 +211,13 @@ class EditHrWorkSchedule extends EditRecord
                 $day->end_time
             );
 
-            if ($currentStart === $oldStart) {
+            if ($isFlexibleSchedule) {
+                $day->start_time = null;
+            } elseif ($currentStart === $oldStart) {
                 $day->start_time = $schedule->start_time;
             }
 
-            if ($isOpenSchedule) {
+            if ($isOpenSchedule || $isFlexibleSchedule) {
                 $day->end_time = null;
             } elseif ($currentEnd === $oldEnd) {
                 $day->end_time = $schedule->end_time;
@@ -201,7 +229,11 @@ class EditHrWorkSchedule extends EditRecord
                 && (int) ($day->break_sessions_allowed ?? 0)
                     === $oldSessions;
 
-            if ($dayBreakMatchesOldDefault) {
+            if ($isFlexibleSchedule) {
+                $day->break_applies = false;
+                $day->break_minutes = 0;
+                $day->break_sessions_allowed = 0;
+            } elseif ($dayBreakMatchesOldDefault) {
                 $breakApplies =
                     $newBreakMinutes > 0
                     && $newSessions > 0;
@@ -215,14 +247,17 @@ class EditHrWorkSchedule extends EditRecord
                     : 0;
             }
 
-            if (
+            if ($isFlexibleSchedule) {
+                $day->tolerance_late_minutes = 0;
+                $day->expected_hours = null;
+            } elseif (
                 (int) ($day->tolerance_late_minutes ?? 0)
                 === $oldTolIn
             ) {
                 $day->tolerance_late_minutes = $newTolIn;
             }
 
-            if ($isOpenSchedule) {
+            if ($isOpenSchedule || $isFlexibleSchedule) {
                 $day->tolerance_early_leave_minutes = 0;
             } elseif (
                 (int) ($day->tolerance_early_leave_minutes ?? 0)
@@ -281,7 +316,10 @@ class EditHrWorkSchedule extends EditRecord
         $isOpenSchedule =
             (string) ($schedule->schedule_type ?? '') === 'open';
 
-        $weekHours = $isOpenSchedule
+        $isFlexibleSchedule =
+            (string) ($schedule->schedule_type ?? '') === 'flexible';
+
+        $weekHours = ($isOpenSchedule || $isFlexibleSchedule)
             ? 0.0
             : round(
                 $workingDays->sum(
