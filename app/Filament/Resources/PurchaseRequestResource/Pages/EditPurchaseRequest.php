@@ -23,10 +23,16 @@ class EditPurchaseRequest extends EditRecord
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
                 ->requiresConfirmation()
-                ->modalHeading('Aprobar solicitud de compra')
-                ->modalDescription('La solicitud será aprobada. Se notificará al solicitante.')
+                ->modalHeading('Confirmar aprobación')
+                ->modalDescription(fn (): string =>
+                    '¿Deseas aprobar la solicitud '
+                    . (string) ($this->record->number ?? ('#' . $this->record->getKey()))
+                    . '? Se notificará al solicitante.'
+                )
+                ->modalSubmitActionLabel('Aprobar solicitud')
+                ->modalCancelActionLabel('Cancelar')
                 ->visible(fn (): bool => $this->canApproveCurrentPurchaseRequest())
-                ->url(fn (): string => route('purchases.requests.approve', ['purchaseRequest' => $this->record->getKey()])),
+                ->action(fn (): mixed => $this->approveCurrentPurchaseRequest()),
 
 
             \Filament\Actions\Action::make('reject_pending_purchase_request')
@@ -35,7 +41,13 @@ class EditPurchaseRequest extends EditRecord
                 ->color('danger')
                 ->requiresConfirmation()
                 ->modalHeading('Rechazar solicitud de compra')
-                ->modalDescription('La solicitud regresará a borrador y se notificará el motivo al solicitante.')
+                ->modalDescription(fn (): string =>
+                    'Indica el motivo para rechazar la solicitud '
+                    . (string) ($this->record->number ?? ('#' . $this->record->getKey()))
+                    . '. La solicitud regresará a borrador.'
+                )
+                ->modalSubmitActionLabel('Rechazar solicitud')
+                ->modalCancelActionLabel('Cancelar')
                 ->form([
                     \Filament\Forms\Components\Textarea::make('reason')
                         ->label('Motivo de rechazo')
