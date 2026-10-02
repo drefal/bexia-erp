@@ -158,6 +158,7 @@
                         <th style="text-align:right;padding:10px;border-bottom:1px solid #e5e7eb;">Costo s/IVA</th>
                         <th style="text-align:right;padding:10px;border-bottom:1px solid #e5e7eb;">IVA</th>
                         <th style="text-align:right;padding:10px;border-bottom:1px solid #e5e7eb;">Costo c/IVA</th>
+                        <th style="text-align:right;padding:10px;border-bottom:1px solid #e5e7eb;">Importe s/IVA</th>
                         <th style="text-align:right;padding:10px;border-bottom:1px solid #e5e7eb;">Importe</th>
                         <th style="text-align:right;padding:10px;border-bottom:1px solid #e5e7eb;">Acciones</th>
                     </tr>
@@ -173,6 +174,7 @@
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;text-align:right;">$ {{ number_format((float) $line->unit_cost_without_tax, 4) }}</td>
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;text-align:right;">{{ number_format((float) $line->tax_rate, 2) }}%</td>
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;text-align:right;">$ {{ number_format((float) $line->unit_cost_with_tax, 4) }}</td>
+                            <td style="padding:10px;border-bottom:1px solid #f1f5f9;text-align:right;">$ {{ number_format((float) ($line->line_total_without_tax ?? 0), 2) }}</td>
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:800;">$ {{ number_format((float) $line->line_total_with_tax, 2) }}</td>
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap;">
                                 <button type="button" wire:click="editLine({{ $line->id }})" style="color:#2563eb;font-weight:700;">Editar</button>
