@@ -20,6 +20,8 @@ class SystemPanelProvider extends PanelProvider
         return $panel
             ->id('system')
             ->path('system')
+            // BEXIA_LIGHT_ONLY_V5_83_6K3
+            ->darkMode(false)
             ->brandName('Bexia ERP | Sistema')
             ->login()
 
