@@ -12333,6 +12333,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .toLowerCase()
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\p{L}\p{N}]+/gu, ' ')
             .replace(/\s+/g, ' ')
             .trim();
     }
@@ -16700,6 +16701,8 @@ document.addEventListener('DOMContentLoaded', function () {
             .toLowerCase()
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\p{L}\p{N}]+/gu, ' ')
+            .replace(/\s+/g, ' ')
             .trim();
     }
 
@@ -16717,7 +16720,11 @@ document.addEventListener('DOMContentLoaded', function () {
             product.dataset.productCode || ''
         ].join(' '));
 
-        return haystack.includes(query);
+        const tokens = query.split(' ').filter(Boolean);
+
+        return tokens.every(function (token) {
+            return haystack.includes(token);
+        });
     }
 
     function restoreCategoryView() {
