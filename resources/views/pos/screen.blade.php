@@ -2610,23 +2610,86 @@ document.addEventListener('DOMContentLoaded', function () {
         return { subtotal: subtotal, tax: tax, total: total };
     }
 
-    function discountAmount(grossTotal) {
-        if (!cartDiscount || grossTotal <= 0) {
+    /*
+     * CIBER3L3_RENTAL_DISCOUNTABLE_TOTALS
+     *
+     * Las líneas originadas por Renta de equipos forman parte
+     * del total del ticket, pero nunca de la base descontable.
+     */
+    function rentalDiscountableGrossTotals() {
+        let subtotal = 0;
+        let tax = 0;
+        let total = 0;
+
+        cart.forEach(function (item) {
+            if (isComputerRentalLockedLine(item)) {
+                return;
+            }
+
+            const lineTotal =
+                Number(item.qty || 0)
+                * Number(item.price || 0);
+
+            const taxRate =
+                Number(item.taxRate || 0);
+
+            let lineSubtotal = lineTotal;
+            let lineTax = 0;
+
+            if (taxRate > 0) {
+                lineSubtotal =
+                    lineTotal / (1 + taxRate);
+
+                lineTax =
+                    lineTotal - lineSubtotal;
+            }
+
+            subtotal += lineSubtotal;
+            tax += lineTax;
+            total += lineTotal;
+        });
+
+        return {
+            subtotal: subtotal,
+            tax: tax,
+            total: total
+        };
+    }
+
+    function discountAmount(discountableGrossTotal) {
+        if (
+            !cartDiscount
+            || discountableGrossTotal <= 0
+        ) {
             return 0;
         }
 
-        const type = cartDiscount.type || 'amount';
-        const value = Number(cartDiscount.value || 0);
+        const type =
+            cartDiscount.type || 'amount';
 
-        if (!Number.isFinite(value) || value <= 0) {
+        const value =
+            Number(cartDiscount.value || 0);
+
+        if (
+            !Number.isFinite(value)
+            || value <= 0
+        ) {
             return 0;
         }
 
-        const amount = type === 'percent'
-            ? grossTotal * (value / 100)
-            : value;
+        const amount =
+            type === 'percent'
+                ? discountableGrossTotal
+                    * (value / 100)
+                : value;
 
-        return Math.max(0, Math.min(amount, grossTotal));
+        return Math.max(
+            0,
+            Math.min(
+                amount,
+                discountableGrossTotal
+            )
+        );
     }
 
     function renderMetaSummary() {
@@ -2684,12 +2747,67 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function totals() {
         const gross = grossTotals();
-        const discountValue = discountAmount(gross.total);
-        const factor = gross.total > 0 ? Math.max(0, (gross.total - discountValue) / gross.total) : 1;
 
-        const subtotal = gross.subtotal * factor;
-        const tax = gross.tax * factor;
-        const total = Math.max(0, gross.total - discountValue);
+        /*
+         * CIBER3L3_RENTAL_DISCOUNT_EXCLUSION
+         *
+         * Renta + consumos protegidos permanecen al 100%.
+         * El descuento se distribuye únicamente sobre líneas normales.
+         */
+        const discountable =
+            rentalDiscountableGrossTotals();
+
+        const discountValue =
+            discountAmount(
+                discountable.total
+            );
+
+        const protectedSubtotal =
+            Math.max(
+                0,
+                gross.subtotal
+                - discountable.subtotal
+            );
+
+        const protectedTax =
+            Math.max(
+                0,
+                gross.tax
+                - discountable.tax
+            );
+
+        const discountableFactor =
+            discountable.total > 0
+                ? Math.max(
+                    0,
+                    (
+                        discountable.total
+                        - discountValue
+                    )
+                    / discountable.total
+                )
+                : 1;
+
+        const subtotal =
+            protectedSubtotal
+            + (
+                discountable.subtotal
+                * discountableFactor
+            );
+
+        const tax =
+            protectedTax
+            + (
+                discountable.tax
+                * discountableFactor
+            );
+
+        const total =
+            Math.max(
+                0,
+                gross.total
+                - discountValue
+            );
 
         if (subtotalEl) subtotalEl.textContent = money(subtotal);
 
@@ -3345,9 +3463,22 @@ document.addEventListener('DOMContentLoaded', function () {
         },
 
         getTotal: function () {
-            const gross = grossTotals();
-            const discountValue = discountAmount(gross.total);
-            return Math.max(0, gross.total - discountValue);
+            const gross =
+                grossTotals();
+
+            const discountable =
+                rentalDiscountableGrossTotals();
+
+            const discountValue =
+                discountAmount(
+                    discountable.total
+                );
+
+            return Math.max(
+                0,
+                gross.total
+                - discountValue
+            );
         },
         getNote: function () {
             return cartNote || '';
@@ -3512,6 +3643,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 const newStock = Number(updated.available_quantity ?? updated.stock_quantity ?? item.stock ?? 0);
                 const rawTax = Number(updated.sale_tax_rate ?? item.taxRate ?? 0.16);
                 const taxRate = rawTax > 1 ? rawTax / 100 : rawTax;
+
+                /*
+                 * CIBER3L3_RENTAL_PERMANENT_PRICE_LOCK
+                 *
+                 * Lista de precios, cliente o refresh de catálogo nunca
+                 * pueden modificar precio/impuesto de una línea de renta.
+                 */
+                if (isComputerRentalLockedLine(item)) {
+                    item.stock = newStock;
+
+                    cart.set(key, item);
+
+                    return;
+                }
 
                 const pendingPriceLocked = Boolean(item.pending_price_locked_until_price_list_change)
                     && !Boolean(window.BEXIA_POS_PRICE_LIST_CHANGED_AFTER_PENDING_LOAD);
@@ -7073,6 +7218,33 @@ async function createPendingTicket() {
                         },
                         body: JSON.stringify({
                             payments: payments,
+
+                            /*
+                             * CIBER3L7_LEGACY_PAYMENT_ECONOMIC_CONTEXT
+                             *
+                             * Este handler viejo sigue activo en algunos
+                             * caminos del modal. Debe enviar exactamente
+                             * el mismo contexto económico que el handler
+                             * moderno.
+                             */
+                            discount:
+                                api
+                                && typeof api.getDiscount === 'function'
+                                    ? api.getDiscount()
+                                    : null,
+
+                            items:
+                                api
+                                && typeof api.getItems === 'function'
+                                    ? api.getItems()
+                                    : [],
+
+                            total:
+                                api
+                                && typeof api.getTotal === 'function'
+                                    ? api.getTotal()
+                                    : total,
+
                             /* BEXIA_V5836G5H4B_LEGACY_PAYING_SESSION */
                             paying_session_id: sessionId(),
                         }),
