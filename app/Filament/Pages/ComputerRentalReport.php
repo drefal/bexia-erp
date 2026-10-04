@@ -65,9 +65,21 @@ class ComputerRentalReport extends Page
      * - pertenencia real al tenant
      * - computer_rental.view
      */
+    /**
+     * CIBER3R7_REPORT_PERMISSION
+     *
+     * La operación de Renta sigue usando computer_rental.view/operate.
+     * El reporte requiere permiso independiente.
+     */
     public static function canAccess(): bool
     {
-        return ComputerRentalControl::canAccess();
+        if (! ComputerRentalControl::canAccess()) {
+            return false;
+        }
+
+        return auth()->user()?->can(
+            'computer_rental.report'
+        ) ?? false;
     }
 
     public static function shouldRegisterNavigation():
