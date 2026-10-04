@@ -7873,6 +7873,68 @@ return response()->json([
 
         }
 
+        /*
+         * CIBER3L7_DIRECT_RENTAL_PAYMENT_SYNC
+         *
+         * El cobro ya terminó y la transacción fue confirmada.
+         * Si el ticket pertenece a Renta de equipos, sincronizamos
+         * inmediatamente la sesión; el polling del panel queda como
+         * respaldo.
+         */
+        try {
+            $v5836CiberPaidOrder =
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_orders'
+                )
+                    ->where(
+                        'id',
+                        $order
+                    )
+                    ->first();
+
+            if (
+                $v5836CiberPaidOrder
+                && (
+                    (string) (
+                        $v5836CiberPaidOrder->status
+                        ?? ''
+                    ) === 'paid'
+                    || ! empty(
+                        $v5836CiberPaidOrder->paid_at
+                    )
+                )
+                && (string) (
+                    $v5836CiberPaidOrder->source_type
+                    ?? ''
+                ) === 'computer_rental'
+                && (int) (
+                    $v5836CiberPaidOrder->company_id
+                    ?? 0
+                ) > 0
+            ) {
+                app(
+                    \App\Support\ComputerRental\ComputerRentalPosStatusService::class
+                )->syncCompany(
+                    (int)
+                        $v5836CiberPaidOrder
+                            ->company_id
+                );
+            }
+        } catch (\Throwable $e) {
+            /*
+             * El cobro ya está confirmado.
+             * Una falla secundaria de sincronización no debe
+             * convertir un pago válido en error HTTP.
+             */
+            \Illuminate\Support\Facades\Log::warning(
+                'No se pudo sincronizar renta después del cobro PDV.',
+                [
+                    'pos_order_id' => $order,
+                    'error' => $e->getMessage(),
+                ]
+            );
+        }
+
         return response()->json([
             'ok' => true,
             'message' =>
@@ -8338,11 +8400,114 @@ return response()->json([
 
             /*
              * CIBER3J1B_RESYNC_RENTAL_LOCK
+             *
+             * CIBER3L3_BACKEND_PRESERVE_RENTAL_LOCK
+             *
+             * El cliente no tiene autoridad para retirar el lock.
+             * Si la línea original estaba protegida, continúa protegida
+             * aunque rental_locked llegue false o sea manipulado.
              */
+            $v5836CiberOriginalRentalLocked = false;
+
+            $v5836CiberOriginalLineId =
+                (int) (
+                    $item['pos_order_line_id']
+                    ?? 0
+                );
+
+            if ($v5836CiberOriginalLineId > 0) {
+                $v5836CiberOriginalLine =
+                    \Illuminate\Support\Facades\DB::table(
+                        'pos_order_lines'
+                    )
+                        ->where(
+                            'pos_order_id',
+                            $orderId
+                        )
+                        ->where(
+                            'id',
+                            $v5836CiberOriginalLineId
+                        )
+                        ->first();
+
+                if ($v5836CiberOriginalLine) {
+                    $v5836CiberOriginalRentalLocked =
+                        (bool) (
+                            $v5836CiberOriginalLine->locked
+                            ?? false
+                        );
+
+                    if (
+                        ! $v5836CiberOriginalRentalLocked
+                        && ! empty(
+                            $v5836CiberOriginalLine->metadata
+                        )
+                    ) {
+                        $v5836CiberOriginalMeta =
+                            json_decode(
+                                (string)
+                                    $v5836CiberOriginalLine
+                                        ->metadata,
+                                true
+                            );
+
+                        $v5836CiberOriginalRaw =
+                            is_array(
+                                $v5836CiberOriginalMeta['raw']
+                                ?? null
+                            )
+                                ? $v5836CiberOriginalMeta['raw']
+                                : [];
+
+                        $v5836CiberOriginalRentalLocked =
+                            (string) (
+                                $v5836CiberOriginalRaw['source']
+                                ?? ''
+                            ) === 'computer_rental'
+                            && in_array(
+                                (string) (
+                                    $v5836CiberOriginalRaw[
+                                        'source_type'
+                                    ]
+                                    ?? ''
+                                ),
+                                [
+                                    'rental',
+                                    'consumption',
+                                    'rental_resend',
+                                    'consumption_resend',
+                                ],
+                                true
+                            );
+                    }
+                }
+            }
+
             $v5836CiberSubmittedRentalLocked =
-                filter_var(
-                    $item['rental_locked'] ?? false,
+                $v5836CiberOriginalRentalLocked
+                || filter_var(
+                    $item['rental_locked']
+                        ?? false,
                     FILTER_VALIDATE_BOOLEAN
+                )
+                || (
+                    (string) (
+                        $item['source']
+                        ?? ''
+                    ) === 'computer_rental'
+                    && in_array(
+                        (string) (
+                            $item['source_type']
+                            ?? ''
+                        ),
+                        [
+                            'rental',
+                            'consumption',
+                            'rental_resend',
+                            'consumption_resend',
+                        ],
+                        true
+                    )
                 );
             $line = [
                 'pos_order_id' => $orderId,
@@ -8658,48 +8823,189 @@ return response()->json([
             return (float) ($orderRow->total ?? 0);
         }
 
+        /*
+         * CIBER3L3_BACKEND_DISCOUNTABLE_BASE
+         *
+         * Después de resincronizar el carrito, los importes persistidos
+         * en pos_order_lines son la fuente autoritativa.
+         *
+         * Las líneas protegidas por Renta de equipos forman parte del
+         * total bruto, pero no forman parte de la base descontable.
+         */
         $grossTotal = 0.0;
         $grossSubtotal = 0.0;
         $grossTax = 0.0;
 
-        if ($items->isNotEmpty()) {
-            foreach ($items as $item) {
-                $qty = (float) ($item['qty'] ?? $item['quantity'] ?? 0);
-                $price = (float) ($item['price'] ?? $item['unit_price'] ?? 0);
-                $taxRate = (float) ($item['tax_rate'] ?? 0.16);
+        $discountableTotal = 0.0;
+        $discountableSubtotal = 0.0;
+        $discountableTax = 0.0;
 
-                if ($taxRate > 1) {
-                    $taxRate = $taxRate / 100;
-                }
+        $protectedTotal = 0.0;
+        $protectedSubtotal = 0.0;
+        $protectedTax = 0.0;
 
-                if ($taxRate < 0) {
-                    $taxRate = 0;
-                }
+        $v5836CiberPersistedLines =
+            \Illuminate\Support\Facades\DB::table(
+                'pos_order_lines'
+            )
+                ->where(
+                    'pos_order_id',
+                    $orderId
+                )
+                ->get();
 
-                // BEXIA_V5820E2A1_PAY_ORDER_BLOCK_ZERO_PRICE
-                if ($qty <= 0 || $price <= 0) {
-                    continue;
-                }
+        foreach (
+            $v5836CiberPersistedLines
+            as $v5836CiberPersistedLine
+        ) {
+            $lineTotal =
+                round(
+                    (float) (
+                        $v5836CiberPersistedLine->total
+                        ?? 0
+                    ),
+                    4
+                );
 
-                $lineTotal = round($qty * $price, 4);
-                $lineSubtotal = $taxRate > 0 ? round($lineTotal / (1 + $taxRate), 4) : $lineTotal;
-                $lineTax = round($lineTotal - $lineSubtotal, 4);
+            $lineSubtotal =
+                round(
+                    (float) (
+                        $v5836CiberPersistedLine->subtotal
+                        ?? 0
+                    ),
+                    4
+                );
 
-                $grossTotal += $lineTotal;
-                $grossSubtotal += $lineSubtotal;
-                $grossTax += $lineTax;
+            $lineTax =
+                round(
+                    (float) (
+                        $v5836CiberPersistedLine->tax_total
+                        ?? 0
+                    ),
+                    4
+                );
+
+            $grossTotal += $lineTotal;
+            $grossSubtotal += $lineSubtotal;
+            $grossTax += $lineTax;
+
+            $v5836CiberLineProtected =
+                (bool) (
+                    $v5836CiberPersistedLine->locked
+                    ?? false
+                );
+
+            if (
+                ! $v5836CiberLineProtected
+                && ! empty(
+                    $v5836CiberPersistedLine->metadata
+                )
+            ) {
+                $v5836CiberLineMeta =
+                    json_decode(
+                        (string)
+                            $v5836CiberPersistedLine
+                                ->metadata,
+                        true
+                    );
+
+                $v5836CiberLineRaw =
+                    is_array(
+                        $v5836CiberLineMeta['raw']
+                        ?? null
+                    )
+                        ? $v5836CiberLineMeta['raw']
+                        : [];
+
+                $v5836CiberLineProtected =
+                    (string) (
+                        $v5836CiberLineRaw['source']
+                        ?? ''
+                    ) === 'computer_rental'
+                    && in_array(
+                        (string) (
+                            $v5836CiberLineRaw[
+                                'source_type'
+                            ]
+                            ?? ''
+                        ),
+                        [
+                            'rental',
+                            'consumption',
+                            'rental_resend',
+                            'consumption_resend',
+                        ],
+                        true
+                    );
+            }
+
+            if ($v5836CiberLineProtected) {
+                $protectedTotal += $lineTotal;
+                $protectedSubtotal +=
+                    $lineSubtotal;
+                $protectedTax += $lineTax;
+            } else {
+                $discountableTotal +=
+                    $lineTotal;
+                $discountableSubtotal +=
+                    $lineSubtotal;
+                $discountableTax +=
+                    $lineTax;
             }
         }
 
+        /*
+         * Fallback defensivo para tickets antiguos sin líneas legibles.
+         */
         if ($grossTotal <= 0) {
-            $grossTotal = (float) ($orderRow->total ?? 0);
-            $grossSubtotal = (float) ($orderRow->subtotal ?? 0);
-            $grossTax = (float) ($orderRow->tax_total ?? 0);
+            $grossTotal =
+                (float) (
+                    $orderRow->total
+                    ?? 0
+                );
 
-            if ($grossSubtotal <= 0 && $grossTotal > 0) {
-                $grossSubtotal = round($grossTotal / 1.16, 4);
-                $grossTax = round($grossTotal - $grossSubtotal, 4);
+            $grossSubtotal =
+                (float) (
+                    $orderRow->subtotal
+                    ?? 0
+                );
+
+            $grossTax =
+                (float) (
+                    $orderRow->tax_total
+                    ?? 0
+                );
+
+            if (
+                $grossSubtotal <= 0
+                && $grossTotal > 0
+            ) {
+                $grossSubtotal =
+                    round(
+                        $grossTotal / 1.16,
+                        4
+                    );
+
+                $grossTax =
+                    round(
+                        $grossTotal
+                        - $grossSubtotal,
+                        4
+                    );
             }
+
+            /*
+             * Si no pudimos identificar líneas protegidas,
+             * mantenemos el comportamiento histórico.
+             */
+            $discountableTotal =
+                $grossTotal;
+
+            $discountableSubtotal =
+                $grossSubtotal;
+
+            $discountableTax =
+                $grossTax;
         }
 
         $discountAmount = 0.0;
@@ -8714,17 +9020,52 @@ return response()->json([
             if ($value > 0) {
                 if ($type === 'percent') {
                     $value = min($value, 100);
-                    $discountAmount = round($grossTotal * ($value / 100), 4);
+
+                    $discountAmount =
+                        round(
+                            $discountableTotal
+                            * ($value / 100),
+                            4
+                        );
                 } else {
-                    $discountAmount = round($value, 4);
+                    $discountAmount =
+                        round(
+                            $value,
+                            4
+                        );
                 }
 
-                $discountAmount = max(0, min($discountAmount, $grossTotal));
+                /*
+                 * CIBER3L3_BACKEND_DISCOUNT_CAP
+                 *
+                 * Un importe fijo tampoco puede consumir
+                 * la parte protegida de Renta de equipos.
+                 */
+                $discountAmount =
+                    max(
+                        0,
+                        min(
+                            $discountAmount,
+                            $discountableTotal
+                        )
+                    );
 
                 $discountMetadata = [
                     'type' => $type,
                     'value' => $value,
                     'amount' => $discountAmount,
+                    'discountable_total' =>
+                        round(
+                            $discountableTotal,
+                            4
+                        ),
+                    'protected_total' =>
+                        round(
+                            $protectedTotal,
+                            4
+                        ),
+                    'rental_protected' =>
+                        $protectedTotal > 0,
                     'user_id' => $discountInput['user_id'] ?? auth()->id(),
                     'user_name' => $discountInput['user_name'] ?? (auth()->user()->name ?? auth()->user()->email ?? 'Usuario'),
                     'applied_at' => $discountInput['applied_at'] ?? now()->toISOString(),
@@ -8746,11 +9087,50 @@ return response()->json([
             }
         }
 
-        $factor = $grossTotal > 0 ? ($calculatedTotal / $grossTotal) : 1;
+        /*
+         * CIBER3L3_BACKEND_PROTECTED_TAX_SPLIT
+         *
+         * No prorratear el descuento sobre la renta.
+         * Solo reducimos subtotal/IVA de las líneas descontables.
+         */
+        $discountableFactor =
+            $discountableTotal > 0
+                ? max(
+                    0,
+                    (
+                        $discountableTotal
+                        - $discountAmount
+                    )
+                    / $discountableTotal
+                )
+                : 1;
 
-        $newSubtotal = round($grossSubtotal * $factor, 4);
-        $newTax = round($grossTax * $factor, 4);
-        $newTotal = round($calculatedTotal, 4);
+        $newSubtotal =
+            round(
+                $protectedSubtotal
+                + (
+                    $discountableSubtotal
+                    * $discountableFactor
+                ),
+                4
+            );
+
+        $newTax =
+            round(
+                $protectedTax
+                + (
+                    $discountableTax
+                    * $discountableFactor
+                ),
+                4
+            );
+
+        $newTotal =
+            round(
+                $grossTotal
+                - $discountAmount,
+                4
+            );
 
         $metadata = [];
 
