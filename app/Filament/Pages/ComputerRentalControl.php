@@ -12,6 +12,7 @@ use App\Support\ComputerRental\ComputerRentalCalculator;
 use App\Support\ComputerRental\ComputerRentalSessionService;
 use App\Support\ComputerRental\ComputerRentalToPosService;
 use App\Support\ComputerRental\ComputerRentalPosStatusService;
+use App\Support\ComputerRental\ComputerRentalAgentCommandService;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -49,6 +50,10 @@ class ComputerRentalControl extends Page
     public ?int $rateProductId = null;
 
     public array $selectedRates = [];
+
+    /** CIBER4E2A1_POWER_CONFIRM_MODAL */
+    public ?int $powerCommandStationId = null;
+    public ?string $powerCommandType = null;
 
     /** CIBER3G1_FINALIZE_TO_POS */
     public ?int $finishSessionId = null;
@@ -318,6 +323,213 @@ class ComputerRentalControl extends Page
         }
 
         return 0;
+    }
+
+    /**
+     * CIBER4E2A1_POWER_CONFIRM_MODAL
+     */
+    public function beginStationPowerCommand(
+        int $stationId,
+        string $commandType
+    ): void {
+        $this->authorizeComputerRentalManagement();
+
+        if (! in_array(
+            $commandType,
+            [
+                'shutdown',
+                'restart',
+                'start_ui',
+            ],
+            true
+        )) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'command' =>
+                    'Comando remoto no permitido.',
+            ]);
+        }
+
+        ComputerRentalStation::query()
+            ->where(
+                'company_id',
+                $this->companyId()
+            )
+            ->whereKey(
+                $stationId
+            )
+            ->where(
+                'is_active',
+                true
+            )
+            ->firstOrFail();
+
+        $this->powerCommandStationId =
+            $stationId;
+
+        $this->powerCommandType =
+            $commandType;
+    }
+
+    public function cancelStationPowerCommand(): void
+    {
+        $this->powerCommandStationId =
+            null;
+
+        $this->powerCommandType =
+            null;
+    }
+
+    public function confirmStationPowerCommand(): void
+    {
+        $this->authorizeComputerRentalManagement();
+
+        $stationId =
+            (int) (
+                $this->powerCommandStationId
+                ?? 0
+            );
+
+        $commandType =
+            (string) (
+                $this->powerCommandType
+                ?? ''
+            );
+
+        if (
+            $stationId <= 0
+            || ! in_array(
+                $commandType,
+                [
+                    'shutdown',
+                    'restart',
+                    'start_ui',
+                ],
+                true
+            )
+        ) {
+            $this->cancelStationPowerCommand();
+
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'command' =>
+                    'No hay una orden remota válida para confirmar.',
+            ]);
+        }
+
+        try {
+            $this->queueStationPowerCommand(
+                $stationId,
+                $commandType
+            );
+        } finally {
+            $this->cancelStationPowerCommand();
+        }
+    }
+
+    public function powerCommandStation(): ?ComputerRentalStation
+    {
+        $stationId =
+            (int) (
+                $this->powerCommandStationId
+                ?? 0
+            );
+
+        if ($stationId <= 0) {
+            return null;
+        }
+
+        return ComputerRentalStation::query()
+            ->where(
+                'company_id',
+                $this->companyId()
+            )
+            ->whereKey(
+                $stationId
+            )
+            ->first();
+    }
+
+    /**
+     * CIBER4E2A_REMOTE_POWER
+     */
+    public function queueStationPowerCommand(
+        int $stationId,
+        string $commandType
+    ): void {
+        $this->authorizeComputerRentalManagement();
+
+        $station =
+            ComputerRentalStation::query()
+                ->where(
+                    'company_id',
+                    $this->companyId()
+                )
+                ->whereKey(
+                    $stationId
+                )
+                ->where(
+                    'is_active',
+                    true
+                )
+                ->firstOrFail();
+
+        app(
+            ComputerRentalAgentCommandService::class
+        )->queue(
+            $station,
+            $commandType,
+            auth()->id()
+                ? (int) auth()->id()
+                : null
+        );
+
+        Notification::make()
+            ->title(
+                match ($commandType) {
+                    'shutdown' =>
+                        'Orden de apagado enviada',
+
+                    'restart' =>
+                        'Orden de reinicio enviada',
+
+                    'start_ui' =>
+                        'Reactivación de bloqueo enviada',
+
+                    default =>
+                        'Orden remota enviada',
+                }
+            )
+            ->body(
+                $station->code
+                . ' recibirá la orden en su siguiente heartbeat.'
+            )
+            ->success()
+            ->send();
+    }
+
+    public function latestStationCommand(
+        int $stationId
+    ): ?object {
+        if (
+            ! Schema::hasTable(
+                'computer_rental_agent_commands'
+            )
+        ) {
+            return null;
+        }
+
+        return \Illuminate\Support\Facades\DB::table(
+            'computer_rental_agent_commands'
+        )
+            ->where(
+                'company_id',
+                $this->companyId()
+            )
+            ->where(
+                'station_id',
+                $stationId
+            )
+            ->orderByDesc('id')
+            ->first();
     }
 
     public function getStationsProperty()

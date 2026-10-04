@@ -161,6 +161,101 @@
                             </div>
 
 
+                            {{-- CIBER4E2A_REMOTE_POWER_UI --}}
+                            @if($canManageComputerRental)
+
+                                @php
+                                    $latestAgentCommand =
+                                        $this->latestStationCommand(
+                                            $station->id
+                                        );
+                                @endphp
+
+                                <div
+                                    class="mt-4 rounded-lg border border-gray-200 bg-white/70 p-3 dark:border-gray-700 dark:bg-gray-900/50"
+                                >
+                                    <div class="text-xs font-bold text-gray-600 dark:text-gray-300">
+                                        Control remoto
+                                    </div>
+
+                                    <div class="mt-2 flex flex-wrap gap-2">
+
+                                        <x-filament::button
+                                            type="button"
+                                            size="sm"
+                                            color="danger"
+                                            wire:click="beginStationPowerCommand({{ $station->id }}, 'shutdown')"
+                                            :disabled="$active !== null"
+                                        >
+                                            Apagar
+                                        </x-filament::button>
+
+                                        <x-filament::button
+                                            type="button"
+                                            size="sm"
+                                            color="warning"
+                                            wire:click="beginStationPowerCommand({{ $station->id }}, 'restart')"
+                                            :disabled="$active !== null"
+                                        >
+                                            Reiniciar
+                                        </x-filament::button>
+
+                                            <x-filament::button
+                                                type="button"
+                                                size="sm"
+                                                color="success"
+                                                wire:click="beginStationPowerCommand({{ $station->id }}, 'start_ui')"
+                                            >
+                                                Reactivar bloqueo
+                                            </x-filament::button>
+
+                                    </div>
+
+                                    @if($active)
+                                        <div class="mt-2 text-xs text-gray-500">
+                                            Apagar y reiniciar no están disponibles durante una renta activa.
+                                        </div>
+                                    @endif
+
+                                    @if($latestAgentCommand)
+                                        @php
+                                            $commandTypeLabels = [
+                                                'shutdown' => 'Apagar',
+                                                'restart' => 'Reiniciar',
+                                                'start_ui' => 'Reactivar bloqueo',
+                                            ];
+
+                                            $commandStatusLabels = [
+                                                'pending' => 'Pendiente',
+                                                'delivered' => 'Entregada',
+                                                'acknowledged' => 'Ejecutada',
+                                                'failed' => 'Fallida',
+                                            ];
+
+                                            $commandTypeLabel =
+                                                $commandTypeLabels[
+                                                    $latestAgentCommand->command_type
+                                                ]
+                                                ?? $latestAgentCommand->command_type;
+
+                                            $commandStatusLabel =
+                                                $commandStatusLabels[
+                                                    $latestAgentCommand->status
+                                                ]
+                                                ?? $latestAgentCommand->status;
+                                        @endphp
+
+                                        <div class="mt-2 text-xs text-gray-500">
+                                            Última orden:
+                                            {{ $commandTypeLabel }}
+                                            ·
+                                            {{ $commandStatusLabel }}
+                                        </div>
+                                    @endif
+                                </div>
+
+                            @endif
+
                             @if($active)
 
                                 <div class="mt-5 space-y-2 rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
@@ -2952,6 +3047,235 @@
 
             </div>
 
+        </div>
+
+    @endif
+
+
+    {{-- CIBER4B_AGENT_STATUS_UI --}}
+    <div
+        class="mt-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900"
+    >
+        <div
+            class="text-sm font-semibold text-gray-900 dark:text-white"
+        >
+            Estado de agentes Windows
+        </div>
+
+        <div
+            class="mt-3 grid gap-3 md:grid-cols-2"
+        >
+            @foreach ($this->stations as $station)
+                @php
+                    $lastHeartbeat =
+                        $station->last_heartbeat_at;
+
+                    $agentOnline =
+                        $lastHeartbeat
+                        && $lastHeartbeat->gt(
+                            now()->subSeconds(45)
+                        );
+
+                    /*
+                     * CIBER4E3A_POWER_STATE
+                     *
+                     * Solo mostramos "Apagada" cuando:
+                     * - ya no hay heartbeat reciente;
+                     * - la ultima orden fue shutdown;
+                     * - Bexia la tiene como acknowledged;
+                     * - el ultimo heartbeat pertenece al momento
+                     *   del apagado, no a un encendido posterior.
+                     */
+                    $latestPowerCommand =
+                        $this->latestStationCommand(
+                            $station->id
+                        );
+
+                    $shutdownAcknowledgedAt =
+                        $latestPowerCommand
+                        && $latestPowerCommand->command_type === 'shutdown'
+                        && $latestPowerCommand->status === 'acknowledged'
+                        && $latestPowerCommand->acknowledged_at
+                            ? \Carbon\Carbon::parse(
+                                $latestPowerCommand->acknowledged_at
+                            )
+                            : null;
+
+                    $agentIntentionallyOff =
+                        ! $agentOnline
+                        && $shutdownAcknowledgedAt
+                        && (
+                            ! $lastHeartbeat
+                            || $lastHeartbeat->lte(
+                                $shutdownAcknowledgedAt
+                                    ->copy()
+                                    ->addMinutes(2)
+                            )
+                        );
+                @endphp
+
+                <div
+                    class="rounded-lg border border-gray-200 p-3 dark:border-gray-700"
+                >
+                    <div
+                        class="font-medium text-gray-900 dark:text-white"
+                    >
+                        {{ $station->code }}
+                        ·
+                        {{ $station->name }}
+                    </div>
+
+                    <div class="mt-1 text-sm">
+                        @if ($agentOnline)
+                            <span
+                                class="font-semibold text-success-600"
+                            >
+                                ● Online
+                            </span>
+                        @elseif ($agentIntentionallyOff)
+                            <span
+                                class="font-semibold text-gray-600 dark:text-gray-300"
+                            >
+                                ● Apagada
+                            </span>
+                        @elseif ($station->agent_uuid)
+                            <span
+                                class="font-semibold text-danger-600"
+                            >
+                                ● Offline
+                            </span>
+                        @else
+                            <span
+                                class="text-gray-500"
+                            >
+                                Sin agente vinculado
+                            </span>
+                        @endif
+                    </div>
+
+                    @if ($station->agent_hostname)
+                        <div
+                            class="mt-1 text-xs text-gray-500"
+                        >
+                            Equipo:
+                            {{ $station->agent_hostname }}
+                        </div>
+                    @endif
+
+                    @if ($station->agent_version)
+                        <div
+                            class="text-xs text-gray-500"
+                        >
+                            Agente:
+                            {{ $station->agent_version }}
+                        </div>
+                    @endif
+
+                    @if ($lastHeartbeat)
+                        <div
+                            class="text-xs text-gray-500"
+                        >
+                            Última conexión:
+                            {{ $lastHeartbeat->diffForHumans() }}
+                        </div>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+    </div>
+
+
+    {{-- CIBER4E2A1_POWER_CONFIRM_MODAL --}}
+    @if(
+        $powerCommandStation =
+            $this->powerCommandStation()
+    )
+
+        <div
+            class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+            style="
+                background: rgba(0, 0, 0, 0.78);
+                backdrop-filter: blur(2px);
+                -webkit-backdrop-filter: blur(2px);
+            "
+            wire:key="computer-rental-power-command-modal"
+        >
+            <div
+                class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-900"
+            >
+                <div class="text-xl font-bold text-gray-950 dark:text-white">
+                    @if($powerCommandType === 'shutdown')
+                        Confirmar apagado
+                    @elseif($powerCommandType === 'restart')
+                        Confirmar reinicio
+                    @else
+                        Confirmar reactivación de bloqueo
+                    @endif
+                </div>
+
+                <div class="mt-4 text-sm text-gray-600 dark:text-gray-300">
+                    @if($powerCommandType === 'shutdown')
+                        ¿Deseas apagar
+                    @elseif($powerCommandType === 'restart')
+                        ¿Deseas reiniciar
+                    @else
+                        ¿Deseas reactivar el bloqueo en
+                    @endif
+
+                    <strong>
+                        {{ $powerCommandStation->code }}
+                        -
+                        {{ $powerCommandStation->name }}
+                    </strong>?
+                </div>
+
+                <div
+                    class="mt-4 rounded-lg p-3 text-sm
+                        @if($powerCommandType === 'start_ui')
+                            bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200
+                        @else
+                            bg-yellow-50 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200
+                        @endif"
+                >
+                    @if($powerCommandType === 'shutdown')
+                        El equipo quedará apagado y será necesario encenderlo físicamente para volver a utilizarlo.
+                    @elseif($powerCommandType === 'restart')
+                        El equipo cerrará Windows y volverá a iniciar automáticamente.
+                    @else
+                        La pantalla de bloqueo de Bexia volverá a mostrarse en el equipo.
+                    @endif
+                </div>
+
+                <div class="mt-6 flex justify-end gap-3">
+
+                    <x-filament::button
+                        type="button"
+                        color="gray"
+                        wire:click="cancelStationPowerCommand"
+                    >
+                        Cancelar
+                    </x-filament::button>
+
+                    <x-filament::button
+                        type="button"
+                        :color="$powerCommandType === 'shutdown'
+                            ? 'danger'
+                            : ($powerCommandType === 'restart'
+                                ? 'warning'
+                                : 'success')"
+                        wire:click="confirmStationPowerCommand"
+                    >
+                        @if($powerCommandType === 'shutdown')
+                            Sí, apagar
+                        @elseif($powerCommandType === 'restart')
+                            Sí, reiniciar
+                        @else
+                            Sí, reactivar bloqueo
+                        @endif
+                    </x-filament::button>
+
+                </div>
+            </div>
         </div>
 
     @endif
