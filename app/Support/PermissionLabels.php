@@ -222,6 +222,13 @@ class PermissionLabels
             'sales.deliver' => 'Entregar ventas',
             'sales.invoice' => 'Facturar ventas',
 
+            'computer_rental.view' =>
+                'Ver renta de equipos',
+            'computer_rental.operate' =>
+                'Operar renta de equipos',
+            'computer_rental.manage' =>
+                'Administrar renta de equipos',
+
             'pos.cash_count' => 'Conteo de caja POS',
             'pos.open_shift' => 'Abrir turno POS',
             'pos.close_shift' => 'Cerrar turno POS',

@@ -3481,6 +3481,24 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             $taxTotal += $lineTax;
             $total += $lineTotal;
 
+            /*
+             * CIBER3J1B_STORE_RENTAL_LINE_LOCK
+             *
+             * Las líneas generadas por Renta de equipos ya llegan
+             * identificadas dentro del item.
+             */
+            $v5836CiberRentalLocked =
+                (string) ($item['source'] ?? '') === 'computer_rental'
+                && in_array(
+                    (string) ($item['source_type'] ?? ''),
+                    [
+                        'rental',
+                        'consumption',
+                        'rental_resend',
+                        'consumption_resend',
+                    ],
+                    true
+                );
             $normalizedItems[] = [
                 'product_id' => $productId,
                 'product_variant_id' => Schema::hasColumn('pos_order_lines', 'product_variant_id') ? $productVariantId : null,
@@ -3503,6 +3521,10 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 'subtotal' => $lineSubtotal,
                 'tax_total' => $lineTax,
                 'total' => $lineTotal,
+                'locked' =>
+                    Schema::hasColumn('pos_order_lines', 'locked')
+                        ? $v5836CiberRentalLocked
+                        : false,
                 'metadata' => json_encode([
                     'source' => 'pos_frontend',
                     'raw' => $item,
@@ -4157,7 +4179,69 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             ->orderBy('id')
             ->get()
             ->map(function ($line) {
+                /*
+                 * CIBER3J1C6_SHOWORDER_RENTAL_LOCK
+                 *
+                 * Este es el payload real usado al cargar
+                 * Tickets pendientes en el PDV.
+                 */
+                $lineMetadata = [];
+
+                if (! empty($line->metadata)) {
+                    $decodedLineMetadata =
+                        json_decode(
+                            (string) $line->metadata,
+                            true
+                        );
+
+                    if (is_array($decodedLineMetadata)) {
+                        $lineMetadata =
+                            $decodedLineMetadata;
+                    }
+                }
+
+                $rawLine =
+                    is_array($lineMetadata['raw'] ?? null)
+                        ? $lineMetadata['raw']
+                        : [];
+
+                $rentalLocked =
+                    (bool) ($line->locked ?? false)
+                    || (
+                        (string) ($rawLine['source'] ?? '')
+                            === 'computer_rental'
+                        && in_array(
+                            (string) (
+                                $rawLine['source_type']
+                                ?? ''
+                            ),
+                            [
+                                'rental',
+                                'consumption',
+                                'rental_resend',
+                                'consumption_resend',
+                            ],
+                            true
+                        )
+                    );
+
                 return [
+                    'pos_order_line_id' =>
+                        (int) $line->id,
+                    'rental_locked' =>
+                        $rentalLocked,
+                    'source' =>
+                        $rawLine['source'] ?? null,
+                    'source_type' =>
+                        $rawLine['source_type'] ?? null,
+                    'computer_rental_session_id' =>
+                        $rawLine[
+                            'computer_rental_session_id'
+                        ] ?? null,
+                    'computer_rental_session_line_id' =>
+                        $rawLine[
+                            'computer_rental_session_line_id'
+                        ] ?? null,
                     'product_id' => $line->product_id ? (int) $line->product_id : null,
                     'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
                     'stock_serial_number_id' => ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null,
@@ -4487,8 +4571,65 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 ->orderBy('id')
                 ->get()
                 ->map(function ($line) {
+                    /*
+                     * CIBER3J1B_PENDING_RENTAL_LOCK_PAYLOAD
+                     */
+                    $lineMetadata = [];
+
+                    if (! empty($line->metadata)) {
+                        $decodedLineMetadata =
+                            json_decode(
+                                (string) $line->metadata,
+                                true
+                            );
+
+                        if (is_array($decodedLineMetadata)) {
+                            $lineMetadata =
+                                $decodedLineMetadata;
+                        }
+                    }
+
+                    $rawLine =
+                        is_array($lineMetadata['raw'] ?? null)
+                            ? $lineMetadata['raw']
+                            : [];
+
+                    $rentalLocked =
+                        (bool) ($line->locked ?? false)
+                        || (
+                            (string) ($rawLine['source'] ?? '')
+                                === 'computer_rental'
+                            && in_array(
+                                (string) (
+                                    $rawLine['source_type']
+                                    ?? ''
+                                ),
+                                [
+                                    'rental',
+                                    'consumption',
+                                    'rental_resend',
+                                    'consumption_resend',
+                                ],
+                                true
+                            )
+                        );
+
                     return [
                         'id' => (int) $line->id,
+                        'pos_order_line_id' => (int) $line->id,
+                        'rental_locked' => $rentalLocked,
+                        'source' =>
+                            $rawLine['source'] ?? null,
+                        'source_type' =>
+                            $rawLine['source_type'] ?? null,
+                        'computer_rental_session_id' =>
+                            $rawLine['computer_rental_session_id']
+                            ?? null,
+                        'computer_rental_session_line_id' =>
+                            $rawLine[
+                                'computer_rental_session_line_id'
+                            ]
+                            ?? null,
                         'product_id' => ! empty($line->product_id) ? (int) $line->product_id : null,
                         'product_variant_id' => ! empty($line->product_variant_id) ? (int) $line->product_variant_id : null,
                         'stock_serial_number_id' => ! empty($line->stock_serial_number_id) ? (int) $line->stock_serial_number_id : null,
@@ -8195,6 +8336,14 @@ return response()->json([
                 }
             }
 
+            /*
+             * CIBER3J1B_RESYNC_RENTAL_LOCK
+             */
+            $v5836CiberSubmittedRentalLocked =
+                filter_var(
+                    $item['rental_locked'] ?? false,
+                    FILTER_VALIDATE_BOOLEAN
+                );
             $line = [
                 'pos_order_id' => $orderId,
                 'product_id' => $productId,
@@ -8218,6 +8367,19 @@ return response()->json([
                 'subtotal' => $lineSubtotal,
                 'tax_total' => $lineTax,
                 'total' => $lineTotal,
+                /*
+                 * CIBER3J1F2_PENDING_SYNC_LOCK_FIX
+                 *
+                 * En la resincronizacion previa al cobro debe usarse
+                 * el lock recibido/preservado por el carrito.
+                 */
+                'locked' =>
+                    \Illuminate\Support\Facades\Schema::hasColumn(
+                        'pos_order_lines',
+                        'locked'
+                    )
+                        ? $v5836CiberSubmittedRentalLocked
+                        : false,
                 'metadata' => json_encode([
                     'source' => 'pos_pending_cart_sync',
                     'raw' => $item,
@@ -8236,6 +8398,130 @@ return response()->json([
             ]);
         }
 
+        /*
+         * CIBER3J1B_VALIDATE_RENTAL_LOCKED_LINES
+         *
+         * El frontend ayuda con UX, pero la protección real
+         * también vive en backend.
+         */
+        $v5836CiberExistingProtected =
+            \Illuminate\Support\Facades\DB::table(
+                'pos_order_lines'
+            )
+                ->where('pos_order_id', $orderId)
+                ->get()
+                ->filter(function ($existingLine) {
+                    if ((bool) ($existingLine->locked ?? false)) {
+                        return true;
+                    }
+
+                    $meta = [];
+
+                    if (! empty($existingLine->metadata)) {
+                        $decoded = json_decode(
+                            (string) $existingLine->metadata,
+                            true
+                        );
+
+                        if (is_array($decoded)) {
+                            $meta = $decoded;
+                        }
+                    }
+
+                    $raw =
+                        is_array($meta['raw'] ?? null)
+                            ? $meta['raw']
+                            : [];
+
+                    return
+                        (string) ($raw['source'] ?? '')
+                            === 'computer_rental'
+                        && in_array(
+                            (string) (
+                                $raw['source_type']
+                                ?? ''
+                            ),
+                            [
+                                'rental',
+                                'consumption',
+                                'rental_resend',
+                                'consumption_resend',
+                            ],
+                            true
+                        );
+                })
+                ->values();
+
+        foreach (
+            $v5836CiberExistingProtected
+            as $protectedLine
+        ) {
+            $submitted = collect($items)
+                ->first(function ($item) use ($protectedLine) {
+                    return
+                        (int) (
+                            $item['pos_order_line_id']
+                            ?? 0
+                        )
+                        === (int) $protectedLine->id;
+                });
+
+            if (! is_array($submitted)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        'La línea '
+                        . ($protectedLine->product_name ?? 'de renta')
+                        . ' pertenece a Renta de equipos '
+                        . 'y no puede eliminarse.',
+                    ],
+                ]);
+            }
+
+            $submittedProduct =
+                (int) ($submitted['product_id'] ?? 0);
+
+            $submittedQty =
+                round(
+                    (float) ($submitted['qty'] ?? 0),
+                    4
+                );
+
+            $submittedPrice =
+                round(
+                    (float) ($submitted['price'] ?? 0),
+                    4
+                );
+
+            $originalProduct =
+                (int) ($protectedLine->product_id ?? 0);
+
+            $originalQty =
+                round(
+                    (float) ($protectedLine->quantity ?? 0),
+                    4
+                );
+
+            $originalPrice =
+                round(
+                    (float) ($protectedLine->unit_price ?? 0),
+                    4
+                );
+
+            if (
+                $submittedProduct !== $originalProduct
+                || abs($submittedQty - $originalQty) > 0.0001
+                || abs($submittedPrice - $originalPrice) > 0.0001
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        'La línea '
+                        . ($protectedLine->product_name ?? 'de renta')
+                        . ' pertenece a Renta de equipos '
+                        . 'y no puede cambiar cantidad ni precio.',
+                    ],
+                ]);
+            }
+        }
         $beforeLines = \Illuminate\Support\Facades\DB::table('pos_order_lines')
             ->where('pos_order_id', $orderId)
             ->get();
