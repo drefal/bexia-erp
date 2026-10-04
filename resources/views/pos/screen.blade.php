@@ -2382,6 +2382,34 @@ document.addEventListener('DOMContentLoaded', function () {
     </div>
 </div>
 
+<style id="v5836-ciber-rental-lock-style">
+/* CIBER3J1B_RENTAL_LOCK_STYLE */
+.v5836-ciber-rental-lock-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 58px;
+    margin-top: 5px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: .3px;
+    background: rgba(100, 116, 139, .12);
+    border: 1px solid rgba(100, 116, 139, .25);
+}
+
+.v5339-cart-line[data-computer-rental-locked="1"] {
+    opacity: .92;
+}
+
+.v5339-cart-line[data-computer-rental-locked="1"]
+.v5339-cart-controls {
+    opacity: .55;
+}
+</style>
 <style id="v5339-cart-style">
     .v5339-cart-line {
         margin-top:10px;
@@ -2740,6 +2768,13 @@ document.addEventListener('DOMContentLoaded', function () {
         event.stopImmediatePropagation();
     }, true);
 
+    // CIBER3J1B_RENDER_RENTAL_LOCK
+    function isComputerRentalLockedLine(item) {
+        return Boolean(
+            item
+            && item.rental_locked
+        );
+    }
     function render() {
         Array.from(cartItems.querySelectorAll('.v5339-cart-line')).forEach(function (el) {
             el.remove();
@@ -2915,10 +2950,42 @@ document.addEventListener('DOMContentLoaded', function () {
             remove.className = 'btn';
             remove.style.padding = '5px 9px';
             remove.textContent = 'Quitar';
+
             remove.addEventListener('click', function () {
+                if (isComputerRentalLockedLine(item)) {
+                    setWarning(
+                        'Esta línea pertenece a Renta de equipos '
+                        + 'y no puede eliminarse.'
+                    );
+                    return;
+                }
+
                 cart.delete(key);
                 render();
             });
+
+            /*
+             * CIBER3J1D_DIRECT_RENTAL_CONTROL_LOCK
+             *
+             * El candado ya viene del backend.
+             * Deshabilitamos los controles directamente,
+             * sin depender de selectores del DOM.
+             */
+            if (isComputerRentalLockedLine(item)) {
+                minus.disabled = true;
+                qty.disabled = true;
+                plus.disabled = true;
+                remove.disabled = true;
+
+                minus.title =
+                    'Línea protegida por Renta de equipos';
+                qty.title =
+                    'Línea protegida por Renta de equipos';
+                plus.title =
+                    'Línea protegida por Renta de equipos';
+                remove.title =
+                    'Línea protegida por Renta de equipos';
+            }
 
             controls.appendChild(minus);
             controls.appendChild(qty);
@@ -2938,6 +3005,43 @@ document.addEventListener('DOMContentLoaded', function () {
             line.appendChild(info);
             line.appendChild(lineTotal);
 
+            if (isComputerRentalLockedLine(item)) {
+                line.dataset.computerRentalLocked = '1';
+
+                line.querySelectorAll(
+                    '.v5339-cart-controls button, '
+                    + 'input.v5339-cart-qty'
+                ).forEach(function (control) {
+                    control.disabled = true;
+                    control.setAttribute(
+                        'title',
+                        'Importe generado por Renta de equipos'
+                    );
+                });
+
+                const lockBadge =
+                    document.createElement('div');
+
+                lockBadge.className =
+                    'v5836-ciber-rental-lock-badge';
+
+                lockBadge.textContent =
+                    '🔒 RENTA';
+
+                const infoBox =
+                    line.querySelector(
+                        '.v5339-cart-line-name'
+                    );
+
+                if (infoBox && infoBox.parentElement) {
+                    infoBox.parentElement.appendChild(
+                        lockBadge
+                    );
+                } else {
+                    line.appendChild(lockBadge);
+                }
+            }
+
             cartItems.appendChild(line);
         });
 
@@ -2947,6 +3051,15 @@ document.addEventListener('DOMContentLoaded', function () {
     function changeQty(key, delta) {
         const item = cart.get(key);
         if (!item) return;
+
+        // CIBER3J1D_CHANGEQTY_RENTAL_GUARD
+        if (isComputerRentalLockedLine(item)) {
+            setWarning(
+                'Esta línea pertenece a Renta de equipos '
+                + 'y su cantidad no puede modificarse.'
+            );
+            return;
+        }
 
         const nextQty = Number(item.qty || 0) + delta;
 
@@ -2996,18 +3109,89 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        const key = lineKey(product);
-        const existing = cart.get(key);
+        let key = lineKey(product);
+        let existing = cart.get(key);
+
+        /*
+         * CIBER3J1E2_SEPARATE_RENTAL_PRODUCT
+         *
+         * Una linea protegida de Renta de equipos nunca debe
+         * absorber productos agregados manualmente desde el catalogo.
+         */
+        if (
+            existing
+            && isComputerRentalLockedLine(existing)
+        ) {
+            const baseKey = String(key);
+
+            /*
+             * Primero buscar si ya existe una linea normal extra
+             * del mismo producto.
+             */
+            let normalExtraKey = null;
+            let normalExtraItem = null;
+
+            for (const [candidateKey, candidateItem] of cart.entries()) {
+                if (
+                    String(candidateKey).startsWith(
+                        baseKey + ':retail-extra:'
+                    )
+                    && !isComputerRentalLockedLine(candidateItem)
+                ) {
+                    normalExtraKey = candidateKey;
+                    normalExtraItem = candidateItem;
+                    break;
+                }
+            }
+
+            if (normalExtraItem) {
+                key = normalExtraKey;
+                existing = normalExtraItem;
+            } else {
+                let suffix = 1;
+
+                do {
+                    key =
+                        baseKey
+                        + ':retail-extra:'
+                        + suffix;
+
+                    suffix++;
+                } while (cart.has(key));
+
+                existing = null;
+            }
+        }
 
         if (existing) {
-            if (!existing.isService && existing.stock > 0 && existing.qty + 1 > existing.stock) {
-                setWarning('No hay existencia suficiente para agregar más de este producto.');
+            if (
+                !existing.isService
+                && existing.stock > 0
+                && existing.qty + 1 > existing.stock
+            ) {
+                setWarning(
+                    'No hay existencia suficiente '
+                    + 'para agregar más de este producto.'
+                );
                 return;
             }
+
             existing.qty += 1;
             cart.set(key, existing);
         } else {
-            cart.set(key, { ...product, qty: 1 });
+            cart.set(
+                key,
+                {
+                    ...product,
+                    qty: 1,
+                    rental_locked: false,
+                    pos_order_line_id: null,
+                    source: null,
+                    source_type: null,
+                    computer_rental_session_id: null,
+                    computer_rental_session_line_id: null,
+                }
+            );
         }
 
         // BEXIA_V5829C_KEEP_PENDING_ORDER_ON_CART_CHANGE
@@ -3141,6 +3325,21 @@ document.addEventListener('DOMContentLoaded', function () {
                     qty: item.qty,
                     tax_rate: item.taxRate,
                     stock: item.stock,
+                    // CIBER3J1B_GETITEMS_RENTAL_LOCK
+                    pos_order_line_id:
+                        item.pos_order_line_id || null,
+                    rental_locked:
+                        Boolean(item.rental_locked),
+                    source:
+                        item.source || null,
+                    source_type:
+                        item.source_type || null,
+                    computer_rental_session_id:
+                        item.computer_rental_session_id
+                        || null,
+                    computer_rental_session_line_id:
+                        item.computer_rental_session_line_id
+                        || null,
                 };
             });
         },
@@ -3217,6 +3416,25 @@ document.addEventListener('DOMContentLoaded', function () {
                     lot_number: pendingLotNumber,
                     lot_locked_from_pending: Boolean(pendingLotId),
                     // BEXIA_V5829C_LOAD_PENDING_LOT_FIELDS
+                    // CIBER3J1B_LOAD_RENTAL_LINE_LOCK
+                    pos_order_line_id:
+                        Number(
+                            item.pos_order_line_id
+                            || item.id
+                            || 0
+                        ) || null,
+                    rental_locked:
+                        Boolean(item.rental_locked),
+                    source:
+                        item.source || null,
+                    source_type:
+                        item.source_type || null,
+                    computer_rental_session_id:
+                        item.computer_rental_session_id
+                        || null,
+                    computer_rental_session_line_id:
+                        item.computer_rental_session_line_id
+                        || null,
                     pending_price_locked_until_price_list_change: true,
                     original_pending_price: Number.isFinite(price) ? price : 0,
                     original_pending_tax_rate: Number(item.tax_rate || 0.16),
