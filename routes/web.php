@@ -876,3 +876,49 @@ Route::get(
     ->whereNumber('attendance')
     ->whereIn('direction', ['in', 'meal_out', 'meal_in', 'out'])
     ->name('rrhh.attendance.photo');
+
+/*
+|--------------------------------------------------------------------------
+| CIBER4B_WINDOWS_AGENT_HEARTBEAT
+|--------------------------------------------------------------------------
+|
+| Agente Windows de Renta de equipos.
+|
+| Autenticacion:
+| X-Bexia-Station-UUID
+| Authorization: Bearer <token>
+|
+*/
+
+\Route::post(
+    '/api/computer-rental/agent/v1/heartbeat',
+    [
+        \App\Http\Controllers\ComputerRental\ComputerRentalAgentController::class,
+        'heartbeat',
+    ]
+)
+    ->withoutMiddleware([
+        \App\Http\Middleware\VerifyCsrfToken::class,
+        \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+    ])
+    ->middleware('throttle:120,1')
+    ->name(
+        'computer-rental.agent.v1.heartbeat'
+    );
+
+
+\Route::post(
+    '/api/computer-rental/agent/v1/command-ack',
+    [
+        \App\Http\Controllers\ComputerRental\ComputerRentalAgentController::class,
+        'commandAck',
+    ]
+)
+    ->withoutMiddleware([
+        \App\Http\Middleware\VerifyCsrfToken::class,
+        \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+    ])
+    ->middleware('throttle:120,1')
+    ->name(
+        'computer-rental.agent.v1.command-ack'
+    );
