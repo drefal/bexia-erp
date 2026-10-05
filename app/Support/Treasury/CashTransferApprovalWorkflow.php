@@ -12,6 +12,8 @@ class CashTransferApprovalWorkflow
 {
     public const DOCUMENT_TYPE = 'treasury_cash_transfer_request';
 
+    public const PETTY_CASH_WORKFLOW_DOCUMENT_TYPE = 'petty_cash_transfer_request';
+
     public static function sendToApproval(TreasuryCashTransferRequest $request): ?ApprovalRequest
     {
         if (! Schema::hasTable('approval_workflows') || ! Schema::hasTable('approval_workflow_steps') || ! Schema::hasTable('approval_requests') || ! Schema::hasTable('approval_request_steps')) {
@@ -222,7 +224,10 @@ class CashTransferApprovalWorkflow
         }
 
         $query = DB::table('approval_workflows')
-            ->where('document_type', self::DOCUMENT_TYPE);
+            ->where(
+                'document_type',
+                static::workflowDocumentTypeForRequest($request)
+            );
 
         if (Schema::hasColumn('approval_workflows', 'is_active')) {
             $query->where('is_active', true);
@@ -268,6 +273,32 @@ class CashTransferApprovalWorkflow
         }
 
         return $query->orderByDesc('id')->first();
+    }
+
+    protected static function workflowDocumentTypeForRequest(
+        TreasuryCashTransferRequest $request
+    ): string {
+        $rawMetadata = $request->metadata ?? null;
+
+        if (is_array($rawMetadata)) {
+            $metadata = $rawMetadata;
+        } elseif (
+            is_string($rawMetadata)
+            && trim($rawMetadata) !== ''
+        ) {
+            $decoded = json_decode($rawMetadata, true);
+            $metadata = is_array($decoded) ? $decoded : [];
+        } else {
+            $metadata = [];
+        }
+
+        $isPettyCash =
+            ($metadata['module'] ?? null) === 'expenses'
+            && ($metadata['source'] ?? null) === 'petty_cash';
+
+        return $isPettyCash
+            ? self::PETTY_CASH_WORKFLOW_DOCUMENT_TYPE
+            : self::DOCUMENT_TYPE;
     }
 
     public static function workflowSteps(object $workflow, TreasuryCashTransferRequest $request)

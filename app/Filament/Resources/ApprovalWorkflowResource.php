@@ -377,6 +377,7 @@ public static function documentTypeOptions(): array
             'employee_incident' => 'Incidencia RRHH',
             'payroll_run' => 'Aprobación de pre-nómina',
             'treasury_cash_transfer_request' => 'Solicitud de efectivo / Retiro PDV',
+            'petty_cash_transfer_request' => 'Movimiento de caja chica',
         ];
     }
 
