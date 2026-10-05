@@ -542,6 +542,31 @@ class ExpenseReportResource extends Resource
                                     ->default(false)
                                     ->live(),
 
+                                Forms\Components\FileUpload::make('evidence_image_path')
+                                    ->label('Foto / evidencia')
+                                    ->disk('local')
+                                    ->directory(
+                                        fn (): string =>
+                                            'expense-receipts/'
+                                            . (static::currentCompanyId() ?? 'sin-empresa')
+                                            . '/evidence'
+                                    )
+                                    ->visibility('private')
+                                    ->acceptedFileTypes([
+                                        'image/jpeg',
+                                        'image/png',
+                                        'image/webp',
+                                    ])
+                                    ->maxSize(10240)
+                                    ->image()
+                                    ->imagePreviewHeight('150')
+                                    ->downloadable()
+                                    ->openable()
+                                    ->helperText(
+                                        'Opcional. Puede agregarse con o sin factura o comprobante.'
+                                    )
+                                    ->columnSpan(2),
+
                                 Forms\Components\FileUpload::make('receipt_xml_path')
                                     ->label('XML CFDI')
                                     ->disk('local')
@@ -709,9 +734,62 @@ class ExpenseReportResource extends Resource
                                             (bool) $get('has_receipt')
                                     )
                                     ->helperText(
-                                        'Se llena automáticamente cuando Bexia puede leerlo; también puede capturarse manualmente.'
+                                        'Se llena automáticamente cuando Bexia puede leerlo; también puede capturarse manualmente. Un UUID solo puede utilizarse una vez.'
                                     )
                                     ->maxLength(36)
+                                    ->rules([
+                                        function (
+                                            ?\App\Models\ExpenseReportLine $record
+                                        ): \Closure {
+                                            return function (
+                                                string $attribute,
+                                                mixed $value,
+                                                \Closure $fail
+                                            ) use ($record): void {
+                                                if (blank($value)) {
+                                                    return;
+                                                }
+
+                                                $uuid = strtolower(
+                                                    trim((string) $value)
+                                                );
+
+                                                $query =
+                                                    \App\Models\ExpenseReportLine::
+                                                        query()
+                                                        ->where(
+                                                            'cfdi_uuid',
+                                                            $uuid
+                                                        );
+
+                                                if ($record?->exists) {
+                                                    $query->whereKeyNot(
+                                                        $record->getKey()
+                                                    );
+                                                }
+
+                                                $existing = $query
+                                                    ->with('report:id,number')
+                                                    ->first();
+
+                                                if (! $existing) {
+                                                    return;
+                                                }
+
+                                                $number =
+                                                    $existing->report?->number
+                                                    ?: '#'
+                                                        . $existing
+                                                            ->expense_report_id;
+
+                                                $fail(
+                                                    'Este UUID ya fue utilizado en la comprobación '
+                                                    . $number
+                                                    . '.'
+                                                );
+                                            };
+                                        },
+                                    ])
                                     ->columnSpan(2),
 
                                 Forms\Components\Textarea::make('receipt_exception_reason')
