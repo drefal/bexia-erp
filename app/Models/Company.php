@@ -246,5 +246,15 @@ class Company extends Model implements HasAvatar
         return $this->hasMany(HrAttendanceLocation::class);
     }
 
+    /**
+     * Puestos de RRHH pertenecientes a esta empresa.
+     *
+     * Requerido por Filament tenancy para HrJobPositionResource.
+     */
+    public function hrJobPositions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\HrJobPosition::class, 'company_id');
+    }
+
 
 }
