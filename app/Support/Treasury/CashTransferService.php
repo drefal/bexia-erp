@@ -3,6 +3,7 @@
 namespace App\Support\Treasury;
 
 use App\Models\TreasuryCashTransferRequest;
+use App\Support\Expenses\PettyCashTransferService;
 
 
 use Illuminate\Support\Facades\DB;
@@ -314,11 +315,16 @@ class CashTransferService
             $updated = DB::table('treasury_cash_transfer_requests')->where('id', $request->id)->first();
             $this->logAction($updated, 'post', $request->status, 'posted', $userId, 'Traspaso contabilizado en Tesoreria.');
 
-            return [
+            $result = [
                 'request_id' => $request->id,
                 'outflow_movement_id' => $outflowMovementId,
                 'inflow_movement_id' => $inflowMovementId,
             ];
+
+            app(PettyCashTransferService::class)
+                ->syncPostedTransfer($updated, $result, $userId);
+
+            return $result;
         });
     }
 

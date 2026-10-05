@@ -1695,6 +1695,7 @@ class ServiceAccess
             'sales_margin_approval' => 'Aprobación de margen de venta',
 
             'treasury_cash_transfer_request' => 'Solicitud de efectivo / retiro PDV',
+            'expense_report' => 'Comprobación de gastos',
 
             'service_repair_parts_request' => 'Solicitud de refacciones/materiales para reparación',
             'service_repair_quote_internal' => 'Presupuesto de reparación / servicio',

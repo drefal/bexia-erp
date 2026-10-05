@@ -184,6 +184,7 @@ class MySentApprovalStatuses extends Page
             'employee_incident' => EmployeeIncidentApprovalWorkflow::documentUrl($row),
             'payroll_run' => PayrollRunApprovalWorkflow::documentUrl($row),
             'treasury_cash_transfer_request' => CashTransferApprovalWorkflow::documentUrl($row),
+            'expense_report' => \App\Support\Expenses\ExpenseReportApprovalWorkflow::documentUrl($row),
             default => '#',
         };
     }
@@ -210,6 +211,12 @@ class MySentApprovalStatuses extends Page
 
         if ($type === 'purchase_request' && $id > 0 && Schema::hasTable('purchase_requests')) {
             return (int) DB::table('purchase_requests')->where('id', $id)->value('company_id');
+        }
+
+        if ($type === 'expense_report' && $id > 0 && Schema::hasTable('expense_reports')) {
+            return (int) DB::table('expense_reports')
+                ->where('id', $id)
+                ->value('company_id');
         }
 
         if (in_array($type, ['sales_quote', 'sales_:quote', 'sale_quote', 'sales_order', 'sales_margin_approval'], true) && $id > 0 && Schema::hasTable('sales_orders')) {
@@ -250,6 +257,12 @@ class MySentApprovalStatuses extends Page
 
     protected function documentTypeLabel(?string $type): string
     {
+
+        if ((string) $type === 'expense_report') {
+            return 'Comprobación de gastos';
+        }
+
+
         return match ((string) $type) {
             'employee_incident' => 'Incidencia RRHH',
             'purchase_order' => 'Orden de compra',
@@ -257,6 +270,7 @@ class MySentApprovalStatuses extends Page
             'sales_quote' => 'Cotización de venta',
             'sale_order' => 'Pedido de venta',
             'treasury_cash_transfer_request' => 'Traspaso de efectivo',
+            'expense_report' => 'Comprobación de gastos',
             'service_repair_request' => 'Orden de servicio',
             'service_repair_delivery' => 'Entrega de servicio',
             default => \Illuminate\Support\Str::headline((string) $type),
@@ -266,6 +280,12 @@ class MySentApprovalStatuses extends Page
 
     protected function documentLabel(?string $type): string
     {
+
+        if ((string) $type === 'expense_report') {
+            return 'Comprobación de gastos';
+        }
+
+
         return match ((string) $type) {
             'employee_incident' => 'Incidencia RRHH',
             'purchase_order' => 'Orden de compra',
