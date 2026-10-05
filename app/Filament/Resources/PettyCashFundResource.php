@@ -61,8 +61,10 @@ class PettyCashFundResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return static::bexiaCanExpensePermission('treasury.view')
-            || static::bexiaCanExpensePermission('treasury.update');
+        return static::bexiaCanExpensePermission('expenses.admin')
+            || static::bexiaCanExpensePermission('petty_cash.view')
+            || static::bexiaCanExpensePermission('petty_cash.manage')
+            || static::bexiaCanExpensePermission('petty_cash.transfer');
     }
 
     public static function canViewAny(): bool
@@ -72,12 +74,14 @@ class PettyCashFundResource extends Resource
 
     public static function canCreate(): bool
     {
-        return static::bexiaCanExpensePermission('treasury.update');
+        return static::bexiaCanExpensePermission('expenses.admin')
+            || static::bexiaCanExpensePermission('petty_cash.manage');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::bexiaCanExpensePermission('treasury.update');
+        return static::bexiaCanExpensePermission('expenses.admin')
+            || static::bexiaCanExpensePermission('petty_cash.manage');
     }
 
     public static function canDelete(Model $record): bool
@@ -288,7 +292,10 @@ class PettyCashFundResource extends Resource
                 'Se creará una solicitud de Tesorería y deberá pasar por el flujo general de aprobación.'
             )
             ->visible(function (PettyCashFund $record): bool {
-                if (! auth()->user()?->can('treasury.create')) {
+                if (! (
+                    auth()->user()?->can('expenses.admin')
+                    || auth()->user()?->can('petty_cash.transfer')
+                )) {
                     return false;
                 }
 
@@ -351,7 +358,10 @@ class PettyCashFundResource extends Resource
                 'El saldo final no podrá superar el monto autorizado.'
             )
             ->visible(function (PettyCashFund $record): bool {
-                if (! auth()->user()?->can('treasury.create')) {
+                if (! (
+                    auth()->user()?->can('expenses.admin')
+                    || auth()->user()?->can('petty_cash.transfer')
+                )) {
                     return false;
                 }
 
@@ -418,7 +428,10 @@ class PettyCashFundResource extends Resource
                 'Se transferirá de la caja chica hacia su caja de fondeo, después de aprobación.'
             )
             ->visible(function (PettyCashFund $record): bool {
-                if (! auth()->user()?->can('treasury.create')) {
+                if (! (
+                    auth()->user()?->can('expenses.admin')
+                    || auth()->user()?->can('petty_cash.transfer')
+                )) {
                     return false;
                 }
 
