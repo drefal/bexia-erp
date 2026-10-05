@@ -49,7 +49,7 @@ class ExpenseCategoryResource extends Resource
             return true;
         }
 
-        return $user->can($permission);
+        return \App\Support\Security\BexiaTenantPermission::can($permission);
     }
 
     public static function shouldRegisterNavigation(): bool
