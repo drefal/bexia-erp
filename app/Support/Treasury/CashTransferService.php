@@ -183,8 +183,17 @@ class CashTransferService
 
                 $sourceBalance = round((float) $sourceAccount->current_balance, 6);
 
-                if ($sourceBalance + 0.000001 < $amount) {
-                    throw new RuntimeException('La caja origen no tiene saldo suficiente para el traspaso.');
+                $allowNegativeBalance =
+                    property_exists($sourceAccount, 'allow_negative_balance')
+                    && (bool) $sourceAccount->allow_negative_balance;
+
+                if (
+                    ! $allowNegativeBalance
+                    && $sourceBalance + 0.000001 < $amount
+                ) {
+                    throw new RuntimeException(
+                        'La caja origen no tiene saldo suficiente para el traspaso.'
+                    );
                 }
             }
 

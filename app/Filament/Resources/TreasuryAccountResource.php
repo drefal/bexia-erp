@@ -182,6 +182,14 @@ class TreasuryAccountResource extends Resource
                             ->default(true)
                             ->helperText('Recomendado para sucursal, administración, bodega/CEDIS y traspasos.'),
 
+                        Forms\Components\Toggle::make('allow_negative_balance')
+                            ->label('Permitir saldo negativo')
+                            ->default(false)
+                            ->helperText(
+                                'Permite registrar salidas aun cuando el saldo contable de esta caja sea insuficiente. '
+                                . 'Úsalo únicamente en cajas de efectivo que operan como bolsa o concentradora.'
+                            ),
+
                         Forms\Components\Toggle::make('is_default_concentrator')
                             ->extraAttributes(['class' => 'bexia-treasury-account-field bexia-treasury-account-field-concentrator'])
                             ->label('Concentradora por defecto de la empresa')

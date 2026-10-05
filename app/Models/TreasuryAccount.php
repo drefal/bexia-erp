@@ -27,6 +27,7 @@ class TreasuryAccount extends Model
         'parent_treasury_account_id',
         'cash_scope',
         'requires_approval',
+        'allow_negative_balance',
         'is_default_concentrator',
     ];
 
@@ -34,6 +35,7 @@ class TreasuryAccount extends Model
         'opening_balance' => 'decimal:6',
         'current_balance' => 'decimal:6',
         'is_active' => 'boolean',
+        'allow_negative_balance' => 'boolean',
         'is_default_concentrator' => 'boolean',
     ];
 
