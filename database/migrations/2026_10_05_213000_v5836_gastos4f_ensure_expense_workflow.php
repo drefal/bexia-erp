@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -74,7 +75,9 @@ return new class extends Migration
                 'amount_min' => null,
                 'amount_max' => null,
                 'notes' => null,
-                'approval_mode' => 'any',
+                ...(Schema::hasColumn('approval_workflow_steps', 'approval_mode')
+                    ? ['approval_mode' => 'any']
+                    : []),
                 'updated_at' => now(),
             ];
 
