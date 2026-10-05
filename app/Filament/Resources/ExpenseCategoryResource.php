@@ -54,8 +54,8 @@ class ExpenseCategoryResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return static::bexiaCanExpensePermission('treasury.view')
-            || static::bexiaCanExpensePermission('treasury.update');
+        return static::bexiaCanExpensePermission('expenses.admin')
+            || static::bexiaCanExpensePermission('expenses.categories.manage');
     }
 
     public static function canViewAny(): bool
@@ -65,17 +65,22 @@ class ExpenseCategoryResource extends Resource
 
     public static function canCreate(): bool
     {
-        return static::bexiaCanExpensePermission('treasury.update');
+        return static::bexiaCanExpensePermission('expenses.admin')
+            || static::bexiaCanExpensePermission('expenses.categories.manage');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::bexiaCanExpensePermission('treasury.update');
+        return static::bexiaCanExpensePermission('expenses.admin')
+            || static::bexiaCanExpensePermission('expenses.categories.manage');
     }
 
     public static function canDelete(Model $record): bool
     {
-        return static::bexiaCanExpensePermission('treasury.update')
+        return (
+                static::bexiaCanExpensePermission('expenses.admin')
+                || static::bexiaCanExpensePermission('expenses.categories.manage')
+            )
             && ! $record->lines()->exists();
     }
 

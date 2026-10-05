@@ -64,9 +64,11 @@ class ExpenseReportResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return static::bexiaCanExpensePermission('treasury.view')
-            || static::bexiaCanExpensePermission('treasury.update')
-            || static::bexiaCanExpensePermission('treasury.create');
+        return static::bexiaCanExpensePermission('expenses.admin')
+            || static::bexiaCanExpensePermission('expenses.view')
+            || static::bexiaCanExpensePermission('expenses.create')
+            || static::bexiaCanExpensePermission('expenses.update')
+            || static::bexiaCanExpensePermission('expenses.submit');
     }
 
     public static function canViewAny(): bool
@@ -81,13 +83,16 @@ class ExpenseReportResource extends Resource
 
     public static function canCreate(): bool
     {
-        return static::bexiaCanExpensePermission('treasury.create')
-            || static::bexiaCanExpensePermission('treasury.update');
+        return static::bexiaCanExpensePermission('expenses.admin')
+            || static::bexiaCanExpensePermission('expenses.create');
     }
 
     public static function canEdit(Model $record): bool
     {
-        return static::bexiaCanExpensePermission('treasury.update')
+        return (
+                static::bexiaCanExpensePermission('expenses.admin')
+                || static::bexiaCanExpensePermission('expenses.update')
+            )
             && (string) $record->status === 'draft';
     }
 
