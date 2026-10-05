@@ -33,21 +33,99 @@ protected static function canUseApprovalsPage(): bool
     }
 
     /*
-     * V5.83.6J2AP1A
+     * V5.83.6-GASTOS4L
      *
-     * RRHH entra por approvals.approve.
-     *
-     * Un jefe directo puede no tener ese permiso global;
-     * debe poder entrar únicamente cuando exista una
-     * aprobación pendiente que realmente pueda atender.
+     * Puede usar la página si:
+     * 1) tiene permiso global approvals.approve;
+     * 2) tiene una aprobación pendiente que realmente puede atender; o
+     * 3) está configurado como aprobador en un workflow activo
+     *    de la empresa/tenant actual.
      */
     if ($user->can('approvals.approve')) {
         return true;
     }
 
-    return static::pendingCountForUser(
-        (int) $user->id
-    ) > 0;
+    if (static::pendingCountForUser((int) $user->id) > 0) {
+        return true;
+    }
+
+    return static::isConfiguredApproverForCurrentTenant($user);
+}
+
+protected static function isConfiguredApproverForCurrentTenant(
+    \App\Models\User $user
+): bool {
+    if (
+        ! Schema::hasTable('approval_workflows')
+        || ! Schema::hasTable('approval_workflow_steps')
+    ) {
+        return false;
+    }
+
+    $tenant = \Filament\Facades\Filament::getTenant();
+    $companyId = $tenant?->getKey();
+
+    if (! $companyId) {
+        $routeTenant = request()?->route('tenant');
+
+        if ($routeTenant instanceof \Illuminate\Database\Eloquent\Model) {
+            $companyId = $routeTenant->getKey();
+        } elseif (is_numeric($routeTenant)) {
+            $companyId = (int) $routeTenant;
+        }
+    }
+
+    $companyId = (int) ($companyId ?? 0);
+
+    if ($companyId <= 0) {
+        return false;
+    }
+
+    $company = \App\Models\Company::query()->find($companyId);
+
+    if (! $company || ! $user->canAccessTenant($company)) {
+        return false;
+    }
+
+    $roleNames = DB::table('model_has_roles as mr')
+        ->join('roles as r', 'r.id', '=', 'mr.role_id')
+        ->where('mr.model_type', \App\Models\User::class)
+        ->where('mr.model_id', $user->id)
+        ->when(
+            Schema::hasColumn('model_has_roles', 'company_id'),
+            fn ($query) => $query->where('mr.company_id', $companyId)
+        )
+        ->pluck('r.name')
+        ->filter()
+        ->values()
+        ->all();
+
+    return DB::table('approval_workflow_steps as steps')
+        ->join(
+            'approval_workflows as workflows',
+            'workflows.id',
+            '=',
+            'steps.approval_workflow_id'
+        )
+        ->where('workflows.company_id', $companyId)
+        ->where('workflows.is_active', true)
+        ->where('steps.is_active', true)
+        ->where(function ($query) use ($user, $roleNames): void {
+            $query->where(function ($specific) use ($user): void {
+                $specific
+                    ->where('steps.approver_type', 'specific_user')
+                    ->where('steps.approver_user_id', $user->id);
+            });
+
+            if ($roleNames !== []) {
+                $query->orWhere(function ($role) use ($roleNames): void {
+                    $role
+                        ->where('steps.approver_type', 'role')
+                        ->whereIn('steps.approver_role_name', $roleNames);
+                });
+            }
+        })
+        ->exists();
 }
 
 public static function shouldRegisterNavigation(): bool
