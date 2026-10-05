@@ -598,6 +598,29 @@ try {
             return;
         }
 
+
+        if ($type === 'expense_report') {
+            \App\Support\Expenses\ExpenseReportApprovalWorkflow::markApproved(
+                $request,
+                (int) $user->id,
+                $comment
+            );
+
+            $this->notifyRequester(
+                $request,
+                'Comprobación de gastos aprobada',
+                'La comprobación '
+                    . $request->document_number
+                    . ' fue aprobada.',
+                'expense_report_approved',
+                $comment
+            );
+
+            return;
+        }
+
+
+
         if ($type === 'service_repair_quote_internal') {
             $this->markServiceRepairApproval(
                 $request,
@@ -679,6 +702,30 @@ try {
 
             return;
         }
+
+
+        if ($type === 'expense_report') {
+            \App\Support\Expenses\ExpenseReportApprovalWorkflow::markRejected(
+                $request,
+                (int) $user->id,
+                $reason
+            );
+
+            $this->notifyRequester(
+                $request,
+                'Comprobación de gastos rechazada',
+                'La comprobación '
+                    . $request->document_number
+                    . ' fue rechazada. Motivo: '
+                    . $reason,
+                'expense_report_rejected',
+                $reason
+            );
+
+            return;
+        }
+
+
 
         if ($type === 'service_repair_quote_internal') {
             $this->markServiceRepairApproval(
@@ -926,6 +973,12 @@ try {
                 : 'Incidencia RRHH rechazada.';
         }
 
+        if ($type === 'expense_report') {
+            return $decision === 'approved'
+                ? 'Comprobación de gastos aprobada.'
+                : 'Comprobación de gastos rechazada.';
+        }
+
         return $decision === 'approved'
             ? 'Documento aprobado.'
             : 'Documento rechazado.';
@@ -1046,6 +1099,7 @@ try {
             'employee_incident' => EmployeeIncidentApprovalWorkflow::documentUrl($row),
             'payroll_run' => PayrollRunApprovalWorkflow::documentUrl($row),
             'treasury_cash_transfer_request' => CashTransferApprovalWorkflow::documentUrl($row),
+            'expense_report' => \App\Support\Expenses\ExpenseReportApprovalWorkflow::documentUrl($row),
             'employee_incident' => 'Incidencia RRHH',
             default => '#',
         };
@@ -1075,6 +1129,12 @@ try {
             return (int) DB::table('purchase_requests')->where('id', $id)->value('company_id');
         }
 
+        if ($type === 'expense_report' && $id > 0 && Schema::hasTable('expense_reports')) {
+            return (int) DB::table('expense_reports')
+                ->where('id', $id)
+                ->value('company_id');
+        }
+
         if (in_array($type, ['sales_quote', 'sales_:quote', 'sale_quote', 'sales_order', 'sales_margin_approval'], true) && $id > 0 && Schema::hasTable('sales_orders')) {
             return (int) DB::table('sales_orders')->where('id', $id)->value('company_id');
         }
@@ -1099,6 +1159,12 @@ try {
 
     protected function documentTypeLabel(?string $type): string
     {
+
+        if ((string) $type === 'expense_report') {
+            return 'Comprobación de gastos';
+        }
+
+
         return match ((string) $type) {
             'employee_incident' => 'Incidencia RRHH',
             'purchase_order' => 'Orden de compra',
@@ -1106,6 +1172,7 @@ try {
             'sales_quote' => 'Cotización de venta',
             'sale_order' => 'Pedido de venta',
             'treasury_cash_transfer_request' => 'Traspaso de efectivo',
+            'expense_report' => 'Comprobación de gastos',
             'service_repair_request' => 'Orden de servicio',
             'service_repair_quote_internal' => 'Presupuesto de reparación / servicio',
             'service_repair_delivery' => 'Entrega de servicio',
@@ -1116,6 +1183,12 @@ try {
 
     protected function documentLabel(?string $type): string
     {
+
+        if ((string) $type === 'expense_report') {
+            return 'Comprobación de gastos';
+        }
+
+
         return match ((string) $type) {
             'employee_incident' => 'Incidencia RRHH',
             'purchase_order' => 'Orden de compra',
