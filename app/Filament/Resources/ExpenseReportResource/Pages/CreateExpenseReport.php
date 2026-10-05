@@ -11,6 +11,16 @@ class CreateExpenseReport extends CreateRecord
 {
     protected static string $resource = ExpenseReportResource::class;
 
+    protected function getRedirectUrl(): string
+    {
+        return static::getResource()::getUrl(
+            'edit',
+            [
+                'record' => $this->record,
+            ]
+        );
+    }
+
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         $data['company_id'] = (int) Filament::getTenant()->getKey();
