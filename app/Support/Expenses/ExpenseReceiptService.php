@@ -526,6 +526,9 @@ class ExpenseReceiptService
         $data['receipt_pdf_path'] =
             $receipt['pdf_path'] ?? null;
 
+        $data['evidence_image_path'] =
+            $receipt['evidence_image_path'] ?? null;
+
         $tax = is_array($metadata['tax'] ?? null)
             ? $metadata['tax']
             : [];
@@ -558,6 +561,13 @@ class ExpenseReceiptService
                 $data['receipt_pdf_path'] ?: null;
 
             unset($data['receipt_pdf_path']);
+        }
+
+        if (array_key_exists('evidence_image_path', $data)) {
+            $receipt['evidence_image_path'] =
+                $data['evidence_image_path'] ?: null;
+
+            unset($data['evidence_image_path']);
         }
 
         $receipt['updated_at'] = now()->toIso8601String();
@@ -618,6 +628,7 @@ class ExpenseReceiptService
         $paths = array_filter([
             'xml' => $receipt['xml_path'] ?? null,
             'pdf' => $receipt['pdf_path'] ?? null,
+            'evidence' => $receipt['evidence_image_path'] ?? null,
         ]);
 
         $currentPaths = array_values($paths);
@@ -657,11 +668,15 @@ class ExpenseReceiptService
                     'target_table' =>
                         'expense_report_lines',
                     'target_id' => $line->id,
-                    'title' => $kind === 'xml'
-                        ? 'XML CFDI'
-                        : 'PDF comprobante',
-                    'description' =>
-                        'Comprobante de gasto',
+                    'title' => match ($kind) {
+                        'xml' => 'XML CFDI',
+                        'pdf' => 'PDF comprobante',
+                        'evidence' => 'Foto / evidencia',
+                        default => 'Adjunto de gasto',
+                    },
+                    'description' => $kind === 'evidence'
+                        ? 'Evidencia fotográfica del gasto'
+                        : 'Comprobante de gasto',
                     'disk' => 'local',
                     'original_filename' =>
                         basename($storagePath),

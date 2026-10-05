@@ -99,6 +99,11 @@ class ExpenseReportSubmissionValidator
             );
         }
 
+        static::validateUniqueCfdiUuids(
+            $report,
+            $errors
+        );
+
         static::validatePettyCash(
             $report,
             $errors
@@ -122,6 +127,43 @@ class ExpenseReportSubmissionValidator
             "No se puede enviar la comprobación:\n- "
             . implode("\n- ", $errors)
         );
+    }
+
+    protected static function validateUniqueCfdiUuids(
+        ExpenseReport $report,
+        array &$errors
+    ): void {
+        foreach ($report->lines as $line) {
+            if (blank($line->cfdi_uuid)) {
+                continue;
+            }
+
+            $existing =
+                \App\Models\ExpenseReportLine::query()
+                    ->where(
+                        'cfdi_uuid',
+                        $line->cfdi_uuid
+                    )
+                    ->whereKeyNot($line->id)
+                    ->with('report:id,number')
+                    ->first();
+
+            if (! $existing) {
+                continue;
+            }
+
+            $number =
+                $existing->report?->number
+                ?: '#'
+                    . $existing->expense_report_id;
+
+            $errors[] =
+                'El UUID CFDI '
+                . $line->cfdi_uuid
+                . ' ya fue utilizado en la comprobación '
+                . $number
+                . '.';
+        }
     }
 
     protected static function validateReceipt(
