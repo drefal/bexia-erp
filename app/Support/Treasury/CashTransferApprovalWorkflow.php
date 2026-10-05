@@ -139,6 +139,51 @@ class CashTransferApprovalWorkflow
             'approval_request_id' => $approvalRequest->id,
             'approval_workflow_id' => $approvalRequest->approval_workflow_id,
         ]);
+
+        /*
+         * AUTO_POST_PETTY_CASH
+         *
+         * Los fondeos, reposiciones y devoluciones originados por Caja Chica
+         * se contabilizan automáticamente al completar la aprobación.
+         *
+         * Si CashTransferService falla (por ejemplo, saldo insuficiente),
+         * la excepción se propaga para que la transacción de aprobación
+         * también haga rollback.
+         */
+        $rawMetadata = $request->metadata ?? null;
+
+        if (is_array($rawMetadata)) {
+            $metadata = $rawMetadata;
+        } elseif (
+            is_string($rawMetadata)
+            && trim($rawMetadata) !== ''
+        ) {
+            $decodedMetadata = json_decode(
+                $rawMetadata,
+                true
+            );
+
+            $metadata = is_array($decodedMetadata)
+                ? $decodedMetadata
+                : [];
+        } else {
+            $metadata = [];
+        }
+
+        $isPettyCash =
+            ($metadata['module'] ?? null) === 'expenses'
+            && ($metadata['source'] ?? null) === 'petty_cash';
+
+        if (
+            $isPettyCash
+            && empty($request->posted_at)
+        ) {
+            app(CashTransferService::class)
+                ->postApprovedTransfer(
+                    (int) $request->id,
+                    $userId
+                );
+        }
     }
 
     public static function markRejected(ApprovalRequest $approvalRequest, ?int $userId = null, ?string $reason = null): void

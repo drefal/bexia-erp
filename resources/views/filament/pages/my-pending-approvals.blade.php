@@ -1,5 +1,20 @@
 <x-filament-panels::page>
-    <div class="space-y-4">
+    <div
+        class="space-y-4"
+        x-data="{
+            approveStepId: null,
+            approveDocumentLabel: '',
+            openApprove(stepId, label) {
+                this.approveStepId = Number(stepId);
+                this.approveDocumentLabel = label || '';
+            },
+            closeApprove() {
+                this.approveStepId = null;
+                this.approveDocumentLabel = '';
+            }
+        }"
+        x-on:keydown.escape.window="closeApprove()"
+    >
         <div>
             <div class="text-base font-semibold text-gray-950 dark:text-white">
                 Aprobaciones pendientes
@@ -67,8 +82,14 @@
                                             size="sm"
                                             color="success"
                                             icon="heroicon-o-check"
-                                            wire:click="approveStep({{ (int) $row['step_id'] }})"
-                                            wire:confirm="¿Aprobar {{ $row['document_label'] }} {{ $row['document_number'] }}?"
+                                            data-step-id="{{ (int) $row['step_id'] }}"
+                                            data-document-label="{{ $row['document_label'] }} {{ $row['document_number'] }}"
+                                            x-on:click="
+                                                openApprove(
+                                                    $el.dataset.stepId,
+                                                    $el.dataset.documentLabel
+                                                )
+                                            "
                                             wire:loading.attr="disabled"
                                         >
                                             Aprobar
@@ -96,6 +117,71 @@
                         @endforelse
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        {{-- Modal de confirmación de aprobación --}}
+        <div
+            x-cloak
+            x-show="approveStepId !== null"
+            x-transition.opacity
+            class="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/50 p-4"
+            x-on:click.self="closeApprove()"
+        >
+            <div
+                x-show="approveStepId !== null"
+                x-transition
+                class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900"
+            >
+                <div class="flex items-start gap-4">
+                    <div
+                        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-success-100 text-success-600 dark:bg-success-500/20 dark:text-success-400"
+                    >
+                        <x-filament::icon
+                            icon="heroicon-o-check"
+                            class="h-6 w-6"
+                        />
+                    </div>
+
+                    <div class="min-w-0">
+                        <div class="text-lg font-semibold text-gray-950 dark:text-white">
+                            Aprobar documento
+                        </div>
+
+                        <div
+                            class="mt-1 text-sm font-medium text-gray-700 dark:text-gray-200"
+                            x-text="approveDocumentLabel"
+                        ></div>
+
+                        <div class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                            Esta acción registrará tu aprobación en la etapa actual.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-2">
+                    <x-filament::button
+                        type="button"
+                        color="gray"
+                        x-on:click="closeApprove()"
+                    >
+                        Cancelar
+                    </x-filament::button>
+
+                    <x-filament::button
+                        type="button"
+                        color="success"
+                        icon="heroicon-o-check"
+                        x-on:click="
+                            const stepId = approveStepId;
+                            closeApprove();
+                            $wire.approveStep(stepId);
+                        "
+                        wire:loading.attr="disabled"
+                    >
+                        Aprobar
+                    </x-filament::button>
+                </div>
             </div>
         </div>
 

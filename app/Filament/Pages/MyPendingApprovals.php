@@ -593,7 +593,15 @@ try {
         $type = (string) ($request->document_type ?? '');
 
         if ($type === CashTransferApprovalWorkflow::DOCUMENT_TYPE) {
-            CashTransferApprovalWorkflow::markApproved($request, $user->id, $comment ?? null);
+            $approvalRequestModel =
+                \App\Models\ApprovalRequest::query()
+                    ->findOrFail((int) $request->id);
+
+            CashTransferApprovalWorkflow::markApproved(
+                $approvalRequestModel,
+                (int) $user->id,
+                $comment ?? null
+            );
 
             return;
         }
@@ -698,7 +706,15 @@ try {
         $type = (string) ($request->document_type ?? '');
 
         if ($type === CashTransferApprovalWorkflow::DOCUMENT_TYPE) {
-            CashTransferApprovalWorkflow::markRejected($request, $user->id, $reason ?? null);
+            $approvalRequestModel =
+                \App\Models\ApprovalRequest::query()
+                    ->findOrFail((int) $request->id);
+
+            CashTransferApprovalWorkflow::markRejected(
+                $approvalRequestModel,
+                (int) $user->id,
+                $reason ?? null
+            );
 
             return;
         }
