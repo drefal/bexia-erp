@@ -14,6 +14,7 @@ class ExpenseAnalyticsReportService
         ?string $status = null,
         ?int $employeeId = null,
         ?int $categoryId = null,
+        ?int $projectId = null,
         ?string $supplier = null,
         array $selectedLineIds = []
     ): Collection {
@@ -25,6 +26,7 @@ class ExpenseAnalyticsReportService
             $status,
             $employeeId,
             $categoryId,
+            $projectId,
             $supplier,
             $selectedLineIds
         );

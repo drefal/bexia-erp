@@ -2,6 +2,7 @@
 
 namespace App\Support\Expenses;
 
+use App\Models\FundingSource;
 use App\Models\PettyCashFund;
 use App\Models\PettyCashFundMovement;
 use App\Models\TreasuryAccount;
@@ -20,14 +21,18 @@ class PettyCashTransferService
         PettyCashFund $fund,
         float $amount,
         ?int $userId = null,
-        ?string $notes = null
+        ?string $notes = null,
+        ?int $fundingSourceId = null,
+        ?int $sourceTreasuryAccountId = null
     ): TreasuryCashTransferRequest {
         return $this->requestInbound(
             $fund,
             $amount,
             self::ACTION_INITIAL_FUNDING,
             $userId,
-            $notes
+            $notes,
+            $fundingSourceId,
+            $sourceTreasuryAccountId
         );
     }
 
@@ -35,14 +40,18 @@ class PettyCashTransferService
         PettyCashFund $fund,
         float $amount,
         ?int $userId = null,
-        ?string $notes = null
+        ?string $notes = null,
+        ?int $fundingSourceId = null,
+        ?int $sourceTreasuryAccountId = null
     ): TreasuryCashTransferRequest {
         return $this->requestInbound(
             $fund,
             $amount,
             self::ACTION_REPLENISHMENT,
             $userId,
-            $notes
+            $notes,
+            $fundingSourceId,
+            $sourceTreasuryAccountId
         );
     }
 
@@ -107,7 +116,9 @@ class PettyCashTransferService
         float $amount,
         string $action,
         ?int $userId,
-        ?string $notes
+        ?string $notes,
+        ?int $fundingSourceId = null,
+        ?int $sourceTreasuryAccountId = null
     ): TreasuryCashTransferRequest {
         $amount = round($amount, 6);
 
@@ -123,9 +134,56 @@ class PettyCashTransferService
 
         $this->assertFundCanOperate($fund);
 
-        if (! $fund->funding_treasury_account_id) {
+        if (! $fundingSourceId) {
             throw new RuntimeException(
-                'Primero configura la caja / cuenta origen de fondeo.'
+                'Selecciona un origen de fondos.'
+            );
+        }
+
+        $fundingSource = FundingSource::query()
+            ->whereKey($fundingSourceId)
+            ->where('company_id', $fund->company_id)
+            ->where('is_active', true)
+            ->first();
+
+        if (! $fundingSource) {
+            throw new RuntimeException(
+                'El origen de fondos seleccionado no es válido para esta empresa.'
+            );
+        }
+
+        $sourceTreasuryAccountId =
+            $sourceTreasuryAccountId
+            ?: (
+                $fund->funding_treasury_account_id
+                    ? (int) $fund->funding_treasury_account_id
+                    : null
+            );
+
+        if (! $sourceTreasuryAccountId) {
+            throw new RuntimeException(
+                'Selecciona una cuenta origen de Tesorería.'
+            );
+        }
+
+        if (
+            (int) $sourceTreasuryAccountId
+            === (int) $fund->treasury_account_id
+        ) {
+            throw new RuntimeException(
+                'La cuenta origen no puede ser la misma cuenta de la caja chica.'
+            );
+        }
+
+        $sourceAccount = TreasuryAccount::query()
+            ->whereKey($sourceTreasuryAccountId)
+            ->where('company_id', $fund->company_id)
+            ->where('is_active', true)
+            ->first();
+
+        if (! $sourceAccount) {
+            throw new RuntimeException(
+                'La cuenta origen seleccionada no es válida o no pertenece a esta empresa.'
             );
         }
 
@@ -154,7 +212,7 @@ class PettyCashTransferService
         return app(CashTransferService::class)->createRequest([
             'company_id' => $fund->company_id,
             'branch_id' => $fund->employee?->branch_id,
-            'source_treasury_account_id' => $fund->funding_treasury_account_id,
+            'source_treasury_account_id' => $sourceTreasuryAccountId,
             'destination_treasury_account_id' => $fund->treasury_account_id,
             'type' => 'transfer',
             'amount' => $amount,
@@ -163,7 +221,14 @@ class PettyCashTransferService
                 . ($fund->number ?: ('#' . $fund->id)),
             'notes' => $notes,
             'requested_by_user_id' => $userId,
-            'metadata' => $this->metadata($fund, $action),
+            'metadata' => array_merge(
+                $this->metadata($fund, $action),
+                [
+                    'funding_source_id' => $fundingSourceId,
+                    'source_treasury_account_id' =>
+                        $sourceTreasuryAccountId,
+                ]
+            ),
         ]);
     }
 
@@ -184,6 +249,9 @@ class PettyCashTransferService
 
         $fundId = (int) ($metadata['petty_cash_fund_id'] ?? 0);
         $action = (string) ($metadata['petty_cash_action'] ?? '');
+        $fundingSourceId = ! empty($metadata['funding_source_id'])
+            ? (int) $metadata['funding_source_id']
+            : null;
 
         if ($fundId <= 0) {
             return;
@@ -247,6 +315,7 @@ class PettyCashTransferService
             'petty_cash_fund_id' => $fund->id,
             'expense_report_id' => null,
             'type' => $action,
+            'funding_source_id' => $fundingSourceId,
             'movement_date' => now()->toDateString(),
             'amount' => $amount,
             'currency_code' => $request->currency_code ?: $fund->currency_code,

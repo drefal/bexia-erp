@@ -12,6 +12,7 @@ class PettyCashFundMovement extends Model
         'petty_cash_fund_id',
         'expense_report_id',
         'type',
+        'funding_source_id',
         'movement_date',
         'amount',
         'currency_code',
@@ -42,6 +43,14 @@ class PettyCashFundMovement extends Model
         return $this->belongsTo(
             PettyCashFund::class,
             'petty_cash_fund_id'
+        );
+    }
+
+    public function fundingSource(): BelongsTo
+    {
+        return $this->belongsTo(
+            FundingSource::class,
+            'funding_source_id'
         );
     }
 

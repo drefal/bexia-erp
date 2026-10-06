@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ExpenseReportResource\Pages;
 use App\Models\Employee;
 use App\Models\ExpenseCategory;
+use App\Models\ExpenseProject;
 use App\Models\ExpenseReport;
 use App\Models\PettyCashFund;
 use App\Support\Expenses\ExpenseReceiptService;
@@ -108,6 +109,7 @@ class ExpenseReportResource extends Resource
                 'employee',
                 'pettyCashFund',
                 'lines.spentByEmployee',
+                'lines.project',
             ]);
 
         $companyId = static::currentCompanyId();
@@ -148,6 +150,29 @@ class ExpenseReportResource extends Resource
             ->where('is_active', true)
             ->orderBy('name')
             ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    protected static function projectOptions(): array
+    {
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId) {
+            return [];
+        }
+
+        return ExpenseProject::query()
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(
+                fn (ExpenseProject $project): array => [
+                    $project->id =>
+                        ($project->code ? $project->code . ' · ' : '')
+                        . $project->name,
+                ]
+            )
             ->toArray();
     }
 
@@ -314,6 +339,16 @@ class ExpenseReportResource extends Resource
                                     ->required()
                                     ->placeholder('Sin categoría'),
 
+                                Forms\Components\Select::make('expense_project_id')
+                                    ->label('Proyecto')
+                                    ->options(fn (): array => static::projectOptions())
+                                    ->searchable()
+                                    ->preload()
+                                    ->placeholder('Sin proyecto')
+                                    ->helperText(
+                                        'Opcional. Permite analizar posteriormente el gasto por proyecto.'
+                                    ),
+
                                 Forms\Components\DatePicker::make('expense_date')
                                     ->label('Fecha del gasto')
                                     ->default(now()->toDateString())
@@ -403,7 +438,7 @@ class ExpenseReportResource extends Resource
                                     ->default(0)
                                     ->minValue(0)
                                     ->required()
-                                    ->live(debounce: 500)
+                                    ->live(debounce: 350)
                                     ->afterStateUpdated(
                                         function (
                                             $state,
@@ -427,6 +462,7 @@ class ExpenseReportResource extends Resource
                                                     'tax_amount',
                                                     $result['tax_amount']
                                                 );
+
                                                 $set(
                                                     'total_amount',
                                                     $result['total_amount']
@@ -443,6 +479,9 @@ class ExpenseReportResource extends Resource
                                                 )
                                             );
                                         }
+                                    )
+                                    ->helperText(
+                                        'Captura subtotal o total; Bexia calcula automáticamente el otro valor según el IVA seleccionado.'
                                     ),
 
                                 Forms\Components\TextInput::make('tax_amount')
@@ -458,7 +497,7 @@ class ExpenseReportResource extends Resource
                                                 $get('iva_mode')
                                             )
                                     )
-                                    ->live(debounce: 500)
+                                    ->live(debounce: 350)
                                     ->afterStateUpdated(
                                         function (
                                             $state,
@@ -487,9 +526,10 @@ class ExpenseReportResource extends Resource
                                     ->label('Total con IVA')
                                     ->numeric()
                                     ->prefix('$')
-                                    ->minValue(0.01)
+                                    ->default(0)
+                                    ->minValue(0)
                                     ->required()
-                                    ->live(debounce: 500)
+                                    ->live(debounce: 350)
                                     ->afterStateUpdated(
                                         function (
                                             $state,
@@ -516,6 +556,7 @@ class ExpenseReportResource extends Resource
                                                 'subtotal',
                                                 $result['subtotal']
                                             );
+
                                             $set(
                                                 'tax_amount',
                                                 $result['tax_amount']
@@ -523,12 +564,8 @@ class ExpenseReportResource extends Resource
                                         }
                                     )
                                     ->helperText(
-                                        'Con una tasa automática, puedes capturar solo el total y Bexia obtiene subtotal e IVA.'
+                                        'También puedes capturar directamente el total y Bexia obtendrá subtotal e IVA.'
                                     ),
-
-                                Forms\Components\Hidden::make('sat_payment_form'),
-
-                                Forms\Components\Hidden::make('sat_payment_method'),
 
                                 Forms\Components\Select::make('payment_method')
                                     ->label('Forma de pago')
@@ -818,34 +855,88 @@ class ExpenseReportResource extends Resource
                 Forms\Components\Section::make('Totales')
                     ->columns(3)
                     ->schema([
-                        Forms\Components\Placeholder::make('subtotal_display')
+                        Forms\Components\Placeholder::make(
+                            'subtotal_display'
+                        )
                             ->label('Subtotal')
                             ->content(
-                                fn (?ExpenseReport $record): string =>
-                                    '$' . number_format(
-                                        (float) ($record?->subtotal ?? 0),
-                                        2
-                                    )
+                                function (
+                                    Forms\Get $get
+                                ): string {
+                                    $lines = collect(
+                                        $get('lines') ?? []
+                                    );
+
+                                    $subtotal = $lines->sum(
+                                        fn ($line): float =>
+                                            (float) (
+                                                $line['subtotal']
+                                                ?? 0
+                                            )
+                                    );
+
+                                    return '$'
+                                        . number_format(
+                                            $subtotal,
+                                            2
+                                        );
+                                }
                             ),
 
-                        Forms\Components\Placeholder::make('tax_display')
+                        Forms\Components\Placeholder::make(
+                            'tax_display'
+                        )
                             ->label('IVA / impuestos')
                             ->content(
-                                fn (?ExpenseReport $record): string =>
-                                    '$' . number_format(
-                                        (float) ($record?->tax_amount ?? 0),
-                                        2
-                                    )
+                                function (
+                                    Forms\Get $get
+                                ): string {
+                                    $lines = collect(
+                                        $get('lines') ?? []
+                                    );
+
+                                    $tax = $lines->sum(
+                                        fn ($line): float =>
+                                            (float) (
+                                                $line['tax_amount']
+                                                ?? 0
+                                            )
+                                    );
+
+                                    return '$'
+                                        . number_format(
+                                            $tax,
+                                            2
+                                        );
+                                }
                             ),
 
-                        Forms\Components\Placeholder::make('total_display')
+                        Forms\Components\Placeholder::make(
+                            'total_display'
+                        )
                             ->label('Total')
                             ->content(
-                                fn (?ExpenseReport $record): string =>
-                                    '$' . number_format(
-                                        (float) ($record?->total_amount ?? 0),
-                                        2
-                                    )
+                                function (
+                                    Forms\Get $get
+                                ): string {
+                                    $lines = collect(
+                                        $get('lines') ?? []
+                                    );
+
+                                    $total = $lines->sum(
+                                        fn ($line): float =>
+                                            (float) (
+                                                $line['total_amount']
+                                                ?? 0
+                                            )
+                                    );
+
+                                    return '$'
+                                        . number_format(
+                                            $total,
+                                            2
+                                        );
+                                }
                             ),
                     ]),
 

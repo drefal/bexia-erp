@@ -13,6 +13,7 @@ class ExpenseReportLine extends Model
     protected $fillable = [
         'expense_report_id',
         'expense_category_id',
+        'expense_project_id',
         'spent_by_employee_id',
         'expense_date',
         'supplier_name',
@@ -62,6 +63,14 @@ class ExpenseReportLine extends Model
         return $this->belongsTo(
             ExpenseCategory::class,
             'expense_category_id'
+        );
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(
+            ExpenseProject::class,
+            'expense_project_id'
         );
     }
 

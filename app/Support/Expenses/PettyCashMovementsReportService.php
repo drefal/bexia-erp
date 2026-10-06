@@ -22,6 +22,27 @@ class PettyCashMovementsReportService
             ->all();
     }
 
+    public static function fundingSourceOptions(
+        int $companyId
+    ): array {
+        return DB::table('funding_sources')
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'code', 'name'])
+            ->mapWithKeys(
+                fn ($row) => [
+                    (int) $row->id =>
+                        trim(
+                            ($row->code ?: '')
+                            . ($row->code ? ' · ' : '')
+                            . ($row->name ?: '')
+                        ),
+                ]
+            )
+            ->all();
+    }
+
     public static function typeOptions(): array
     {
         return [
@@ -37,7 +58,8 @@ class PettyCashMovementsReportService
         ?string $dateFrom = null,
         ?string $dateTo = null,
         ?int $fundId = null,
-        ?string $type = null
+        ?string $type = null,
+        ?int $fundingSourceId = null
     ): Collection {
         $query = DB::table('petty_cash_fund_movements as m')
             ->join(
@@ -59,6 +81,30 @@ class PettyCashMovementsReportService
                 'm.expense_report_id'
             )
             ->leftJoin(
+                'funding_sources as fs',
+                'fs.id',
+                '=',
+                'm.funding_source_id'
+            )
+            ->leftJoin(
+                'treasury_cash_transfer_requests as tr',
+                function ($join): void {
+                    $join->on(
+                        'tr.id',
+                        '=',
+                        DB::raw(
+                            "NULLIF(m.metadata->>'treasury_cash_transfer_request_id','')::bigint"
+                        )
+                    );
+                }
+            )
+            ->leftJoin(
+                'treasury_accounts as sa',
+                'sa.id',
+                '=',
+                'tr.source_treasury_account_id'
+            )
+            ->leftJoin(
                 'users as u',
                 'u.id',
                 '=',
@@ -74,6 +120,11 @@ class PettyCashMovementsReportService
                 'm.expense_report_id',
                 'er.number as expense_report_number',
                 'm.type',
+                'm.funding_source_id',
+                'fs.code as funding_source_code',
+                'fs.name as funding_source_name',
+                'tr.source_treasury_account_id',
+                'sa.name as source_account_name',
                 'm.movement_date',
                 'm.amount',
                 'm.currency_code',
@@ -101,6 +152,13 @@ class PettyCashMovementsReportService
 
         if ($type) {
             $query->where('m.type', $type);
+        }
+
+        if ($fundingSourceId) {
+            $query->where(
+                'm.funding_source_id',
+                $fundingSourceId
+            );
         }
 
         return $query
@@ -183,14 +241,16 @@ class PettyCashMovementsReportService
         ?string $dateFrom = null,
         ?string $dateTo = null,
         ?int $fundId = null,
-        ?string $type = null
+        ?string $type = null,
+        ?int $fundingSourceId = null
     ): void {
         $rows = static::rows(
             $companyId,
             $dateFrom,
             $dateTo,
             $fundId,
-            $type
+            $type,
+            $fundingSourceId
         );
 
         $writer = new \OpenSpout\Writer\XLSX\Writer();
@@ -206,6 +266,8 @@ class PettyCashMovementsReportService
                 'Caja chica',
                 'Responsable',
                 'Tipo',
+                'Origen de fondos',
+                'Cuenta origen',
                 'Referencia',
                 'Descripción',
                 'Entrada',
@@ -226,6 +288,12 @@ class PettyCashMovementsReportService
                     $row->fund_name,
                     $row->employee_name,
                     $row->type_label,
+                    trim(
+                        ($row->funding_source_code ?: '')
+                        . ($row->funding_source_code ? ' · ' : '')
+                        . ($row->funding_source_name ?: '')
+                    ),
+                    $row->source_account_name,
                     $row->reference,
                     $row->description,
                     (float) $row->entry_amount,

@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PettyCashFundResource\Pages;
 use App\Models\Employee;
 use App\Models\PettyCashFund;
+use App\Models\FundingSource;
 use App\Models\TreasuryAccount;
 use App\Support\Expenses\PettyCashTransferService;
 use Filament\Facades\Filament;
@@ -268,6 +269,31 @@ class PettyCashFundResource extends Resource
             ->bulkActions([]);
     }
 
+    protected static function fundingSourceOptions(
+        ?PettyCashFund $record = null
+    ): array {
+        $companyId = $record?->company_id
+            ?: (int) (Filament::getTenant()?->getKey() ?? 0);
+
+        if ($companyId <= 0) {
+            return [];
+        }
+
+        return FundingSource::query()
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(
+                fn (FundingSource $source): array => [
+                    $source->id =>
+                        ($source->code ? $source->code . ' · ' : '')
+                        . $source->name,
+                ]
+            )
+            ->toArray();
+    }
+
     public static function initialFundingAction(): Tables\Actions\Action
     {
         return Tables\Actions\Action::make('initialFunding')
@@ -281,6 +307,36 @@ class PettyCashFundResource extends Resource
                     ->required()
                     ->minValue(0.01)
                     ->prefix('$'),
+
+                Forms\Components\Select::make('source_treasury_account_id')
+                    ->label('Cuenta origen')
+                    ->options(
+                        fn (PettyCashFund $record): array =>
+                            static::fundingAccountOptions($record)
+                    )
+                    ->default(
+                        fn (PettyCashFund $record): ?int =>
+                            $record->funding_treasury_account_id
+                                ? (int) $record->funding_treasury_account_id
+                                : null
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->required()
+                    ->helperText(
+                        'Cuenta real de Tesorería de donde saldrá el dinero.'
+                    ),
+
+                Forms\Components\Select::make('funding_source_id')
+                    ->label('Origen de fondos')
+                    ->options(
+                        fn (PettyCashFund $record): array =>
+                            static::fundingSourceOptions($record)
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->required()
+                    ->placeholder('Selecciona el origen del dinero'),
 
                 Forms\Components\Textarea::make('notes')
                     ->label('Notas')
@@ -312,7 +368,13 @@ class PettyCashFundResource extends Resource
                             $record,
                             (float) $data['amount'],
                             auth()->id(),
-                            $data['notes'] ?? null
+                            $data['notes'] ?? null,
+                            isset($data['funding_source_id'])
+                                ? (int) $data['funding_source_id']
+                                : null,
+                            isset($data['source_treasury_account_id'])
+                                ? (int) $data['source_treasury_account_id']
+                                : null
                         );
 
                     Notification::make()
@@ -348,6 +410,36 @@ class PettyCashFundResource extends Resource
                     ->minValue(0.01)
                     ->prefix('$'),
 
+                Forms\Components\Select::make('source_treasury_account_id')
+                    ->label('Cuenta origen')
+                    ->options(
+                        fn (PettyCashFund $record): array =>
+                            static::fundingAccountOptions($record)
+                    )
+                    ->default(
+                        fn (PettyCashFund $record): ?int =>
+                            $record->funding_treasury_account_id
+                                ? (int) $record->funding_treasury_account_id
+                                : null
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->required()
+                    ->helperText(
+                        'Cuenta real de Tesorería de donde saldrá el dinero.'
+                    ),
+
+                Forms\Components\Select::make('funding_source_id')
+                    ->label('Origen de fondos')
+                    ->options(
+                        fn (PettyCashFund $record): array =>
+                            static::fundingSourceOptions($record)
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->required()
+                    ->placeholder('Selecciona el origen del dinero'),
+
                 Forms\Components\Textarea::make('notes')
                     ->label('Notas')
                     ->rows(3),
@@ -382,7 +474,13 @@ class PettyCashFundResource extends Resource
                             $record,
                             (float) $data['amount'],
                             auth()->id(),
-                            $data['notes'] ?? null
+                            $data['notes'] ?? null,
+                            isset($data['funding_source_id'])
+                                ? (int) $data['funding_source_id']
+                                : null,
+                            isset($data['source_treasury_account_id'])
+                                ? (int) $data['source_treasury_account_id']
+                                : null
                         );
 
                     Notification::make()

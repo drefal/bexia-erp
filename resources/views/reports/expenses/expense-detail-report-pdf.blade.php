@@ -99,6 +99,7 @@ Generado: {{ $generatedAt->format('d/m/Y H:i') }}
 <th>Estado</th>
 <th>Empleado</th>
 <th>Categoría</th>
+<th>Proyecto</th>
 <th>Proveedor</th>
 <th>Descripción</th>
 <th class="right">Subtotal</th>
@@ -117,6 +118,14 @@ Generado: {{ $generatedAt->format('d/m/Y H:i') }}
 <td>{{ $row->status_label }}</td>
 <td>{{ $row->spent_by_name }}</td>
 <td>{{ $row->category_name ?: 'Sin categoría' }}</td>
+<td>
+    @if ($row->project_name)
+        {{ $row->project_code ? $row->project_code . ' · ' : '' }}
+        {{ $row->project_name }}
+    @else
+        —
+    @endif
+</td>
 <td>{{ $row->supplier_name ?: '—' }}</td>
 <td>{{ $row->description }}</td>
 
