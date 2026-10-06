@@ -106,6 +106,25 @@ Categoría
 </select>
 </div>
 
+<div>
+<label class="mb-1 block text-sm font-medium">
+Proyecto
+</label>
+
+<select
+    wire:model="projectId"
+    class="w-full rounded-lg border-gray-300"
+>
+<option value="">Todos</option>
+
+@foreach ($projectOptions as $id => $label)
+<option value="{{ $id }}">
+{{ $label }}
+</option>
+@endforeach
+</select>
+</div>
+
 <div class="xl:col-span-2">
 <label class="mb-1 block text-sm font-medium">
 Proveedor
@@ -275,7 +294,7 @@ ${{ number_format($value, 2) }}
 
 <div class="overflow-x-auto">
 
-<table class="w-full min-w-[1800px] text-sm">
+<table class="w-full min-w-[1950px] text-sm">
 
 <thead>
 <tr class="border-b border-gray-200 text-left">
@@ -286,6 +305,7 @@ ${{ number_format($value, 2) }}
 <th class="p-3">Estado</th>
 <th class="p-3">Empleado</th>
 <th class="p-3">Categoría</th>
+<th class="p-3">Proyecto</th>
 <th class="p-3">Proveedor</th>
 <th class="p-3">RFC</th>
 <th class="p-3">Descripción</th>
@@ -334,6 +354,15 @@ class="font-medium text-primary-600 hover:underline"
 </td>
 
 <td class="p-3">
+@if ($row->project_name)
+    {{ $row->project_code ? $row->project_code . ' · ' : '' }}
+    {{ $row->project_name }}
+@else
+    —
+@endif
+</td>
+
+<td class="p-3">
 {{ $row->supplier_name ?: '—' }}
 </td>
 
@@ -370,7 +399,7 @@ ${{ number_format((float) $row->total_amount, 2) }}
 @empty
 
 <tr>
-<td colspan="14" class="p-8 text-center text-gray-500">
+<td colspan="15" class="p-8 text-center text-gray-500">
 No hay gastos para los filtros seleccionados.
 </td>
 </tr>

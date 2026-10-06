@@ -28,6 +28,26 @@ class ExpenseDetailReportService
             ->all();
     }
 
+    public static function projectOptions(int $companyId): array
+    {
+        return DB::table('expense_projects')
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'code', 'name'])
+            ->mapWithKeys(
+                fn ($row) => [
+                    (int) $row->id =>
+                        trim(
+                            ($row->code ?: '')
+                            . ($row->code ? ' · ' : '')
+                            . ($row->name ?: '')
+                        ),
+                ]
+            )
+            ->all();
+    }
+
     public static function typeOptions(): array
     {
         return [
@@ -57,6 +77,7 @@ class ExpenseDetailReportService
         ?string $status = null,
         ?int $employeeId = null,
         ?int $categoryId = null,
+        ?int $projectId = null,
         ?string $supplier = null,
         array $selectedLineIds = []
     ): Collection {
@@ -86,6 +107,12 @@ class ExpenseDetailReportService
                 'l.expense_category_id'
             )
             ->leftJoin(
+                'expense_projects as p',
+                'p.id',
+                '=',
+                'l.expense_project_id'
+            )
+            ->leftJoin(
                 'petty_cash_funds as f',
                 'f.id',
                 '=',
@@ -110,6 +137,9 @@ class ExpenseDetailReportService
                 'se.name as spent_by_name',
                 'l.expense_category_id',
                 'c.name as category_name',
+                'l.expense_project_id',
+                'p.code as project_code',
+                'p.name as project_name',
                 'l.supplier_name',
                 'l.supplier_rfc',
                 'l.description',
@@ -147,6 +177,10 @@ class ExpenseDetailReportService
 
         if ($categoryId) {
             $q->where('l.expense_category_id', $categoryId);
+        }
+
+        if ($projectId) {
+            $q->where('l.expense_project_id', $projectId);
         }
 
         if ($supplier && trim($supplier) !== '') {
@@ -195,6 +229,7 @@ class ExpenseDetailReportService
         ?string $status = null,
         ?int $employeeId = null,
         ?int $categoryId = null,
+        ?int $projectId = null,
         ?string $supplier = null
     ): Collection {
         return static::rows(
@@ -205,6 +240,7 @@ class ExpenseDetailReportService
             $status,
             $employeeId,
             $categoryId,
+            $projectId,
             $supplier,
             []
         );
@@ -244,6 +280,7 @@ class ExpenseDetailReportService
         ?string $status = null,
         ?int $employeeId = null,
         ?int $categoryId = null,
+        ?int $projectId = null,
         ?string $supplier = null,
         array $selectedLineIds = []
     ): void {
@@ -255,6 +292,7 @@ class ExpenseDetailReportService
             $status,
             $employeeId,
             $categoryId,
+            $projectId,
             $supplier,
             $selectedLineIds
         );
@@ -273,6 +311,7 @@ class ExpenseDetailReportService
                 'Caja chica',
                 'Empleado',
                 'Categoría',
+                'Proyecto',
                 'Proveedor',
                 'RFC',
                 'Descripción',
@@ -299,6 +338,11 @@ class ExpenseDetailReportService
                     ),
                     $row->spent_by_name,
                     $row->category_name,
+                    trim(
+                        ($row->project_code ?: '')
+                        . ($row->project_code ? ' · ' : '')
+                        . ($row->project_name ?: '')
+                    ),
                     $row->supplier_name,
                     $row->supplier_rfc,
                     $row->description,

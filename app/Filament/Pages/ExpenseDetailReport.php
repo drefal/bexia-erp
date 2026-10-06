@@ -39,6 +39,7 @@ class ExpenseDetailReport extends Page
     public ?string $reportStatus = null;
     public ?int $employeeId = null;
     public ?int $categoryId = null;
+    public ?int $projectId = null;
     public ?string $supplier = null;
 
     public array $selectedLineIds = [];
@@ -46,6 +47,7 @@ class ExpenseDetailReport extends Page
 
     public array $employeeOptions = [];
     public array $categoryOptions = [];
+    public array $projectOptions = [];
     public array $typeOptions = [];
     public array $statusOptions = [];
 
@@ -74,6 +76,11 @@ class ExpenseDetailReport extends Page
 
         $this->categoryOptions =
             ExpenseDetailReportService::categoryOptions(
+                $companyId
+            );
+
+        $this->projectOptions =
+            ExpenseDetailReportService::projectOptions(
                 $companyId
             );
 
@@ -143,6 +150,7 @@ class ExpenseDetailReport extends Page
         $this->reportStatus = null;
         $this->employeeId = null;
         $this->categoryId = null;
+        $this->projectId = null;
         $this->supplier = null;
         $this->selectedLineIds = [];
 
@@ -161,6 +169,7 @@ class ExpenseDetailReport extends Page
                 $this->reportStatus,
                 $this->employeeId,
                 $this->categoryId,
+                $this->projectId,
                 $this->supplier
             );
 
@@ -227,6 +236,7 @@ class ExpenseDetailReport extends Page
                 $this->reportStatus,
                 $this->employeeId,
                 $this->categoryId,
+                $this->projectId,
                 $this->supplier,
                 $this->selectedLineIds
             );
@@ -302,6 +312,7 @@ class ExpenseDetailReport extends Page
                 $this->reportStatus,
                 $this->employeeId,
                 $this->categoryId,
+                $this->projectId,
                 $this->supplier,
                 $this->selectedLineIds
             );

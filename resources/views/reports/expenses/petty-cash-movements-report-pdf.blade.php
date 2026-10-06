@@ -107,6 +107,12 @@
                         <br>
                     @endif
 
+                    @if ($fundingSourceId)
+                        Origen:
+                        {{ $fundingSourceOptions[$fundingSourceId] ?? $fundingSourceId }}
+                        <br>
+                    @endif
+
                     Generado:
                     {{ $generatedAt->format('d/m/Y H:i') }}
                 </div>
@@ -150,6 +156,8 @@
                 <th>Caja</th>
                 <th>Responsable</th>
                 <th>Tipo</th>
+                <th>Origen fondos</th>
+                <th>Cuenta origen</th>
                 <th>Referencia</th>
                 <th>Descripción</th>
                 <th class="right">Entrada</th>
@@ -173,6 +181,15 @@
                     </td>
                     <td>{{ $row->employee_name ?: '—' }}</td>
                     <td>{{ $row->type_label }}</td>
+                    <td>
+                        @if ($row->funding_source_name)
+                            {{ $row->funding_source_code ? $row->funding_source_code . ' · ' : '' }}
+                            {{ $row->funding_source_name }}
+                        @else
+                            —
+                        @endif
+                    </td>
+                    <td>{{ $row->source_account_name ?: '—' }}</td>
                     <td>{{ $row->reference ?: '—' }}</td>
                     <td>{{ $row->description ?: '—' }}</td>
 

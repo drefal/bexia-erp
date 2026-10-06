@@ -2,7 +2,7 @@
     <div class="space-y-6">
 
         <x-filament::section>
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
 
                 <div>
                     <label class="mb-1 block text-sm font-medium">
@@ -64,6 +64,26 @@
 
                         @foreach ($typeOptions as $value => $label)
                             <option value="{{ $value }}">
+                                {{ $label }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-sm font-medium">
+                        Origen de fondos
+                    </label>
+
+                    <select
+                        wire:model="fundingSourceId"
+                        class="w-full rounded-lg border-gray-300"
+                    >
+                        <option value="">
+                            Todos
+                        </option>
+
+                        @foreach ($fundingSourceOptions as $id => $label)
+                            <option value="{{ $id }}">
                                 {{ $label }}
                             </option>
                         @endforeach
@@ -158,13 +178,15 @@
 
         <x-filament::section>
             <div class="overflow-x-auto">
-                <table class="w-full min-w-[1500px] text-sm">
+                <table class="w-full min-w-[1800px] text-sm">
                     <thead>
                         <tr class="border-b border-gray-200 text-left">
                             <th class="p-3">Fecha</th>
                             <th class="p-3">Caja chica</th>
                             <th class="p-3">Responsable</th>
                             <th class="p-3">Tipo</th>
+                            <th class="p-3">Origen de fondos</th>
+                            <th class="p-3">Cuenta origen</th>
                             <th class="p-3">Referencia</th>
                             <th class="p-3">Descripción</th>
                             <th class="p-3 text-right">Entrada</th>
@@ -201,6 +223,19 @@
 
                                 <td class="p-3">
                                     {{ $row->type_label }}
+                                </td>
+
+                                <td class="p-3">
+                                    @if ($row->funding_source_name)
+                                        {{ $row->funding_source_code ? $row->funding_source_code . ' · ' : '' }}
+                                        {{ $row->funding_source_name }}
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+
+                                <td class="p-3">
+                                    {{ $row->source_account_name ?: '—' }}
                                 </td>
 
                                 <td class="p-3">
@@ -259,7 +294,7 @@
                         @empty
                             <tr>
                                 <td
-                                    colspan="13"
+                                    colspan="15"
                                     class="p-8 text-center text-gray-500"
                                 >
                                     No hay movimientos para los filtros seleccionados.

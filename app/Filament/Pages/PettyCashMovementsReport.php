@@ -38,6 +38,8 @@ class PettyCashMovementsReport extends Page
 
     public ?string $movementType = null;
 
+    public ?int $fundingSourceId = null;
+
     public Collection $rows;
 
     public array $summary = [];
@@ -45,6 +47,8 @@ class PettyCashMovementsReport extends Page
     public array $fundOptions = [];
 
     public array $typeOptions = [];
+
+    public array $fundingSourceOptions = [];
 
     public function mount(): void
     {
@@ -65,6 +69,11 @@ class PettyCashMovementsReport extends Page
 
         $this->typeOptions =
             PettyCashMovementsReportService::typeOptions();
+
+        $this->fundingSourceOptions =
+            PettyCashMovementsReportService::fundingSourceOptions(
+                $companyId
+            );
 
         $this->loadReport();
     }
@@ -117,6 +126,7 @@ class PettyCashMovementsReport extends Page
 
         $this->fundId = null;
         $this->movementType = null;
+        $this->fundingSourceId = null;
 
         $this->loadReport();
     }
@@ -131,7 +141,8 @@ class PettyCashMovementsReport extends Page
                 $this->dateFrom,
                 $this->dateTo,
                 $this->fundId,
-                $this->movementType
+                $this->movementType,
+                $this->fundingSourceId
             );
 
         $this->summary =
@@ -172,7 +183,8 @@ class PettyCashMovementsReport extends Page
             $this->dateFrom,
             $this->dateTo,
             $this->fundId,
-            $this->movementType
+            $this->movementType,
+            $this->fundingSourceId
         );
 
         return response()
@@ -207,7 +219,8 @@ class PettyCashMovementsReport extends Page
                 $this->dateFrom,
                 $this->dateTo,
                 $this->fundId,
-                $this->movementType
+                $this->movementType,
+                $this->fundingSourceId
             );
 
         $summary =
@@ -240,6 +253,10 @@ class PettyCashMovementsReport extends Page
                         $this->fundOptions,
                     'typeOptions' =>
                         $this->typeOptions,
+                    'fundingSourceId' =>
+                        $this->fundingSourceId,
+                    'fundingSourceOptions' =>
+                        $this->fundingSourceOptions,
                 ]
             )
             ->setPaper('letter', 'landscape');
