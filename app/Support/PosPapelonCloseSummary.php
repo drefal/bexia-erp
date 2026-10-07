@@ -270,6 +270,57 @@ class PosPapelonCloseSummary
             ->get(['id', 'name', 'parent_id'])
             ->keyBy('id');
 
+        /*
+         * BEXIA_V5836_PDV1_PRODUCT_REFERENCE_MAP
+         *
+         * La referencia se obtiene del producto o variante realmente vendido.
+         */
+        $productReferenceMap = DB::table('products')
+            ->whereIn(
+                'id',
+                $lines
+                    ->pluck('product_id')
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all()
+            )
+            ->get()
+            ->mapWithKeys(
+                function ($product) {
+                    $reference = '';
+
+                    foreach ([
+                        'internal_reference',
+                        'default_code',
+                        'reference',
+                        'sku',
+                        'barcode',
+                        'code',
+                    ] as $column) {
+
+                        if (
+                            isset($product->{$column})
+                            && trim(
+                                (string) $product->{$column}
+                            ) !== ''
+                        ) {
+                            $reference =
+                                trim(
+                                    (string) $product->{$column}
+                                );
+
+                            break;
+                        }
+                    }
+
+                    return [
+                        (int) $product->id =>
+                            $reference,
+                    ];
+                }
+            );
+
         $paymentsByOrder = $payments->groupBy('pos_order_id');
 
         $grossByOrder = [];
@@ -356,20 +407,104 @@ class PosPapelonCloseSummary
                 'UTF-8'
             );
 
-            $productName = $productName !== '' ? $productName : 'Producto';
-            $pathLabel = $path ? implode(' > ', array_column($path, 'name')) : '[SIN RUTA]';
+            $productName =
+                $productName !== ''
+                    ? $productName
+                    : 'Producto';
 
-            if (! isset($sectionProducts[$section][$productName])) {
-                $sectionProducts[$section][$productName] = [
-                    'name' => $productName,
-                    'qty' => 0,
-                    'total' => 0,
-                    'path' => $pathLabel,
+            $pathLabel =
+                $path
+                    ? implode(
+                        ' > ',
+                        array_column(
+                            $path,
+                            'name'
+                        )
+                    )
+                    : '[SIN RUTA]';
+
+            $productReference =
+                trim(
+                    (string) (
+                        $productReferenceMap[
+                            (int) (
+                                $line->product_id
+                                ?? 0
+                            )
+                        ]
+                        ?? ''
+                    )
+                );
+
+            /*
+             * No mezclar dos SKU diferentes aunque compartan nombre.
+             */
+            $productKey =
+                (
+                    $productReference !== ''
+                        ? $productReference
+                        : (
+                            'ID:'
+                            . (int) (
+                                $line->product_id
+                                ?? 0
+                            )
+                        )
+                )
+                . '|'
+                . $productName;
+
+            if (
+                ! isset(
+                    $sectionProducts[
+                        $section
+                    ][
+                        $productKey
+                    ]
+                )
+            ) {
+                $sectionProducts[
+                    $section
+                ][
+                    $productKey
+                ] = [
+                    'name' =>
+                        $productName,
+
+                    'reference' =>
+                        $productReference,
+
+                    'qty' =>
+                        0,
+
+                    'total' =>
+                        0,
+
+                    'path' =>
+                        $pathLabel,
                 ];
             }
 
-            $sectionProducts[$section][$productName]['qty'] += (float) ($line->quantity ?? 0);
-            $sectionProducts[$section][$productName]['total'] += $lineGross;
+            $sectionProducts[
+                $section
+            ][
+                $productKey
+            ][
+                'qty'
+            ] +=
+                (float) (
+                    $line->quantity
+                    ?? 0
+                );
+
+            $sectionProducts[
+                $section
+            ][
+                $productKey
+            ][
+                'total'
+            ] +=
+                $lineGross;
         }
 
         $grossTotal = round(
@@ -670,8 +805,20 @@ class PosPapelonCloseSummary
             $productsBySection[$section] = array_map(function ($row) {
                 return [
                     'name' => (string) ($row['name'] ?? 'Producto'),
-                    'qty' => round((float) ($row['qty'] ?? 0), 4),
-                    'total' => round((float) ($row['total'] ?? 0), 2),
+
+                    // BEXIA_V5836_PDV1B_KEEP_REFERENCE
+                    'reference' => (string) ($row['reference'] ?? ''),
+
+                    'qty' => round(
+                        (float) ($row['qty'] ?? 0),
+                        4
+                    ),
+
+                    'total' => round(
+                        (float) ($row['total'] ?? 0),
+                        2
+                    ),
+
                     'path' => (string) ($row['path'] ?? ''),
                 ];
             }, array_values($products));
@@ -784,7 +931,30 @@ class PosPapelonCloseSummary
             return 'Efectivo';
         }
 
-        if (str_contains($key, 'tarjeta') || str_contains($key, 'debito') || str_contains($key, 'credito') || str_contains($key, 'card')) {
+        /*
+         * BEXIA_V5836_PDV1_CARD_SPLIT
+         *
+         * Los pagos actuales ya guardan crédito y débito por separado.
+         * Los históricos ambiguos se conservan simplemente como Tarjeta.
+         */
+        if (
+            str_contains($key, 'debito')
+            || str_contains($key, 'debit')
+        ) {
+            return 'Tarjeta de débito';
+        }
+
+        if (
+            str_contains($key, 'credito')
+            || str_contains($key, 'credit')
+        ) {
+            return 'Tarjeta de crédito';
+        }
+
+        if (
+            str_contains($key, 'tarjeta')
+            || str_contains($key, 'card')
+        ) {
             return 'Tarjeta';
         }
 
@@ -800,14 +970,21 @@ class PosPapelonCloseSummary
     protected function sortedMethods(array $methods, bool $standardRows): array
     {
         if ($standardRows) {
-            foreach (['Efectivo', 'Tarjeta', 'Transferencia'] as $method) {
+            foreach ([
+                'Efectivo',
+                'Tarjeta de crédito',
+                'Tarjeta de débito',
+                'Transferencia',
+            ] as $method) {
                 $methods[$method] = $methods[$method] ?? 0.0;
             }
         }
 
         $order = [
             'Efectivo' => 10,
-            'Tarjeta' => 20,
+            'Tarjeta de crédito' => 20,
+            'Tarjeta de débito' => 21,
+            'Tarjeta' => 22,
             'Transferencia' => 30,
             'Sin método' => 90,
         ];

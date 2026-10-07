@@ -33,6 +33,96 @@ class ViewPosSession extends ViewRecord
                 ->url(fn (): string => url('/pos/sessions/' . $this->record->id . '/close-ticket/print'))
                 ->openUrlInNewTab(),
 
+            // BEXIA_V5836_PDV1I_RESEND_ACTION
+            Actions\Action::make('resend_close_email')
+                ->label('Reenviar correo')
+                ->icon('heroicon-o-envelope')
+                ->color('info')
+                ->requiresConfirmation()
+                ->modalHeading('Reenviar correo de cierre')
+                ->modalDescription(
+                    'Se enviará nuevamente el corte de caja y el reporte de cierre a los correos configurados en este punto de venta.'
+                )
+                ->modalSubmitActionLabel('Sí, reenviar')
+                ->visible(function (): bool {
+                    if (
+                        (string) $this->record->status
+                        !== 'closed'
+                    ) {
+                        return false;
+                    }
+
+                    if (
+                        ! (
+                            auth()
+                                ->user()
+                                ?->can(
+                                    'pos.sessions.download_report'
+                                )
+                            ?? false
+                        )
+                    ) {
+                        return false;
+                    }
+
+                    return
+                        \Illuminate\Support\Facades\DB::table(
+                            'pos_points'
+                        )
+                            ->where(
+                                'id',
+                                (int) $this->record->pos_point_id
+                            )
+                            ->where(
+                                'session_close_email_enabled',
+                                true
+                            )
+                            ->exists();
+                })
+                ->action(function (): void {
+                    try {
+                        app(
+                            \App\Http\Controllers\PosController::class
+                        )->v5836Pdv1SendCloseEmail(
+                            (int) $this->record->id
+                        );
+
+                        \Filament\Notifications\Notification::make()
+                            ->title(
+                                'Correo de cierre enviado'
+                            )
+                            ->body(
+                                'El corte y el reporte fueron procesados para los destinatarios configurados.'
+                            )
+                            ->success()
+                            ->send();
+
+                    } catch (\Throwable $e) {
+
+                        \Illuminate\Support\Facades\Log::error(
+                            'PDV_CLOSE_RESEND_UI: fallo',
+                            [
+                                'session_id' =>
+                                    (int) $this->record->id,
+
+                                'error' =>
+                                    $e->getMessage(),
+                            ]
+                        );
+
+                        \Filament\Notifications\Notification::make()
+                            ->title(
+                                'No se pudo reenviar el correo'
+                            )
+                            ->body(
+                                $e->getMessage()
+                            )
+                            ->danger()
+                            ->persistent()
+                            ->send();
+                    }
+                }),
+
             Actions\Action::make('open_pos')
                 ->label('Abrir PDV')
                 ->icon('heroicon-o-computer-desktop')

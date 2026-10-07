@@ -200,7 +200,11 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
     <table>
         <thead>
             <tr>
+                {{-- BEXIA_V5836_PDV1C_REFERENCE_FIRST --}}
+                <th>Referencia</th>
+
                 <th>Producto</th>
+
                 <th>Ruta categoría</th>
                 <th class="right">Cantidad</th>
                 <th class="right">Importe</th>
@@ -209,10 +213,47 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
         <tbody>
             @foreach($products as $product)
                 <tr>
-                    <td>{{ $product['name'] ?? 'Producto' }}</td>
-                    <td>{{ $product['path'] ?? '' }}</td>
-                    <td class="right">{{ number_format((float)($product['qty'] ?? 0), 2) }}</td>
-                    <td class="right">{{ $money($product['total'] ?? 0) }}</td>
+                    <td>
+                        {{
+                            trim(
+                                (string) (
+                                    $product['reference']
+                                    ?? ''
+                                )
+                            ) !== ''
+                                ? $product['reference']
+                                : '—'
+                        }}
+                    </td>
+
+                    <td>
+                        {{ $product['name'] ?? 'Producto' }}
+                    </td>
+
+                    <td>
+                        {{ $product['path'] ?? '' }}
+                    </td>
+
+                    <td class="right">
+                        {{
+                            number_format(
+                                (float) (
+                                    $product['qty']
+                                    ?? 0
+                                ),
+                                2
+                            )
+                        }}
+                    </td>
+
+                    <td class="right">
+                        {{
+                            $money(
+                                $product['total']
+                                ?? 0
+                            )
+                        }}
+                    </td>
                 </tr>
             @endforeach
         </tbody>
