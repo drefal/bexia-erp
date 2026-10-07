@@ -69,7 +69,16 @@
         .pname {
             margin-top:3px;
             min-height:26px;
-            font-size:11px;
+
+            /* BEXIA_V5836_PDV1_PRODUCT_NAME_FONT */
+            font-size:{{ in_array(
+                (int) ($pos->product_name_font_size_px ?? 11),
+                [9, 11, 13, 15, 17],
+                true
+            )
+                ? (int) ($pos->product_name_font_size_px ?? 11)
+                : 11 }}px;
+
             line-height:1.10;
             font-weight:850;
         }

@@ -362,6 +362,38 @@ Forms\Components\TextInput::make('name')
                                 /*
                                  * BEXIA_V5527D5C_RECEIPT_PRIVACY_SECTION
                                  */
+                                // BEXIA_V5836_PDV1_CLOSE_SETTINGS
+                                Forms\Components\Section::make('Visual y envío de cierre PDV')
+                                    ->description('Configura el tamaño del nombre del producto y el envío automático del corte/reporte al cerrar caja.')
+                                    ->schema([
+                                        Forms\Components\Select::make('product_name_font_size_px')
+                                            ->label('Tamaño del nombre del producto en PDV')
+                                            ->options([
+                                                9 => 'Pequeño · 9 px',
+                                                11 => 'Normal · 11 px',
+                                                13 => 'Grande · 13 px',
+                                                15 => 'Muy grande · 15 px',
+                                                17 => 'Extra grande · 17 px',
+                                            ])
+                                            ->default(11)
+                                            ->native(false)
+                                            ->helperText('Cambia únicamente el nombre mostrado en las tarjetas del catálogo.'),
+
+                                        Forms\Components\Toggle::make('session_close_email_enabled')
+                                            ->label('Enviar corte y reporte de cierre por correo')
+                                            ->default(false)
+                                            ->helperText('El cierre de caja no se bloquea si falla el envío.'),
+
+                                        Forms\Components\TagsInput::make('session_close_email_recipients')
+                                            ->label('Correos para corte y cierre')
+                                            ->placeholder('correo@empresa.com')
+                                            ->separator(',')
+                                            ->rules(['nullable', 'array'])
+                                            ->nestedRecursiveRules(['email:rfc'])
+                                            ->helperText('Puedes registrar uno o varios correos. Presiona Enter después de cada dirección.'),
+                                    ])
+                                    ->columns(1),
+
                                 Forms\Components\Section::make('Privacidad del ticket')
                                     ->extraAttributes(['class' => 'bexia-pos-point-receipt-privacy-section'])
                                     ->description('Configura cómo se muestra el vendedor/cajero en los tickets impresos. No afecta la pantalla del PDV.')

@@ -3052,11 +3052,673 @@ abort_if(! $sessionRow, 404);
             ],
         ]);
 
+    /*
+     * BEXIA_V5836_PDV1_SEND_CLOSE_EMAIL_CALL
+     *
+     * El cierre NO depende del correo.
+     */
+    try {
+        $this->v5836Pdv1SendCloseEmail(
+            $session
+        );
+    } catch (\Throwable $e) {
+
+        \Illuminate\Support\Facades\Log::error(
+            'No se pudo enviar el correo de cierre PDV.',
+            [
+                'pos_session_id' =>
+                    $session,
+
+                'error' =>
+                    $e->getMessage(),
+            ]
+        );
+
+        /*
+         * BEXIA_V5836_PDV1J_AUDIT_GUARD
+         *
+         * Una falla al auditar el error de correo tampoco debe
+         * impedir que el cierre de caja finalice correctamente.
+         */
+        try {
+            $this->v5515aWritePosAuditLog(
+                'pos.session.close.email_failed',
+                [
+                    'pos_session_id' =>
+                        $session,
+
+                    'entity_type' =>
+                        'pos_session',
+
+                    'entity_id' =>
+                        $session,
+
+                    'description' =>
+                        'El cierre se realizó, pero falló el envío del correo.',
+
+                    'metadata' => [
+                        'error' =>
+                            $e->getMessage(),
+                    ],
+                ]
+            );
+        } catch (\Throwable $auditError) {
+            \Illuminate\Support\Facades\Log::error(
+                'No se pudo auditar el fallo del correo de cierre PDV.',
+                [
+                    'pos_session_id' =>
+                        $session,
+
+                    'error' =>
+                        $auditError->getMessage(),
+                ]
+            );
+        }
+    }
+
 return redirect($this->v5485hPosEmployeeSelectorUrl($row))
         ->with('success', 'Sesión cerrada correctamente.');
 }
 
 
+
+
+    /**
+     * BEXIA_V5836_PDV1_CLOSE_EMAIL
+     *
+     * Envía:
+     * - Corte de caja PDF.
+     * - Reporte de cierre PDF.
+     */
+    public function v5836Pdv1SendCloseEmail(
+        int $sessionId
+    ): void {
+        $sessionRow =
+            \Illuminate\Support\Facades\DB::table(
+                'pos_sessions'
+            )
+                ->where(
+                    'id',
+                    $sessionId
+                )
+                ->first();
+
+        if (! $sessionRow) {
+            return;
+        }
+
+        $pos =
+            $this->posPoint(
+                (int) $sessionRow->pos_point_id
+            );
+
+        if (
+            ! (bool) (
+                $pos->session_close_email_enabled
+                ?? false
+            )
+        ) {
+            return;
+        }
+
+
+        $rawRecipients =
+            $pos->session_close_email_recipients
+            ?? [];
+
+
+        /*
+         * BEXIA_V5836_PDV1D_RECIPIENT_NORMALIZER
+         *
+         * Acepta:
+         * - JSON array.
+         * - JSON string.
+         * - Texto separado por coma, punto y coma o salto de línea.
+         */
+        if (is_string($rawRecipients)) {
+
+            $decoded =
+                json_decode(
+                    $rawRecipients,
+                    true
+                );
+
+            if (is_array($decoded)) {
+
+                $rawRecipients =
+                    $decoded;
+
+            } elseif (is_string($decoded)) {
+
+                $rawRecipients =
+                    preg_split(
+                        '/[,;\r\n]+/',
+                        $decoded
+                    );
+
+            } else {
+
+                $rawRecipients =
+                    preg_split(
+                        '/[,;\r\n]+/',
+                        $rawRecipients
+                    );
+            }
+        }
+
+
+        $recipients =
+            collect(
+                is_array($rawRecipients)
+                    ? $rawRecipients
+                    : []
+            )
+                ->map(
+                    fn ($email) =>
+                        trim(
+                            (string) $email
+                        )
+                )
+                ->filter(
+                    fn ($email) =>
+                        $email !== ''
+                        && filter_var(
+                            $email,
+                            FILTER_VALIDATE_EMAIL
+                        )
+                )
+                ->unique()
+                ->values()
+                ->all();
+
+
+        if ($recipients === []) {
+            return;
+        }
+
+
+        $summary =
+            $this
+                ->v5484BuildCloseSessionSummary(
+                    $sessionId
+                );
+
+
+        $closePayload =
+            $this
+                ->v5488iClosePayloadFromSessionNotes(
+                    $sessionRow->notes
+                    ?? null
+                );
+
+
+        $formatKey =
+            strtolower(
+                trim(
+                    (string) (
+                        $pos->session_close_format
+                        ?? ''
+                    )
+                )
+            );
+
+
+        $closeFormat =
+            in_array(
+                $formatKey,
+                [
+                    'papelon',
+                    'papelón',
+                ],
+                true
+            )
+                ? 'papelon'
+                : 'generic';
+
+
+        $reportView =
+            'pos.session-sales-report';
+
+
+        $closeView =
+            'pos.session-close-ticket';
+
+
+        if (
+            $closeFormat
+            === 'papelon'
+        ) {
+            $summary[
+                'papelon_close'
+            ] =
+                \App\Support\PosPapelonCloseSummary::build(
+                    $sessionId
+                );
+
+
+            if (
+                view()->exists(
+                    'pos.session-sales-report-papelon'
+                )
+            ) {
+                $reportView =
+                    'pos.session-sales-report-papelon';
+            }
+
+
+            if (
+                view()->exists(
+                    'pos.session-close-ticket-papelon'
+                )
+            ) {
+                $closeView =
+                    'pos.session-close-ticket-papelon';
+            }
+        }
+
+
+        $logoUrl =
+            $summary[
+                'company'
+            ][
+                'logo_url'
+            ]
+            ?? null;
+
+
+        if (
+            ! $logoUrl
+            && method_exists(
+                $this,
+                'ticketLogoUrl'
+            )
+        ) {
+            $logoUrl =
+                $this->ticketLogoUrl(
+                    $pos
+                );
+        }
+
+
+        if (
+            ! $logoUrl
+            && method_exists(
+                $this,
+                'v5521c4ResolveCompanyLogoUrl'
+            )
+        ) {
+            $logoUrl =
+                $this
+                    ->v5521c4ResolveCompanyLogoUrl(
+                        $pos,
+                        $sessionRow
+                    );
+        }
+
+
+        $reportHtml =
+            view(
+                $reportView,
+                [
+                    'summary' =>
+                        $summary,
+
+                    'session' =>
+                        $sessionRow,
+
+                    'closeFormat' =>
+                        $closeFormat,
+
+                    'companyLogoUrl' =>
+                        $logoUrl,
+                ]
+            )->render();
+
+
+        $closeHtml =
+            view(
+                $closeView,
+                [
+                    'summary' =>
+                        $summary,
+
+                    'session' =>
+                        $sessionRow,
+
+                    'closePayload' =>
+                        $closePayload,
+
+                    'closeFormat' =>
+                        $closeFormat,
+
+                    'companyLogoUrl' =>
+                        $logoUrl,
+                ]
+            )->render();
+
+
+        $sessionNumber =
+            (string) (
+                $sessionRow->number
+                ?? (
+                    'sesion-'
+                    . $sessionId
+                )
+            );
+
+
+        $safeNumber =
+            preg_replace(
+                '/[^A-Za-z0-9_\-]/',
+                '-',
+                $sessionNumber
+            );
+
+
+        $reportPdf =
+            \Barryvdh\DomPDF\Facade\Pdf
+                ::loadHTML(
+                    $reportHtml
+                )
+                ->setPaper(
+                    'letter',
+                    'portrait'
+                )
+                ->output();
+
+
+        $closePdf =
+            \Barryvdh\DomPDF\Facade\Pdf
+                ::loadHTML(
+                    $closeHtml
+                )
+                ->setPaper(
+                    [
+                        0,
+                        0,
+                        226.77,
+                        841.89,
+                    ],
+                    'portrait'
+                )
+                ->output();
+
+
+        $companyName =
+            (string) data_get(
+                $summary,
+                'company.name',
+                ''
+            );
+
+
+        $posName =
+            (string) data_get(
+                $summary,
+                'pos.name',
+                (
+                    $pos->name
+                    ?? (
+                        'PDV #'
+                        . $pos->id
+                    )
+                )
+            );
+
+
+        $closedAt =
+            (string) (
+                $sessionRow->closed_at
+                ?? now()->format(
+                    'Y-m-d H:i:s'
+                )
+            );
+
+
+        $subject =
+            trim(
+                'Cierre PDV '
+                . $sessionNumber
+                . (
+                    $posName !== ''
+                        ? (
+                            ' · '
+                            . $posName
+                        )
+                        : ''
+                )
+                . (
+                    $companyName !== ''
+                        ? (
+                            ' · '
+                            . $companyName
+                        )
+                        : ''
+                )
+            );
+
+
+        $body =
+            view(
+                'pos.session-close-email',
+                [
+                    'sessionNumber' =>
+                        $sessionNumber,
+
+                    'companyName' =>
+                        $companyName,
+
+                    'posName' =>
+                        $posName,
+
+                    'closedAt' =>
+                        $closedAt,
+
+                    'summary' =>
+                        $summary,
+                ]
+            )->render();
+
+
+        
+        /*
+         * BEXIA_V5836_PDV1I_RESEND_API
+         *
+         * El cierre PDV usa Resend por API HTTP, igual que otros
+         * módulos de Bexia. No depende de SMTP.
+         */
+        $v5836ResendApiKey =
+            trim(
+                (string) (
+                    env('RESEND_API_KEY')
+                    ?: config('services.resend.key')
+                    ?: env('RESEND_KEY')
+                    ?: ''
+                )
+            );
+
+        if ($v5836ResendApiKey === '') {
+            throw new \RuntimeException(
+                'No está configurada la API key de Resend.'
+            );
+        }
+
+        $v5836ResendFromEmail =
+            trim(
+                (string) (
+                    config('mail.from.address')
+                    ?: ''
+                )
+            );
+
+        /*
+         * DEV originalmente usa hello@example.com.
+         * Nunca enviamos desde ese remitente.
+         */
+        if (
+            $v5836ResendFromEmail === ''
+            || strtolower($v5836ResendFromEmail)
+                === 'hello@example.com'
+        ) {
+            $v5836ResendFromEmail =
+                'notificaciones@bexiaerp.com';
+        }
+
+        $v5836ResendFromName =
+            trim(
+                (string) (
+                    config('mail.from.name')
+                    ?: 'Notificaciones BexiaERP'
+                )
+            );
+
+        if (
+            $v5836ResendFromName === ''
+            || $v5836ResendFromName === '${APP_NAME}'
+        ) {
+            $v5836ResendFromName =
+                'Notificaciones BexiaERP';
+        }
+
+        $v5836ResendFrom =
+            sprintf(
+                '%s <%s>',
+                $v5836ResendFromName,
+                $v5836ResendFromEmail
+            );
+
+        \Illuminate\Support\Facades\Log::info(
+            'PDV_CLOSE_RESEND: antes de enviar',
+            [
+                'session_id' => $sessionId,
+                'to' => $recipients,
+                'from' => $v5836ResendFrom,
+                'format' => $closeFormat,
+                'close_pdf_bytes' =>
+                    strlen($closePdf),
+                'report_pdf_bytes' =>
+                    strlen($reportPdf),
+            ]
+        );
+
+        $v5836ResendResponse =
+            \Illuminate\Support\Facades\Http::withToken(
+                $v5836ResendApiKey
+            )
+                ->acceptJson()
+                ->timeout(30)
+                ->post(
+                    'https://api.resend.com/emails',
+                    [
+                        'from' =>
+                            $v5836ResendFrom,
+
+                        'to' =>
+                            $recipients,
+
+                        'subject' =>
+                            $subject,
+
+                        'html' =>
+                            $body,
+
+                        'attachments' => [
+                            [
+                                'filename' =>
+                                    'corte-caja-'
+                                    . $safeNumber
+                                    . '.pdf',
+
+                                'content' =>
+                                    base64_encode(
+                                        $closePdf
+                                    ),
+                            ],
+                            [
+                                'filename' =>
+                                    'reporte-cierre-'
+                                    . $safeNumber
+                                    . '.pdf',
+
+                                'content' =>
+                                    base64_encode(
+                                        $reportPdf
+                                    ),
+                            ],
+                        ],
+                    ]
+                );
+
+        \Illuminate\Support\Facades\Log::info(
+            'PDV_CLOSE_RESEND: respuesta',
+            [
+                'session_id' =>
+                    $sessionId,
+
+                'status' =>
+                    $v5836ResendResponse->status(),
+
+                'body' =>
+                    $v5836ResendResponse->json()
+                    ?: $v5836ResendResponse->body(),
+            ]
+        );
+
+        if ($v5836ResendResponse->failed()) {
+            throw new \RuntimeException(
+                'Resend API error ['
+                . $v5836ResendResponse->status()
+                . ']: '
+                . substr(
+                    $v5836ResendResponse->body(),
+                    0,
+                    500
+                )
+            );
+        }
+
+        $v5836ResendBody =
+            $v5836ResendResponse->json()
+            ?: [];
+
+        $this->v5515aWritePosAuditLog(
+            'pos.session.close.email_sent',
+            [
+                'pos_session_id' =>
+                    $sessionId,
+
+                'entity_type' =>
+                    'pos_session',
+
+                'entity_id' =>
+                    $sessionId,
+
+                'description' =>
+                    'Correo de corte y reporte de cierre enviado por Resend.',
+
+                'metadata' => [
+                    'recipients' =>
+                        $recipients,
+
+                    'transport' =>
+                        'resend_api',
+
+                    'resend_id' =>
+                        $v5836ResendBody['id']
+                        ?? null,
+
+                    'format' =>
+                        $closeFormat,
+                ],
+            ]
+        );
+        /*
+         * BEXIA_V5836_PDV1J_RESEND_ONLY
+         * El envío termina aquí. No existe fallback SMTP.
+         */
+        return;
+
+}
 
 
     protected function normalizePosTaxRate($value): float

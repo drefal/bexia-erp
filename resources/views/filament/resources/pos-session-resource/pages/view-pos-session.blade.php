@@ -8,21 +8,10 @@
                 </div>
             </div>
 
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                @if($canDownloadReport ?? false)
-                    <a href="{{ $reportUrl }}" target="_blank"
-                       style="display:inline-flex; align-items:center; padding:9px 12px; border-radius:10px; background:#f8fafc; border:1px solid #cbd5e1; font-weight:800; font-size:13px;">
-                        Abrir reporte en pestaña
-                    </a>
-                @endif
-
-                @if($canPrintCloseTicket ?? false)
-                    <a href="{{ $closeTicketUrl }}" target="_blank"
-                       style="display:inline-flex; align-items:center; padding:9px 12px; border-radius:10px; background:#ecfdf5; border:1px solid #bbf7d0; font-weight:800; font-size:13px;">
-                        Imprimir ticket cierre
-                    </a>
-                @endif
-            </div>
+            {{-- BEXIA_V5836_PDV1F2_DUPLICATES_REMOVED
+                 Los botones oficiales son las acciones superiores de Filament:
+                 Descargar reporte / Imprimir ticket cierre.
+            --}}
         </div>
 
         <div style="border:1px solid #e5e7eb; border-radius:16px; background:#fff; overflow:hidden;">
