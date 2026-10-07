@@ -32,18 +32,6 @@ class PettyCashFundService
                 );
             }
 
-            $existing = PettyCashFund::query()
-                ->where('company_id', $companyId)
-                ->where('employee_id', $employeeId)
-                ->where('is_active', true)
-                ->first();
-
-            if ($existing) {
-                throw new RuntimeException(
-                    'El empleado ya tiene una caja chica activa.'
-                );
-            }
-
             $fundingAccountId = filled($data['funding_treasury_account_id'] ?? null)
                 ? (int) $data['funding_treasury_account_id']
                 : null;
