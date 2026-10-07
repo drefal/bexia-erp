@@ -3427,6 +3427,18 @@ return redirect($this->v5485hPosEmployeeSelectorUrl($row))
                 ->output();
 
 
+        /*
+         * BEXIA_V5836_PDV1R_EMAIL_TICKET_PAPER
+         *
+         * Sólo afecta el PDF adjunto del correo.
+         *
+         * El HTML del ticket está diseñado alrededor de 80 mm y
+         * conserva márgenes/padding propios. Un lienzo PDF de
+         * exactamente 80 mm provoca que DomPDF recorte el extremo
+         * derecho. Usamos 90 mm de papel para dejar margen real.
+         *
+         * La impresión física / navegador NO usa este PDF.
+         */
         $closePdf =
             \Barryvdh\DomPDF\Facade\Pdf
                 ::loadHTML(
@@ -3436,7 +3448,11 @@ return redirect($this->v5485hPosEmployeeSelectorUrl($row))
                     [
                         0,
                         0,
-                        226.77,
+
+                        // 90 mm = 255.12 puntos aprox.
+                        255.12,
+
+                        // Altura larga para ticket de cierre.
                         841.89,
                     ],
                     'portrait'
