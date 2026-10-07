@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use Filament\Facades\Filament;
+use Filament\Navigation\NavigationItem;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -11,13 +12,9 @@ class CashCounter extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
 
-    protected static ?string $navigationGroup = 'Punto de Venta';
-
     protected static ?string $navigationLabel = 'Contador de efectivo';
 
     protected static ?string $title = 'Contador de efectivo';
-
-    protected static ?int $navigationSort = 65;
 
     protected static string $view = 'filament.pages.cash-counter';
 
@@ -73,38 +70,73 @@ class CashCounter extends Page
             ->all();
     }
 
-    public static function canAccess(): bool
+    protected static function canUseExpenses(): bool
     {
-        $user = auth()->user();
-
-        if (! $user) {
+        try {
+            return \App\Filament\Resources\PettyCashFundResource::canViewAny();
+        } catch (\Throwable) {
             return false;
         }
+    }
 
+    protected static function canUsePos(): bool
+    {
         try {
-            if (
-                method_exists($user, 'isSystemAdmin')
-                && $user->isSystemAdmin()
-            ) {
-                return true;
-            }
+            return \App\Filament\Pages\PointOfSale::shouldRegisterNavigation();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
 
-            if (
-                method_exists($user, 'isGroupAdmin')
-                && $user->isGroupAdmin()
-            ) {
-                return true;
-            }
-        } catch (\Throwable $e) {
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::canUseExpenses()
+            || static::canUsePos();
+    }
+
+    public static function canAccess(): bool
+    {
+        return static::canUseExpenses()
+            || static::canUsePos();
+    }
+
+    public static function getNavigationItems(): array
+    {
+        $items = [];
+
+        if (static::canUseExpenses()) {
+            $items[] = NavigationItem::make(
+                'Contador de efectivo'
+            )
+                ->group('Gastos')
+                ->icon('heroicon-o-calculator')
+                ->sort(15)
+                ->url(static::getUrl())
+                ->isActiveWhen(
+                    fn (): bool =>
+                        request()->routeIs(
+                            'filament.admin.pages.cash-counter'
+                        )
+                );
         }
 
-        return $user->can('expenses.admin')
-            || $user->can('expenses.view')
-            || $user->can('petty_cash.view')
-            || $user->can('petty_cash.manage')
-            || $user->can('petty_cash.transfer')
-            || $user->can('pos.view')
-            || $user->can('pos.access');
+        if (static::canUsePos()) {
+            $items[] = NavigationItem::make(
+                'Contador de efectivo'
+            )
+                ->group('Punto de Venta')
+                ->icon('heroicon-o-calculator')
+                ->sort(65)
+                ->url(static::getUrl())
+                ->isActiveWhen(
+                    fn (): bool =>
+                        request()->routeIs(
+                            'filament.admin.pages.cash-counter'
+                        )
+                );
+        }
+
+        return $items;
     }
 
     protected function companyId(): ?int
