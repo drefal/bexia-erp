@@ -16,6 +16,7 @@ class ExpenseReport extends Model
         'company_id',
         'employee_id',
         'petty_cash_fund_id',
+        'expense_advance_id',
         'number',
         'type',
         'status',
@@ -74,6 +75,14 @@ class ExpenseReport extends Model
     public function pettyCashFund(): BelongsTo
     {
         return $this->belongsTo(PettyCashFund::class);
+    }
+
+    public function expenseAdvance(): BelongsTo
+    {
+        return $this->belongsTo(
+            ExpenseAdvance::class,
+            'expense_advance_id'
+        );
     }
 
     public function approvalRequest(): BelongsTo

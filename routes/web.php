@@ -1,5 +1,25 @@
 <?php
 
+use App\Http\Controllers\Expenses\ExpenseAdvanceReimbursementPrintController;
+
+
+Route::get(
+    '/admin/{tenant}/expense-advances/{expenseAdvance}/reimbursement-print',
+    ExpenseAdvanceReimbursementPrintController::class
+)
+    ->middleware(['web', 'auth'])
+    ->name('expenses.advances.reimbursement.print');
+
+Route::get(
+    '/admin/{tenant}/expense-advances/{expenseAdvance}/print',
+    \App\Http\Controllers\Expenses\ExpenseAdvancePrintController::class
+)
+    ->middleware(['web', 'auth'])
+    ->whereNumber('tenant')
+    ->whereNumber('expenseAdvance')
+    ->name('expenses.advances.print');
+
+
 use App\Http\Controllers\Inventory\SuggestedPurchaseListPdfController;
 
 use App\Http\Controllers\Inventory\ReplenishmentReportPdfController;
@@ -922,3 +942,10 @@ Route::get(
     ->name(
         'computer-rental.agent.v1.command-ack'
     );
+
+Route::get(
+    '/admin/{tenant}/expense-advances/{expenseAdvance}/return-print',
+    \App\Http\Controllers\Expenses\ExpenseAdvanceReturnPrintController::class
+)
+    ->middleware('auth')
+    ->name('expenses.advances.return.print');

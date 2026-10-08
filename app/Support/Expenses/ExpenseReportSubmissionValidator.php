@@ -12,6 +12,7 @@ class ExpenseReportSubmissionValidator
     {
         $report->load([
             'pettyCashFund',
+            'expenseAdvance',
             'lines.category',
             'lines.spentByEmployee',
             'lines.attachments',
@@ -249,6 +250,61 @@ class ExpenseReportSubmissionValidator
         ) {
             $errors[] =
                 'La moneda de la comprobación no coincide con la caja chica.';
+        }
+
+        if ($report->expense_advance_id) {
+            $advance = $report->expenseAdvance;
+
+            if (! $advance) {
+                $errors[] =
+                    'El anticipo relacionado no existe.';
+
+                return;
+            }
+
+            if (
+                (int) $advance->company_id
+                !== (int) $report->company_id
+            ) {
+                $errors[] =
+                    'El anticipo pertenece a otra empresa.';
+            }
+
+            if (
+                (int) $advance->petty_cash_fund_id
+                !== (int) $report->petty_cash_fund_id
+            ) {
+                $errors[] =
+                    'La caja chica no coincide con '
+                    . 'la del anticipo.';
+            }
+
+            if (
+                (int) $advance->employee_id
+                !== (int) $report->employee_id
+            ) {
+                $errors[] =
+                    'El responsable no coincide con '
+                    . 'el empleado del anticipo.';
+            }
+
+            if (
+                (string) $advance->status
+                !== \App\Models\ExpenseAdvance::
+                    STATUS_PENDING_RECONCILIATION
+            ) {
+                $errors[] =
+                    'El anticipo ya no está pendiente '
+                    . 'de comprobación.';
+            }
+
+            /*
+             * IMPORTANTE:
+             * el dinero del anticipo ya salió de Caja Chica.
+             * No se valida esta comprobación contra
+             * operational_balance.
+             */
+            return;
         }
 
         $balance = round(
