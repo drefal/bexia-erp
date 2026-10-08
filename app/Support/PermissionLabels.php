@@ -23,6 +23,17 @@ class PermissionLabels
     public static function labels(): array
     {
         return [
+            'crm.leads.view' => 'Ver leads CRM',
+            'crm.leads.create' => 'Crear leads CRM',
+            'crm.leads.update' => 'Editar leads CRM',
+            'crm.leads.reassign' => 'Reasignar leads CRM',
+            'crm.leads.view_all' => 'Ver todos los leads CRM',
+            'crm.team.manage' => 'Administrar equipo CRM',
+            'crm.pipeline.manage' => 'Administrar pipeline CRM',
+            'crm.activities.view' => 'Ver actividades CRM',
+            'crm.activities.create' => 'Crear actividades CRM',
+            'crm.activities.update' => 'Editar actividades CRM',
+
             'company.view' => 'Ver empresas',
             'company.update' => 'Editar empresas',
 
@@ -215,6 +226,7 @@ class PermissionLabels
             'purchases.invoice' => 'Facturar compras',
 
             'sales.view' => 'Ver ventas',
+            'sales.dashboard.view' => 'Ver dashboard de ventas',
             'sales.create' => 'Crear ventas',
             'sales.update' => 'Editar ventas',
             'sales.delete' => 'Eliminar ventas',
@@ -271,6 +283,7 @@ class PermissionLabels
     {
         $moduleLabels = [
             'accounting' => 'contabilidad',
+            'crm' => 'CRM',
             'company' => 'empresas',
             'contacts' => 'contactos',
             'inventory' => 'inventario',

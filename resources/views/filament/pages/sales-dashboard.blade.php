@@ -1027,14 +1027,19 @@
                             ${{ number_format($point['value'] / 1000, 1) }}k
                         </div>
 
+                        @php
+                            $isBestDay =
+                                (float) $point['value'] > 0
+                                && (float) $point['value'] >= (float) $weekdayMax;
+                        @endphp
+
                         <div
-                            class="w-full rounded-t-md
-                            {{ $point['label'] === 'Sáb'
-                                ? 'bg-emerald-500'
-                                : ($point['label'] === 'Dom'
-                                    ? 'bg-orange-400'
-                                    : 'bg-primary-500') }}"
-                            style="height: {{ $height }}px"
+                            class="w-full rounded-t-md shadow-sm"
+                            style="
+                                height: {{ $height }}px;
+                                background-color: {{ $isBestDay ? '#10b981' : '#3b82f6' }};
+                            "
+                            title="{{ $point['label'] }} · ${{ number_format($point['value'], 2) }}"
                         ></div>
 
                         <div class="mt-2 text-[10px] text-gray-500">
