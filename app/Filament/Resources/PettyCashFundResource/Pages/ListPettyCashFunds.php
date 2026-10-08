@@ -14,15 +14,6 @@ class ListPettyCashFunds extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('cashCounter')
-                ->label('Contador de efectivo')
-                ->icon('heroicon-o-calculator')
-                ->color('gray')
-                ->url(
-                    fn (): string => CashCounter::getUrl()
-                )
-                ->openUrlInNewTab(),
-
             Actions\CreateAction::make()
                 ->label('Nueva caja chica'),
         ];
