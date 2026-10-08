@@ -1,6 +1,72 @@
 <x-filament-panels::page>
+    @php
+        $cashCounterCompany = \Filament\Facades\Filament::getTenant();
+
+        $cashCounterCompanyName = trim(
+            (string) (
+                $cashCounterCompany->name
+                ?? $cashCounterCompany->business_name
+                ?? 'Empresa'
+            )
+        );
+
+        $cashCounterCompanyLogo = '';
+
+        if ($cashCounterCompany) {
+            try {
+                if (
+                    method_exists(
+                        $cashCounterCompany,
+                        'getLogoUrl'
+                    )
+                ) {
+                    $cashCounterCompanyLogo = trim(
+                        (string) (
+                            $cashCounterCompany->getLogoUrl()
+                            ?? ''
+                        )
+                    );
+                }
+
+                if (
+                    $cashCounterCompanyLogo === ''
+                    && filled(
+                        $cashCounterCompany->logo_path
+                        ?? null
+                    )
+                ) {
+                    $cashCounterCompanyLogo =
+                        \Illuminate\Support\Facades\Storage::disk(
+                            'public'
+                        )->url(
+                            (string) $cashCounterCompany->logo_path
+                        );
+                }
+            } catch (\Throwable $e) {
+                $cashCounterCompanyLogo = '';
+            }
+        }
+
+        $cashCounterUserName = trim(
+            (string) (
+                auth()->user()?->name
+                ?? auth()->user()?->email
+                ?? 'Usuario'
+            )
+        );
+    @endphp
+
     <div
         x-data="{
+            ticketCompany:
+                @js($cashCounterCompanyName),
+
+            ticketLogo:
+                @js($cashCounterCompanyLogo),
+
+            ticketUser:
+                @js($cashCounterUserName),
+
             rows: @js(
                 collect($denominations)
                     ->map(
@@ -143,6 +209,545 @@
                     navigator.clipboard
                         .writeText(amount);
                 }
+            },
+
+            ticketMoney(value) {
+                return '$'
+                    + Number(value || 0)
+                        .toLocaleString(
+                            'es-MX',
+                            {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                            }
+                        );
+            },
+
+            printTicket() {
+                const used =
+                    this.usedRows();
+
+                if (used.length === 0) {
+                    window.alert(
+                        'Captura al menos una denominación antes de imprimir.'
+                    );
+
+                    return;
+                }
+
+                const win =
+                    window.open(
+                        '',
+                        '_blank',
+                        'width=420,height=760'
+                    );
+
+                if (! win) {
+                    window.alert(
+                        'El navegador bloqueó la ventana de impresión.'
+                    );
+
+                    return;
+                }
+
+                const doc =
+                    win.document;
+
+                doc.title =
+                    'Conteo de efectivo';
+
+                const style =
+                    doc.createElement('style');
+
+                style.textContent = [
+                    '@page{size:80mm auto;margin:4mm}',
+                    '*{box-sizing:border-box}',
+                    'html,body{margin:0;padding:0;background:#fff}',
+                    'body{width:72mm;margin:0 auto;color:#111;',
+                    'font-family:Arial,Helvetica,sans-serif;',
+                    'font-size:10.5px;line-height:1.3}',
+                    '.ticket{width:72mm;padding:1mm 0 3mm}',
+                    '.center{text-align:center}',
+                    '.brand{font-size:16px;font-weight:900;',
+                    'line-height:1.05}',
+                    '.company{margin-top:2px;font-size:11px;',
+                    'font-weight:800}',
+                    '.title{margin-top:6px;padding:5px 0;',
+                    'border-top:1px dashed #111;',
+                    'border-bottom:1px dashed #111;',
+                    'font-size:12px;font-weight:900;',
+                    'letter-spacing:.04em}',
+                    '.meta{margin-top:7px}',
+                    '.row{display:flex;justify-content:space-between;',
+                    'gap:8px;margin:2px 0}',
+                    '.label{font-weight:700}',
+                    '.sep{margin:7px 0;border-top:1px dashed #111}',
+                    'table{width:100%;border-collapse:collapse}',
+                    'th{padding:3px 1px;border-bottom:1px solid #111;',
+                    'font-size:9px;text-transform:uppercase}',
+                    'td{padding:3px 1px}',
+                    'th:first-child,td:first-child{text-align:left}',
+                    '.qty{width:17mm;text-align:center}',
+                    '.amount{width:25mm;text-align:right;',
+                    'font-weight:700}',
+                    '.denom{font-weight:700}',
+                    '.summary{margin-top:6px;padding-top:5px;',
+                    'border-top:1px dashed #111}',
+                    '.summary strong{white-space:nowrap}',
+                    '.grand{margin-top:7px;padding:7px 0;',
+                    'border-top:2px solid #111;',
+                    'border-bottom:2px solid #111;',
+                    'text-align:center}',
+                    '.grand-label{font-size:11px;font-weight:900}',
+                    '.grand-value{margin-top:2px;font-size:19px;',
+                    'font-weight:900}',
+                    '.signatures{margin-top:15mm}',
+                    '.signature{margin-top:15mm;text-align:center}',
+                    '.signature-line{border-top:1px solid #111;',
+                    'padding-top:3px;font-size:9.5px;',
+                    'font-weight:700}',
+                    '.signature-sub{margin-top:1px;font-size:8px}',
+                    '.footer{margin-top:8mm;padding-top:4px;',
+                    'border-top:1px dashed #111;',
+                    'text-align:center;font-size:8px}',
+                    '.actions{margin:10px 0;text-align:center}',
+                    '.actions button{border:0;border-radius:6px;',
+                    'padding:8px 12px;background:#111;color:#fff;',
+                    'font-weight:700;cursor:pointer}',
+                    '@media print{html,body,.ticket{width:72mm}',
+                    '.actions{display:none!important}}'
+                ].join('');
+
+                doc.head.appendChild(
+                    style
+                );
+
+                const el = (
+                    tag,
+                    className = '',
+                    text = ''
+                ) => {
+                    const node =
+                        doc.createElement(tag);
+
+                    if (className) {
+                        node.className =
+                            className;
+                    }
+
+                    if (text !== '') {
+                        node.textContent =
+                            text;
+                    }
+
+                    return node;
+                };
+
+                const ticket =
+                    el('div', 'ticket');
+
+                const center =
+                    el('div', 'center');
+
+                if (this.ticketLogo) {
+                    const logo =
+                        doc.createElement('img');
+
+                    logo.src =
+                        this.ticketLogo;
+
+                    logo.alt =
+                        'Logo de '
+                        + this.ticketCompany;
+
+                    logo.style.display =
+                        'block';
+
+                    logo.style.maxWidth =
+                        '46mm';
+
+                    logo.style.maxHeight =
+                        '14mm';
+
+                    logo.style.width =
+                        'auto';
+
+                    logo.style.height =
+                        'auto';
+
+                    logo.style.objectFit =
+                        'contain';
+
+                    logo.style.margin =
+                        '0 auto 2mm';
+
+                    center.appendChild(
+                        logo
+                    );
+                } else {
+                    center.appendChild(
+                        el(
+                            'div',
+                            'brand',
+                            'BexiaERP'
+                        )
+                    );
+                }
+
+                center.appendChild(
+                    el(
+                        'div',
+                        'company',
+                        this.ticketCompany
+                    )
+                );
+
+                center.appendChild(
+                    el(
+                        'div',
+                        'title',
+                        'CONTEO DE EFECTIVO'
+                    )
+                );
+
+                ticket.appendChild(
+                    center
+                );
+
+                const meta =
+                    el('div', 'meta');
+
+                const printedAt =
+                    new Intl.DateTimeFormat(
+                        'es-MX',
+                        {
+                            dateStyle: 'short',
+                            timeStyle: 'medium',
+                        }
+                    ).format(new Date());
+
+                const addRow = (
+                    parent,
+                    label,
+                    value
+                ) => {
+                    const row =
+                        el('div', 'row');
+
+                    row.appendChild(
+                        el(
+                            'span',
+                            'label',
+                            label
+                        )
+                    );
+
+                    row.appendChild(
+                        el(
+                            'span',
+                            '',
+                            value
+                        )
+                    );
+
+                    parent.appendChild(
+                        row
+                    );
+                };
+
+                addRow(
+                    meta,
+                    'Fecha:',
+                    printedAt
+                );
+
+                addRow(
+                    meta,
+                    'Usuario:',
+                    this.ticketUser
+                );
+
+                ticket.appendChild(meta);
+                ticket.appendChild(
+                    el('div', 'sep')
+                );
+
+                const table =
+                    doc.createElement('table');
+
+                const thead =
+                    doc.createElement('thead');
+
+                const hr =
+                    doc.createElement('tr');
+
+                const headers = [
+                    ['Denom.', ''],
+                    ['Cant.', 'qty'],
+                    ['Importe', 'amount'],
+                ];
+
+                headers.forEach(
+                    item => {
+                        const th =
+                            el(
+                                'th',
+                                item[1],
+                                item[0]
+                            );
+
+                        hr.appendChild(th);
+                    }
+                );
+
+                thead.appendChild(hr);
+                table.appendChild(thead);
+
+                const tbody =
+                    doc.createElement('tbody');
+
+                used.forEach(
+                    row => {
+                        const tr =
+                            doc.createElement(
+                                'tr'
+                            );
+
+                        tr.appendChild(
+                            el(
+                                'td',
+                                'denom',
+                                this.ticketMoney(
+                                    row.value
+                                )
+                            )
+                        );
+
+                        tr.appendChild(
+                            el(
+                                'td',
+                                'qty',
+                                String(
+                                    this.qty(row)
+                                )
+                            )
+                        );
+
+                        tr.appendChild(
+                            el(
+                                'td',
+                                'amount',
+                                this.ticketMoney(
+                                    this.lineTotal(
+                                        row
+                                    )
+                                )
+                            )
+                        );
+
+                        tbody.appendChild(
+                            tr
+                        );
+                    }
+                );
+
+                table.appendChild(tbody);
+                ticket.appendChild(table);
+
+                const summary =
+                    el('div', 'summary');
+
+                const addSummary = (
+                    label,
+                    value
+                ) => {
+                    const row =
+                        el('div', 'row');
+
+                    row.appendChild(
+                        el(
+                            'span',
+                            '',
+                            label
+                        )
+                    );
+
+                    row.appendChild(
+                        el(
+                            'strong',
+                            '',
+                            value
+                        )
+                    );
+
+                    summary.appendChild(
+                        row
+                    );
+                };
+
+                addSummary(
+                    'Billetes ('
+                        + this.billPieces()
+                        + ' pzas.)',
+                    this.ticketMoney(
+                        this.billTotal()
+                    )
+                );
+
+                addSummary(
+                    'Monedas ('
+                        + this.coinPieces()
+                        + ' pzas.)',
+                    this.ticketMoney(
+                        this.coinTotal()
+                    )
+                );
+
+                addSummary(
+                    'Total de piezas',
+                    String(
+                        this.pieces()
+                    )
+                );
+
+                ticket.appendChild(
+                    summary
+                );
+
+                const grand =
+                    el('div', 'grand');
+
+                grand.appendChild(
+                    el(
+                        'div',
+                        'grand-label',
+                        'TOTAL CONTADO'
+                    )
+                );
+
+                grand.appendChild(
+                    el(
+                        'div',
+                        'grand-value',
+                        this.ticketMoney(
+                            this.total()
+                        )
+                    )
+                );
+
+                ticket.appendChild(
+                    grand
+                );
+
+                const signatures =
+                    el('div', 'signatures');
+
+                const addSignature = (
+                    label,
+                    subtitle
+                ) => {
+                    const box =
+                        el(
+                            'div',
+                            'signature'
+                        );
+
+                    box.appendChild(
+                        el(
+                            'div',
+                            'signature-line',
+                            label
+                        )
+                    );
+
+                    box.appendChild(
+                        el(
+                            'div',
+                            'signature-sub',
+                            subtitle
+                        )
+                    );
+
+                    signatures.appendChild(
+                        box
+                    );
+                };
+
+                addSignature(
+                    'Contó / Firma',
+                    this.ticketUser
+                );
+
+                addSignature(
+                    'Vo.Bo. / Firma',
+                    'Corroboró el conteo'
+                );
+
+                ticket.appendChild(
+                    signatures
+                );
+
+                const footer =
+                    el(
+                        'div',
+                        'footer'
+                    );
+
+                footer.appendChild(
+                    doc.createTextNode(
+                        'Documento interno de respaldo de conteo'
+                    )
+                );
+
+                footer.appendChild(
+                    doc.createElement('br')
+                );
+
+                footer.appendChild(
+                    doc.createTextNode(
+                        'BexiaERP'
+                    )
+                );
+
+                ticket.appendChild(
+                    footer
+                );
+
+                const actions =
+                    el(
+                        'div',
+                        'actions'
+                    );
+
+                const printButton =
+                    el(
+                        'button',
+                        '',
+                        'Imprimir'
+                    );
+
+                printButton.type =
+                    'button';
+
+                printButton.onclick =
+                    () => win.print();
+
+                actions.appendChild(
+                    printButton
+                );
+
+                ticket.appendChild(
+                    actions
+                );
+
+                doc.body.appendChild(
+                    ticket
+                );
+
+                setTimeout(
+                    () => win.print(),
+                    250
+                );
             },
         }"
         class="bexia-cash-counter"
@@ -731,10 +1336,23 @@
                         "
                         class="
                             bcc-btn
-                            bcc-btn-primary
+                            bcc-btn-secondary
                         "
                     >
                         Copiar total
+                    </button>
+
+                    <button
+                        type="button"
+                        x-on:click="
+                            printTicket()
+                        "
+                        class="
+                            bcc-btn
+                            bcc-btn-primary
+                        "
+                    >
+                        Imprimir ticket
                     </button>
                 </div>
             </aside>
