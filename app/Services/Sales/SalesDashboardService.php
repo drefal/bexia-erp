@@ -1326,7 +1326,7 @@ class SalesDashboardService
             : $rows->sortByDesc('sales');
 
         return $rows
-            ->take(5)
+            ->take(10)
             ->values()
             ->all();
     }

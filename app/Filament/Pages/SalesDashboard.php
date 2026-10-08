@@ -19,6 +19,16 @@ class SalesDashboard extends Page
 
     protected static string $view = 'filament.pages.sales-dashboard';
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::canAccess();
+    }
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('sales.dashboard.view') ?? false;
+    }
+
     public string $scope = 'company';
 
     public string $channel = 'all';
