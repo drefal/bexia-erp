@@ -263,10 +263,178 @@ class PettyCashFundResource extends Resource
                 static::initialFundingAction(),
                 static::replenishmentAction(),
                 static::returnCashAction(),
+                static::fundTransferAction(),
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
             ])
             ->bulkActions([]);
+    }
+
+    protected static function pettyCashDestinationOptions(
+        PettyCashFund $sourceFund
+    ): array {
+        return PettyCashFund::query()
+            ->with(['employee', 'treasuryAccount'])
+            ->where('company_id', $sourceFund->company_id)
+            ->where('id', '!=', $sourceFund->id)
+            ->where('is_active', true)
+            ->where('status', 'active')
+            ->where('currency_code', $sourceFund->currency_code)
+            ->whereHas(
+                'treasuryAccount',
+                fn (Builder $query) =>
+                    $query->where('is_active', true)
+            )
+            ->orderBy('number')
+            ->get()
+            ->mapWithKeys(function (PettyCashFund $fund): array {
+                $responsible =
+                    $fund->employee?->name ?: 'Sin responsable';
+
+                $balance = (float) (
+                    $fund->treasuryAccount?->current_balance ?? 0
+                );
+
+                return [
+                    $fund->id =>
+                        ($fund->number ?: ('#' . $fund->id))
+                        . ' · '
+                        . $fund->name
+                        . ' · '
+                        . $responsible
+                        . ' · Saldo $'
+                        . number_format($balance, 2),
+                ];
+            })
+            ->toArray();
+    }
+
+    public static function fundTransferAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('fundTransfer')
+            ->label('Transferir')
+            ->icon('heroicon-o-arrows-right-left')
+            ->color('warning')
+            ->form([
+                Forms\Components\Placeholder::make('source_info')
+                    ->label('Caja origen')
+                    ->content(
+                        fn (PettyCashFund $record): string =>
+                            ($record->number ?: ('#' . $record->id))
+                            . ' · '
+                            . $record->name
+                            . ' · Saldo $'
+                            . number_format(
+                                (float) (
+                                    $record->treasuryAccount
+                                        ?->current_balance ?? 0
+                                ),
+                                2
+                            )
+                    ),
+
+                Forms\Components\Select::make(
+                    'destination_petty_cash_fund_id'
+                )
+                    ->label('Caja chica destino')
+                    ->options(
+                        fn (PettyCashFund $record): array =>
+                            static::pettyCashDestinationOptions(
+                                $record
+                            )
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->required()
+                    ->helperText(
+                        'Solo se muestran cajas activas de la misma empresa y moneda.'
+                    ),
+
+                Forms\Components\TextInput::make('amount')
+                    ->label('Monto a transferir')
+                    ->numeric()
+                    ->required()
+                    ->minValue(0.01)
+                    ->step('0.01')
+                    ->prefix('$'),
+
+                Forms\Components\Textarea::make('reason')
+                    ->label('Motivo')
+                    ->required()
+                    ->rows(3)
+                    ->maxLength(2000),
+
+                Forms\Components\Textarea::make('notes')
+                    ->label('Notas')
+                    ->rows(3)
+                    ->maxLength(3000),
+            ])
+            ->requiresConfirmation()
+            ->modalHeading('Transferir entre cajas chicas')
+            ->modalDescription(
+                'Se generará una solicitud y el dinero se moverá únicamente después de completar el flujo de aprobación.'
+            )
+            ->visible(function (PettyCashFund $record): bool {
+                if (! (
+                    auth()->user()?->can('expenses.admin')
+                    || auth()->user()?->can('petty_cash.transfer')
+                )) {
+                    return false;
+                }
+
+                if (
+                    ! $record->is_active
+                    || (string) $record->status !== 'active'
+                ) {
+                    return false;
+                }
+
+                return (float) (
+                    $record->treasuryAccount?->current_balance ?? 0
+                ) > 0.000001;
+            })
+            ->action(function (
+                PettyCashFund $record,
+                array $data
+            ): void {
+                try {
+                    $request = app(
+                        PettyCashTransferService::class
+                    )->requestFundTransfer(
+                        $record,
+                        (int) $data[
+                            'destination_petty_cash_fund_id'
+                        ],
+                        (float) $data['amount'],
+                        auth()->id(),
+                        (string) $data['reason'],
+                        $data['notes'] ?? null
+                    );
+
+                    Notification::make()
+                        ->title(
+                            'Solicitud de transferencia creada'
+                        )
+                        ->body(
+                            'Tesorería '
+                            . (
+                                $request->number
+                                ?: ('#' . $request->id)
+                            )
+                            . ' fue enviada al flujo de aprobación.'
+                        )
+                        ->success()
+                        ->send();
+                } catch (Throwable $e) {
+                    Notification::make()
+                        ->title(
+                            'No se pudo crear la transferencia'
+                        )
+                        ->body($e->getMessage())
+                        ->danger()
+                        ->send();
+                }
+            });
     }
 
     protected static function fundingSourceOptions(
