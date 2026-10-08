@@ -38,6 +38,46 @@ class ExpenseReportPostingService
                 return $locked->refresh();
             }
 
+            /*
+             * COMPROBACION DE ANTICIPO
+             *
+             * El dinero ya salió de Caja Chica al momento
+             * de entregar el anticipo. La aprobación de la
+             * comprobación es exclusivamente documental:
+             * NO crea otra salida de Tesorería y NO crea
+             * otro movimiento expense.
+             */
+            if ($locked->expense_advance_id) {
+                $metadata = is_array($locked->metadata)
+                    ? $locked->metadata
+                    : [];
+
+                $metadata['advance_reconciliation'] = [
+                    'expense_advance_id' =>
+                        (int) $locked->expense_advance_id,
+                    'financial_posting_required' =>
+                        false,
+                    'approved_amount' =>
+                        round(
+                            (float) $locked->total_amount,
+                            6
+                        ),
+                    'approved_at' =>
+                        now()->toDateTimeString(),
+                ];
+
+                $locked->forceFill([
+                    'payment_treasury_account_id' =>
+                        null,
+                    'treasury_movement_id' =>
+                        null,
+                    'metadata' =>
+                        $metadata,
+                ])->save();
+
+                return $locked->refresh();
+            }
+
             if (
                 (string) $locked->status !== 'approved'
                 || (string) $locked->approval_status !== 'approved'

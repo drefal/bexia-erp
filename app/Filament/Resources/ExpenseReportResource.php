@@ -212,7 +212,11 @@ class ExpenseReportResource extends Resource
                     )
                     ->columns(2)
                     ->schema([
-                        Forms\Components\Select::make('type')
+                        Forms\Components\Hidden::make(
+                        'expense_advance_id'
+                    ),
+
+                    Forms\Components\Select::make('type')
                             ->label('Tipo')
                             ->options([
                                 ExpenseReport::TYPE_PETTY_CASH => 'Caja chica',

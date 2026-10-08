@@ -35,6 +35,23 @@ class ExpenseReportLine extends Model
 
     protected static function booted(): void
     {
+        /*
+         * has_receipt es NOT NULL en BD.
+         *
+         * Los componentes dinámicos/Repetater de Filament pueden
+         * enviar explícitamente NULL cuando el Toggle está apagado.
+         * En ese caso PostgreSQL no utiliza el default FALSE de la
+         * columna, porque recibió un NULL explícito.
+         *
+         * Se normaliza aquí para proteger cualquier vía de guardado:
+         * Filament, relación, importación o código de backend.
+         */
+        static::saving(function (ExpenseReportLine $line): void {
+            if ($line->getAttribute('has_receipt') === null) {
+                $line->setAttribute('has_receipt', false);
+            }
+        });
+
         static::saved(function (ExpenseReportLine $line): void {
             ExpenseReceiptService::syncAttachments($line);
         });
