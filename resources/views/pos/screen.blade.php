@@ -143,7 +143,87 @@
         }
 
         .empty { margin-top:18px; border:1px dashed #cbd5e1; background:#fff; border-radius:18px; padding:24px; color:#64748b; }
-    </style>
+    
+/*
+ * BEXIA_V5836_PDV2A_PRODUCT_CARD_FONT_FIT
+ *
+ * La fuente configurable del nombre puede crecer hasta 17px.
+ * La tarjeta debe crecer con ella y mantener referencia/precio/stock dentro.
+ */
+.product {
+    height: auto !important;
+    min-height: calc(
+        122px
+        + max(
+            0px,
+            (var(--bexia-pos-product-name-font-size, 11px) - 11px) * 4
+        )
+    ) !important;
+
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.product .pimg {
+    flex: 0 0 auto;
+}
+
+.product .pname {
+    flex: 0 0 auto;
+
+    min-height: calc(
+        var(--bexia-pos-product-name-font-size, 11px) * 2.25
+    ) !important;
+
+    line-height: 1.08 !important;
+
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.product .code,
+.product .price,
+.product .stock,
+.product .no-stock {
+    flex: 0 0 auto;
+}
+
+.product .price {
+    margin-top: 4px;
+}
+
+.product .stock {
+    margin-top: 2px;
+}
+
+/*
+ * Ajustes explícitos por los tamaños que actualmente permite
+ * Configuración PDV.
+ */
+body[data-v5836-product-name-size="9"] .product,
+body[data-v5836-product-name-size="11"] .product {
+    min-height: 122px !important;
+}
+
+body[data-v5836-product-name-size="13"] .product {
+    min-height: 138px !important;
+}
+
+body[data-v5836-product-name-size="15"] .product {
+    min-height: 152px !important;
+}
+
+body[data-v5836-product-name-size="17"] .product {
+    min-height: 168px !important;
+}
+
+</style>
 
 
 
@@ -425,7 +505,9 @@
 </style>
 
 </head>
-<body>
+<body
+    data-v5836-product-name-size="{{ (int) ($pos->product_name_font_size_px ?? 11) }}"
+>
 @php
     $staffPermissions = $staffPermissions ?? [
         'role' => 'mixed',
@@ -11367,25 +11449,58 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function insertHeaderButtons() {
-        if (document.getElementById('v5485-cash-movement-btn')) return;
+        if (
+            document.getElementById(
+                'v5485-cash-movement-btn'
+            )
+        ) {
+            return;
+        }
 
-        const movementBtn = document.createElement('button');
+        const movementBtn =
+            document.createElement('button');
+
         movementBtn.type = 'button';
-        movementBtn.id = 'v5485-cash-movement-btn';
-        movementBtn.className = 'v5485-cash-btn';
-        movementBtn.textContent = 'Movimiento efectivo';
-        movementBtn.addEventListener('click', function () {
-            openMovementModal('cash_in');
-        });
+        movementBtn.id =
+            'v5485-cash-movement-btn';
+        movementBtn.className =
+            'v5485-cash-btn';
+        movementBtn.textContent =
+            'Movimiento efectivo';
 
-        const closeSession = document.getElementById('v5333-close-session-form')
-            || document.getElementById('v5332-close-session-form')
-            || document.getElementById('v5331-close-session-form');
+        movementBtn.addEventListener(
+            'click',
+            function () {
+                openMovementModal(
+                    'cash_in'
+                );
+            }
+        );
 
-        if (closeSession && closeSession.parentElement) {
-            closeSession.parentElement.insertBefore(movementBtn, closeSession);
+        const closeSession =
+            document.getElementById(
+                'v5333-close-session-form'
+            )
+            || document.getElementById(
+                'v5332-close-session-form'
+            )
+            || document.getElementById(
+                'v5331-close-session-form'
+            );
+
+        if (
+            closeSession
+            && closeSession.parentElement
+        ) {
+            closeSession.parentElement
+                .insertBefore(
+                    movementBtn,
+                    closeSession
+                );
         } else {
-            document.body.prepend(movementBtn);
+            document.body.prepend(
+                movementBtn
+            );
         }
     }
 
