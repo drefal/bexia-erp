@@ -11027,6 +11027,12 @@ document.addEventListener('DOMContentLoaded', function () {
         const totals = summary.totals || {};
         const session = summary.session || {};
         const pos = summary.pos || {};
+        // BEXIA_V5836_PAPC19R2_FORMAT_FROM_SERVER
+        if (body) {
+            body.dataset.bexiaCloseFormat = String(
+                pos.session_close_format || ''
+            ).toLowerCase().trim();
+        }
         const cashier = summary.cashier || {};
         const payments = summary.payments_by_method || [];
         const paidOrders = summary.paid_orders || [];
@@ -11141,8 +11147,81 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     download?.addEventListener('click', function () {
+        // BEXIA_V5836_PAPC16_PDF_BUTTON
         const sid = sessionId();
-        if (sid) window.open('/pos/sessions/' + sid + '/sales-report', '_blank');
+        if (!sid) return;
+
+        // BEXIA_V5836_PAPC20_GENERIC_PDF_GUARD
+        const closeFormat = String(
+            document.getElementById(
+                'v5484-close-session-body'
+            )?.dataset.bexiaCloseFormat || ''
+        ).toLowerCase().trim();
+
+        if (closeFormat !== 'papelon'
+            && closeFormat !== 'papelón') {
+            window.open(
+                '/pos/sessions/' + sid + '/sales-report',
+                '_blank'
+            );
+            return;
+        }
+
+        const rows = Array.from(
+            document.querySelectorAll(
+                '#v5485-denominations .v5485-denom-row'
+            )
+        );
+
+        if (rows.length === 0) {
+            window.open(
+                '/pos/sessions/' + sid + '/sales-report',
+                '_blank'
+            );
+            return;
+        }
+
+        const cashCount = rows.map(function (row) {
+            const value = Number(row.dataset.value || 0);
+            const input = row.querySelector('[data-v5485-denom-qty]');
+            const quantity = Number(input ? input.value : 0);
+            const name = String(
+                row.querySelector('strong')?.textContent || ''
+            ).trim();
+
+            return {
+                value: value,
+                quantity: quantity,
+                total: Number((value * quantity).toFixed(2)),
+                name: name
+            };
+        });
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action =
+            '/pos/sessions/' + sid + '/sales-report/preview';
+        form.target = '_blank';
+        form.style.display = 'none';
+
+        const data = {
+            _token: @json(csrf_token()),
+            preview_cash_count: JSON.stringify(cashCount),
+            preview_closing_note:
+                document.getElementById('v5485-closing-note')?.value || ''
+        };
+
+        Object.entries(data).forEach(function (entry) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = entry[0];
+            input.value = entry[1];
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+        form.remove();
     });
 
     confirm?.addEventListener('click', function () {
@@ -11598,7 +11677,33 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function buildCashCount(summary) {
         const totals = summary.totals || {};
-        const denominations = summary.denominations || [];
+        // BEXIA_V5836_PAPC7_DENOMINATION_ORDER
+        // Orden descendente; billete antes de moneda del mismo valor.
+        const denominations = (summary.denominations || []).slice()
+            .sort(function (a, b) {
+                const av = Number(a.value || 0);
+                const bv = Number(b.value || 0);
+
+                if (av !== bv) return bv - av;
+
+                function rank(row) {
+                    const text = String(
+                        (row.name || '') + ' ' + (row.type || '')
+                    ).toLowerCase();
+
+                    if (text.includes('billete') || text.includes('bill')) {
+                        return 0;
+                    }
+
+                    if (text.includes('moneda') || text.includes('coin')) {
+                        return 1;
+                    }
+
+                    return 2;
+                }
+
+                return rank(a) - rank(b);
+            });
         const movements = summary.cash_movements || [];
 
         let html = '';
@@ -12059,10 +12164,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
             counted += total;
 
+            // BEXIA_V5836_PAPC17_CASH_COUNT_IDENTITY
+            // Conservar identidad de billete y moneda, aun con igual valor.
+            const name = String(
+                row.querySelector('strong')?.textContent || ''
+            ).trim();
+
+            const normalizedName = name.toLowerCase();
+
+            const type = normalizedName.includes('billete')
+                ? 'bill'
+                : (normalizedName.includes('moneda') ? 'coin' : '');
+
             cashCount.push({
                 value: value,
                 quantity: quantity,
-                total: total,
+                total: Number(total.toFixed(2)),
+                name: name,
+                type: type,
             });
         });
 
@@ -12440,7 +12559,94 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            window.open('/pos/sessions/' + sid + '/close-ticket/print', '_blank', 'width=420,height=760');
+            // BEXIA_V5836_PAPC19R2_GENERIC_PRINT_GUARD
+            const closeFormat = String(
+                document.getElementById(
+                    'v5484-close-session-body'
+                )?.dataset.bexiaCloseFormat || ''
+            ).toLowerCase().trim();
+
+            if (closeFormat !== 'papelon'
+                && closeFormat !== 'papelón') {
+                window.open(
+                    '/pos/sessions/' + sid + '/close-ticket/print',
+                    '_blank',
+                    'width=420,height=760'
+                );
+                return;
+            }
+
+            // BEXIA_V5836_PAPC6_PRINT_BUTTON_ONLY
+            const rows = Array.from(
+                document.querySelectorAll('#v5485-denominations .v5485-denom-row')
+            );
+
+            const cashCount = rows.map(function (row) {
+                const value = Number(row.dataset.value || 0);
+                const input = row.querySelector('[data-v5485-denom-qty]');
+                const quantity = Number(input ? input.value : 0);
+                const name = String(
+                    row.querySelector('strong')?.textContent || ''
+                ).trim();
+                const normalizedName = name.toLowerCase();
+                const type = normalizedName.includes('billete')
+                    ? 'bill'
+                    : (normalizedName.includes('moneda') ? 'coin' : '');
+
+                return {
+                    value: value,
+                    quantity: quantity,
+                    total: Number((value * quantity).toFixed(2)),
+                    name: name,
+                    type: type
+                };
+            });
+
+            const note = document.getElementById('v5485-closing-note')?.value || '';
+            // BEXIA_V5836_PAPC7_CSRF
+            // Token Laravel disponible al renderizar la vista.
+            const csrf = @json(csrf_token());
+
+            if (!csrf || rows.length === 0) {
+                alert('No se pudo obtener el conteo o la sesión de impresión.');
+                return;
+            }
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/pos/sessions/' + sid + '/close-ticket/print-preview';
+            // BEXIA_V5836_PAPC8_SMALL_PRINT_WINDOW
+            const printWindow = window.open(
+                '',
+                'bexia_papelon_cierre_preview',
+                'width=420,height=760,left=20,top=20,resizable=yes,scrollbars=yes'
+            );
+
+            if (!printWindow) {
+                alert('Permite las ventanas emergentes para imprimir el cierre.');
+                return;
+            }
+
+            printWindow.focus();
+
+            form.target = 'bexia_papelon_cierre_preview';
+            form.style.display = 'none';
+
+            function addField(name, value) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = String(value);
+                form.appendChild(input);
+            }
+
+            addField('_token', csrf);
+            addField('preview_cash_count', JSON.stringify(cashCount));
+            addField('preview_closing_note', note);
+
+            document.body.appendChild(form);
+            form.submit();
+            form.remove();
         });
     }
 });

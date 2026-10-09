@@ -248,16 +248,166 @@ td{padding:2px 0;vertical-align:top}
     @endforeach
 </table>
 
+{{-- BEXIA_V5836_PAPC6_PAPELON_CLOSE_DETAIL --}}
+@php
+    $papc6Session = $summary['session'] ?? [];
+    $papc6Totals = $summary['totals'] ?? [];
+    $papc6Rows = $papc6Session['closing_cash_count']
+        ?? ($closePayload['cash_count'] ?? []);
+
+    if (is_string($papc6Rows)) {
+        $papc6Rows = json_decode($papc6Rows, true);
+    }
+
+    $papc6HasCount = is_array($papc6Rows) && count($papc6Rows) > 0;
+    $papc6Lines = [];
+
+    foreach (is_array($papc6Rows) ? $papc6Rows : [] as $row) {
+        if (!is_array($row)) continue;
+
+        $value = round((float) ($row['value'] ?? 0), 2);
+        $quantity = (int) ($row['quantity'] ?? 0);
+        if ($value <= 0 || $quantity < 0) continue;
+
+        $name = trim((string) ($row['name'] ?? ''));
+        $type = strtolower(trim((string) ($row['type'] ?? '')));
+
+        if ($type === '' && $name !== '') {
+            $lower = mb_strtolower($name);
+            $type = str_contains($lower, 'billete')
+                ? 'bill'
+                : (str_contains($lower, 'moneda') ? 'coin' : '');
+        }
+
+        if ($name === '') {
+            $label = number_format($value, $value < 1 ? 2 : 0);
+            $name = ($type === 'coin' ? 'Moneda de '
+                : ($type === 'bill' ? 'Billete de ' : '$')) . $label;
+        }
+
+        $papc6Lines[] = [
+            'value' => $value,
+            'quantity' => $quantity,
+            'name' => $name,
+            'type' => $type,
+            'total' => round($value * $quantity, 2),
+        ];
+    }
+
+    usort($papc6Lines, function ($a, $b) {
+        $byValue = $b['value'] <=> $a['value'];
+        if ($byValue !== 0) return $byValue;
+        if ($a['type'] === $b['type']) return 0;
+        if ($a['type'] === 'bill') return -1;
+        if ($b['type'] === 'bill') return 1;
+        return 0;
+    });
+
+    $papc6CashCounted = round(
+        array_sum(array_column($papc6Lines, 'total')), 2
+    );
+
+    $papc6CardCredit = 0.0;
+    $papc6CardDebit = 0.0;
+    $papc6CardOther = 0.0;
+    $papc6Transfer = 0.0;
+    $papc6Other = 0.0;
+    $papc6Sales = 0.0;
+
+    foreach ($methodTotals as $method) {
+        $name = mb_strtolower(
+            \Illuminate\Support\Str::ascii(
+                (string) ($method['method'] ?? '')
+            )
+        );
+        $amount = (float) ($method['total'] ?? 0);
+        $papc6Sales += $amount;
+
+        if (str_contains($name, 'efectivo') || str_contains($name, 'cash')) {
+            continue;
+        }
+        if (str_contains($name, 'transfer') || str_contains($name, 'spei')) {
+            $papc6Transfer += $amount;
+        } elseif (str_contains($name, 'tarjeta') || str_contains($name, 'card')) {
+            if (str_contains($name, 'credito')) {
+                $papc6CardCredit += $amount;
+            } elseif (str_contains($name, 'debito')) {
+                $papc6CardDebit += $amount;
+            } else {
+                $papc6CardOther += $amount;
+            }
+        } else {
+            $papc6Other += $amount;
+        }
+    }
+
+    $papc6Sales = round($papc6Sales, 2);
+    $papc6CardTotal = round(
+        $papc6CardCredit + $papc6CardDebit + $papc6CardOther, 2
+    );
+    $papc6Total = round(
+        $papc6CashCounted + $papc6CardTotal
+        + $papc6Transfer + $papc6Other, 2
+    );
+    $papc6Difference = round($papc6Total - $papc6Sales, 2);
+    $papc6Note = trim((string) (
+        $papc6Session['closing_note']
+        ?? ($closePayload['closing_note'] ?? '')
+    ));
+@endphp
+
 <div class="section-title">CUENTA EFECTIVO</div>
 <table class="cash-table">
-    @foreach([1000,500,200,100,50,20,10,5,2,1,0.5] as $denom)
+    @forelse($papc6Lines as $line)
         <tr>
-            <td>${{ number_format((float)$denom, $denom < 1 ? 2 : 0) }}</td>
-            <td class="center">x ______</td>
-            <td class="right">= ______</td>
+            <td>{{ $line['name'] }}</td>
+            <td class="center">x {{ $line['quantity'] }}</td>
+            <td class="right">= {{ $money($line['total']) }}</td>
         </tr>
-    @endforeach
+    @empty
+        <tr><td colspan="3">Sin desglose de denominaciones</td></tr>
+    @endforelse
+    <tr class="total-row">
+        <td colspan="2">TOTAL EFECTIVO CONTADO</td>
+        <td class="right">
+            {{ $papc6HasCount ? $money($papc6CashCounted) : 'Sin conteo' }}
+        </td>
+    </tr>
 </table>
+
+<div class="section-title">CONCILIACIÓN DEL CIERRE</div>
+<table>
+    <tr><td>Total cobrado registrado</td><td class="right">{{ $money($papc6Sales) }}</td></tr>
+    <tr><td>Efectivo contado</td><td class="right">{{ $papc6HasCount ? $money($papc6CashCounted) : 'Sin conteo' }}</td></tr>
+    <tr><td>Tarjeta de crédito</td><td class="right">{{ $money($papc6CardCredit) }}</td></tr>
+    <tr><td>Tarjeta de débito</td><td class="right">{{ $money($papc6CardDebit) }}</td></tr>
+    @if(abs($papc6CardOther) > 0.009)
+        <tr><td>Otras tarjetas</td><td class="right">{{ $money($papc6CardOther) }}</td></tr>
+    @endif
+    <tr><td>Transferencias</td><td class="right">{{ $money($papc6Transfer) }}</td></tr>
+    @if(abs($papc6Other) > 0.009)
+        <tr><td>Otros métodos</td><td class="right">{{ $money($papc6Other) }}</td></tr>
+    @endif
+    <tr class="net-row">
+        <td>TOTAL CONTADO Y REGISTRADO</td>
+        <td class="right">{{ $papc6HasCount ? $money($papc6Total) : 'Sin conteo' }}</td>
+    </tr>
+    <tr>
+        <td>DIFERENCIA VS COBRADO</td>
+        <td class="right bold">
+            {{ $papc6HasCount ? $money($papc6Difference) : 'Sin conteo' }}
+        </td>
+    </tr>
+    <tr><td>Observaciones</td><td class="right">________________</td></tr>
+</table>
+
+@if($papc6Note !== '')
+    <div class="sep"></div>
+    <div class="small">
+        <strong>Nota de cierre:</strong>
+        {{ $papc6Note }}
+    </div>
+@endif
 
 <div class="sep"></div>
 

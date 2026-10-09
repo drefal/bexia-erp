@@ -10194,6 +10194,73 @@ return response()->json([
             }
         }
 
+        // BEXIA_V5836_PAPC16_PDF_PREVIEW
+        if ($request->isMethod('post')) {
+            abort_unless(
+                $request->is('pos/sessions/*/sales-report/preview')
+                && $v5521eCloseFormat === 'papelon',
+                422
+            );
+
+            $request->validate([
+                'preview_cash_count' => 'required|string|max:12000',
+                'preview_closing_note' => 'nullable|string|max:2000',
+            ]);
+
+            $inputRows = json_decode(
+                (string) $request->input('preview_cash_count'),
+                true
+            );
+
+            abort_unless(
+                is_array($inputRows)
+                && count($inputRows) >= 1
+                && count($inputRows) <= 40,
+                422
+            );
+
+            $clean = [];
+            foreach ($inputRows as $row) {
+                abort_unless(
+                    is_array($row)
+                    && isset($row['value'], $row['quantity'])
+                    && is_numeric($row['value'])
+                    && is_numeric($row['quantity']),
+                    422
+                );
+
+                $value = (float) $row['value'];
+                $quantity = (float) $row['quantity'];
+
+                abort_unless(
+                    is_finite($value)
+                    && is_finite($quantity)
+                    && $value > 0
+                    && $value <= 10000
+                    && $quantity >= 0
+                    && $quantity <= 100000
+                    && floor($quantity) === $quantity,
+                    422
+                );
+
+                $clean[] = [
+                    'value' => round($value, 2),
+                    'quantity' => (int) $quantity,
+                    'total' => round($value * $quantity, 2),
+                    'name' => mb_substr(
+                        (string) ($row['name'] ?? ''),
+                        0,
+                        70
+                    ),
+                ];
+            }
+
+            $summary['session']['closing_cash_count'] = $clean;
+            $summary['session']['closing_note'] = trim(
+                (string) $request->input('preview_closing_note', '')
+            );
+        }
+
         $v5521eLogoUrl = $summary['company']['logo_url'] ?? null;
 
         if (! $v5521eLogoUrl && method_exists($this, 'ticketLogoUrl')) {
@@ -11055,6 +11122,8 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                 'id' => (int) ($pos->id ?? 0),
                 'name' => (string) $posName,
                 'code' => (string) ($pos->code ?? ''),
+                // BEXIA_V5836_PAPC19R2_FORMAT
+                'session_close_format' => (string) ($pos->session_close_format ?? ''),
             ],
             'cashier' => [
                 'name' => $cashierName !== '' ? $cashierName : 'Sin cajero',
@@ -11981,6 +12050,73 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             if (view()->exists('pos.session-close-ticket-papelon')) {
                 $v5521eView = 'pos.session-close-ticket-papelon';
             }
+        }
+
+        // BEXIA_V5836_PAPC6_PREVIEW_SERVER
+        if (
+            $request->isMethod('post')
+            && $request->is('pos/sessions/*/close-ticket/print-preview')
+        ) {
+            abort_unless($v5521eCloseFormat === 'papelon', 422);
+
+            $request->validate([
+                'preview_cash_count' => 'required|string|max:12000',
+                'preview_closing_note' => 'nullable|string|max:2000',
+            ]);
+
+            $previewRows = json_decode(
+                (string) $request->input('preview_cash_count'),
+                true
+            );
+
+            abort_unless(
+                is_array($previewRows)
+                && count($previewRows) >= 1
+                && count($previewRows) <= 40,
+                422
+            );
+
+            $cleanRows = [];
+            foreach ($previewRows as $row) {
+                abort_unless(
+                    is_array($row)
+                    && isset($row['value'], $row['quantity'])
+                    && is_numeric($row['value'])
+                    && is_numeric($row['quantity']),
+                    422
+                );
+
+                $value = (float) $row['value'];
+                $quantity = (float) $row['quantity'];
+
+                abort_unless(
+                    is_finite($value)
+                    && is_finite($quantity)
+                    && $value > 0
+                    && $value <= 10000
+                    && $quantity >= 0
+                    && $quantity <= 100000
+                    && floor($quantity) === $quantity,
+                    422
+                );
+
+                $cleanRows[] = [
+                    'value' => round($value, 2),
+                    'quantity' => (int) $quantity,
+                    'total' => round($value * $quantity, 2),
+                    'name' => mb_substr((string) ($row['name'] ?? ''), 0, 70),
+                    'type' => in_array(($row['type'] ?? ''), ['bill','coin'], true)
+                        ? $row['type'] : '',
+                ];
+            }
+
+            $closePayload['cash_count'] = $cleanRows;
+            $closePayload['closing_note'] =
+                trim((string) $request->input('preview_closing_note', ''));
+
+            $summary['session']['closing_cash_count'] = $cleanRows;
+            $summary['session']['closing_note'] =
+                $closePayload['closing_note'];
         }
 
         $v5521eLogoUrl = $summary['company']['logo_url'] ?? null;
