@@ -212,7 +212,7 @@ class EditExpenseReport extends EditRecord
                 )
                 ->visible(
                     fn (): bool =>
-                        (string) $this->record->status === 'draft'
+                        in_array((string) $this->record->status, ['draft', 'rejected'], true)
                         && (
                             auth()->user()?->can('expenses.admin')
                             || auth()->user()?->can('expenses.submit')
