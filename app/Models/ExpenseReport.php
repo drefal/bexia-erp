@@ -90,6 +90,14 @@ class ExpenseReport extends Model
         return $this->belongsTo(ApprovalRequest::class);
     }
 
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(
+            User::class,
+            'rejected_by_user_id'
+        );
+    }
+
     public function paymentTreasuryAccount(): BelongsTo
     {
         return $this->belongsTo(

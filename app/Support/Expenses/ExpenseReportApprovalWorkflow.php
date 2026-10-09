@@ -62,9 +62,15 @@ class ExpenseReportApprovalWorkflow
                     ->lockForUpdate()
                     ->findOrFail($report->id);
 
-                if ((string) $locked->status !== 'draft') {
+                if (
+                    ! in_array(
+                        (string) $locked->status,
+                        ['draft', 'rejected'],
+                        true
+                    )
+                ) {
                     throw new RuntimeException(
-                        'La comprobación ya no está en borrador.'
+                        'La comprobación ya no puede enviarse a aprobación.'
                     );
                 }
 
@@ -251,6 +257,20 @@ class ExpenseReportApprovalWorkflow
 
                     'approval_status' =>
                         'pending',
+
+                    /*
+                     * Al reenviar una comprobación previamente rechazada,
+                     * conservar el historial en approval_requests pero
+                     * limpiar el rechazo activo del documento.
+                     */
+                    'rejected_by_user_id' =>
+                        null,
+
+                    'rejected_at' =>
+                        null,
+
+                    'rejection_reason' =>
+                        null,
 
                     'submitted_by_user_id' =>
                         $requesterId,

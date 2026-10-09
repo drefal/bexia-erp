@@ -152,8 +152,11 @@ class ViewExpenseReport extends ViewRecord
                 ->label('Editar comprobación')
                 ->visible(
                     fn (): bool =>
-                        (string) $this->record->status
-                            === 'draft'
+                        in_array(
+                            (string) $this->record->status,
+                            ['draft', 'rejected'],
+                            true
+                        )
                         && ExpenseReportResource::canEdit(
                             $this->record
                         )
