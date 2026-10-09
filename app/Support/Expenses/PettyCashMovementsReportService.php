@@ -7,10 +7,20 @@ use Illuminate\Support\Facades\DB;
 
 class PettyCashMovementsReportService
 {
-    public static function fundOptions(int $companyId): array
-    {
+    public static function fundOptions(
+        int $companyId,
+        ?int $employeeId = null
+    ): array {
         return DB::table('petty_cash_funds')
             ->where('company_id', $companyId)
+            ->when(
+                $employeeId !== null,
+                fn ($query) =>
+                    $query->where(
+                        'employee_id',
+                        $employeeId
+                    )
+            )
             ->orderBy('name')
             ->get(['id', 'number', 'name'])
             ->mapWithKeys(function ($row): array {
@@ -59,7 +69,8 @@ class PettyCashMovementsReportService
         ?string $dateTo = null,
         ?int $fundId = null,
         ?string $type = null,
-        ?int $fundingSourceId = null
+        ?int $fundingSourceId = null,
+        ?int $employeeId = null
     ): Collection {
         $query = DB::table('petty_cash_fund_movements as m')
             ->join(
@@ -111,6 +122,14 @@ class PettyCashMovementsReportService
                 'm.created_by_user_id'
             )
             ->where('m.company_id', $companyId)
+            ->when(
+                $employeeId !== null,
+                fn ($query) =>
+                    $query->where(
+                        'f.employee_id',
+                        $employeeId
+                    )
+            )
             ->select([
                 'm.id',
                 'm.petty_cash_fund_id',
@@ -242,7 +261,8 @@ class PettyCashMovementsReportService
         ?string $dateTo = null,
         ?int $fundId = null,
         ?string $type = null,
-        ?int $fundingSourceId = null
+        ?int $fundingSourceId = null,
+        ?int $employeeId = null
     ): void {
         $rows = static::rows(
             $companyId,
@@ -250,7 +270,8 @@ class PettyCashMovementsReportService
             $dateTo,
             $fundId,
             $type,
-            $fundingSourceId
+            $fundingSourceId,
+            $employeeId
         );
 
         $writer = new \OpenSpout\Writer\XLSX\Writer();

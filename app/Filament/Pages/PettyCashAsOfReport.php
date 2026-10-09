@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Expenses\ExpenseAccess;
 use App\Support\Expenses\ExpenseReportBranding;
 use App\Support\Expenses\PettyCashAsOfReportService;
 use App\Support\Security\BexiaTenantPermission;
@@ -54,7 +55,8 @@ class PettyCashAsOfReport extends Page
 
         $this->fundOptions =
             PettyCashAsOfReportService::fundOptions(
-                $this->companyId()
+                $this->companyId(),
+                $this->effectiveEmployeeId()
             );
 
         $this->loadReport();
@@ -80,6 +82,9 @@ class PettyCashAsOfReport extends Page
         return BexiaTenantPermission::can(
             'expenses.admin'
         )
+            || BexiaTenantPermission::can(
+                'expenses.reports.view'
+            )
             || BexiaTenantPermission::can(
                 'petty_cash.view'
             )
@@ -114,7 +119,8 @@ class PettyCashAsOfReport extends Page
             PettyCashAsOfReportService::rows(
                 $this->companyId(),
                 $this->asOfDate,
-                $this->fundId
+                $this->fundId,
+                $this->effectiveEmployeeId()
             );
 
         $this->summary =
@@ -147,7 +153,8 @@ class PettyCashAsOfReport extends Page
             $path,
             $this->companyId(),
             $this->asOfDate,
-            $this->fundId
+            $this->fundId,
+            $this->effectiveEmployeeId()
         );
 
         return response()
@@ -245,6 +252,17 @@ class PettyCashAsOfReport extends Page
                 )
                 ->action('exportPdf'),
         ];
+    }
+
+    protected function effectiveEmployeeId(): ?int
+    {
+        if (ExpenseAccess::canViewAll()) {
+            return null;
+        }
+
+        return ExpenseAccess::currentEmployeeId(
+            $this->companyId()
+        ) ?? 0;
     }
 
     protected function companyId(): int

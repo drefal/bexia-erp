@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseProject;
 use App\Models\ExpenseReport;
+use App\Support\Expenses\ExpenseAccess;
 use App\Models\PettyCashFund;
 use App\Support\Expenses\ExpenseReceiptService;
 use App\Support\Expenses\ExpenseTaxCalculator;
@@ -79,7 +80,11 @@ class ExpenseReportResource extends Resource
 
     public static function canView(Model $record): bool
     {
-        return static::canViewAny();
+        return static::canViewAny()
+            && ExpenseAccess::canAccessEmployee(
+                static::currentCompanyId(),
+                (int) $record->employee_id
+            );
     }
 
     public static function canCreate(): bool
@@ -94,7 +99,11 @@ class ExpenseReportResource extends Resource
                 static::bexiaCanExpensePermission('expenses.admin')
                 || static::bexiaCanExpensePermission('expenses.update')
             )
-            && in_array((string) $record->status, ['draft', 'rejected'], true);
+            && in_array((string) $record->status, ['draft', 'rejected'], true)
+            && ExpenseAccess::canAccessEmployee(
+                static::currentCompanyId(),
+                (int) $record->employee_id
+            );
     }
 
     public static function canDelete(Model $record): bool
@@ -116,6 +125,11 @@ class ExpenseReportResource extends Resource
 
         if ($companyId) {
             $query->where('company_id', $companyId);
+
+            ExpenseAccess::scopeEmployeeQuery(
+                $query,
+                $companyId
+            );
         }
 
         return $query->latest('id');
@@ -129,12 +143,9 @@ class ExpenseReportResource extends Resource
             return [];
         }
 
-        return Employee::query()
-            ->where('company_id', $companyId)
-            ->where('active', true)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->toArray();
+        return ExpenseAccess::employeeOptions(
+            $companyId
+        );
     }
 
     protected static function categoryOptions(): array

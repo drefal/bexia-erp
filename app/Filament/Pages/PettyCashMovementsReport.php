@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Expenses\ExpenseAccess;
 use App\Support\Expenses\ExpenseReportBranding;
 use App\Support\Expenses\PettyCashMovementsReportService;
 use App\Support\Security\BexiaTenantPermission;
@@ -64,7 +65,8 @@ class PettyCashMovementsReport extends Page
 
         $this->fundOptions =
             PettyCashMovementsReportService::fundOptions(
-                $companyId
+                $companyId,
+                $this->effectiveEmployeeId()
             );
 
         $this->typeOptions =
@@ -93,6 +95,9 @@ class PettyCashMovementsReport extends Page
         return BexiaTenantPermission::can(
             'expenses.admin'
         )
+            || BexiaTenantPermission::can(
+                'expenses.reports.view'
+            )
             || BexiaTenantPermission::can(
                 'petty_cash.view'
             )
@@ -142,7 +147,8 @@ class PettyCashMovementsReport extends Page
                 $this->dateTo,
                 $this->fundId,
                 $this->movementType,
-                $this->fundingSourceId
+                $this->fundingSourceId,
+                $this->effectiveEmployeeId()
             );
 
         $this->summary =
@@ -184,7 +190,8 @@ class PettyCashMovementsReport extends Page
             $this->dateTo,
             $this->fundId,
             $this->movementType,
-            $this->fundingSourceId
+            $this->fundingSourceId,
+            $this->effectiveEmployeeId()
         );
 
         return response()
@@ -220,7 +227,8 @@ class PettyCashMovementsReport extends Page
                 $this->dateTo,
                 $this->fundId,
                 $this->movementType,
-                $this->fundingSourceId
+                $this->fundingSourceId,
+                $this->effectiveEmployeeId()
             );
 
         $summary =
@@ -294,6 +302,17 @@ class PettyCashMovementsReport extends Page
                 )
                 ->action('exportPdf'),
         ];
+    }
+
+    protected function effectiveEmployeeId(): ?int
+    {
+        if (ExpenseAccess::canViewAll()) {
+            return null;
+        }
+
+        return ExpenseAccess::currentEmployeeId(
+            $this->companyId()
+        ) ?? 0;
     }
 
     protected function companyId(): int

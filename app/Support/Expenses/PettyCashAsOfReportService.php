@@ -7,10 +7,20 @@ use Illuminate\Support\Facades\DB;
 
 class PettyCashAsOfReportService
 {
-    public static function fundOptions(int $companyId): array
-    {
+    public static function fundOptions(
+        int $companyId,
+        ?int $employeeId = null
+    ): array {
         return DB::table('petty_cash_funds')
             ->where('company_id', $companyId)
+            ->when(
+                $employeeId !== null,
+                fn ($query) =>
+                    $query->where(
+                        'employee_id',
+                        $employeeId
+                    )
+            )
             ->orderBy('name')
             ->get([
                 'id',
@@ -33,7 +43,8 @@ class PettyCashAsOfReportService
     public static function rows(
         int $companyId,
         string $asOfDate,
-        ?int $fundId = null
+        ?int $fundId = null,
+        ?int $employeeId = null
     ): Collection {
         $funds = DB::table('petty_cash_funds as f')
             ->leftJoin(
@@ -43,6 +54,14 @@ class PettyCashAsOfReportService
                 'f.employee_id'
             )
             ->where('f.company_id', $companyId)
+            ->when(
+                $employeeId !== null,
+                fn ($query) =>
+                    $query->where(
+                        'f.employee_id',
+                        $employeeId
+                    )
+            )
             ->where(function ($q) use ($asOfDate): void {
                 $q->whereNull('f.assigned_at')
                     ->orWhereDate(
@@ -286,12 +305,14 @@ class PettyCashAsOfReportService
         string $path,
         int $companyId,
         string $asOfDate,
-        ?int $fundId = null
+        ?int $fundId = null,
+        ?int $employeeId = null
     ): void {
         $rows = static::rows(
             $companyId,
             $asOfDate,
-            $fundId
+            $fundId,
+            $employeeId
         );
 
         $writer =

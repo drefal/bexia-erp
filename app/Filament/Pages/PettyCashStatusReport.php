@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Expenses\ExpenseAccess;
 use App\Support\Expenses\ExpenseReportBranding;
 use App\Support\Expenses\PettyCashStatusReportService;
 use App\Support\Security\BexiaTenantPermission;
@@ -57,6 +58,9 @@ class PettyCashStatusReport extends Page
             'expenses.admin'
         )
             || BexiaTenantPermission::can(
+                'expenses.reports.view'
+            )
+            || BexiaTenantPermission::can(
                 'petty_cash.view'
             )
             || BexiaTenantPermission::can(
@@ -78,7 +82,10 @@ class PettyCashStatusReport extends Page
         abort_unless($companyId > 0, 404);
 
         $this->rows =
-            PettyCashStatusReportService::rows($companyId);
+            PettyCashStatusReportService::rows(
+                $companyId,
+                $this->effectiveEmployeeId($companyId)
+            );
 
         $this->summary =
             PettyCashStatusReportService::summary(
@@ -111,7 +118,8 @@ class PettyCashStatusReport extends Page
 
         PettyCashStatusReportService::writeExcel(
             $path,
-            $companyId
+            $companyId,
+            $this->effectiveEmployeeId($companyId)
         );
 
         return response()
@@ -146,7 +154,8 @@ class PettyCashStatusReport extends Page
 
         $rows =
             PettyCashStatusReportService::rows(
-                $companyId
+                $companyId,
+                $this->effectiveEmployeeId($companyId)
             );
 
         $summary =
@@ -185,6 +194,18 @@ class PettyCashStatusReport extends Page
                 'Content-Type' => 'application/pdf',
             ]
         );
+    }
+
+    protected function effectiveEmployeeId(
+        int $companyId
+    ): ?int {
+        if (ExpenseAccess::canViewAll()) {
+            return null;
+        }
+
+        return ExpenseAccess::currentEmployeeId(
+            $companyId
+        ) ?? 0;
     }
 
     protected function getHeaderActions(): array

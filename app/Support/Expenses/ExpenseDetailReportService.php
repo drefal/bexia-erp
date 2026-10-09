@@ -171,8 +171,11 @@ class ExpenseDetailReportService
             $q->where('r.status', $status);
         }
 
-        if ($employeeId) {
-            $q->where('l.spent_by_employee_id', $employeeId);
+        if ($employeeId !== null) {
+            $q->where(
+                'l.spent_by_employee_id',
+                $employeeId
+            );
         }
 
         if ($categoryId) {

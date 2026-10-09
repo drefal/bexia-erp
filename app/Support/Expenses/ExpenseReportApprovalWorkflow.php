@@ -511,6 +511,10 @@ class ExpenseReportApprovalWorkflow
             return false;
         }
 
+        if (! ExpenseAccess::isAdmin()) {
+            return false;
+        }
+
         $step = static::currentPendingStep(
             $report
         );
@@ -549,6 +553,8 @@ class ExpenseReportApprovalWorkflow
         ExpenseReport $report,
         object $user
     ): void {
+        ExpenseAccess::assertAdmin();
+
         DB::transaction(
             function () use ($report, $user): void {
                 $lockedReport =
@@ -783,6 +789,8 @@ class ExpenseReportApprovalWorkflow
         object $user,
         string $reason
     ): void {
+        ExpenseAccess::assertAdmin();
+
         $reason = trim($reason);
 
         if ($reason === '') {
