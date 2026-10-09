@@ -412,7 +412,7 @@ class ExpenseAdvanceResource extends Resource
                         'request_date'
                     )
                         ->label('Fecha de solicitud')
-                        ->native(false)
+                        ->native(true)
                         ->default(
                             now()->toDateString()
                         )

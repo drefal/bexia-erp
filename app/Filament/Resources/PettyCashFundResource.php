@@ -169,7 +169,7 @@ class PettyCashFundResource extends Resource
 
                     Forms\Components\DatePicker::make('assigned_at')
                         ->label('Fecha de asignación')
-                        ->native(false)
+                        ->native(true)
                         ->default(now()),
 
                     Forms\Components\Select::make('status')
