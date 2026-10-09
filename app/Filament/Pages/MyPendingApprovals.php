@@ -2,6 +2,8 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Expenses\ExpenseAccess;
+
 use App\Support\BexiaUserNotification;
 use App\Support\EmployeeIncidentApprovalWorkflow;
 use App\Support\PayrollRunApprovalWorkflow;
@@ -1301,6 +1303,15 @@ try {
         object $user,
         object $row
     ): bool {
+        if (
+            ExpenseAccess::approvalRequiresAdmin(
+                $row
+            )
+            && ! ExpenseAccess::isAdmin()
+        ) {
+            return false;
+        }
+
         if (
             ! empty($row->approver_user_id)
             && (int) $row->approver_user_id === (int) $user->id

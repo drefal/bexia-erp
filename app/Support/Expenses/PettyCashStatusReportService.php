@@ -7,8 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 class PettyCashStatusReportService
 {
-    public static function rows(int $companyId): Collection
-    {
+    public static function rows(
+        int $companyId,
+        ?int $employeeId = null
+    ): Collection {
         return DB::table('petty_cash_funds as f')
             ->leftJoin('employees as e', 'e.id', '=', 'f.employee_id')
             ->leftJoin(
@@ -18,6 +20,14 @@ class PettyCashStatusReportService
                 'f.treasury_account_id'
             )
             ->where('f.company_id', $companyId)
+            ->when(
+                $employeeId !== null,
+                fn ($query) =>
+                    $query->where(
+                        'f.employee_id',
+                        $employeeId
+                    )
+            )
             ->select([
                 'f.id',
                 'f.number',
@@ -158,9 +168,13 @@ class PettyCashStatusReportService
 
     public static function writeExcel(
         string $path,
-        int $companyId
+        int $companyId,
+        ?int $employeeId = null
     ): void {
-        $rows = static::rows($companyId);
+        $rows = static::rows(
+            $companyId,
+            $employeeId
+        );
 
         $writer = new \OpenSpout\Writer\XLSX\Writer();
         $writer->openToFile($path);

@@ -73,7 +73,32 @@ class CashCounter extends Page
     protected static function canUseExpenses(): bool
     {
         try {
-            return \App\Filament\Resources\PettyCashFundResource::canViewAny();
+            $user = auth()->user();
+
+            if (! $user) {
+                return false;
+            }
+
+            if ((bool) ($user->is_system_admin ?? false)) {
+                return true;
+            }
+
+            return
+                \App\Support\Security\BexiaTenantPermission::can(
+                    'expenses.admin'
+                )
+                || \App\Support\Security\BexiaTenantPermission::can(
+                    'expenses.view'
+                )
+                || \App\Support\Security\BexiaTenantPermission::can(
+                    'expenses.create'
+                )
+                || \App\Support\Security\BexiaTenantPermission::can(
+                    'expenses.update'
+                )
+                || \App\Support\Security\BexiaTenantPermission::can(
+                    'expenses.submit'
+                );
         } catch (\Throwable) {
             return false;
         }

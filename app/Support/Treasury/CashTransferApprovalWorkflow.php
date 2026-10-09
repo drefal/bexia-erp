@@ -4,6 +4,7 @@ namespace App\Support\Treasury;
 
 use App\Models\ApprovalRequest;
 use App\Models\TreasuryCashTransferRequest;
+use App\Support\Expenses\ExpenseAccess;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -127,6 +128,14 @@ class CashTransferApprovalWorkflow
             return;
         }
 
+        if (
+            ExpenseAccess::isExpenseAdvanceTransfer(
+                $request
+            )
+        ) {
+            ExpenseAccess::assertAdmin();
+        }
+
         DB::table('treasury_cash_transfer_requests')
             ->where('id', $request->id)
             ->update([
@@ -198,6 +207,14 @@ class CashTransferApprovalWorkflow
 
         if (! $request) {
             return;
+        }
+
+        if (
+            ExpenseAccess::isExpenseAdvanceTransfer(
+                $request
+            )
+        ) {
+            ExpenseAccess::assertAdmin();
         }
 
         DB::table('treasury_cash_transfer_requests')

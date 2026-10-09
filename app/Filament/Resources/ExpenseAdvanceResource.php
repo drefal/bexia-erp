@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ExpenseAdvanceResource\Pages;
 use App\Models\Employee;
 use App\Models\ExpenseAdvance;
+use App\Support\Expenses\ExpenseAccess;
 use App\Models\ExpenseReport;
 use App\Filament\Resources\ExpenseReportResource;
 use App\Models\PettyCashFund;
@@ -92,7 +93,11 @@ class ExpenseAdvanceResource extends Resource
 
     public static function canView(Model $record): bool
     {
-        return static::canViewAny();
+        return static::canViewAny()
+            && ExpenseAccess::canAccessEmployee(
+                static::currentCompanyId(),
+                (int) $record->employee_id
+            );
     }
 
     public static function canCreate(): bool
@@ -133,6 +138,11 @@ class ExpenseAdvanceResource extends Resource
                 'company_id',
                 $companyId
             );
+
+            ExpenseAccess::scopeEmployeeQuery(
+                $query,
+                $companyId
+            );
         }
 
         return $query;
@@ -146,12 +156,9 @@ class ExpenseAdvanceResource extends Resource
             return [];
         }
 
-        return Employee::query()
-            ->where('company_id', $companyId)
-            ->where('active', true)
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->toArray();
+        return ExpenseAccess::employeeOptions(
+            $companyId
+        );
     }
 
     protected static function fundOptions(): array

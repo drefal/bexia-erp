@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Expenses\ExpenseAccess;
 use App\Support\Expenses\ExpenseAnalyticsReportService;
 use App\Support\Expenses\ExpenseDetailReportService;
 use App\Support\Expenses\ExpenseReportBranding;
@@ -70,9 +71,16 @@ class ExpenseDetailReport extends Page
         $companyId = $this->companyId();
 
         $this->employeeOptions =
-            ExpenseDetailReportService::employeeOptions(
+            ExpenseAccess::employeeOptions(
                 $companyId
             );
+
+        if (! ExpenseAccess::canViewAll()) {
+            $this->employeeId =
+                ExpenseAccess::currentEmployeeId(
+                    $companyId
+                ) ?? 0;
+        }
 
         $this->categoryOptions =
             ExpenseDetailReportService::categoryOptions(
@@ -107,6 +115,9 @@ class ExpenseDetailReport extends Page
         }
 
         return BexiaTenantPermission::can('expenses.admin')
+            || BexiaTenantPermission::can(
+                'expenses.reports.view'
+            )
             || BexiaTenantPermission::can('expenses.view')
             || BexiaTenantPermission::can('expenses.view_all');
     }
@@ -148,7 +159,14 @@ class ExpenseDetailReport extends Page
 
         $this->reportType = null;
         $this->reportStatus = null;
-        $this->employeeId = null;
+        $this->employeeId =
+            ExpenseAccess::canViewAll()
+                ? null
+                : (
+                    ExpenseAccess::currentEmployeeId(
+                        $this->companyId()
+                    ) ?? 0
+                );
         $this->categoryId = null;
         $this->projectId = null;
         $this->supplier = null;
@@ -167,7 +185,7 @@ class ExpenseDetailReport extends Page
                 $this->dateTo,
                 $this->reportType,
                 $this->reportStatus,
-                $this->employeeId,
+                $this->effectiveEmployeeId(),
                 $this->categoryId,
                 $this->projectId,
                 $this->supplier
@@ -234,7 +252,7 @@ class ExpenseDetailReport extends Page
                 $this->dateTo,
                 $this->reportType,
                 $this->reportStatus,
-                $this->employeeId,
+                $this->effectiveEmployeeId(),
                 $this->categoryId,
                 $this->projectId,
                 $this->supplier,
@@ -310,7 +328,7 @@ class ExpenseDetailReport extends Page
                 $this->dateTo,
                 $this->reportType,
                 $this->reportStatus,
-                $this->employeeId,
+                $this->effectiveEmployeeId(),
                 $this->categoryId,
                 $this->projectId,
                 $this->supplier,
@@ -432,6 +450,17 @@ class ExpenseDetailReport extends Page
                 )
                 ->action('exportPdf'),
         ];
+    }
+
+    protected function effectiveEmployeeId(): ?int
+    {
+        if (ExpenseAccess::canViewAll()) {
+            return $this->employeeId;
+        }
+
+        return ExpenseAccess::currentEmployeeId(
+            $this->companyId()
+        ) ?? 0;
     }
 
     protected function companyId(): int
