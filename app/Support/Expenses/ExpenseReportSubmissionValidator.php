@@ -20,7 +20,14 @@ class ExpenseReportSubmissionValidator
 
         $errors = [];
 
-        if ((string) $report->status !== 'draft') {
+        if (
+            ! in_array(
+                (string) $report->status,
+                ['draft', 'rejected'],
+                true
+            )
+        ) {
+            // BEXIA_V5836_EXPENSE_REJECT_RESUBMIT_VALIDATOR
             $errors[] = 'La comprobación ya no está en borrador.';
         }
 

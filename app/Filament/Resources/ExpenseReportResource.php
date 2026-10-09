@@ -94,7 +94,7 @@ class ExpenseReportResource extends Resource
                 static::bexiaCanExpensePermission('expenses.admin')
                 || static::bexiaCanExpensePermission('expenses.update')
             )
-            && (string) $record->status === 'draft';
+            && in_array((string) $record->status, ['draft', 'rejected'], true);
     }
 
     public static function canDelete(Model $record): bool
@@ -206,6 +206,67 @@ class ExpenseReportResource extends Resource
     {
         return $form
             ->schema([
+                Forms\Components\Section::make('RECHAZADO')
+                    ->description(
+                        'Este comprobante fue rechazado. '
+                        . 'Realiza las correcciones indicadas y vuelve a enviarlo a aprobación.'
+                    )
+                    ->icon('heroicon-o-x-circle')
+                    ->columns(2)
+                    ->visible(
+                        fn (?ExpenseReport $record): bool =>
+                            $record !== null
+                            && (string) $record->status === 'rejected'
+                    )
+                    ->schema([
+                        Forms\Components\Placeholder::make(
+                            'rejection_reason_display'
+                        )
+                            ->label('Motivo del rechazo')
+                            ->content(
+                                fn (?ExpenseReport $record): string =>
+                                    trim(
+                                        (string) (
+                                            $record?->rejection_reason
+                                            ?? ''
+                                        )
+                                    ) !== ''
+                                        ? (string) $record->rejection_reason
+                                        : 'Sin motivo registrado'
+                            )
+                            ->columnSpanFull(),
+
+                        Forms\Components\Placeholder::make(
+                            'rejected_by_display'
+                        )
+                            ->label('Rechazado por')
+                            ->content(
+                                fn (?ExpenseReport $record): string =>
+                                    (string) (
+                                        $record?->rejectedBy?->name
+                                        ?? 'Usuario no disponible'
+                                    )
+                            ),
+
+                        Forms\Components\Placeholder::make(
+                            'rejected_at_display'
+                        )
+                            ->label('Fecha del rechazo')
+                            ->content(
+                                fn (?ExpenseReport $record): string =>
+                                    $record?->rejected_at
+                                        ? $record->rejected_at
+                                            ->timezone(
+                                                config(
+                                                    'app.timezone',
+                                                    'America/Mexico_City'
+                                                )
+                                            )
+                                            ->format('d/m/Y H:i')
+                                        : '—'
+                            ),
+                    ]),
+
                 Forms\Components\Section::make('Comprobación')
                     ->description(
                         'El responsable del reporte y la persona que realizó cada gasto pueden ser distintos.'
