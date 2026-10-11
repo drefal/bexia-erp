@@ -1828,6 +1828,47 @@ function setPriceListButtonLabel(name, id) {
 
 
     window.BEXIA_POS_APPLY_PRICE_LIST_BY_ID = async function (priceListId, options) {
+        /*
+         * BEXIA_POS53C2I5_PRICE_LIST_LOCK
+         * Con anticipo, conservar la lista comprometida.
+         * Solo se permite restaurarla al cargar el apartado.
+         */
+        const pos53Pending =
+            window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+
+        if (
+            pos53Pending?.id
+            && Number(pos53Pending.paid_total || 0) > 0.009
+        ) {
+            const pos53OriginalListId = Number(
+                pos53Pending.price_list_id
+                ?? pos53Pending.selected_price_list_id
+                ?? pos53Pending.metadata?.price_list_id
+                ?? pos53Pending.metadata?.selected_price_list_id
+                ?? 0
+            );
+
+            const pos53RequestedListId = Number(priceListId || 0);
+            const pos53Restore =
+                options?.source === 'pending_order_load';
+
+            if (
+                !pos53Restore
+                || pos53RequestedListId !== pos53OriginalListId
+            ) {
+                if (typeof window.showPosNotice === 'function') {
+                    window.showPosNotice(
+                        'La lista de precios original del apartado ' +
+                        'no puede cambiarse después del anticipo.',
+                        'warning'
+                    );
+                }
+
+                return false;
+            }
+        }
+
+
         options = options || {};
 
         const sid = sessionId();
@@ -2653,8 +2694,24 @@ document.addEventListener('DOMContentLoaded', function () {
         return Number.isFinite(parsed) ? parsed : fallback;
     }
 
+    // BEXIA_POS53C2D_ADVANCE_ORIGINAL
+    function isAdvanceOriginalLine(item) {
+        return Boolean(
+            item
+            && item.advance_original_locked
+            && Number(item.pos_order_line_id || 0) > 0
+        );
+    }
+
     function lineKey(product) {
-        return String(product.id || product.name || Math.random());
+        const baseKey = String(product.id || product.name || Math.random());
+
+        if (isAdvanceOriginalLine(product)) {
+            return baseKey + ':advance-original:' +
+                String(product.pos_order_line_id);
+        }
+
+        return baseKey;
     }
 
     function setWarning(message) {
@@ -3161,6 +3218,10 @@ document.addEventListener('DOMContentLoaded', function () {
             remove.textContent = 'Quitar';
 
             remove.addEventListener('click', function () {
+                if (isAdvanceOriginalLine(item)) {
+                    setWarning('Este producto pertenece al apartado original y no se puede eliminar.');
+                    return;
+                }
                 if (isComputerRentalLockedLine(item)) {
                     setWarning(
                         'Esta línea pertenece a Renta de equipos '
@@ -3194,6 +3255,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     'Línea protegida por Renta de equipos';
                 remove.title =
                     'Línea protegida por Renta de equipos';
+            }
+
+            // BEXIA_POS53C2D_ADVANCE_ORIGINAL_CONTROLS
+            if (isAdvanceOriginalLine(item)) {
+                minus.disabled = true;
+                qty.disabled = true;
+                plus.disabled = true;
+                remove.disabled = true;
+
+                [minus, qty, plus, remove].forEach(function (control) {
+                    control.title = 'Producto original protegido por anticipo';
+                });
             }
 
             controls.appendChild(minus);
@@ -3260,6 +3333,11 @@ document.addEventListener('DOMContentLoaded', function () {
     function changeQty(key, delta) {
         const item = cart.get(key);
         if (!item) return;
+
+        if (isAdvanceOriginalLine(item)) {
+            setWarning('La cantidad original del apartado esta protegida.');
+            return;
+        }
 
         // CIBER3J1D_CHANGEQTY_RENTAL_GUARD
         if (isComputerRentalLockedLine(item)) {
@@ -3539,6 +3617,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         item.pos_order_line_id || null,
                     rental_locked:
                         Boolean(item.rental_locked),
+                    // BEXIA_POS53C2D_ADVANCE_ORIGINAL_GETITEMS
+                    advance_original_locked:
+                        Boolean(item.advance_original_locked),
                     source:
                         item.source || null,
                     source_type:
@@ -3554,6 +3635,46 @@ document.addEventListener('DOMContentLoaded', function () {
         },
 
         getTotal: function () {
+            /*
+             * BEXIA_POS53C2H6_COMMITTED_TOTAL
+             *
+             * Con anticipo, el total anterior ya incluye
+             * el descuento historico y no debe recalcularse.
+             * Solo sumamos los articulos adicionales.
+             */
+            const pending = window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+            const paidBefore = Number(pending?.paid_total || 0);
+
+            if (
+                pending
+                && pending.id
+                && Number.isFinite(paidBefore)
+                && paidBefore > 0.009
+            ) {
+                const committedTotal = Number(pending.total);
+
+                if (!Number.isFinite(committedTotal) || committedTotal < 0) {
+                    setWarning('El total original del apartado no es valido.');
+                    return 0;
+                }
+
+                let addedTotal = 0;
+
+                cart.forEach(function (item) {
+                    if (isAdvanceOriginalLine(item)) {
+                        return;
+                    }
+
+                    addedTotal +=
+                        Number(item.qty || 0)
+                        * Number(item.price || 0);
+                });
+
+                return Number(
+                    (committedTotal + addedTotal).toFixed(2)
+                );
+            }
+
             const gross =
                 grossTotals();
 
@@ -3575,6 +3696,15 @@ document.addEventListener('DOMContentLoaded', function () {
             return cartNote || '';
         },
         getDiscount: function () {
+            // BEXIA_POS53C2H6_HISTORIC_DISCOUNT_PAYLOAD
+            const pending = window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+
+            if (pending?.id && Number(pending.paid_total || 0) > 0.009) {
+                // El backend conserva el descuento ya registrado.
+                // No se envia como descuento nuevo.
+                return null;
+            }
+
             return cartDiscount || null;
         },
         setNote: function (note) {
@@ -3582,6 +3712,16 @@ document.addEventListener('DOMContentLoaded', function () {
             render();
         },
         setDiscount: function (discount) {
+            // BEXIA_POS53C2H6_DISCOUNT_LOCK
+            const pending = window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+
+            if (pending?.id && Number(pending.paid_total || 0) > 0.009) {
+                setWarning(
+                    'El descuento original del apartado esta protegido.'
+                );
+                return;
+            }
+
             cartDiscount = discount || null;
             render();
         },
@@ -3645,6 +3785,11 @@ document.addEventListener('DOMContentLoaded', function () {
                             || item.id
                             || 0
                         ) || null,
+                    // BEXIA_POS53C2D_ADVANCE_ORIGINAL_LOAD
+                    advance_original_locked: Boolean(
+                        Number(loadedOrder.paid_total || 0) > 0.009
+                        && Number(item.pos_order_line_id || item.id || 0) > 0
+                    ),
                     rental_locked:
                         Boolean(item.rental_locked),
                     source:
@@ -3659,7 +3804,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         || null,
                     pending_price_locked_until_price_list_change: true,
                     original_pending_price: Number.isFinite(price) ? price : 0,
-                    original_pending_tax_rate: Number(item.tax_rate || 0.16),
+                    // BEXIA_POS53C2I4_ZERO_TAX
+                    original_pending_tax_rate: Number(item.tax_rate ?? 0.16),
                     // BEXIA_V5545N_PENDING_PRICE_LOCK_UNTIL_MANUAL_PRICE_LIST
                     // BEXIA_V5545M_PENDING_ONLY_LOCK_SERIAL
                     // BEXIA_V5545I3_LOAD_PENDING_SERIAL_FIELDS
@@ -3667,7 +3813,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     reference: item.reference || item.product_reference || '',
                     price: Number.isFinite(price) ? price : 0,
                     stock: Number(item.stock || item.available_quantity || item.stock_quantity || 999999),
-                    taxRate: Number(item.tax_rate || 0.16),
+                    taxRate: Number(item.tax_rate ?? 0.16),
                     qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
                 };
 
@@ -3741,6 +3887,13 @@ document.addEventListener('DOMContentLoaded', function () {
                  * Lista de precios, cliente o refresh de catálogo nunca
                  * pueden modificar precio/impuesto de una línea de renta.
                  */
+                // BEXIA_POS53C2H6_ORIGINAL_PRICE_LOCK
+                if (isAdvanceOriginalLine(item)) {
+                    item.stock = newStock;
+                    cart.set(key, item);
+                    return;
+                }
+
                 if (isComputerRentalLockedLine(item)) {
                     item.stock = newStock;
 
@@ -6280,16 +6433,21 @@ document.addEventListener('DOMContentLoaded', function () {
             Number(order.paid_total || 0) > 0.009;
 
         /*
-         * Después del primer anticipo el apartado
-         * queda económicamente bloqueado.
+         * BEXIA_POS53C2M3_ALLOW_ADVANCE_LOAD
+         *
+         * Un anticipo bloquea los importes y productos originales,
+         * pero no impide recuperar el ticket para agregar productos.
+         * Las restricciones de las lineas originales siguen
+         * aplicandose en el carrito y en el servidor.
          */
         loadBtn.disabled =
             lines.length === 0
-            || v5836g5h3HasAdvances;
+            || !v5504aPerms.load;
 
         if (v5836g5h3HasAdvances) {
             loadBtn.title =
-                'El apartado ya tiene anticipos y no puede modificarse.';
+                'Recuperar apartado: los productos originales ' +
+                'estan protegidos; puedes agregar nuevos productos.';
         } else {
             loadBtn.title = '';
         }
@@ -7265,6 +7423,22 @@ async function createPendingTicket() {
             confirmBtn.onclick = async function (event) {
                 event.preventDefault();
 
+                // BEXIA_POS53C2H7A_LEGACY_GUARD
+                const advanceOrder =
+                    window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+
+                if (
+                    advanceOrder?.id
+                    && Number(advanceOrder.paid_total || 0) > 0.009
+                ) {
+                    showPosNotice(
+                        'Este apartado tiene anticipos. ' +
+                        'Utiliza el flujo actualizado de cobro.',
+                        'warning'
+                    );
+                    return;
+                }
+
                 const payments = v5418CollectPayments();
                 const sum = payments.reduce(function (carry, payment) {
                     return carry + Number(payment.amount || 0);
@@ -7949,6 +8123,28 @@ async function createPendingTicket() {
     }
 
     async function registerPayment(event) {
+        // BEXIA_POS53C2H7B_SPLIT_GUARD
+        const pos53AdvanceOrder =
+            window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+
+        if (
+            pos53AdvanceOrder?.id
+            && Number(pos53AdvanceOrder.paid_total || 0) > 0.009
+        ) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            showPosNotice(
+                'Este apartado tiene anticipos. ' +
+                'El cobro dividido anterior no esta habilitado.',
+                'warning'
+            );
+
+            return;
+        }
+
             if (event) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -8050,6 +8246,48 @@ async function createPendingTicket() {
         }
 
         document.addEventListener('click', function (event) {
+            /*
+             * BEXIA_POS53C2I8_SINGLE_ENTRY
+             * Para apartados con anticipo, bloquear todos los
+             * manejadores antiguos del mismo clic.
+             */
+            const pos53Target = event.target;
+            const pos53Advance =
+                window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+
+            if (
+                pos53Advance?.id
+                && Number(pos53Advance.paid_total || 0) > 0.009
+                && pos53Target
+                && typeof pos53Target.closest === 'function'
+            ) {
+                const pos53Charge =
+                    pos53Target.closest('#v5349-charge-ticket');
+
+                const pos53Confirm =
+                    pos53Target.closest('#v5335-payment-confirm');
+
+                if (pos53Charge || pos53Confirm) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+
+                    const fn = pos53Charge
+                        ? window.BEXIA_POS_OPEN_PAYMENT_FLOW_V5481I
+                        : window.BEXIA_POS53C2I8_REGISTER_PAYMENT;
+
+                    if (typeof fn === 'function') {
+                        fn();
+                    } else {
+                        console.error(
+                            'POS53: manejador moderno no disponible.'
+                        );
+                    }
+
+                    return;
+                }
+            }
+
             const chargeButton = event.target.closest ? event.target.closest('#v5349-charge-ticket') : null;
 
             if (chargeButton) {
@@ -10163,6 +10401,33 @@ document.addEventListener('DOMContentLoaded', function () {
         return 0;
     }
 
+    // BEXIA_POS53C2G_PAYMENT_BALANCE
+    function previousConfirmedPayments() {
+        const order = currentOrder();
+
+        if (!order || !order.id) {
+            return 0;
+        }
+
+        const paid = Number(order.paid_total || 0);
+
+        return Number.isFinite(paid)
+            ? Math.max(0, paid)
+            : 0;
+    }
+
+    function currentBalanceDue() {
+        return Math.max(
+            0,
+            Number(
+                (
+                    currentTotal()
+                    - previousConfirmedPayments()
+                ).toFixed(2)
+            )
+        );
+    }
+
     function warn(message) {
         const api = window.BEXIA_POS_CART_API || null;
 
@@ -10417,7 +10682,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const summary = document.getElementById('v5481i-payment-summary');
         const button = confirmButton();
 
-        const analysis = v5530cPaymentAnalysis(currentTotal());
+        const analysis = v5530cPaymentAnalysis(currentBalanceDue());
         const okColor = '#166534';
         const warnColor = '#b91c1c';
 
@@ -10432,8 +10697,42 @@ document.addEventListener('DOMContentLoaded', function () {
                     '<div style="display:flex;justify-content:space-between;gap:12px;color:' + (analysis.isCovered ? okColor : warnColor) + ';"><span>Saldo</span><strong>' + money(Math.max(0, analysis.diff)) + '</strong></div>';
             }
 
+            /*
+             * BEXIA_POS53C2M4R1_BALANCE_HEADER
+             *
+             * La cantidad principal debe coincidir con
+             * "Por cobrar ahora", no con el total historico
+             * si el ticket ya tiene anticipos.
+             */
+            const pos53HeaderAmount =
+                document.getElementById('v5335-payment-total');
+
+            const pos53HeaderLabel =
+                document.querySelector(
+                    '.v5335-payment-total span'
+                );
+
+            const pos53HasHistoricalAdvance =
+                previousConfirmedPayments() > 0.009;
+
+            if (pos53HeaderAmount) {
+                pos53HeaderAmount.textContent =
+                    money(analysis.total);
+            }
+
+            if (pos53HeaderLabel) {
+                pos53HeaderLabel.textContent =
+                    pos53HasHistoricalAdvance
+                        ? 'Saldo por cobrar'
+                        : 'Total a cobrar';
+            }
+
             summary.innerHTML =
-                '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Total</span><strong>' + money(analysis.total) + '</strong></div>' +
+                '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Total del ticket</span><strong>' + money(currentTotal()) + '</strong></div>' +
+                (previousConfirmedPayments() > 0
+                    ? '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Anticipos anteriores</span><strong>−' + money(previousConfirmedPayments()) + '</strong></div>'
+                    : '') +
+                '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Por cobrar ahora</span><strong>' + money(analysis.total) + '</strong></div>' +
                 '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Recibido</span><strong>' + money(analysis.tendered) + '</strong></div>' +
                 '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Aplicado a venta</span><strong>' + money(analysis.applied) + '</strong></div>' +
                 statusLine;
@@ -10522,7 +10821,8 @@ document.addEventListener('DOMContentLoaded', function () {
             row.remove();
 
             if (paymentRows().length === 0) {
-                addPaymentRow(currentTotal());
+                // BEXIA_POS53C2H7A_RESTORE_BALANCE
+                addPaymentRow(currentBalanceDue());
             }
 
             updateSummary();
@@ -10575,7 +10875,7 @@ document.addEventListener('DOMContentLoaded', function () {
             event.preventDefault();
             event.stopPropagation();
 
-            const remaining = Math.max(0, Number((currentTotal() - paidTotal()).toFixed(2)));
+            const remaining = Math.max(0, Number((currentBalanceDue() - paidTotal()).toFixed(2)));
             addPaymentRow(remaining > 0 ? remaining : 0);
         });
 
@@ -10585,7 +10885,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         box.appendChild(wrapper);
 
-        addPaymentRow(currentTotal());
+        addPaymentRow(currentBalanceDue());
     }
 
     async function openPaymentFlow(event) {
@@ -10688,7 +10988,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        const total = Number(currentTotal().toFixed(2));
+        const total = Number(currentBalanceDue().toFixed(2));
         const payments = collectPayments();
 
         if (!payments.length) {
@@ -10739,7 +11039,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     payments: payments,
                     discount: currentDiscount,
                     items: currentItems,
-                    total: total,
+                    total: Number(currentTotal().toFixed(2)),
                     paying_session_id: sessionId(),
                 }),
             });
@@ -10801,6 +11101,24 @@ document.addEventListener('DOMContentLoaded', function () {
     }, true);
 
     window.BEXIA_POS_OPEN_PAYMENT_FLOW_V5481I = openPaymentFlow;
+
+    // BEXIA_POS53C2I8_SINGLE_PAYMENT_LOCK
+    window.BEXIA_POS53C2I8_REGISTER_PAYMENT = function () {
+        if (window.BEXIA_POS53C2I8_PAYMENT_IN_FLIGHT === true) {
+            return Promise.resolve(false);
+        }
+
+        window.BEXIA_POS53C2I8_PAYMENT_IN_FLIGHT = true;
+
+        return Promise.resolve()
+            .then(function () {
+                return registerPayment();
+            })
+            .finally(function () {
+                window.BEXIA_POS53C2I8_PAYMENT_IN_FLIGHT = false;
+            });
+    };
+
     window.BEXIA_POS_CLOSE_PAYMENT_MODAL_V5481I = closeModal;
 });
 </script>

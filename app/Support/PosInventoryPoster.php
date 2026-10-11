@@ -67,7 +67,7 @@ class PosInventoryPoster
                     ]);
                 }
 
-                app(\App\Support\PosStockReservationService::class)->releaseOrder($orderId, 'paid');
+
 
                 $pos = null;
 
@@ -126,7 +126,10 @@ class PosInventoryPoster
                     ]);
                 }
 
+                // BEXIA_POS53C2M6I_CUMULATIVE_STOCK
                 $lockedQuants = [];
+                $pos53RequiredByQuant = [];
+                $pos53RemainingByQuant = [];
 
                 foreach ($stockLines as $line) {
                     $qty = round((float) ($line->quantity ?? 0), 6);
@@ -203,9 +206,21 @@ class PosInventoryPoster
                         ]);
                     }
 
+                    // BEXIA_POS53C2M6I_TOTAL_PER_QUANT
+                    $pos53QuantId = (int) $quant->id;
+                    $pos53RequiredByQuant[$pos53QuantId] =
+                        round(
+                            ($pos53RequiredByQuant[$pos53QuantId] ?? 0)
+                            + $qty,
+                            6
+                        );
+
                     $physical = (float) ($quant->quantity ?? 0);
 
-                    if ($physical < $qty) {
+                    if (
+                        $physical + 0.000001
+                        < $pos53RequiredByQuant[$pos53QuantId]
+                    ) {
                         return $this->updateOrderMetadata($order, [
                             'inventory_status' => 'pending_insufficient_stock',
                             'inventory_message' => 'Existencia insuficiente para ' . ($line->product_name ?? ('producto #' . $productId)) . '. Existencia: ' . number_format($physical, 2) . ', requerido: ' . number_format($qty, 2) . '.',
@@ -217,6 +232,18 @@ class PosInventoryPoster
                         'lot_id' => $lotId,
                     ];
                 }
+
+                /*
+                 * BEXIA_POS53C2L6_RELEASE_AFTER_VALIDATION
+                 *
+                 * Conservar las reservas si alguna validacion previa
+                 * obliga a dejar pendiente la salida.
+                 *
+                 * La liberacion y la salida quedan dentro de la
+                 * misma transaccion de postPaidOrder().
+                 */
+                app(\App\Support\PosStockReservationService::class)
+                    ->releaseOrder($orderId, 'paid');
 
                 $reference = $this->nextMovementReference($operationType, $companyId, $warehouseId, $sourceLocationId, $pos);
 
@@ -290,12 +317,32 @@ class PosInventoryPoster
                         );
                     }
 
+                    // BEXIA_POS53C2M6I_DECREMENT_CUMULATIVE
+                    $pos53QuantId = (int) $quant->id;
+                    $pos53PreviousBalance =
+                        $pos53RemainingByQuant[$pos53QuantId]
+                        ?? (float) $quant->quantity;
+
+                    $pos53NewBalance = round(
+                        $pos53PreviousBalance - $qty,
+                        6
+                    );
+
+                    if ($pos53NewBalance < -0.000001) {
+                        throw new \RuntimeException(
+                            'La salida acumulada excede existencias.'
+                        );
+                    }
+
                     DB::table('stock_quants')
-                        ->where('id', $quant->id)
+                        ->where('id', $pos53QuantId)
                         ->update([
-                            'quantity' => round(((float) $quant->quantity) - $qty, 6),
+                            'quantity' => $pos53NewBalance,
                             'updated_at' => now(),
                         ]);
+
+                    $pos53RemainingByQuant[$pos53QuantId] =
+                        $pos53NewBalance;
                 }
 
                 return $this->updateOrderMetadata($order, [

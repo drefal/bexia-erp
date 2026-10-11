@@ -4410,7 +4410,19 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 DB::table('pos_order_lines')->insert($line);
             }
 
-            app(\App\Support\PosStockReservationService::class)->reserveOrder($orderId, auth()->id());
+            // BEXIA_POS53C2M5E_CREATE_RESERVE_CHECK
+            $pos53CreateReserve = app(
+                \App\Support\PosStockReservationService::class
+            )->reserveOrder($orderId, auth()->id());
+
+            if (! ($pos53CreateReserve['ok'] ?? false)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        $pos53CreateReserve['message']
+                            ?? 'No fue posible reservar el inventario.',
+                    ],
+                ]);
+            }
 
             $paymentLabel = trim((string) $request->input('payment_label', ''));
 
@@ -4684,6 +4696,46 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 'price_list_name',
                 $request->input('selected_price_list_name', '')
             ));
+
+            /*
+             * BEXIA_POS53C2H5_PRICE_LIST_GUARD
+             * Los anticipos fijan la lista original.
+             * Nunca sustituirla por valores omitidos del formulario.
+             */
+            if ($v5836g5h2PaidBeforeUpdate > 0.009) {
+                $pos53OriginalListId = (int) (
+                    $orderRow->price_list_id
+                    ?? $metadata['price_list_id']
+                    ?? $metadata['selected_price_list_id']
+                    ?? 0
+                );
+
+                $pos53OriginalListName = trim((string) (
+                    $orderRow->price_list_name
+                    ?? $metadata['price_list_name']
+                    ?? $metadata['selected_price_list_name']
+                    ?? ''
+                ));
+
+                if (
+                    ($priceListId !== null
+                        && $priceListId !== $pos53OriginalListId)
+                    || ($priceListName !== ''
+                        && $priceListName !== $pos53OriginalListName)
+                ) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'price_list_id' => [
+                            'No se permite cambiar la lista de precios '
+                            . 'de un apartado que ya tiene anticipos.'
+                        ],
+                    ]);
+                }
+
+                $priceListId = $pos53OriginalListId > 0
+                    ? $pos53OriginalListId
+                    : null;
+                $priceListName = $pos53OriginalListName;
+            }
 
             if ($priceListId) {
                 $metadata['price_list_id'] = $priceListId;
@@ -7880,6 +7932,8 @@ return response()->json([
              * capturarse explicitamente en el closure.
              */
             $result = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $payments, $request) {
+                // BEXIA_POS53C2J6_ATOMIC_ROLLBACK
+                $pos53InnerResult = (function () use ($order, $payments, $request) {
             $orderRow = \Illuminate\Support\Facades\DB::table('pos_orders')
                 ->where('id', $order)
                 ->lockForUpdate()
@@ -8054,36 +8108,195 @@ return response()->json([
              * ajustes del carrito. Después del primero el ticket
              * queda económicamente bloqueado.
              */
+            /*
+             * BEXIA_POS53C2I2_PAYMENT_ROUTING
+             *
+             * Apartado con anticipo:
+             * 1. Sin productos adicionales: cobrar el saldo vigente.
+             * 2. Con productos adicionales: validar y ampliar antes
+             *    de registrar el pago, en la misma transaccion.
+             *
+             * Los articulos originales llegan en el payload con
+             * pos_order_line_id. Solo las lineas sin ese ID son nuevas.
+             */
             $requestItems = collect(
                 request()->input('items', [])
             )
                 ->filter(fn ($item) => is_array($item))
                 ->values();
 
-            $hasEconomicAdjustments =
-                $requestItems->isNotEmpty()
-                || request()->input('discount', null) !== null;
+            $pos53DiscountRequest = request()->input(
+                'discount',
+                null
+            );
 
-            if (
-                $existingPaidTotal > 0.009
-                && $hasEconomicAdjustments
-            ) {
-                return [
-                    'ok' => false,
-                    'status' => 422,
-                    'message' =>
-                        'Este apartado ya tiene anticipos. '
-                        . 'No se pueden cambiar sus productos, '
-                        . 'cantidades, precios o descuentos.',
-                ];
-            }
+            if ($existingPaidTotal > 0.009) {
+                if ($pos53DiscountRequest !== null) {
+                    return [
+                        'ok' => false,
+                        'status' => 422,
+                        'message' =>
+                            'El descuento de este apartado ya esta '
+                            . 'comprometido y no puede modificarse.',
+                    ];
+                }
 
-            $requestedTotal = $existingPaidTotal > 0.009
-                ? (float) ($orderRow->total ?? 0)
-                : $this->v5481jApplyPendingPaymentAdjustments(
-                    $orderRow,
-                    request()
+                $pos53HasNewItems = $requestItems->contains(
+                    fn ($item) =>
+                        (int) ($item['pos_order_line_id'] ?? 0) <= 0
                 );
+
+                if ($pos53HasNewItems) {
+                    // Aplica guardas C2E1/C2H4 y suma C2H1.
+                    // Si falla una validacion, la transaccion
+                    // revierte lineas, total y reservas.
+                    $requestedTotal =
+                        $this->v5481jApplyPendingPaymentAdjustments(
+                            $orderRow,
+                            request()
+                        );
+                } else {
+                    /*
+                     * BEXIA_POS53C2I9_DIRECT_SETTLEMENT_GUARD
+                     *
+                     * El modal de anticipos historico puede enviar
+                     * solo payments, sin items.
+                     *
+                     * Si se envian lineas de carrito, deben coincidir
+                     * integramente con las lineas guardadas.
+                     */
+                    if ($requestItems->isNotEmpty()) {
+                        $pos53DbLines = \Illuminate\Support\Facades\DB::table(
+                            'pos_order_lines'
+                        )
+                            ->where('pos_order_id', (int) $orderRow->id)
+                            ->lockForUpdate()
+                            ->get()
+                            ->keyBy('id');
+
+                        if (
+                            $pos53DbLines->isEmpty()
+                            || $requestItems->count() !== $pos53DbLines->count()
+                        ) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'items' => [
+                                    'El carrito no coincide con las lineas '
+                                    . 'originales del apartado.'
+                                ],
+                            ]);
+                        }
+
+                        $pos53SeenIds = [];
+
+                        foreach ($requestItems as $pos53Submitted) {
+                            $pos53LineId = (int) (
+                                $pos53Submitted['pos_order_line_id'] ?? 0
+                            );
+
+                            if (
+                                $pos53LineId <= 0
+                                || isset($pos53SeenIds[$pos53LineId])
+                                || ! $pos53DbLines->has($pos53LineId)
+                            ) {
+                                throw \Illuminate\Validation\ValidationException::withMessages([
+                                    'items' => [
+                                        'Una linea original esta duplicada '
+                                        . 'o no corresponde al apartado.'
+                                    ],
+                                ]);
+                            }
+
+                            $pos53SeenIds[$pos53LineId] = true;
+                            $pos53Original = $pos53DbLines->get($pos53LineId);
+
+                            $pos53TaxRate = (float) (
+                                $pos53Submitted['tax_rate'] ?? 0
+                            );
+
+                            if ($pos53TaxRate > 1) {
+                                $pos53TaxRate /= 100;
+                            }
+
+                            $pos53Mismatch =
+                                (int) ($pos53Submitted['product_id'] ?? 0)
+                                    !== (int) ($pos53Original->product_id ?? 0)
+                                || (int) (
+                                    $pos53Submitted['product_variant_id']
+                                    ?? $pos53Submitted['variant_id']
+                                    ?? 0
+                                ) !== (int) ($pos53Original->product_variant_id ?? 0)
+                                || (int) (
+                                    $pos53Submitted['stock_serial_number_id']
+                                    ?? $pos53Submitted['serial_number_id']
+                                    ?? 0
+                                ) !== (int) ($pos53Original->stock_serial_number_id ?? 0)
+                                || (int) (
+                                    $pos53Submitted['stock_lot_id']
+                                    ?? $pos53Submitted['lot_id']
+                                    ?? 0
+                                ) !== (int) ($pos53Original->stock_lot_id ?? 0)
+                                || abs(
+                                    (float) ($pos53Submitted['qty']
+                                        ?? $pos53Submitted['quantity'] ?? 0)
+                                    - (float) ($pos53Original->quantity ?? 0)
+                                ) > 0.000001
+                                || abs(
+                                    (float) ($pos53Submitted['price']
+                                        ?? $pos53Submitted['unit_price'] ?? 0)
+                                    - (float) ($pos53Original->unit_price ?? 0)
+                                ) > 0.000001
+                                || abs(
+                                    $pos53TaxRate
+                                    - (float) ($pos53Original->tax_rate ?? 0)
+                                ) > 0.000001;
+
+                            if ($pos53Mismatch) {
+                                throw \Illuminate\Validation\ValidationException::withMessages([
+                                    'items' => [
+                                        'Se detectaron cambios en productos '
+                                        . 'originales del apartado.'
+                                    ],
+                                ]);
+                            }
+                        }
+                    }
+
+                    // Liquidacion sin ampliar: NO resincronizar,
+                    // NO cambiar lineas y NO recrear reservas.
+                    $requestedTotal = (float) (
+                        $orderRow->total ?? 0
+                    );
+
+                    $pos53IncomingTotal =
+                        request()->input('total', null);
+
+                    if (
+                        $pos53IncomingTotal !== null
+                        && (
+                            ! is_numeric($pos53IncomingTotal)
+                            || abs(
+                                round((float) $pos53IncomingTotal, 2)
+                                - round($requestedTotal, 2)
+                            ) > 0.01
+                        )
+                    ) {
+                        return [
+                            'ok' => false,
+                            'status' => 422,
+                            'message' =>
+                                'El total del apartado ha cambiado. '
+                                . 'Actualiza el ticket antes de cobrar.',
+                        ];
+                    }
+                }
+            } else {
+                // Comportamiento anterior sin anticipos.
+                $requestedTotal =
+                    $this->v5481jApplyPendingPaymentAdjustments(
+                        $orderRow,
+                        request()
+                    );
+            }
 
             $total = round(
                 (float) $requestedTotal,
@@ -8494,7 +8707,82 @@ return response()->json([
                 'fully_paid' => $fullyPaid,
                 'is_partial' => ! $fullyPaid,
             ];
-        });
+                })();
+
+                /*
+                 * BEXIA_POS53C2J6_ATOMIC_ROLLBACK
+                 *
+                 * La transaccion no puede terminar normalmente
+                 * si su resultado indica error.
+                 *
+                 * Una excepcion revierte lineas, reservas, total,
+                 * pagos y movimientos de Tesoreria transaccionales.
+                 */
+                if (! ($pos53InnerResult['ok'] ?? false)) {
+                    throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                        response()->json(
+                            [
+                                'ok' => false,
+                                'message' => $pos53InnerResult['message']
+                                    ?? 'No se pudo registrar el cobro.',
+                            ],
+                            $pos53InnerResult['status'] ?? 500
+                        )
+                    );
+                }
+
+                /*
+                 * BEXIA_POS53C2M5I_ATOMIC_INVENTORY
+                 *
+                 * Ejecutar salida de inventario ANTES del commit
+                 * del nuevo cobro. postPaidOrder usa una transaccion
+                 * anidada y puede devolver pending_* sin excepcion.
+                 *
+                 * Fallar explicitamente obliga a revertir el cobro,
+                 * el ticket, las reservas y la Tesoreria transaccional.
+                 */
+                if ((bool) ($pos53InnerResult['fully_paid'] ?? false)) {
+                    $pos53InventoryResult = app(
+                        \App\Support\PosInventoryPoster::class
+                    )->postPaidOrder((int) $order);
+
+                    $pos53InventoryStatus = (string) (
+                        $pos53InventoryResult['status'] ?? ''
+                    );
+
+                    $pos53InventoryAccepted = in_array(
+                        $pos53InventoryStatus,
+                        [
+                            'delivered',
+                            'already_posted',
+                            'no_stockable_products',
+                        ],
+                        true
+                    );
+
+                    if (
+                        ! ($pos53InventoryResult['ok'] ?? false)
+                        || ! $pos53InventoryAccepted
+                    ) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'inventory' => [
+                                'El cobro no se registro porque la salida '
+                                . 'de inventario no pudo completarse. '
+                                . (string) (
+                                    $pos53InventoryResult['message']
+                                    ?? $pos53InventoryStatus
+                                    ?: 'Revisa existencias y configuracion.'
+                                ),
+                            ],
+                        ]);
+                    }
+
+                    $pos53InnerResult['inventory_status'] =
+                        $pos53InventoryStatus;
+                }
+
+                return $pos53InnerResult;
+            });
 
         if (! ($result['ok'] ?? false)) {
             return response()->json([
@@ -8513,7 +8801,8 @@ return response()->json([
         if ((bool) ($result['fully_paid'] ?? false)) {
 
         // V5.46.1 inventory poster: generar salida de inventario al cobrar.
-        $v5461InventoryResult = app(\App\Support\PosInventoryPoster::class)->postPaidOrder((int) $order);
+        // BEXIA_POS53C2M5I_NO_POST_COMMIT_POSTING
+        // La salida ya se valido dentro de la transaccion del cobro.
 
         
         // V5.61.4e: sincronizar cotizacion despues de salida PDV.
@@ -8887,6 +9176,125 @@ return response()->json([
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'items' => ['El ticket ya no esta disponible para actualizar sus productos.'],
             ]);
+        }
+
+
+        /*
+         * BEXIA_POS53C2E1_GUARD_ORIGINAL_LINES
+         *
+         * Si hay anticipos pagados, cada linea existente debe llegar
+         * exactamente una vez y conservar identidad y valores.
+         * Las lineas adicionales deben tener ID original vacio.
+         *
+         * Proteccion de servidor: no depende de flags del navegador.
+         */
+        $pos53PaidBefore = round(
+            (float) \Illuminate\Support\Facades\DB::table('pos_order_payments')
+                ->where('pos_order_id', $orderId)
+                ->where('status', 'paid')
+                ->sum('amount'),
+            2
+        );
+
+        if ($pos53PaidBefore > 0.009) {
+            $pos53Originals = \Illuminate\Support\Facades\DB::table('pos_order_lines')
+                ->where('pos_order_id', $orderId)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            if ($pos53Originals->isEmpty()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ['El apartado tiene anticipos pero no se encontraron sus lineas originales.'],
+                ]);
+            }
+
+            $pos53Seen = [];
+
+            foreach ($items as $pos53Item) {
+                if (! is_array($pos53Item)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['Una linea del carrito tiene formato incorrecto.'],
+                    ]);
+                }
+
+                $pos53LineId = (int) ($pos53Item['pos_order_line_id'] ?? 0);
+
+                if ($pos53LineId <= 0) {
+                    continue;
+                }
+
+                if (
+                    isset($pos53Seen[$pos53LineId])
+                    || ! $pos53Originals->has($pos53LineId)
+                ) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['La identidad de una linea original es incorrecta o esta duplicada.'],
+                    ]);
+                }
+
+                $pos53Seen[$pos53LineId] = true;
+                $pos53Original = $pos53Originals->get($pos53LineId);
+
+                $pos53SubmittedProduct = (int) ($pos53Item['product_id'] ?? 0);
+                $pos53SubmittedVariant = (int) (
+                    $pos53Item['product_variant_id']
+                    ?? $pos53Item['variant_id']
+                    ?? 0
+                );
+                $pos53SubmittedSerial = (int) (
+                    $pos53Item['stock_serial_number_id']
+                    ?? $pos53Item['serial_number_id']
+                    ?? 0
+                );
+                $pos53SubmittedLot = (int) (
+                    $pos53Item['stock_lot_id']
+                    ?? $pos53Item['lot_id']
+                    ?? 0
+                );
+                $pos53SubmittedQty = round(
+                    (float) ($pos53Item['qty'] ?? $pos53Item['quantity'] ?? 0),
+                    6
+                );
+                $pos53SubmittedPrice = round(
+                    (float) ($pos53Item['price'] ?? $pos53Item['unit_price'] ?? 0),
+                    6
+                );
+                $pos53SubmittedTax = (float) ($pos53Item['tax_rate'] ?? 0);
+                if ($pos53SubmittedTax > 1) {
+                    $pos53SubmittedTax /= 100;
+                }
+
+                $pos53Changed =
+                    $pos53SubmittedProduct !== (int) ($pos53Original->product_id ?? 0)
+                    || $pos53SubmittedVariant !== (int) ($pos53Original->product_variant_id ?? 0)
+                    || $pos53SubmittedSerial !== (int) ($pos53Original->stock_serial_number_id ?? 0)
+                    || $pos53SubmittedLot !== (int) ($pos53Original->stock_lot_id ?? 0)
+                    || abs(
+                        $pos53SubmittedQty - (float) ($pos53Original->quantity ?? 0)
+                    ) > 0.000001
+                    || abs(
+                        $pos53SubmittedPrice - (float) ($pos53Original->unit_price ?? 0)
+                    ) > 0.000001
+                    || abs(
+                        $pos53SubmittedTax - (float) ($pos53Original->tax_rate ?? 0)
+                    ) > 0.000001;
+
+                if ($pos53Changed) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => [
+                            'Un producto original del apartado fue modificado. '
+                            . 'Solo se permite agregar articulos nuevos.'
+                        ],
+                    ]);
+                }
+            }
+
+            if (count($pos53Seen) !== $pos53Originals->count()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ['Falta un producto original del apartado. No puede eliminarse.'],
+                ]);
+            }
         }
 
         $lineColumns = \Illuminate\Support\Facades\Schema::getColumnListing('pos_order_lines');
@@ -9374,17 +9782,513 @@ return response()->json([
         // Liberacion y nueva reserva ocurren en la misma transaccion del cobro.
         // Si cualquier validacion falla, Laravel revierte lineas y reservas juntas.
         $reservationService = app(\App\Support\PosStockReservationService::class);
-        $releaseResult = $reservationService->releaseOrder($orderId, 'pending_cart_resync');
 
-        \Illuminate\Support\Facades\DB::table('pos_order_lines')
-            ->where('pos_order_id', $orderId)
-            ->delete();
+        /*
+         * BEXIA_POS53C2E2_APPEND_ONLY
+         *
+         * Con anticipo:
+         * - Las lineas originales ya fueron verificadas en C2E1.
+         * - Nunca borrarlas ni recrearlas.
+         * - Insertar exclusivamente las nuevas.
+         * - Reservar nuevamente el conjunto completo usando
+         *   los mismos IDs de linea.
+         *
+         * Sin anticipo:
+         * - Mantener el comportamiento anterior.
+         */
+        if ($pos53PaidBefore > 0.009) {
+            if (count($normalizedLines) !== $items->count()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        'Todas las lineas del apartado deben ser validas. '
+                        . 'No se permite omitir cantidades.'
+                    ],
+                ]);
+            }
 
-        foreach ($normalizedLines as $line) {
-            \Illuminate\Support\Facades\DB::table('pos_order_lines')->insert($line);
+            $pos53OriginalIds = \Illuminate\Support\Facades\DB::table(
+                'pos_order_lines'
+            )
+                ->where('pos_order_id', $orderId)
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+
+            /*
+             * BEXIA_POS53C2H4_AVAILABILITY_GUARD
+             *
+             * Verificar stock libre ANTES de insertar lineas nuevas.
+             * Las reservas del apartado original ya estan incluidas
+             * en el reservado activo y no deben descontarse dos veces.
+             *
+             * Agrupar por producto/variante/lote para impedir
+             * que varias lineas nuevas sobrepasen juntas el disponible.
+             */
+            $pos53Point = \Illuminate\Support\Facades\DB::table('pos_points')
+                ->where('id', (int) ($orderRow->pos_point_id ?? 0))
+                ->first();
+
+            $pos53WarehouseId = (int) ($pos53Point->warehouse_id ?? 0);
+            $pos53LocationId = (int) (
+                $pos53Point->stock_source_location_id
+                ?? $pos53Point->stock_location_id
+                ?? 0
+            );
+
+            if (
+                $companyId <= 0
+                || $pos53WarehouseId <= 0
+                || $pos53LocationId <= 0
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        'No se pudo identificar la ubicacion de inventario del PDV.'
+                    ],
+                ]);
+            }
+
+            /*
+             * BEXIA_POS53C2J2_ORIGINAL_RESERVATIONS
+             *
+             * Antes de ampliar, exigir reservas activas completas
+             * para todas las lineas originales inventariables.
+             * Si hay discrepancias, fallar sin reparar en automatico.
+             */
+            $pos53OriginalStockLines = \Illuminate\Support\Facades\DB::table(
+                'pos_order_lines as l'
+            )
+                ->join('products as p', 'p.id', '=', 'l.product_id')
+                ->where('l.pos_order_id', $orderId)
+                ->where('p.product_type', 'stockable')
+                ->select([
+                    'l.id',
+                    'l.product_id',
+                    'l.product_variant_id',
+                    'l.stock_lot_id',
+                    'l.quantity',
+                ])
+                ->orderBy('l.id')
+                ->get();
+
+            $pos53ActualReservations = \Illuminate\Support\Facades\DB::table(
+                'stock_reservations'
+            )
+                ->where('source_type', 'pos_order')
+                ->where('source_id', $orderId)
+                ->where('status', 'active')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if (
+                $pos53ActualReservations->count()
+                !== $pos53OriginalStockLines->count()
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        'Las reservas originales del apartado no estan completas. '
+                        . 'Se requiere revision de inventario antes de ampliarlo.'
+                    ],
+                ]);
+            }
+
+            $pos53ReservationsByLine = $pos53ActualReservations->keyBy(
+                'pos_order_line_id'
+            );
+
+            if (
+                $pos53ReservationsByLine->count()
+                !== $pos53ActualReservations->count()
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        'Se detectaron reservas duplicadas en el apartado.'
+                    ],
+                ]);
+            }
+
+            foreach ($pos53OriginalStockLines as $pos53OriginalLine) {
+                $pos53Reservation = $pos53ReservationsByLine->get(
+                    (int) $pos53OriginalLine->id
+                );
+
+                $pos53ReservationMatches =
+                    $pos53Reservation
+                    && (int) ($pos53Reservation->company_id ?? 0)
+                        === $companyId
+                    && (int) ($pos53Reservation->warehouse_id ?? 0)
+                        === $pos53WarehouseId
+                    && (int) ($pos53Reservation->location_id ?? 0)
+                        === $pos53LocationId
+                    && (int) ($pos53Reservation->product_id ?? 0)
+                        === (int) $pos53OriginalLine->product_id
+                    && (int) ($pos53Reservation->product_variant_id ?? 0)
+                        === (int) ($pos53OriginalLine->product_variant_id ?? 0)
+                    && (int) ($pos53Reservation->lot_id ?? 0)
+                        === (int) ($pos53OriginalLine->stock_lot_id ?? 0)
+                    && abs(
+                        (float) ($pos53Reservation->quantity ?? 0)
+                        - (float) ($pos53OriginalLine->quantity ?? 0)
+                    ) <= 0.000001;
+
+                if (! $pos53ReservationMatches) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => [
+                            'La reserva de la linea original #'
+                            . $pos53OriginalLine->id
+                            . ' no coincide con el apartado. '
+                            . 'No se agrego mercancia ni se registro un pago.'
+                        ],
+                    ]);
+                }
+            }
+
+            $pos53AddedStock = [];
+            $pos53Sources = $items->values();
+
+            foreach ($normalizedLines as $pos53Index => $pos53Line) {
+                $pos53Source = $pos53Sources->get($pos53Index);
+
+                if (! is_array($pos53Source)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['Linea adicional sin identificacion valida.'],
+                    ]);
+                }
+
+                if ((int) ($pos53Source['pos_order_line_id'] ?? 0) > 0) {
+                    continue;
+                }
+
+                $pos53ProductId = (int) ($pos53Line['product_id'] ?? 0);
+                $pos53VariantId = (int) (
+                    $pos53Line['product_variant_id'] ?? 0
+                );
+                $pos53LotId = (int) (
+                    $pos53Line['stock_lot_id'] ?? 0
+                );
+                $pos53Qty = round(
+                    (float) ($pos53Line['quantity'] ?? 0),
+                    6
+                );
+
+                if ($pos53ProductId <= 0 || $pos53Qty <= 0) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['Producto o cantidad adicional invalida.'],
+                    ]);
+                }
+
+                $pos53Product = \Illuminate\Support\Facades\DB::table('products')
+                    ->where('id', $pos53ProductId)
+                    ->first();
+
+                if (! $pos53Product) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['No existe un producto adicional.'],
+                    ]);
+                }
+
+                if ((string) ($pos53Product->product_type ?? '') !== 'stockable') {
+                    continue;
+                }
+
+                $pos53Key = implode(':', [
+                    $pos53ProductId,
+                    $pos53VariantId,
+                    $pos53LotId,
+                ]);
+
+                if (! isset($pos53AddedStock[$pos53Key])) {
+                    $pos53AddedStock[$pos53Key] = [
+                        'product_id' => $pos53ProductId,
+                        'variant_id' => $pos53VariantId,
+                        'lot_id' => $pos53LotId,
+                        'quantity' => 0.0,
+                    ];
+                }
+
+                $pos53AddedStock[$pos53Key]['quantity'] = round(
+                    $pos53AddedStock[$pos53Key]['quantity'] + $pos53Qty,
+                    6
+                );
+            }
+
+            ksort($pos53AddedStock, SORT_STRING);
+
+            foreach ($pos53AddedStock as $pos53Stock) {
+                $pos53QuantQuery = \Illuminate\Support\Facades\DB::table(
+                    'stock_quants'
+                )
+                    ->where('company_id', $companyId)
+                    ->where('warehouse_id', $pos53WarehouseId)
+                    ->where('location_id', $pos53LocationId)
+                    ->where('product_id', $pos53Stock['product_id']);
+
+                $pos53ReservationQuery = \Illuminate\Support\Facades\DB::table(
+                    'stock_reservations'
+                )
+                    ->where('company_id', $companyId)
+                    ->where('warehouse_id', $pos53WarehouseId)
+                    ->where('location_id', $pos53LocationId)
+                    ->where('product_id', $pos53Stock['product_id'])
+                    ->where('status', 'active');
+
+                foreach (
+                    [
+                        ['product_variant_id', 'variant_id'],
+                        ['lot_id', 'lot_id'],
+                    ] as $pos53Dimension
+                ) {
+                    [$pos53Column, $pos53Field] = $pos53Dimension;
+                    $pos53Value = (int) $pos53Stock[$pos53Field];
+
+                    if ($pos53Value > 0) {
+                        $pos53QuantQuery->where($pos53Column, $pos53Value);
+                        $pos53ReservationQuery->where(
+                            $pos53Column,
+                            $pos53Value
+                        );
+                    } else {
+                        $pos53QuantQuery->whereNull($pos53Column);
+                        $pos53ReservationQuery->whereNull($pos53Column);
+                    }
+                }
+
+                // Bloqueo transaccional de los quants afectados.
+                $pos53Quants = $pos53QuantQuery
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                $pos53PhysicalQty = round(
+                    (float) $pos53Quants->sum('quantity'),
+                    6
+                );
+
+                $pos53ReservedQty = round(
+                    (float) $pos53ReservationQuery->sum('quantity'),
+                    6
+                );
+
+                $pos53AvailableQty = round(
+                    max(0, $pos53PhysicalQty - $pos53ReservedQty),
+                    6
+                );
+
+                if (
+                    $pos53Quants->isEmpty()
+                    || $pos53Stock['quantity'] > $pos53AvailableQty + 0.000001
+                ) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => [
+                            'Existencia insuficiente para ampliar el apartado. '
+                            . 'Producto #' . $pos53Stock['product_id']
+                            . ', disponible: '
+                            . number_format($pos53AvailableQty, 2)
+                            . ', solicitado adicional: '
+                            . number_format($pos53Stock['quantity'], 2)
+                            . '.'
+                        ],
+                    ]);
+                }
+            }
+
+            $pos53NewLineCount = 0;
+            $pos53SourceItems = $items->values();
+
+            foreach ($normalizedLines as $pos53Index => $pos53Line) {
+                $pos53Source = $pos53SourceItems->get($pos53Index);
+
+                if (! is_array($pos53Source)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => ['No se pudo identificar una linea nueva.'],
+                    ]);
+                }
+
+                $pos53ExistingId = (int) (
+                    $pos53Source['pos_order_line_id'] ?? 0
+                );
+
+                if ($pos53ExistingId > 0) {
+                    // C2E1 ya verifico que la linea original
+                    // exista y que todos sus campos permanezcan intactos.
+                    continue;
+                }
+
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_order_lines'
+                )->insert($pos53Line);
+
+                $pos53NewLineCount++;
+            }
+
+            $pos53OriginalIdsAfter = \Illuminate\Support\Facades\DB::table(
+                'pos_order_lines'
+            )
+                ->where('pos_order_id', $orderId)
+                ->whereIn('id', $pos53OriginalIds)
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            if ($pos53OriginalIdsAfter !== $pos53OriginalIds) {
+                throw new \RuntimeException(
+                    'Se detecto una alteracion de las lineas originales.'
+                );
+            }
+
+            // reserveOrder libera las reservas previas y vuelve
+            // a reservar las lineas del mismo ticket.
+            // El proceso corre dentro de la transaccion de cobro.
+            $releaseResult = [
+                'released_lines' => 0,
+                'mode' => 'managed_by_reserve_order',
+            ];
+
+            $reserveResult = $reservationService->reserveOrder(
+                $orderId,
+                auth()->id()
+            );
+
+            if (! ($reserveResult['ok'] ?? false)) {
+                throw new \RuntimeException(
+                    'No se pudieron actualizar las reservas del apartado: '
+                    . ($reserveResult['message'] ?? 'Error desconocido')
+                );
+            }
+            /*
+             * BEXIA_POS53C2J3_POST_RESERVE_CHECK
+             *
+             * Fallar dentro de la transaccion si la nueva reserva
+             * consolidada supera las existencias fisicas.
+             *
+             * No modifica reservas; solamente las comprueba.
+             */
+            $pos53ReservedDimensions = \Illuminate\Support\Facades\DB::table(
+                'stock_reservations'
+            )
+                ->where('source_type', 'pos_order')
+                ->where('source_id', $orderId)
+                ->where('status', 'active')
+                ->select([
+                    'company_id',
+                    'warehouse_id',
+                    'location_id',
+                    'product_id',
+                    'product_variant_id',
+                    'lot_id',
+                ])
+                ->distinct()
+                ->orderBy('product_id')
+                ->orderBy('product_variant_id')
+                ->orderBy('lot_id')
+                ->get();
+
+            foreach ($pos53ReservedDimensions as $pos53Dim) {
+                $pos53QuantCheck = \Illuminate\Support\Facades\DB::table(
+                    'stock_quants'
+                )
+                    ->where('company_id', (int) $pos53Dim->company_id)
+                    ->where('warehouse_id', (int) $pos53Dim->warehouse_id)
+                    ->where('location_id', (int) $pos53Dim->location_id)
+                    ->where('product_id', (int) $pos53Dim->product_id);
+
+                $pos53ActiveCheck = \Illuminate\Support\Facades\DB::table(
+                    'stock_reservations'
+                )
+                    ->where('company_id', (int) $pos53Dim->company_id)
+                    ->where('warehouse_id', (int) $pos53Dim->warehouse_id)
+                    ->where('location_id', (int) $pos53Dim->location_id)
+                    ->where('product_id', (int) $pos53Dim->product_id)
+                    ->where('status', 'active');
+
+                foreach ([
+                    'product_variant_id',
+                    'lot_id',
+                ] as $pos53Field) {
+                    $pos53Value = $pos53Dim->{$pos53Field};
+
+                    if ($pos53Value === null) {
+                        $pos53QuantCheck->whereNull($pos53Field);
+                        $pos53ActiveCheck->whereNull($pos53Field);
+                    } else {
+                        $pos53QuantCheck->where(
+                            $pos53Field,
+                            (int) $pos53Value
+                        );
+                        $pos53ActiveCheck->where(
+                            $pos53Field,
+                            (int) $pos53Value
+                        );
+                    }
+                }
+
+                $pos53QuantRows = $pos53QuantCheck
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                $pos53Physical = round(
+                    (float) $pos53QuantRows->sum('quantity'),
+                    6
+                );
+
+                $pos53Reserved = round(
+                    (float) $pos53ActiveCheck->sum('quantity'),
+                    6
+                );
+
+                if (
+                    $pos53QuantRows->isEmpty()
+                    || $pos53Reserved > $pos53Physical + 0.000001
+                ) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'items' => [
+                            'La ampliacion excede el inventario disponible '
+                            . 'despues de reconstruir reservas. '
+                            . 'Producto #' . $pos53Dim->product_id
+                            . '. No se registro el pago.'
+                        ],
+                    ]);
+                }
+            }
+
+        } else {
+            // Comportamiento historico sin anticipos.
+            $releaseResult = $reservationService->releaseOrder(
+                $orderId,
+                'pending_cart_resync'
+            );
+
+            \Illuminate\Support\Facades\DB::table(
+                'pos_order_lines'
+            )
+                ->where('pos_order_id', $orderId)
+                ->delete();
+
+            foreach ($normalizedLines as $line) {
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_order_lines'
+                )->insert($line);
+            }
+
+            $reserveResult = $reservationService->reserveOrder(
+                $orderId,
+                auth()->id()
+            );
+
+            // BEXIA_POS53C2M5E_SYNC_RESERVE_CHECK
+            if (! ($reserveResult['ok'] ?? false)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        $reserveResult['message']
+                            ?? 'No se pudieron actualizar las reservas.',
+                    ],
+                ]);
+            }
         }
-
-        $reserveResult = $reservationService->reserveOrder($orderId, auth()->id());
 
         $metadata = [];
         if (! empty($orderRow->metadata)) {
@@ -9443,6 +10347,182 @@ return response()->json([
 
         if ($orderId <= 0 || ! \Illuminate\Support\Facades\Schema::hasTable('pos_orders')) {
             return (float) ($orderRow->total ?? 0);
+        }
+
+
+        /*
+         * BEXIA_POS53C2H1_ECONOMIC_APPEND
+         *
+         * Solo para tickets con anticipos confirmados.
+         * El precio comprometido NO se recalcula.
+         * El descuento historico NO se modifica.
+         *
+         * El nuevo total es:
+         * total anterior + suma de lineas adicionales.
+         */
+        $pos53PaidTotal = round(
+            (float) \Illuminate\Support\Facades\DB::table(
+                'pos_order_payments'
+            )
+                ->where('pos_order_id', $orderId)
+                ->where('status', 'paid')
+                ->sum('amount'),
+            2
+        );
+
+        if ($pos53PaidTotal > 0.009) {
+            $pos53Items = collect($request->input('items', []))
+                ->filter(fn ($item) => is_array($item))
+                ->values();
+
+            if ($pos53Items->isEmpty()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ['No se recibieron productos para ampliar el apartado.'],
+                ]);
+            }
+
+            // En la primera version con anticipos
+            // el descuento esta completamente bloqueado.
+            if ($request->input('discount', null) !== null) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'discount' => [
+                        'Un apartado con anticipo no permite modificar descuentos.'
+                    ],
+                ]);
+            }
+
+            $pos53BeforeIds = \Illuminate\Support\Facades\DB::table(
+                'pos_order_lines'
+            )
+                ->where('pos_order_id', $orderId)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $pos53OldTotal = round(
+                (float) ($orderRow->total ?? 0),
+                4
+            );
+            $pos53OldSubtotal = round(
+                (float) ($orderRow->subtotal ?? 0),
+                4
+            );
+            $pos53OldTax = round(
+                (float) ($orderRow->tax_total ?? 0),
+                4
+            );
+
+            // C2E1 valida las lineas originales.
+            // C2E2 inserta solo las nuevas.
+            $this->v5829cSyncPendingOrderLines(
+                $orderRow,
+                $pos53Items
+            );
+
+            $pos53NewLines = \Illuminate\Support\Facades\DB::table(
+                'pos_order_lines'
+            )
+                ->where('pos_order_id', $orderId)
+                ->whereNotIn('id', $pos53BeforeIds)
+                ->get();
+
+            if ($pos53NewLines->isEmpty()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => [
+                        'Debes agregar al menos un producto nuevo al apartado.'
+                    ],
+                ]);
+            }
+
+            $pos53AddedTotal = round(
+                (float) $pos53NewLines->sum('total'),
+                4
+            );
+            $pos53AddedSubtotal = round(
+                (float) $pos53NewLines->sum('subtotal'),
+                4
+            );
+            $pos53AddedTax = round(
+                (float) $pos53NewLines->sum('tax_total'),
+                4
+            );
+
+            if ($pos53AddedTotal <= 0) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => ['Los productos adicionales no tienen importe valido.'],
+                ]);
+            }
+
+            $pos53NewTotal = round(
+                $pos53OldTotal + $pos53AddedTotal,
+                4
+            );
+            $pos53NewSubtotal = round(
+                $pos53OldSubtotal + $pos53AddedSubtotal,
+                4
+            );
+            $pos53NewTax = round(
+                $pos53OldTax + $pos53AddedTax,
+                4
+            );
+
+            $pos53RequestedTotal = $request->input('total');
+
+            if (
+                is_numeric($pos53RequestedTotal)
+                && abs(
+                    round((float) $pos53RequestedTotal, 2)
+                    - round($pos53NewTotal, 2)
+                ) > 0.01
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'total' => [
+                        'El total enviado no coincide con la ampliacion calculada.'
+                    ],
+                ]);
+            }
+
+            $pos53Meta = [];
+            if (! empty($orderRow->metadata)) {
+                $pos53Decoded = json_decode(
+                    (string) $orderRow->metadata,
+                    true
+                );
+                $pos53Meta = is_array($pos53Decoded)
+                    ? $pos53Decoded
+                    : [];
+            }
+
+            $pos53Meta['pos53_last_extension'] = [
+                'extended_at' => now()->toDateTimeString(),
+                'extended_by_user_id' => auth()->id(),
+                'previous_total' => $pos53OldTotal,
+                'added_total' => $pos53AddedTotal,
+                'new_total' => $pos53NewTotal,
+                'new_line_count' => $pos53NewLines->count(),
+            ];
+
+            $pos53EncodedMeta = json_encode(
+                $pos53Meta,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+
+            \Illuminate\Support\Facades\DB::table('pos_orders')
+                ->where('id', $orderId)
+                ->update([
+                    'subtotal' => $pos53NewSubtotal,
+                    'tax_total' => $pos53NewTax,
+                    'total' => $pos53NewTotal,
+                    'metadata' => $pos53EncodedMeta,
+                    'updated_at' => now(),
+                ]);
+
+            $orderRow->subtotal = $pos53NewSubtotal;
+            $orderRow->tax_total = $pos53NewTax;
+            $orderRow->total = $pos53NewTotal;
+            $orderRow->metadata = $pos53EncodedMeta;
+
+            return $pos53NewTotal;
         }
 
         $requestedTotal = $request->input('total', null);

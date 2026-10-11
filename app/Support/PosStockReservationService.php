@@ -55,6 +55,155 @@ class PosStockReservationService
                 return ['ok' => false, 'message' => 'Falta configurar empresa, almacén o ubicación del PDV.'];
             }
 
+            /*
+             * BEXIA_POS53C2M5E_STOCK_GUARD
+             *
+             * Validar las cantidades agrupadas y bloquear quants
+             * antes de reemplazar las reservas del ticket.
+             *
+             * Las reservas del propio ticket pueden reemplazarse,
+             * pero las de otros tickets deben permanecer cubiertas.
+             */
+            $pos53RequestedLines = DB::table('pos_order_lines as l')
+                ->join('products as p', 'p.id', '=', 'l.product_id')
+                ->where('l.pos_order_id', $orderId)
+                ->where('p.product_type', 'stockable')
+                ->select([
+                    'l.product_id',
+                    'l.product_variant_id',
+                    'l.stock_lot_id',
+                    'l.quantity',
+                ])
+                ->get();
+
+            $pos53Requested = [];
+
+            foreach ($pos53RequestedLines as $pos53Line) {
+                $pos53ProductId = (int) $pos53Line->product_id;
+                $pos53VariantId = (int) ($pos53Line->product_variant_id ?? 0);
+                $pos53LotId = (int) ($pos53Line->stock_lot_id ?? 0);
+                $pos53Qty = round((float) $pos53Line->quantity, 6);
+
+                if ($pos53ProductId <= 0 || $pos53Qty <= 0) {
+                    return [
+                        'ok' => false,
+                        'message' => 'Una linea inventariable tiene cantidad invalida.',
+                    ];
+                }
+
+                $pos53Key = implode(':', [
+                    $pos53ProductId,
+                    $pos53VariantId,
+                    $pos53LotId,
+                ]);
+
+                if (! isset($pos53Requested[$pos53Key])) {
+                    $pos53Requested[$pos53Key] = [
+                        'product_id' => $pos53ProductId,
+                        'variant_id' => $pos53VariantId,
+                        'lot_id' => $pos53LotId,
+                        'quantity' => 0.0,
+                    ];
+                }
+
+                $pos53Requested[$pos53Key]['quantity'] = round(
+                    $pos53Requested[$pos53Key]['quantity'] + $pos53Qty,
+                    6
+                );
+            }
+
+            ksort($pos53Requested, SORT_STRING);
+
+            foreach ($pos53Requested as $pos53Item) {
+                $pos53QuantQuery = DB::table('stock_quants')
+                    ->where('company_id', $companyId)
+                    ->where('warehouse_id', $warehouseId)
+                    ->where('location_id', $locationId)
+                    ->where('product_id', $pos53Item['product_id']);
+
+                $pos53ReservedQuery = DB::table('stock_reservations')
+                    ->where('company_id', $companyId)
+                    ->where('warehouse_id', $warehouseId)
+                    ->where('location_id', $locationId)
+                    ->where('product_id', $pos53Item['product_id'])
+                    ->where('status', 'active');
+
+                foreach ([
+                    ['product_variant_id', 'variant_id'],
+                    ['lot_id', 'lot_id'],
+                ] as $pos53Dimension) {
+                    [$pos53Column, $pos53Field] = $pos53Dimension;
+                    $pos53Value = (int) $pos53Item[$pos53Field];
+
+                    if ($pos53Value > 0) {
+                        $pos53QuantQuery->where($pos53Column, $pos53Value);
+                        $pos53ReservedQuery->where($pos53Column, $pos53Value);
+                    } else {
+                        $pos53QuantQuery->whereNull($pos53Column);
+                        $pos53ReservedQuery->whereNull($pos53Column);
+                    }
+                }
+
+                $pos53Quants = $pos53QuantQuery
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                $pos53Physical = round(
+                    (float) $pos53Quants->sum('quantity'),
+                    6
+                );
+
+                $pos53ActiveReserved = round(
+                    (float) (clone $pos53ReservedQuery)->sum('quantity'),
+                    6
+                );
+
+                $pos53OwnReserved = round(
+                    (float) (clone $pos53ReservedQuery)
+                        ->where('source_type', 'pos_order')
+                        ->where('source_id', $orderId)
+                        ->sum('quantity'),
+                    6
+                );
+
+                $pos53ReservedByOthers = max(
+                    0,
+                    round($pos53ActiveReserved - $pos53OwnReserved, 6)
+                );
+
+                $pos53AvailableForTicket = round(
+                    $pos53Physical - $pos53ReservedByOthers,
+                    6
+                );
+
+                if (
+                    $pos53Quants->isEmpty()
+                    || $pos53Item['quantity'] > $pos53AvailableForTicket + 0.000001
+                ) {
+                    return [
+                        'ok' => false,
+                        'message' =>
+                            'Existencias insuficientes para reservar producto #'
+                            . $pos53Item['product_id']
+                            . '. Disponible para este ticket: '
+                            . number_format(
+                                max(0, $pos53AvailableForTicket),
+                                2,
+                                '.',
+                                ''
+                            )
+                            . '. Solicitado: '
+                            . number_format(
+                                $pos53Item['quantity'],
+                                2,
+                                '.',
+                                ''
+                            ),
+                    ];
+                }
+            }
+
             $this->releaseOrder($orderId, 'replaced');
 
             $lines = DB::table('pos_order_lines as l')
