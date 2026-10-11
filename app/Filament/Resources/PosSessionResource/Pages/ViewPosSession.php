@@ -144,6 +144,11 @@ class ViewPosSession extends ViewRecord
             'reportUrl' => url('/pos/sessions/' . $this->record->id . '/sales-report'),
             'closeTicketUrl' => url('/pos/sessions/' . $this->record->id . '/close-ticket/print'),
             'priceListChanges' => $this->priceListChanges(),
+            // BEXIA_V5836_POS53C1_SESSION_TICKETS
+            'canViewSessionTickets' => (auth()->user()?->can('pos.menu.view') ?? false),
+            'sessionTickets' => (auth()->user()?->can('pos.menu.view') ?? false)
+                ? $this->v5836Pos53c1SessionTickets()
+                : collect(),
             'canViewPriceListChanges' => auth()->user()?->can('pos.sessions.view_price_list_changes') ?? false,
             'canDownloadReport' => auth()->user()?->can('pos.sessions.download_report') ?? false,
             'canPrintCloseTicket' => auth()->user()?->can('pos.sessions.print_close_ticket') ?? false,
@@ -186,4 +191,63 @@ class ViewPosSession extends ViewRecord
                 DB::raw(Schema::hasTable('contacts') ? 'c.name as customer_name' : 'NULL as customer_name'),
             ]);
     }
+
+    protected function v5836Pos53c1SessionTickets()
+    {
+        if (
+            ! Schema::hasTable('pos_orders')
+            || ! Schema::hasTable('pos_order_payments')
+            || ! Schema::hasColumn('pos_order_payments', 'pos_session_id')
+        ) {
+            return collect();
+        }
+
+        $sessionId = (int) $this->record->id;
+        $companyId = (int) ($this->record->company_id ?? 0);
+        $posPointId = (int) ($this->record->pos_point_id ?? 0);
+
+        $sessionPayments = DB::table('pos_order_payments')
+            ->select('pos_order_id')
+            ->selectRaw('SUM(amount) AS session_paid')
+            ->selectRaw('COUNT(*) AS session_payment_count')
+            ->where('pos_session_id', $sessionId)
+            ->where('status', 'paid')
+            ->groupBy('pos_order_id');
+
+        // BEXIA_V5836_POS53C1A_PAYMENT_COUNT
+        $allPayments = DB::table('pos_order_payments')
+            ->select('pos_order_id')
+            ->selectRaw('COUNT(*) AS all_payment_count')
+            ->where('status', 'paid')
+            ->groupBy('pos_order_id');
+
+        return DB::table('pos_orders as o')
+            ->leftJoinSub($allPayments, 'ap', function ($join) {
+                $join->on('ap.pos_order_id', '=', 'o.id');
+            })
+            ->leftJoinSub($sessionPayments, 'sp', function ($join) {
+                $join->on('sp.pos_order_id', '=', 'o.id');
+            })
+            ->where('o.company_id', $companyId)
+            ->where('o.pos_point_id', $posPointId)
+            ->where(function ($query) use ($sessionId) {
+                $query->where('o.pos_session_id', $sessionId)
+                    ->orWhereNotNull('sp.pos_order_id');
+            })
+            ->select(
+                'o.id',
+                'o.number',
+                'o.status',
+                'o.total',
+                'o.created_at',
+                'o.pos_session_id'
+            )
+            ->selectRaw('COALESCE(sp.session_paid, 0) AS session_paid')
+            ->selectRaw('COALESCE(sp.session_payment_count, 0) AS session_payment_count')
+            ->selectRaw('COALESCE(ap.all_payment_count, 0) AS all_payment_count')
+            ->orderBy('o.id')
+            ->get();
+    }
+
+
 }
