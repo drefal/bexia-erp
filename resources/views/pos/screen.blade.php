@@ -8247,58 +8247,66 @@ async function createPendingTicket() {
 
         document.addEventListener('click', function (event) {
             /*
-             * BEXIA_POS53C2I8_SINGLE_ENTRY
-             * Para apartados con anticipo, bloquear todos los
-             * manejadores antiguos del mismo clic.
+             * BEXIA_POS53C2M7G_UNIFIED_PAYMENT_CLICK
+             *
+             * Las ventas normales y los tickets con anticipo
+             * utilizan el mismo flujo moderno.
+             *
+             * Impide que listeners anteriores procesen el mismo
+             * clic y conserva el bloqueo de cobro en curso.
              */
-            const pos53Target = event.target;
-            const pos53Advance =
-                window.BEXIA_POS_LOADED_PENDING_ORDER || null;
+            const target = event.target;
 
-            if (
-                pos53Advance?.id
-                && Number(pos53Advance.paid_total || 0) > 0.009
-                && pos53Target
-                && typeof pos53Target.closest === 'function'
-            ) {
-                const pos53Charge =
-                    pos53Target.closest('#v5349-charge-ticket');
-
-                const pos53Confirm =
-                    pos53Target.closest('#v5335-payment-confirm');
-
-                if (pos53Charge || pos53Confirm) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    event.stopImmediatePropagation();
-
-                    const fn = pos53Charge
-                        ? window.BEXIA_POS_OPEN_PAYMENT_FLOW_V5481I
-                        : window.BEXIA_POS53C2I8_REGISTER_PAYMENT;
-
-                    if (typeof fn === 'function') {
-                        fn();
-                    } else {
-                        console.error(
-                            'POS53: manejador moderno no disponible.'
-                        );
-                    }
-
-                    return;
-                }
-            }
-
-            const chargeButton = event.target.closest ? event.target.closest('#v5349-charge-ticket') : null;
-
-            if (chargeButton) {
-                openPaymentFlow(event);
+            if (!target || typeof target.closest !== 'function') {
                 return;
             }
 
-            const confirmButton = event.target.closest ? event.target.closest('#v5335-payment-confirm') : null;
+            const chargeButton = target.closest('#v5349-charge-ticket');
+            const confirmButton = target.closest('#v5335-payment-confirm');
 
-            if (confirmButton) {
-                registerPayment(event);
+            if (chargeButton || confirmButton) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+
+                const modal = document.getElementById('v5335-payment-modal');
+
+                if (
+                    confirmButton
+                    && (!modal || !modal.classList.contains('is-open'))
+                ) {
+                    return;
+                }
+
+                const handler = chargeButton
+                    ? window.BEXIA_POS_OPEN_PAYMENT_FLOW_V5481I
+                    : window.BEXIA_POS53C2I8_REGISTER_PAYMENT;
+
+                if (typeof handler !== 'function') {
+                    console.error('POS53: manejador moderno no disponible.');
+                    showPosNotice(
+                        'No se pudo iniciar el cobro. Recarga el PDV.',
+                        'error'
+                    );
+                    return;
+                }
+
+                try {
+                    Promise.resolve(handler()).catch(function (error) {
+                        console.error('POS53: error en flujo de cobro', error);
+                        showPosNotice(
+                            error?.message || 'Ocurrió un error al cobrar.',
+                            'error'
+                        );
+                    });
+                } catch (error) {
+                    console.error('POS53: error iniciando cobro', error);
+                    showPosNotice(
+                        error?.message || 'Ocurrió un error al cobrar.',
+                        'error'
+                    );
+                }
+
                 return;
             }
 
