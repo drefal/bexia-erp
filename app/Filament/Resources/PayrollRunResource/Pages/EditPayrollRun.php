@@ -19,6 +19,37 @@ class EditPayrollRun extends EditRecord
     {
         PayrollRunCloseService::ensureCanEdit($this->record);
 
+        /*
+         * Grupo y modo forman parte de la identidad histórica
+         * de la corrida. Aunque alguien manipule el request,
+         * siempre conservamos los valores originales.
+         */
+        $data['payroll_group_id'] =
+            (int) $this->record->payroll_group_id;
+
+        $data['calculation_mode_snapshot'] =
+            (string) (
+                $this->record->calculation_mode_snapshot
+                ?: 'operational'
+            );
+
+        $data['run_type'] =
+            in_array(
+                (string) $this->record->run_type,
+                ['ordinary', 'extraordinary'],
+                true
+            )
+                ? (string) $this->record->run_type
+                : 'ordinary';
+
+        $periodType = PayrollRunResource::periodTypeForPayrollGroup(
+            (int) $this->record->payroll_group_id
+        );
+
+        if ($periodType !== null) {
+            $data['period_type'] = $periodType;
+        }
+
         $data['updated_by_user_id'] = auth()->id();
 
         return $data;

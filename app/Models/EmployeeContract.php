@@ -24,6 +24,7 @@ class EmployeeContract extends Model
         'payroll_periodicity_id',
         'base_salary',
         'salary_type',
+        'payment_scheme',
         'currency',
         'hours_per_week',
         'is_current',
@@ -36,8 +37,10 @@ class EmployeeContract extends Model
         'sat_workday_type_code',
         'sat_regime_type_code',
         'sat_risk_position_code',
+        'sat_work_state_code',
         'daily_salary',
         'integrated_daily_salary',
+        'social_security_base_salary',
         'is_unionized',
 ];
 
@@ -46,7 +49,13 @@ class EmployeeContract extends Model
         'end_date' => 'date',
         'signed_at' => 'date',
         'probation_end_date' => 'date',
+        /*
+         * BEXIA_V5836_CONTRACT_SALARY_CASTS
+         */
         'base_salary' => 'decimal:2',
+        'daily_salary' => 'decimal:4',
+        'integrated_daily_salary' => 'decimal:4',
+        'social_security_base_salary' => 'decimal:4',
         'hours_per_week' => 'decimal:2',
         'is_current' => 'boolean',
     ];
@@ -94,6 +103,44 @@ class EmployeeContract extends Model
     public function updatedBy()
     {
         return $this->belongsTo(\App\Models\User::class, 'updated_by_user_id');
+    }
+
+    public function generateAutomaticContractNumber(): string
+    {
+        $company = $this->company;
+
+        $companyName = trim((string) ($company?->name ?? 'EMPRESA'));
+        $firstWord = preg_split('/\\s+/', $companyName)[0] ?? 'EMPRESA';
+
+        $companyCode = strtoupper(
+            preg_replace('/[^A-Za-z0-9]/', '', $firstWord)
+        );
+
+        if ($companyCode === '') {
+            $companyCode = 'EMPRESA';
+        }
+
+        $year = $this->start_date
+            ? $this->start_date->format('Y')
+            : now()->format('Y');
+
+        return sprintf(
+            'CTR-%s-%s-%06d',
+            $companyCode,
+            $year,
+            (int) $this->getKey()
+        );
+    }
+
+    public function assignAutomaticContractNumberIfMissing(): void
+    {
+        if (filled($this->contract_number) || ! $this->exists) {
+            return;
+        }
+
+        $this->forceFill([
+            'contract_number' => $this->generateAutomaticContractNumber(),
+        ])->saveQuietly();
     }
 
     public function getFileUrlAttribute(): ?string

@@ -4,7 +4,7 @@ namespace App\Filament\Resources\EmployeePayrollPerceptionResource\Pages;
 
 use App\Filament\Resources\EmployeePayrollPerceptionResource;
 use App\Models\EmployeePayrollPerception;
-use App\Models\PayrollConcept;
+use App\Support\PayrollConceptGroupGuard;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -23,11 +23,19 @@ class CreateEmployeePayrollPerception extends CreateRecord
         $data['code'] = $data['code'] ?: EmployeePayrollPerception::defaultCodeForType((string) ($data['type'] ?? 'bonus'));
         $data['name'] = $data['name'] ?: (EmployeePayrollPerception::typeOptions()[(string) ($data['type'] ?? 'bonus')] ?? 'Percepción de empleado');
 
-        if (blank($data['payroll_concept_id'] ?? null) && filled($data['company_id'] ?? null)) {
-            $data['payroll_concept_id'] = PayrollConcept::query()
-                ->where('company_id', $data['company_id'])
-                ->where('code', $data['code'])
-                ->value('id');
+        if (
+            blank($data['payroll_concept_id'] ?? null)
+            && filled($data['company_id'] ?? null)
+        ) {
+            $data['payroll_concept_id'] =
+                PayrollConceptGroupGuard::resolveByCode(
+                    isset($data['employee_id'])
+                        ? (int) $data['employee_id']
+                        : null,
+                    (int) $data['company_id'],
+                    'perception',
+                    (string) $data['code']
+                );
         }
 
         if ((float) ($data['remaining_amount'] ?? 0) <= 0) {

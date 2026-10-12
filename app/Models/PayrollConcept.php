@@ -15,18 +15,24 @@ class PayrollConcept extends Model
         'source',
         'unit',
         'sat_key',
+        'cfdi_key',
         'is_active',
         'sort_order',
         'notes',
         'created_by_user_id',
         'updated_by_user_id',
         'is_taxable',
+        'reduces_taxable_base',
         'taxable_amount_default',
         'exempt_amount_default',
 ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_taxable' => 'boolean',
+        'reduces_taxable_base' => 'boolean',
+        'taxable_amount_default' => 'decimal:2',
+        'exempt_amount_default' => 'decimal:2',
         'sort_order' => 'integer',
     ];
 
@@ -38,6 +44,19 @@ class PayrollConcept extends Model
     public function runLineConcepts()
     {
         return $this->hasMany(\App\Models\PayrollRunLineConcept::class);
+    }
+
+    public function payrollGroups()
+    {
+        return $this->belongsToMany(
+            \App\Models\PayrollGroup::class,
+            'payroll_concept_payroll_group'
+        )
+            ->withTimestamps()
+            ->where(
+                'payroll_groups.company_id',
+                $this->company_id
+            );
     }
 
     public static function typeOptions(): array
@@ -57,6 +76,7 @@ class PayrollConcept extends Model
             'attendance' => 'Asistencia',
             'incident' => 'Incidencia',
             'manual' => 'Manual',
+            'tax' => 'Impuestos',
             'other' => 'Otro',
         ];
     }

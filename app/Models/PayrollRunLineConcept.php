@@ -18,17 +18,24 @@ class PayrollRunLineConcept extends Model
         'category',
         'source',
         'unit',
+        'sat_key',
         'quantity',
         'rate',
         'amount',
+        'taxable_amount',
+        'exempt_amount',
+        'reduces_taxable_base',
         'metadata',
         'sort_order',
     ];
 
     protected $casts = [
+        'reduces_taxable_base' => 'boolean',
         'quantity' => 'decimal:4',
         'rate' => 'decimal:4',
         'amount' => 'decimal:2',
+        'taxable_amount' => 'decimal:2',
+        'exempt_amount' => 'decimal:2',
         'metadata' => 'array',
         'sort_order' => 'integer',
     ];

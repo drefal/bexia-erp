@@ -51,6 +51,18 @@ class PayrollCfdiStampingGuardService
             $this->requireField($errors, $company, 'billing_csd_certificate_path', 'La empresa no tiene certificado CSD configurado.');
             $this->requireField($errors, $company, 'billing_csd_key_path', 'La empresa no tiene llave CSD configurada.');
             $this->requireField($errors, $company, 'billing_csd_password', 'La empresa no tiene password CSD configurado.');
+
+            /*
+             * BEXIA_V5836_PAYROLL_REQUIRE_VALIDATED_CSD
+             */
+            if (
+                (string) (
+                    $company->billing_csd_last_test_status
+                    ?? ''
+                ) !== 'success'
+            ) {
+                $errors[] = 'El CSD de la empresa no está validado correctamente.';
+            }
         }
 
         $receipt = null;

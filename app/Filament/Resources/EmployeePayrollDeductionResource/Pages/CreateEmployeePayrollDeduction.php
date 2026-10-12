@@ -4,7 +4,7 @@ namespace App\Filament\Resources\EmployeePayrollDeductionResource\Pages;
 
 use App\Filament\Resources\EmployeePayrollDeductionResource;
 use App\Models\EmployeePayrollDeduction;
-use App\Models\PayrollConcept;
+use App\Support\PayrollConceptGroupGuard;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -23,11 +23,19 @@ class CreateEmployeePayrollDeduction extends CreateRecord
         $data['code'] = $data['code'] ?: EmployeePayrollDeduction::defaultCodeForType((string) ($data['type'] ?? 'loan'));
         $data['name'] = $data['name'] ?: (EmployeePayrollDeduction::typeOptions()[(string) ($data['type'] ?? 'loan')] ?? 'Descuento de empleado');
 
-        if (blank($data['payroll_concept_id'] ?? null) && filled($data['company_id'] ?? null)) {
-            $data['payroll_concept_id'] = PayrollConcept::query()
-                ->where('company_id', $data['company_id'])
-                ->where('code', $data['code'])
-                ->value('id');
+        if (
+            blank($data['payroll_concept_id'] ?? null)
+            && filled($data['company_id'] ?? null)
+        ) {
+            $data['payroll_concept_id'] =
+                PayrollConceptGroupGuard::resolveByCode(
+                    isset($data['employee_id'])
+                        ? (int) $data['employee_id']
+                        : null,
+                    (int) $data['company_id'],
+                    'deduction',
+                    (string) $data['code']
+                );
         }
 
         if ((float) ($data['outstanding_amount'] ?? 0) <= 0) {

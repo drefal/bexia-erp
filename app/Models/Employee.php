@@ -33,6 +33,7 @@ class Employee extends Model
         'hr_work_schedule_id',
         'payroll_periodicity_id',
         'payroll_employer_registration_id',
+        'payroll_group_id',
 
         'email',
         'phone',
@@ -126,6 +127,7 @@ class Employee extends Model
         'hr_work_schedule_id' => 'integer',
         'payroll_periodicity_id' => 'integer',
         'payroll_employer_registration_id' => 'integer',
+        'payroll_group_id' => 'integer',
     ];
 
 
@@ -349,6 +351,11 @@ class Employee extends Model
     public function payrollEmployerRegistration()
     {
         return $this->belongsTo(\App\Models\PayrollEmployerRegistration::class, 'payroll_employer_registration_id');
+    }
+
+    public function payrollGroup()
+    {
+        return $this->belongsTo(\App\Models\PayrollGroup::class, 'payroll_group_id');
     }
     /*
      * V5.64.2c-end

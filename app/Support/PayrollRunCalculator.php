@@ -19,6 +19,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use App\Support\PayrollRunCloseService;
+use App\Support\PayrollTax\PayrollFiscalRunCalculationService;
 
 class PayrollRunCalculator
 {
@@ -29,6 +30,32 @@ class PayrollRunCalculator
         if (in_array((string) $run->status, ['pending_approval', 'approved', 'closed', 'cancelled'], true)) {
             throw new \RuntimeException('Solo se puede recalcular una pre-nómina en borrador o calculada.');
         }
+
+        /*
+         * BEXIA_V5836_PAYROLL_PENDING_ATTENDANCE_GUARD
+         *
+         * No permitir cálculo/recalculo mientras existan incidencias
+         * automáticas de asistencia que afectan nómina y siguen sin
+         * resolver.
+         *
+         * approved = justificada, no descuenta.
+         * rejected = no justificada, sí participa en el cálculo.
+         * draft/pending = debe resolverse antes de calcular.
+         *
+         * Esto evita que un recálculo sustituya silenciosamente la
+         * asistencia física por ceros mientras la incidencia está
+         * pendiente.
+         */
+        PayrollAttendanceIncidentGate::assertResolved(
+            $run,
+            'calcular la prenómina'
+        );
+
+        /*
+         * Antes de borrar o recalcular líneas validamos que todos los
+         * empleados incluidos tengan datos mínimos suficientes.
+         */
+        PayrollRunReadinessService::assertReady($run);
 
         return DB::transaction(function () use ($run, $userId): PayrollRun {
             static::reverseEmployeeDeductionApplications($run);
@@ -45,6 +72,13 @@ class PayrollRunCalculator
             $policy = static::activePolicy((int) $run->company_id);
 
             $employees = static::employeesForRun($run);
+
+            /*
+             * Los resultados fiscales se calculan junto con cada línea,
+             * pero sólo se persisten después de capturar la versión final.
+             */
+            $fiscalRows = [];
+
             $summary = [
                 'employees' => 0,
                 'attendance_records' => 0,
@@ -61,6 +95,24 @@ class PayrollRunCalculator
                 $line = static::calculateEmployee($run, $employee, $policy);
                 $line->save();
                 static::createLineConcepts($line);
+
+                /*
+                 * La capa operativa queda intacta.
+                 *
+                 * Sólo fiscal_preview / fiscal_cfdi agregan ISR
+                 * y modifican deductions/net antes de totalizar.
+                 */
+                if ($run->calculatesFiscalTaxes()) {
+                    $fiscalRows[] =
+                        PayrollFiscalRunCalculationService
+                            ::applyToLine(
+                                $run,
+                                $employee,
+                                $line
+                            );
+
+                    $line->refresh();
+                }
 
                 $summary['employees']++;
                 $summary['attendance_records'] += (int) $line->attendance_records;
@@ -102,6 +154,29 @@ class PayrollRunCalculator
                 'calculated_at' => now(),
             ])->save();
 
+            /*
+             * Cada cálculo exitoso queda congelado como una versión
+             * auditable antes de confirmar la transacción.
+             */
+            $version = PayrollRunVersionService::capture(
+                $run,
+                $userId ?: auth()->id(),
+                'calculation'
+            );
+
+            /*
+             * El resultado fiscal se liga exactamente a la versión
+             * que acaba de congelar estos totales y conceptos.
+             */
+            if ($run->calculatesFiscalTaxes()) {
+                PayrollFiscalRunCalculationService
+                    ::persistForVersion(
+                        $run->fresh(),
+                        $version,
+                        $fiscalRows
+                    );
+            }
+
             return $run->fresh(['lines.employee']);
         });
     }
@@ -110,6 +185,7 @@ class PayrollRunCalculator
     {
         return Employee::query()
             ->where('company_id', $run->company_id)
+            ->where('payroll_group_id', $run->payroll_group_id)
             ->where(function ($query) use ($run): void {
                 $query->where('active', true)
                     ->orWhere(function ($query) use ($run): void {
@@ -133,8 +209,79 @@ class PayrollRunCalculator
         $periodEnd = CarbonImmutable::parse($run->period_end)->startOfDay();
         $periodDays = $periodStart->diffInDays($periodEnd) + 1;
 
-        $contract = static::currentContract($employee, $periodStart, $periodEnd);
-        $salary = static::salaryData($employee, $contract);
+        $contract = static::currentContract(
+            $employee,
+            $periodStart,
+            $periodEnd
+        );
+
+        $salary = static::salaryData(
+            $employee,
+            $contract
+        );
+
+        /*
+         * BEXIA_V5836_EMPLOYMENT_PAYABLE_DAYS
+         *
+         * Días base pagables del periodo:
+         * únicamente los días dentro de la relación laboral
+         * efectiva del empleado/contrato.
+         *
+         * Aún NO se descuentan aquí faltas, permisos sin goce
+         * ni incapacidades. Esos conceptos se resolverán
+         * explícitamente en una fase posterior.
+         */
+        $employmentStart = $periodStart;
+        $employmentEnd = $periodEnd;
+
+        if (! empty($employee->hire_date)) {
+            $hireDate = CarbonImmutable::parse(
+                $employee->hire_date
+            )->startOfDay();
+
+            if ($hireDate->greaterThan($employmentStart)) {
+                $employmentStart = $hireDate;
+            }
+        }
+
+        if (! empty($contract?->start_date)) {
+            $contractStart = CarbonImmutable::parse(
+                $contract->start_date
+            )->startOfDay();
+
+            if ($contractStart->greaterThan($employmentStart)) {
+                $employmentStart = $contractStart;
+            }
+        }
+
+        if (! empty($employee->termination_date)) {
+            $terminationDate = CarbonImmutable::parse(
+                $employee->termination_date
+            )->startOfDay();
+
+            if ($terminationDate->lessThan($employmentEnd)) {
+                $employmentEnd = $terminationDate;
+            }
+        }
+
+        if (! empty($contract?->end_date)) {
+            $contractEnd = CarbonImmutable::parse(
+                $contract->end_date
+            )->startOfDay();
+
+            if ($contractEnd->lessThan($employmentEnd)) {
+                $employmentEnd = $contractEnd;
+            }
+        }
+
+        $employmentPayableDays =
+            $employmentEnd->lessThan($employmentStart)
+                ? 0.0
+                : (
+                    $employmentStart
+                        ->diffInDays($employmentEnd)
+                    + 1
+                );
 
         $attendances = EmployeeAttendance::query()
             ->where('company_id', $run->company_id)
@@ -143,11 +290,18 @@ class PayrollRunCalculator
             ->whereDate('attendance_date', '<=', $periodEnd->toDateString())
             ->get();
 
+        /*
+         * Asistencia física:
+         * conserva exactamente lo ocurrido en reloj/captura.
+         */
         $attendanceSummary = [
             'attendance_records' => $attendances->count(),
             'worked_minutes' => (int) $attendances->sum(fn ($row) => (int) $row->worked_minutes),
             'worked_hours' => round(((int) $attendances->sum(fn ($row) => (int) $row->worked_minutes)) / 60, 2),
             'late_minutes' => (int) $attendances->sum(fn ($row) => (int) $row->late_minutes),
+            'late_count' => $attendances
+                ->filter(fn ($row): bool => (int) ($row->late_minutes ?? 0) > 0)
+                ->count(),
             'early_leave_minutes' => (int) $attendances->sum(fn ($row) => (int) $row->early_leave_minutes),
             'overtime_minutes' => (int) $attendances->sum(fn ($row) => (int) $row->overtime_minutes),
             'overtime_hours' => round(((int) $attendances->sum(fn ($row) => (int) $row->overtime_minutes)) / 60, 2),
@@ -155,23 +309,223 @@ class PayrollRunCalculator
             'rest_day_worked_days' => (float) $attendances->where('status', 'rest_day_worked')->count(),
         ];
 
-        $attendancePolicy = static::applyAttendancePolicy($attendanceSummary, $salary, $policy);
-        $attendanceSummary = $attendancePolicy['attendance'];
+        /*
+         * Asistencia efectiva para nómina:
+         *
+         * approved = incidencia justificada -> no cuenta;
+         * rejected = no justificada -> sí cuenta;
+         * pending/draft = no cuenta todavía.
+         *
+         * El resumen físico permanece intacto para auditoría.
+         */
+        $attendanceResolution =
+            static::attendanceIncidentResolution(
+                $run,
+                $employee,
+                $attendances
+            );
 
-        $incidents = static::approvedPayrollIncidents($run, $employee);
-        $incidentAmounts = static::incidentAmounts($incidents, $salary);
+        $payrollAttendanceSummary = $attendanceSummary;
+
+        if ($attendanceResolution['managed']) {
+            $payrollAttendanceSummary['late_minutes'] =
+                $attendanceResolution['late_minutes'];
+
+            $payrollAttendanceSummary['late_count'] =
+                $attendanceResolution['late_count'];
+
+            $payrollAttendanceSummary['early_leave_minutes'] =
+                $attendanceResolution['early_leave_minutes'];
+
+            $payrollAttendanceSummary['absence_days'] =
+                $attendanceResolution['absence_days'];
+        }
+
+        $attendancePolicy = static::applyAttendancePolicy(
+            $payrollAttendanceSummary,
+            $salary,
+            $policy
+        );
+
+        $incidents = static::approvedPayrollIncidents(
+            $run,
+            $employee
+        );
+
+        $incidentAmounts = static::incidentAmounts(
+            $incidents,
+            $salary
+        );
+
+        /*
+         * BEXIA_V5836_INCAPACITY_PERIOD_NORMALIZATION
+         *
+         * Valida las incapacidades aprobadas y calcula únicamente
+         * los días que intersectan el periodo actual de nómina.
+         *
+         * Aún NO modifica payable_days ni importes.
+         */
+        $normalizedIncapacities =
+            static::normalizedIncapacityIncidents(
+                $incidents
+            );
+
+        $periodIncapacities =
+            static::incapacityPeriodsForRun(
+                $normalizedIncapacities,
+                $periodStart,
+                $periodEnd
+            );
+
+        $incapacityDaysInPeriod = array_sum(
+            array_map(
+                static fn (array $row): int =>
+                    (int) ($row['days_in_period'] ?? 0),
+                $periodIncapacities
+            )
+        );
+
+        /*
+         * BEXIA_V5836_INCAPACITY_ECONOMIC_ALLOCATION_TRACE
+         *
+         * Sólo calcula y congela la asignación que corresponde
+         * al periodo. Todavía NO la suma a gross/deductions/net.
+         */
+        $incapacityEconomicAllocations =
+            static::incapacityEconomicAllocations(
+                $periodIncapacities
+            );
+
+        /*
+         * BEXIA_V5836_MANUAL_UNPAID_DAYS
+         *
+         * Sólo incidencias MANUALES aprobadas, no ligadas a
+         * asistencia, pueden reducir aquí los días pagados.
+         *
+         * Casos aceptados:
+         * - FALTA
+         * - PERMISO_SIN_GOCE
+         *
+         * Deben venir expresadas explícitamente en días.
+         *
+         * NO incluye:
+         * - retardos convertidos por política a falta equivalente;
+         * - vacaciones;
+         * - permiso con goce;
+         * - incapacidad;
+         * - descuentos genéricos.
+         */
+        $manualUnpaidDays =
+            static::manualUnpaidIncidentDays(
+                $incidents
+            );
+
+        /*
+         * BEXIA_V5836_ATTENDANCE_UNPAID_DAYS
+         *
+         * attendanceResolution['absence_days'] sólo contiene
+         * incidencias FALTA de asistencia resueltas como rejected
+         * (no justificadas).
+         *
+         * NO contiene:
+         * - retardos;
+         * - salida temprana;
+         * - late_count_absence;
+         * - late_accumulated_absence.
+         *
+         * Por tanto sí representa una ausencia real no pagada
+         * distinta de las faltas equivalentes por política.
+         */
+        $attendanceUnpaidDays = max(
+            0.0,
+            (float) (
+                $attendanceResolution['absence_days']
+                ?? 0
+            )
+        );
+
+        $totalUnpaidDays = max(
+            0.0,
+            (float) $manualUnpaidDays['days']
+                + $attendanceUnpaidDays
+        );
+
+        $unpaidDaysApplied = min(
+            (float) $employmentPayableDays,
+            $totalUnpaidDays
+        );
+
+        $payableDays = max(
+            0.0,
+            (float) $employmentPayableDays
+                - $unpaidDaysApplied
+        );
+
         $policyDeductions = static::attendancePolicyDeductions($attendancePolicy, $salary, $policy);
         $employeeDeductions = static::employeePayrollDeductions($run, $employee);
         $employeePerceptions = static::employeePayrollPerceptions($run, $employee);
 
-        $baseAmount = static::baseAmount($salary, $periodDays, $attendanceSummary);
+        /*
+         * BEXIA_V5836_BASE_AMOUNT_EMPLOYMENT_DAYS
+         *
+         * El sueldo base debe corresponder a los días dentro de
+         * la relación laboral, no siempre a la longitud completa
+         * de la corrida.
+         *
+         * Para empleados por hora, baseAmount() continúa usando
+         * worked_hours.
+         */
+        $baseAmount = static::baseAmount(
+            $salary,
+            $employmentPayableDays,
+            $attendanceSummary
+        );
 
         $overtimeMultiplier = (float) ($policy['overtime_multiplier'] ?? 2);
         $overtimeAmount = round($salary['hourly_rate'] * $overtimeMultiplier * $attendanceSummary['overtime_hours'], 2);
 
-        $grossAmount = round($baseAmount + $overtimeAmount + $incidentAmounts['perceptions'] + $employeePerceptions['amount'], 2);
-        $deductionsAmount = round($incidentAmounts['deductions'] + $policyDeductions['amount'] + $employeeDeductions['amount'], 2);
-        $netAmount = round(max(0, $grossAmount - $deductionsAmount), 2);
+        /*
+         * BEXIA_V5836_INCAPACITY_ECONOMIC_TOTALS
+         *
+         * Los importes específicos de incapacidad se incorporan
+         * una sola vez aquí.
+         *
+         * No vienen de incidentAmounts(), porque INACTIVIDAD
+         * fiscal no debe duplicarse con la incidencia genérica.
+         */
+        $grossAmount = round(
+            $baseAmount
+                + $overtimeAmount
+                + $incidentAmounts['perceptions']
+                + $employeePerceptions['amount']
+                + (
+                    $incapacityEconomicAllocations[
+                        'perceptions'
+                    ] ?? 0
+                ),
+            2
+        );
+
+        $deductionsAmount = round(
+            $incidentAmounts['deductions']
+                + $policyDeductions['amount']
+                + $employeeDeductions['amount']
+                + (
+                    $incapacityEconomicAllocations[
+                        'deductions'
+                    ] ?? 0
+                ),
+            2
+        );
+
+        $netAmount = round(
+            max(
+                0,
+                $grossAmount
+                    - $deductionsAmount
+            ),
+            2
+        );
 
         return new PayrollRunLine([
             'company_id' => $run->company_id,
@@ -186,7 +540,7 @@ class PayrollRunCalculator
             'hourly_rate' => $salary['hourly_rate'],
 
             'period_days' => $periodDays,
-            'payable_days' => $periodDays,
+            'payable_days' => $payableDays,
 
             ...$attendanceSummary,
 
@@ -196,8 +550,28 @@ class PayrollRunCalculator
 
             'base_amount' => $baseAmount,
             'overtime_amount' => $overtimeAmount,
-            'incident_perceptions' => $incidentAmounts['perceptions'],
-            'incident_deductions' => $incidentAmounts['deductions'],
+            /*
+             * BEXIA_V5836_INCAPACITY_LINE_TOTALS
+             */
+            'incident_perceptions' => round(
+                $incidentAmounts['perceptions']
+                    + (
+                        $incapacityEconomicAllocations[
+                            'perceptions'
+                        ] ?? 0
+                    ),
+                2
+            ),
+
+            'incident_deductions' => round(
+                $incidentAmounts['deductions']
+                    + (
+                        $incapacityEconomicAllocations[
+                            'deductions'
+                        ] ?? 0
+                    ),
+                2
+            ),
             'gross_amount' => $grossAmount,
             'deductions_amount' => $deductionsAmount,
             'net_amount' => $netAmount,
@@ -207,8 +581,47 @@ class PayrollRunCalculator
                 'contract_number' => $contract?->contract_number,
                 'period_start' => $periodStart->toDateString(),
                 'period_end' => $periodEnd->toDateString(),
+
+                'employment_period_start' =>
+                    $employmentStart->toDateString(),
+
+                'employment_period_end' =>
+                    $employmentEnd->toDateString(),
+
+                'employment_payable_days' =>
+                    $employmentPayableDays,
+
+                'incapacities_in_period' =>
+                    $periodIncapacities,
+
+                'incapacity_days_in_period' =>
+                    $incapacityDaysInPeriod,
+
+                'incapacity_economic_allocations' =>
+                    $incapacityEconomicAllocations,
+
+                'manual_unpaid_incident_days' =>
+                    $manualUnpaidDays['days'],
+
+                'manual_unpaid_incident_ids' =>
+                    $manualUnpaidDays['incident_ids'],
+
+                'attendance_unpaid_days' =>
+                    $attendanceUnpaidDays,
+
+                'total_unpaid_days' =>
+                    $totalUnpaidDays,
+
+                'unpaid_days_applied' =>
+                    $unpaidDaysApplied,
+
+                'payable_days_after_unpaid_incidents' =>
+                    $payableDays,
+
                 'attendance_ids' => $attendances->pluck('id')->values()->all(),
                 'approved_incident_ids' => $incidents->pluck('id')->values()->all(),
+                'attendance_incident_resolution' => $attendanceResolution,
+                'physical_attendance' => $attendanceSummary,
                 'payroll_policy' => [
                     'id' => $policy['id'] ?? null,
                     'name' => $policy['name'] ?? 'Defaults internos',
@@ -225,7 +638,8 @@ class PayrollRunCalculator
                 'employee_payroll_deductions' => $employeeDeductions ?? ['amount' => 0, 'items' => []],
                 'employee_payroll_perceptions' => $employeePerceptions ?? ['amount' => 0, 'items' => []],
                 'formula' => [
-                    'base_amount' => 'salary basis by salary_type',
+                    'base_amount' =>
+                        'salary basis by salary_type and employment payable days',
                     'overtime_amount' => 'hourly_rate * ' . ($overtimeMultiplier ?? (float) ($policy['overtime_multiplier'] ?? 2)) . ' * overtime_hours',
                     'net_amount' => 'gross_amount - deductions_amount',
                 ],
@@ -288,8 +702,27 @@ class PayrollRunCalculator
 
     protected static function baseAmount(array $salary, float $periodDays, array $attendanceSummary): float
     {
-        if (in_array($salary['salary_type'], ['hourly', 'hora', 'por_hora'], true)) {
-            return round($salary['hourly_rate'] * $attendanceSummary['worked_hours'], 2);
+        $salaryType = strtolower((string) ($salary['salary_type'] ?? ''));
+
+        if (in_array($salaryType, ['hourly', 'hora', 'por_hora'], true)) {
+            return round(
+                $salary['hourly_rate'] * $attendanceSummary['worked_hours'],
+                2
+            );
+        }
+
+        /*
+         * Para una semana completa usamos directamente el sueldo semanal
+         * contractual. Evita perder centavos al convertir primero a salario
+         * diario redondeado: 2500 / 7 = 357.14 -> 2499.98.
+         *
+         * Periodos parciales conservan el cálculo proporcional diario.
+         */
+        if (
+            in_array($salaryType, ['weekly', 'semanal'], true)
+            && abs($periodDays - 7.0) < 0.001
+        ) {
+            return round((float) $salary['base_salary'], 2);
         }
 
         return round($salary['daily_salary'] * $periodDays, 2);
@@ -326,6 +759,14 @@ class PayrollRunCalculator
             'late_tolerance_minutes' => (int) $policy->late_tolerance_minutes,
             'late_discount_mode' => (string) $policy->late_discount_mode,
             'late_minutes_to_absence' => (int) $policy->late_minutes_to_absence,
+            'late_count_to_absence' => max(
+                0,
+                (int) (
+                    is_array($policy->settings)
+                        ? ($policy->settings['late_count_to_absence'] ?? 0)
+                        : 0
+                )
+            ),
             'early_leave_discount_mode' => (string) $policy->early_leave_discount_mode,
             'absence_discount_mode' => (string) $policy->absence_discount_mode,
             'rest_day_worked_mode' => (string) $policy->rest_day_worked_mode,
@@ -344,6 +785,7 @@ class PayrollRunCalculator
             'late_tolerance_minutes' => 0,
             'late_discount_mode' => 'none',
             'late_minutes_to_absence' => 0,
+            'late_count_to_absence' => 0,
             'early_leave_discount_mode' => 'none',
             'absence_discount_mode' => 'incident_only',
             'rest_day_worked_mode' => 'informational',
@@ -355,6 +797,7 @@ class PayrollRunCalculator
     {
         $raw = [
             'late_minutes' => (int) ($attendanceSummary['late_minutes'] ?? 0),
+            'late_count' => (int) ($attendanceSummary['late_count'] ?? 0),
             'early_leave_minutes' => (int) ($attendanceSummary['early_leave_minutes'] ?? 0),
             'absence_days' => (float) ($attendanceSummary['absence_days'] ?? 0),
             'overtime_minutes' => (int) ($attendanceSummary['overtime_minutes'] ?? 0),
@@ -369,6 +812,7 @@ class PayrollRunCalculator
             'raw' => $raw,
             'effective' => [
                 'late_minutes' => (int) $attendanceSummary['late_minutes'],
+                'late_count' => (int) ($attendanceSummary['late_count'] ?? 0),
                 'early_leave_minutes' => (int) ($attendanceSummary['early_leave_minutes'] ?? 0),
                 'absence_days' => (float) ($attendanceSummary['absence_days'] ?? 0),
                 'overtime_minutes' => (int) ($attendanceSummary['overtime_minutes'] ?? 0),
@@ -409,6 +853,43 @@ class PayrollRunCalculator
                 'quantity' => $days,
                 'amount' => $lateAbsenceAmount,
             ];
+        }
+
+        if ($lateMode === 'count_to_absence') {
+            $lateCount = max(
+                0,
+                (int) ($effective['late_count'] ?? 0)
+            );
+
+            $lateCountToAbsence = max(
+                0,
+                (int) ($policy['late_count_to_absence'] ?? 0)
+            );
+
+            if (
+                $lateCountToAbsence > 0
+                && $lateCount >= $lateCountToAbsence
+            ) {
+                $days = floor(
+                    $lateCount / $lateCountToAbsence
+                );
+
+                $lateAbsenceAmount = round(
+                    $salary['daily_salary'] * $days,
+                    2
+                );
+
+                $amount += $lateAbsenceAmount;
+
+                $items[] = [
+                    'type' => 'late_count_absence',
+                    'quantity' => $days,
+                    'late_count' => $lateCount,
+                    'late_count_to_absence' =>
+                        $lateCountToAbsence,
+                    'amount' => $lateAbsenceAmount,
+                ];
+            }
         }
 
         if (($policy['early_leave_discount_mode'] ?? 'none') === 'minutes' && $earlyLeaveMinutes > 0) {
@@ -1004,7 +1485,58 @@ class PayrollRunCalculator
             );
         }
 
-        if ((float) $line->incident_perceptions !== 0.0) {
+        /*
+         * BEXIA_V5836_INCAPACITY_LINE_CONCEPTS
+         *
+         * Separar la incapacidad de las incidencias genéricas
+         * para conservar su TipoPercepcion / TipoDeduccion SAT.
+         */
+        $incapacityEconomic =
+            $details[
+                'incapacity_economic_allocations'
+            ] ?? [
+                'perceptions' => 0,
+                'deductions' => 0,
+                'items' => [],
+            ];
+
+        $incapacityPerceptionAmount = round(
+            (float) (
+                $incapacityEconomic[
+                    'perceptions'
+                ] ?? 0
+            ),
+            2
+        );
+
+        $incapacityDeductionAmount = round(
+            (float) (
+                $incapacityEconomic[
+                    'deductions'
+                ] ?? 0
+            ),
+            2
+        );
+
+        $genericIncidentPerceptions = round(
+            max(
+                0,
+                (float) $line->incident_perceptions
+                    - $incapacityPerceptionAmount
+            ),
+            2
+        );
+
+        $genericIncidentDeductions = round(
+            max(
+                0,
+                (float) $line->incident_deductions
+                    - $incapacityDeductionAmount
+            ),
+            2
+        );
+
+        if ($genericIncidentPerceptions > 0) {
             $rows[] = static::conceptPayload(
                 line: $line,
                 code: 'INCIDENCIAS_PERCEPCION',
@@ -1015,15 +1547,162 @@ class PayrollRunCalculator
                 unit: 'amount',
                 quantity: (float) $line->approved_incidents_count,
                 rate: 0,
-                amount: (float) $line->incident_perceptions,
+                amount: $genericIncidentPerceptions,
                 metadata: [
-                    'approved_incident_ids' => $details['approved_incident_ids'] ?? [],
+                    'approved_incident_ids' =>
+                        $details[
+                            'approved_incident_ids'
+                        ] ?? [],
                 ],
                 sortOrder: 30,
             );
         }
 
-        if ((float) $line->incident_deductions !== 0.0) {
+        foreach (
+            $incapacityEconomic['items'] ?? []
+            as $incapacityItem
+        ) {
+            $effect =
+                (string) (
+                    $incapacityItem[
+                        'payroll_effect'
+                    ] ?? 'none'
+                );
+
+            $amount = round(
+                (float) (
+                    $incapacityItem[
+                        'period_monetary_amount'
+                    ] ?? 0
+                ),
+                2
+            );
+
+            if (
+                $effect === 'perception'
+                && $amount > 0
+            ) {
+                $rows[] = static::conceptPayload(
+                    line: $line,
+                    code: 'INCAPACIDAD_PERCEPCION',
+                    name: 'Subsidio por incapacidad',
+                    type: 'perception',
+                    category: 'incapacity',
+                    source: 'incident',
+                    unit: 'days',
+                    quantity: (float) (
+                        $incapacityItem[
+                            'days_in_period'
+                        ] ?? 0
+                    ),
+                    rate: (
+                        (float) (
+                            $incapacityItem[
+                                'days_in_period'
+                            ] ?? 0
+                        ) > 0
+                    )
+                        ? round(
+                            $amount
+                            / (float) $incapacityItem[
+                                'days_in_period'
+                            ],
+                            4
+                        )
+                        : 0,
+                    amount: $amount,
+                    metadata: [
+                        /*
+                         * BEXIA_V5836_INCAPACITY_CFDI_KEY
+                         *
+                         * Clave interna != Clave CFDI Nómina.
+                         */
+                        'cfdi_key' =>
+                            'INCAP_PER',
+
+                        'incapacity' =>
+                            $incapacityItem,
+                    ],
+                    sortOrder: 35,
+                );
+
+                /*
+                 * BEXIA_V5836_INCAPACITY_CONCEPT_EXPLICIT_TAX_SPLIT
+                 *
+                 * Sobrescribir el gravado/exento del payload
+                 * genérico con el reparto explícito del periodo.
+                 */
+                $lastIndex = array_key_last($rows);
+
+                $rows[$lastIndex][
+                    'taxable_amount'
+                ] = round(
+                    (float) (
+                        $incapacityItem[
+                            'period_taxable_amount'
+                        ] ?? 0
+                    ),
+                    2
+                );
+
+                $rows[$lastIndex][
+                    'exempt_amount'
+                ] = round(
+                    (float) (
+                        $incapacityItem[
+                            'period_exempt_amount'
+                        ] ?? 0
+                    ),
+                    2
+                );
+            }
+
+            if (
+                $effect === 'deduction'
+                && $amount > 0
+            ) {
+                $rows[] = static::conceptPayload(
+                    line: $line,
+                    code: 'INCAPACIDAD_DEDUCCION',
+                    name: 'Descuento por incapacidad',
+                    type: 'deduction',
+                    category: 'incapacity',
+                    source: 'incident',
+                    unit: 'days',
+                    quantity: (float) (
+                        $incapacityItem[
+                            'days_in_period'
+                        ] ?? 0
+                    ),
+                    rate: (
+                        (float) (
+                            $incapacityItem[
+                                'days_in_period'
+                            ] ?? 0
+                        ) > 0
+                    )
+                        ? round(
+                            $amount
+                            / (float) $incapacityItem[
+                                'days_in_period'
+                            ],
+                            4
+                        )
+                        : 0,
+                    amount: $amount,
+                    metadata: [
+                        'cfdi_key' =>
+                            'INCAP_DED',
+
+                        'incapacity' =>
+                            $incapacityItem,
+                    ],
+                    sortOrder: 105,
+                );
+            }
+        }
+
+        if ($genericIncidentDeductions > 0) {
             $rows[] = static::conceptPayload(
                 line: $line,
                 code: 'INCIDENCIAS_DEDUCCION',
@@ -1034,11 +1713,18 @@ class PayrollRunCalculator
                 unit: 'amount',
                 quantity: (float) $line->approved_incidents_count,
                 rate: 0,
-                amount: (float) $line->incident_deductions,
+                amount: $genericIncidentDeductions,
                 metadata: [
-                    'approved_incident_ids' => $details['approved_incident_ids'] ?? [],
-                    'deduction_days' => (float) $line->approved_incident_deduction_days,
-                    'deduction_minutes' => (int) $line->approved_incident_deduction_minutes,
+                    'approved_incident_ids' =>
+                        $details[
+                            'approved_incident_ids'
+                        ] ?? [],
+                    'deduction_days' =>
+                        (float) $line
+                            ->approved_incident_deduction_days,
+                    'deduction_minutes' =>
+                        (int) $line
+                            ->approved_incident_deduction_minutes,
                 ],
                 sortOrder: 110,
             );
@@ -1056,7 +1742,7 @@ class PayrollRunCalculator
             [$code, $name, $unit, $sortOrder] = match ($type) {
                 'late_minutes' => ['POLITICA_RETARDO', 'Descuento por retardo', 'minutes', 120],
                 'early_leave_minutes' => ['POLITICA_SALIDA_TEMPRANA', 'Descuento por salida temprana', 'minutes', 130],
-                'attendance_absence_days', 'late_accumulated_absence' => ['POLITICA_FALTA', 'Descuento por falta', 'days', 140],
+                'attendance_absence_days', 'late_accumulated_absence', 'late_count_absence' => ['POLITICA_FALTA', 'Descuento por falta', 'days', 140],
                 default => ['POLITICA_RETARDO', 'Descuento por política de asistencia', 'units', 150],
             };
 
@@ -1164,6 +1850,58 @@ class PayrollRunCalculator
             sortOrder: $sortOrder,
         );
 
+        /*
+         * BEXIA_V5836_INCAPACITY_CONCEPT_SAT_KEYS
+         *
+         * Estos dos conceptos son determinísticos por definición.
+         * No dejar que nazcan con sat_key NULL.
+         */
+        if (
+            $concept
+            && $code === 'INCAPACIDAD_PERCEPCION'
+        ) {
+            /*
+             * BEXIA_V5836_INCAPACITY_NO_IMPLICIT_TAXABILITY
+             *
+             * SAT 014 queda identificado, pero gravado/exento
+             * se congela por incidencia y no se infiere aquí.
+             */
+            $concept->forceFill([
+                'sat_key' => '014',
+                'is_taxable' => null,
+                'reduces_taxable_base' => false,
+            ])->save();
+        }
+
+        if (
+            $concept
+            && $code === 'INCAPACIDAD_DEDUCCION'
+        ) {
+            $concept->forceFill([
+                'sat_key' => '006',
+                'reduces_taxable_base' => false,
+            ])->save();
+        }
+
+        /*
+         * BEXIA_V5836_CATALOG_CFDI_KEY_TO_METADATA
+         *
+         * La Clave CFDI configurada en el catálogo se congela
+         * dentro de metadata del concepto de línea.
+         *
+         * Si metadata ya trae una clave explícita (por ejemplo
+         * incapacidad), se conserva. Después el snapshot de versión
+         * congela exactamente este metadata.
+         */
+        if (
+            ! isset($metadata['cfdi_key'])
+            && $concept !== null
+            && filled($concept->cfdi_key)
+        ) {
+            $metadata['cfdi_key'] =
+                (string) $concept->cfdi_key;
+        }
+
         return [
             'company_id' => $line->company_id,
             'payroll_run_id' => $line->payroll_run_id,
@@ -1176,12 +1914,71 @@ class PayrollRunCalculator
             'category' => $concept?->category ?: $category,
             'source' => $concept?->source ?: $source,
             'unit' => $concept?->unit ?: $unit,
+            'sat_key' => $concept?->sat_key,
             'quantity' => round($quantity, 4),
             'rate' => round($rate, 4),
             'amount' => round($amount, 2),
+            'taxable_amount' => static::conceptTaxableAmount(
+                $concept,
+                $type,
+                $amount
+            ),
+            'exempt_amount' => static::conceptExemptAmount(
+                $concept,
+                $type,
+                $amount
+            ),
+            'reduces_taxable_base' =>
+                $concept !== null
+                    ? (bool) $concept->reduces_taxable_base
+                    : false,
             'metadata' => $metadata,
             'sort_order' => $concept?->sort_order ?: $sortOrder,
         ];
+    }
+
+    protected static function conceptTaxableAmount(
+        ?PayrollConcept $concept,
+        string $type,
+        float $amount
+    ): ?float {
+        /*
+         * Gravado/exento aplica a percepciones.
+         * Las deducciones usan TipoDeduccion SAT y no esta división.
+         */
+        if ($type !== 'perception' || ! $concept) {
+            return null;
+        }
+
+        if ($concept->is_taxable === null) {
+            return null;
+        }
+
+        if ((bool) $concept->is_taxable) {
+            return round($amount, 2);
+        }
+
+        return 0.0;
+    }
+
+    protected static function conceptExemptAmount(
+        ?PayrollConcept $concept,
+        string $type,
+        float $amount
+    ): ?float {
+        if ($type !== 'perception' || ! $concept) {
+            return null;
+        }
+
+        if ($concept->is_taxable === null) {
+            return null;
+        }
+
+        if ((bool) $concept->is_taxable) {
+            return 0.0;
+        }
+
+        return round($amount, 2);
     }
 
     protected static function ensurePayrollConcept(
@@ -1215,14 +2012,184 @@ class PayrollRunCalculator
         );
     }
 
+    /**
+     * Resume únicamente las incidencias de asistencia ya resueltas
+     * como NO JUSTIFICADAS (status=rejected).
+     *
+     * Las aprobadas están justificadas.
+     * Las pending/draft todavía no producen descuento.
+     */
+    protected static function attendanceIncidentResolution(
+        PayrollRun $run,
+        Employee $employee,
+        $attendances
+    ): array {
+        $result = [
+            'managed' => false,
+            'late_minutes' => 0,
+            'late_count' => 0,
+            'early_leave_minutes' => 0,
+            'absence_days' => 0.0,
+            'approved_justified_incident_ids' => [],
+            'rejected_unjustified_incident_ids' => [],
+            'pending_incident_ids' => [],
+        ];
+
+        if (
+            ! Schema::hasColumn(
+                'employee_incidents',
+                'employee_attendance_id'
+            )
+            || $attendances->isEmpty()
+        ) {
+            return $result;
+        }
+
+        $attendanceIds = $attendances
+            ->pluck('id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+
+        if (empty($attendanceIds)) {
+            return $result;
+        }
+
+        $incidents = EmployeeIncident::query()
+            ->with('incidentType')
+            ->where('company_id', $run->company_id)
+            ->where('employee_id', $employee->id)
+            ->whereIn('employee_attendance_id', $attendanceIds)
+            ->whereIn(
+                'status',
+                ['draft', 'pending', 'approved', 'rejected']
+            )
+            ->get();
+
+        /*
+         * En cuanto existen incidencias automáticas asociadas,
+         * éstas son la fuente de verdad para el efecto de asistencia
+         * en nómina.
+         */
+        $managedCodes = [
+            'RETARDO',
+            'FALTA',
+            'SALIDA_TEMPRANA',
+        ];
+
+        $managed = $incidents->filter(
+            function ($incident) use ($managedCodes): bool {
+                $code = strtoupper(
+                    (string) ($incident->incidentType?->code ?? '')
+                );
+
+                return in_array($code, $managedCodes, true);
+            }
+        );
+
+        if ($managed->isEmpty()) {
+            return $result;
+        }
+
+        $result['managed'] = true;
+
+        foreach ($managed as $incident) {
+            $status = (string) $incident->status;
+            $code = strtoupper(
+                (string) ($incident->incidentType?->code ?? '')
+            );
+
+            if ($status === 'approved') {
+                $result['approved_justified_incident_ids'][] =
+                    (int) $incident->id;
+
+                continue;
+            }
+
+            if (in_array($status, ['draft', 'pending'], true)) {
+                $result['pending_incident_ids'][] =
+                    (int) $incident->id;
+
+                continue;
+            }
+
+            if ($status !== 'rejected') {
+                continue;
+            }
+
+            $result['rejected_unjustified_incident_ids'][] =
+                (int) $incident->id;
+
+            $quantity = max(
+                0,
+                (float) ($incident->quantity ?? 0)
+            );
+
+            if ($code === 'RETARDO') {
+                $result['late_count']++;
+                $result['late_minutes'] +=
+                    (int) round($quantity);
+
+                continue;
+            }
+
+            if ($code === 'SALIDA_TEMPRANA') {
+                $result['early_leave_minutes'] +=
+                    (int) round($quantity);
+
+                continue;
+            }
+
+            if ($code === 'FALTA') {
+                $result['absence_days'] +=
+                    $quantity > 0 ? $quantity : 1.0;
+            }
+        }
+
+        $result['approved_justified_incident_ids'] =
+            array_values(array_unique(
+                $result['approved_justified_incident_ids']
+            ));
+
+        $result['rejected_unjustified_incident_ids'] =
+            array_values(array_unique(
+                $result['rejected_unjustified_incident_ids']
+            ));
+
+        $result['pending_incident_ids'] =
+            array_values(array_unique(
+                $result['pending_incident_ids']
+            ));
+
+        return $result;
+    }
+
     protected static function approvedPayrollIncidents(PayrollRun $run, Employee $employee)
     {
-        return EmployeeIncident::query()
+        $query = EmployeeIncident::query()
             ->with('incidentType')
             ->where('company_id', $run->company_id)
             ->where('employee_id', $employee->id)
             ->where('status', 'approved')
-            ->where('affects_payroll', true)
+            ->where('affects_payroll', true);
+
+        /*
+         * Una incidencia ligada a asistencia usa la política de asistencia.
+         *
+         * approved significa JUSTIFICADA y por ello no debe convertirse
+         * aquí en una deducción individual.
+         */
+        if (
+            Schema::hasColumn(
+                'employee_incidents',
+                'employee_attendance_id'
+            )
+        ) {
+            $query->whereNull('employee_attendance_id');
+        }
+
+        return $query
             ->whereDate('start_date', '<=', $run->period_end)
             ->where(function ($query) use ($run): void {
                 $query->whereNull('end_date')
@@ -1230,6 +2197,954 @@ class PayrollRunCalculator
             })
             ->get();
     }
+
+    /**
+     * Días no pagados explícitos provenientes exclusivamente
+     * de incidencias manuales aprobadas.
+     *
+     * approvedPayrollIncidents() ya excluye incidencias
+     * ligadas a employee_attendance_id.
+     */
+    /**
+     * BEXIA_V5836_INCAPACITY_FISCAL_GUARD
+     *
+     * Normaliza y valida incapacidades aprobadas antes de
+     * permitir que la capa fiscal las utilice.
+     *
+     * No calcula importes ni modifica payable_days.
+     */
+    protected static function normalizedIncapacityIncidents(
+        $incidents
+    ): array {
+        $result = [];
+
+        foreach ($incidents as $incident) {
+            $type = $incident->incidentType;
+
+            $code = strtoupper(
+                trim(
+                    (string) (
+                        $type?->code
+                        ?? ''
+                    )
+                )
+            );
+
+            if ($code !== 'INCAPACIDAD') {
+                continue;
+            }
+
+            $unit = strtolower(
+                trim(
+                    (string) (
+                        $incident->quantity_unit
+                        ?? ''
+                    )
+                )
+            );
+
+            if ($unit !== 'days') {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' debe estar expresada en días.'
+                );
+            }
+
+            if ($incident->quantity === null) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' no tiene DiasIncapacidad.'
+                );
+            }
+
+            $days = (float) $incident->quantity;
+
+            if (
+                $days < 1
+                || abs($days - round($days)) > 0.000001
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' debe tener un número entero '
+                    .'de días mayor o igual a 1.'
+                );
+            }
+
+            $satType = trim(
+                (string) (
+                    $incident->sat_incapacity_type_code
+                    ?? ''
+                )
+            );
+
+            if (
+                ! in_array(
+                    $satType,
+                    ['01', '02', '03', '04'],
+                    true
+                )
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' no tiene TipoIncapacidad SAT válido.'
+                );
+            }
+
+            /*
+             * BEXIA_V5836_INCAPACITY_EFFECT_GUARD
+             */
+            $payrollEffect = trim(
+                (string) (
+                    $incident->incapacity_payroll_effect
+                    ?? ''
+                )
+            );
+
+            if (
+                ! in_array(
+                    $payrollEffect,
+                    [
+                        'none',
+                        'perception',
+                        'deduction',
+                    ],
+                    true
+                )
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' no tiene tratamiento de nómina válido.'
+                );
+            }
+
+            /*
+             * BEXIA_V5836_INCAPACITY_EXPLICIT_SEMANTICS_GUARD
+             */
+            $salaryTreatment = trim(
+                (string) (
+                    $incident->incapacity_salary_treatment
+                    ?? ''
+                )
+            );
+
+            $taxableAmountRaw =
+                $incident->incapacity_taxable_amount;
+
+            $exemptAmountRaw =
+                $incident->incapacity_exempt_amount;
+
+            $amount =
+                $incident->incapacity_monetary_amount;
+
+            if (
+                in_array(
+                    $payrollEffect,
+                    [
+                        'perception',
+                        'deduction',
+                    ],
+                    true
+                )
+                && ! in_array(
+                    $salaryTreatment,
+                    [
+                        'keep_salary',
+                        'replace_salary_days',
+                    ],
+                    true
+                )
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' requiere tratamiento explícito '
+                    .'del sueldo ordinario.'
+                );
+            }
+
+            if (
+                $payrollEffect === 'none'
+                && $salaryTreatment !== ''
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' no tiene efecto económico y no debe '
+                    .'definir tratamiento salarial.'
+                );
+            }
+
+            if (
+                in_array(
+                    $payrollEffect,
+                    [
+                        'perception',
+                        'deduction',
+                    ],
+                    true
+                )
+                && (
+                    $amount === null
+                    || (float) $amount <= 0
+                )
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' requiere ImporteMonetario mayor a cero.'
+                );
+            }
+
+            if (
+                $payrollEffect === 'none'
+                && $amount !== null
+                && abs((float) $amount) > 0.000001
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' tiene tratamiento sin importe pero '
+                    .'contiene ImporteMonetario.'
+                );
+            }
+
+            $taxableAmount =
+                $taxableAmountRaw !== null
+                    ? round(
+                        (float) $taxableAmountRaw,
+                        2
+                    )
+                    : null;
+
+            $exemptAmount =
+                $exemptAmountRaw !== null
+                    ? round(
+                        (float) $exemptAmountRaw,
+                        2
+                    )
+                    : null;
+
+            if (
+                $taxableAmount !== null
+                && $taxableAmount < 0
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' tiene importe gravado inválido.'
+                );
+            }
+
+            if (
+                $exemptAmount !== null
+                && $exemptAmount < 0
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' tiene importe exento inválido.'
+                );
+            }
+
+            if ($payrollEffect === 'perception') {
+                if (
+                    $taxableAmount === null
+                    || $exemptAmount === null
+                ) {
+                    throw new \RuntimeException(
+                        'La incapacidad '
+                        .($incident->id ?? 'N/D')
+                        .' requiere importe gravado y exento '
+                        .'explícitos.'
+                    );
+                }
+
+                if (
+                    abs(
+                        round(
+                            $taxableAmount
+                                + $exemptAmount,
+                            2
+                        )
+                        - round(
+                            (float) $amount,
+                            2
+                        )
+                    ) > 0.009
+                ) {
+                    throw new \RuntimeException(
+                        'La incapacidad '
+                        .($incident->id ?? 'N/D')
+                        .' tiene gravado + exento distinto '
+                        .'del ImporteMonetario.'
+                    );
+                }
+            }
+
+            if (
+                in_array(
+                    $payrollEffect,
+                    [
+                        'none',
+                        'deduction',
+                    ],
+                    true
+                )
+                && (
+                    $taxableAmount !== null
+                    || $exemptAmount !== null
+                )
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' no debe tener desglose gravado/exento '
+                    .'para este tratamiento.'
+                );
+            }
+
+            if (
+                $amount !== null
+                && (float) $amount < 0
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($incident->id ?? 'N/D')
+                    .' tiene ImporteMonetario inválido.'
+                );
+            }
+
+            $result[] = [
+                'incident_id' =>
+                    ! empty($incident->id)
+                        ? (int) $incident->id
+                        : null,
+
+                'start_date' =>
+                    $incident->start_date
+                        ? $incident->start_date->toDateString()
+                        : null,
+
+                'end_date' =>
+                    $incident->end_date
+                        ? $incident->end_date->toDateString()
+                        : (
+                            $incident->start_date
+                                ? $incident->start_date->toDateString()
+                                : null
+                        ),
+
+                'days' => (int) round($days),
+
+                'sat_type_code' => $satType,
+
+                'payroll_effect' =>
+                    $payrollEffect,
+
+                'salary_treatment' =>
+                    $salaryTreatment !== ''
+                        ? $salaryTreatment
+                        : null,
+
+                'taxable_amount' =>
+                    $taxableAmount,
+
+                'exempt_amount' =>
+                    $exemptAmount,
+
+                'monetary_amount' =>
+                    $amount !== null
+                        ? round((float) $amount, 2)
+                        : null,
+            ];
+        }
+
+        return $result;
+    }
+
+
+    /**
+     * BEXIA_V5836_INCAPACITY_PERIOD_OVERLAP
+     *
+     * Calcula la porción de cada incapacidad que cae dentro
+     * del periodo de nómina.
+     *
+     * Falla cerrado si quantity no coincide con las fechas
+     * completas capturadas para la incapacidad.
+     */
+    protected static function incapacityPeriodsForRun(
+        array $incapacities,
+        CarbonImmutable $periodStart,
+        CarbonImmutable $periodEnd
+    ): array {
+        $result = [];
+
+        foreach ($incapacities as $row) {
+            $startRaw = $row['start_date'] ?? null;
+            $endRaw = $row['end_date'] ?? $startRaw;
+
+            if (blank($startRaw)) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($row['incident_id'] ?? 'N/D')
+                    .' no tiene fecha de inicio.'
+                );
+            }
+
+            $start = CarbonImmutable::parse(
+                $startRaw
+            )->startOfDay();
+
+            $end = CarbonImmutable::parse(
+                $endRaw
+            )->startOfDay();
+
+            if ($end->lessThan($start)) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($row['incident_id'] ?? 'N/D')
+                    .' tiene fecha final anterior '
+                    .'a la fecha inicial.'
+                );
+            }
+
+            $capturedDays = (int) (
+                $row['days']
+                ?? 0
+            );
+
+            /*
+             * BEXIA_V5836_INCAPACITY_DATE_SPAN_INT
+             *
+             * Carbon puede devolver un tipo numérico distinto de int.
+             * Normalizamos antes de comparar estrictamente.
+             */
+            $dateSpanDays =
+                (int) round(
+                    $start->diffInDays($end)
+                ) + 1;
+
+            /*
+             * No adivinar qué dato es correcto.
+             * Si días y fechas no coinciden, RRHH debe corregir
+             * la incidencia antes de usarla fiscalmente.
+             */
+            if ($capturedDays !== $dateSpanDays) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($row['incident_id'] ?? 'N/D')
+                    .' tiene '
+                    .$capturedDays
+                    .' días capturados pero sus fechas '
+                    .'abarcan '
+                    .$dateSpanDays
+                    .' días.'
+                );
+            }
+
+            $overlapStart =
+                $start->greaterThan($periodStart)
+                    ? $start
+                    : $periodStart;
+
+            $overlapEnd =
+                $end->lessThan($periodEnd)
+                    ? $end
+                    : $periodEnd;
+
+            if ($overlapEnd->lessThan($overlapStart)) {
+                continue;
+            }
+
+            $daysInPeriod =
+                $overlapStart->diffInDays(
+                    $overlapEnd
+                ) + 1;
+
+            $result[] = [
+                ...$row,
+
+                'original_start_date' =>
+                    $start->toDateString(),
+
+                'original_end_date' =>
+                    $end->toDateString(),
+
+                'period_start_date' =>
+                    $overlapStart->toDateString(),
+
+                'period_end_date' =>
+                    $overlapEnd->toDateString(),
+
+                'days_in_period' =>
+                    (int) $daysInPeriod,
+            ];
+        }
+
+        return $result;
+    }
+
+
+    /**
+     * BEXIA_V5836_INCAPACITY_PERIOD_AMOUNT_ALLOCATION
+     *
+     * incapacity_monetary_amount representa el importe TOTAL
+     * de la incapacidad completa.
+     *
+     * Cuando la incapacidad cruza periodos, se distribuye
+     * proporcionalmente por días usando acumulados redondeados.
+     *
+     * De esta forma la suma de todos los periodos reproduce
+     * exactamente el importe total capturado, incluyendo centavos.
+     *
+     * No modifica todavía los totales económicos de la nómina.
+     */
+    protected static function incapacityEconomicAllocations(
+        array $periodIncapacities
+    ): array {
+        $items = [];
+        $perceptions = 0.0;
+        $deductions = 0.0;
+
+        foreach ($periodIncapacities as $row) {
+            $effect = (string) (
+                $row['payroll_effect']
+                ?? 'none'
+            );
+
+            $row['period_monetary_amount'] = 0.0;
+            $row['sat_payroll_key'] = null;
+
+            if ($effect === 'none') {
+                $items[] = $row;
+                continue;
+            }
+
+            if (
+                ! in_array(
+                    $effect,
+                    [
+                        'perception',
+                        'deduction',
+                    ],
+                    true
+                )
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($row['incident_id'] ?? 'N/D')
+                    .' tiene tratamiento económico inválido.'
+                );
+            }
+
+            $totalDays = (int) (
+                $row['days']
+                ?? 0
+            );
+
+            $totalAmount = round(
+                (float) (
+                    $row['monetary_amount']
+                    ?? 0
+                ),
+                2
+            );
+
+            if ($totalDays < 1) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($row['incident_id'] ?? 'N/D')
+                    .' no tiene días totales válidos.'
+                );
+            }
+
+            if ($totalAmount <= 0) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($row['incident_id'] ?? 'N/D')
+                    .' no tiene importe total válido.'
+                );
+            }
+
+            $originalStart =
+                CarbonImmutable::parse(
+                    (string) $row[
+                        'original_start_date'
+                    ]
+                )->startOfDay();
+
+            $periodStart =
+                CarbonImmutable::parse(
+                    (string) $row[
+                        'period_start_date'
+                    ]
+                )->startOfDay();
+
+            $periodEnd =
+                CarbonImmutable::parse(
+                    (string) $row[
+                        'period_end_date'
+                    ]
+                )->startOfDay();
+
+            /*
+             * Número de días completos anteriores al tramo
+             * que cae en esta corrida.
+             */
+            $daysBefore =
+                (int) round(
+                    $originalStart->diffInDays(
+                        $periodStart
+                    )
+                );
+
+            /*
+             * Número acumulado de días desde el inicio de la
+             * incapacidad hasta el final del tramo actual,
+             * incluyendo ambos extremos.
+             */
+            $daysThrough =
+                (int) round(
+                    $originalStart->diffInDays(
+                        $periodEnd
+                    )
+                ) + 1;
+
+            if (
+                $daysBefore < 0
+                || $daysThrough < 1
+                || $daysThrough > $totalDays
+                || $daysBefore >= $daysThrough
+            ) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($row['incident_id'] ?? 'N/D')
+                    .' tiene un tramo monetario inválido.'
+                );
+            }
+
+            /*
+             * Asignación acumulativa:
+             *
+             * round(total * dias_hasta / dias_total)
+             * -
+             * round(total * dias_antes / dias_total)
+             *
+             * Evita perder/duplicar centavos cuando el incidente
+             * cruza varios periodos.
+             */
+            $cumulativeBefore = round(
+                $totalAmount
+                    * $daysBefore
+                    / $totalDays,
+                2
+            );
+
+            $cumulativeThrough = round(
+                $totalAmount
+                    * $daysThrough
+                    / $totalDays,
+                2
+            );
+
+            $periodAmount = round(
+                $cumulativeThrough
+                    - $cumulativeBefore,
+                2
+            );
+
+            if ($periodAmount < 0) {
+                throw new \RuntimeException(
+                    'La incapacidad '
+                    .($row['incident_id'] ?? 'N/D')
+                    .' produjo un importe de periodo negativo.'
+                );
+            }
+
+            $row['period_monetary_amount'] =
+                $periodAmount;
+
+            /*
+             * BEXIA_V5836_INCAPACITY_PERIOD_TAX_ALLOCATION
+             *
+             * El desglose fiscal se distribuye con la misma
+             * lógica acumulativa usada para el importe total.
+             */
+            $row['period_taxable_amount'] = null;
+            $row['period_exempt_amount'] = null;
+
+            if ($effect === 'perception') {
+                $totalTaxable = round(
+                    (float) (
+                        $row['taxable_amount']
+                        ?? 0
+                    ),
+                    2
+                );
+
+                $totalExempt = round(
+                    (float) (
+                        $row['exempt_amount']
+                        ?? 0
+                    ),
+                    2
+                );
+
+                /*
+                 * BEXIA_V5836_INCAPACITY_COUPLED_CENT_ALLOCATION
+                 *
+                 * No distribuir gravado y exento de forma
+                 * independiente por días.
+                 *
+                 * Primero distribuimos el importe monetario.
+                 * Después distribuimos los centavos gravados
+                 * dentro de los centavos monetarios acumulados.
+                 * El exento es siempre la diferencia.
+                 *
+                 * Garantiza:
+                 *
+                 * gravado_periodo + exento_periodo
+                 * = monetario_periodo
+                 *
+                 * y conserva exactamente los totales al finalizar
+                 * toda la incapacidad.
+                 */
+                $totalAmountCents = (int) round(
+                    $totalAmount * 100
+                );
+
+                $totalTaxableCents = (int) round(
+                    $totalTaxable * 100
+                );
+
+                $totalExemptCents = (int) round(
+                    $totalExempt * 100
+                );
+
+                if (
+                    $totalTaxableCents < 0
+                    || $totalExemptCents < 0
+                    || (
+                        $totalTaxableCents
+                        + $totalExemptCents
+                    ) !== $totalAmountCents
+                ) {
+                    throw new \RuntimeException(
+                        'La incapacidad '
+                        .($row['incident_id'] ?? 'N/D')
+                        .' tiene un desglose fiscal total '
+                        .'inconsistente.'
+                    );
+                }
+
+                $monetaryBeforeCents = (int) round(
+                    $cumulativeBefore * 100
+                );
+
+                $monetaryThroughCents = (int) round(
+                    $cumulativeThrough * 100
+                );
+
+                if ($totalAmountCents <= 0) {
+                    throw new \RuntimeException(
+                        'La incapacidad '
+                        .($row['incident_id'] ?? 'N/D')
+                        .' no tiene importe monetario válido '
+                        .'para distribuir su desglose fiscal.'
+                    );
+                }
+
+                /*
+                 * El gravado acumulado avanza únicamente conforme
+                 * avanzan los centavos monetarios acumulados.
+                 */
+                $taxableBeforeCents = (int) round(
+                    $totalTaxableCents
+                        * $monetaryBeforeCents
+                        / $totalAmountCents
+                );
+
+                $taxableThroughCents = (int) round(
+                    $totalTaxableCents
+                        * $monetaryThroughCents
+                        / $totalAmountCents
+                );
+
+                /*
+                 * Defensa explícita del último tramo:
+                 * al llegar al total monetario debemos recuperar
+                 * exactamente el gravado total.
+                 */
+                if (
+                    $monetaryThroughCents
+                    === $totalAmountCents
+                ) {
+                    $taxableThroughCents =
+                        $totalTaxableCents;
+                }
+
+                $periodAmountCents =
+                    $monetaryThroughCents
+                    - $monetaryBeforeCents;
+
+                $periodTaxableCents =
+                    $taxableThroughCents
+                    - $taxableBeforeCents;
+
+                if (
+                    $periodTaxableCents < 0
+                    || $periodTaxableCents
+                        > $periodAmountCents
+                ) {
+                    throw new \RuntimeException(
+                        'La incapacidad '
+                        .($row['incident_id'] ?? 'N/D')
+                        .' produjo un reparto gravado inválido.'
+                    );
+                }
+
+                $periodExemptCents =
+                    $periodAmountCents
+                    - $periodTaxableCents;
+
+                $periodTaxable =
+                    $periodTaxableCents / 100;
+
+                $periodExempt =
+                    $periodExemptCents / 100;
+
+                if (
+                    abs(
+                        round(
+                            $periodTaxable
+                                + $periodExempt,
+                            2
+                        )
+                        - $periodAmount
+                    ) > 0.009
+                ) {
+                    throw new \RuntimeException(
+                        'La incapacidad '
+                        .($row['incident_id'] ?? 'N/D')
+                        .' produjo un desglose fiscal de periodo '
+                        .'distinto del importe monetario.'
+                    );
+                }
+
+                $row['period_taxable_amount'] =
+                    $periodTaxable;
+
+                $row['period_exempt_amount'] =
+                    $periodExempt;
+
+                $row['sat_payroll_key'] = '014';
+
+                $perceptions = round(
+                    $perceptions
+                        + $periodAmount,
+                    2
+                );
+            }
+
+            if ($effect === 'deduction') {
+                $row['sat_payroll_key'] = '006';
+
+                $deductions = round(
+                    $deductions
+                        + $periodAmount,
+                    2
+                );
+            }
+
+            $items[] = $row;
+        }
+
+        return [
+            'perceptions' => $perceptions,
+            'deductions' => $deductions,
+            'items' => $items,
+        ];
+    }
+
+
+    protected static function manualUnpaidIncidentDays(
+        $incidents
+    ): array {
+        $days = 0.0;
+        $incidentIds = [];
+
+        foreach ($incidents as $incident) {
+            $type = $incident->incidentType;
+
+            $code = strtoupper(
+                trim(
+                    (string) (
+                        $type?->code
+                        ?? ''
+                    )
+                )
+            );
+
+            if (
+                ! in_array(
+                    $code,
+                    [
+                        'FALTA',
+                        'PERMISO_SIN_GOCE',
+                    ],
+                    true
+                )
+            ) {
+                continue;
+            }
+
+            $unit = strtolower(
+                trim(
+                    (string) (
+                        $incident->quantity_unit
+                        ?? ''
+                    )
+                )
+            );
+
+            if ($unit !== 'days') {
+                continue;
+            }
+
+            $quantity =
+                $incident->quantity !== null
+                    ? max(
+                        0.0,
+                        (float) $incident->quantity
+                    )
+                    : 1.0;
+
+            if ($quantity <= 0) {
+                continue;
+            }
+
+            $days += $quantity;
+
+            if (! empty($incident->id)) {
+                $incidentIds[] =
+                    (int) $incident->id;
+            }
+        }
+
+        return [
+            'days' => round($days, 2),
+            'incident_ids' =>
+                array_values(
+                    array_unique($incidentIds)
+                ),
+        ];
+    }
+
 
     protected static function incidentAmounts($incidents, array $salary): array
     {

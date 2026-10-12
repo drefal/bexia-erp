@@ -10,6 +10,7 @@ use App\Models\HrJobPosition;
 use App\Models\HrWorkSchedule;
 use App\Models\PayrollEmployerRegistration;
 use App\Models\PayrollPeriodicity;
+use App\Support\PayrollSdiCalculator;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
@@ -136,52 +137,152 @@ class EmployeeContractResource extends Resource
                                     ->searchable()
                                     ->preload()
                                     ->required()
-                                    ->live(),
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        $employeeId = (int) ($state ?? 0);
+
+                                        if ($employeeId <= 0) {
+                                            $set('employee_hire_date', null);
+                                            $set('integrated_daily_salary', null);
+                                            return;
+                                        }
+
+                                        $employee = Employee::query()->find($employeeId);
+
+                                        $set(
+                                            'employee_hire_date',
+                                            $employee?->hire_date?->format('Y-m-d')
+                                        );
+
+                                        static::calculateSdiForForm($get, $set);
+                                    }),
+
+                                DatePicker::make('employee_hire_date')
+                                    ->label('Fecha de ingreso a la empresa')
+                                    ->native(true)
+                                    ->dehydrated(false)
+                                    ->live()
+                                    ->helperText('Se guarda en la ficha del empleado y se usa para antigüedad, vacaciones y cálculo del SDI.')
+                                    ->afterStateHydrated(function ($state, $get, $set): void {
+                                        $employeeId = (int) ($get('employee_id') ?? 0);
+
+                                        if ($employeeId <= 0) {
+                                            return;
+                                        }
+
+                                        $employee = Employee::query()->find($employeeId);
+
+                                        if ($employee?->hire_date) {
+                                            $set(
+                                                'employee_hire_date',
+                                                $employee->hire_date->format('Y-m-d')
+                                            );
+
+                                            static::calculateSdiForForm($get, $set);
+                                        }
+                                    })
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        $employeeId = (int) ($get('employee_id') ?? 0);
+
+                                        if ($employeeId <= 0) {
+                                            return;
+                                        }
+
+                                        $employee = Employee::query()->find($employeeId);
+
+                                        if (! $employee) {
+                                            return;
+                                        }
+
+                                        $employee->hire_date = filled($state)
+                                            ? \Carbon\CarbonImmutable::parse($state)->toDateString()
+                                            : null;
+
+                                        $employee->save();
+
+                                        static::calculateSdiForForm($get, $set);
+                                    }),
 
                                 TextInput::make('contract_number')
                                     ->label('Número / folio contrato')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-number-field'])
-                                    ->maxLength(255),
+                                    ->maxLength(255)
+                                    ->helperText('Opcional. Si se deja vacío, Bexia genera el folio automáticamente al guardar el contrato.')
+                                    ->unique(
+                                        table: 'employee_contracts',
+                                        column: 'contract_number',
+                                        ignorable: fn ($record) => $record
+                                    ),
 
                                 Select::make('contract_type')
                                     ->label('Tipo de contrato')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-type-field'])
                                     ->options(self::contractTypeOptions())
                                     ->default('indefinite')
-                                    ->required(),
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        $satCode = match ((string) $state) {
+                                            'indefinite' => '01',
+                                            'fixed_term' => '03',
+                                            'trial' => '05',
+                                            'training' => '06',
+                                            'temporary' => '04',
+                                            'contractor' => '09',
+                                            'internship', 'other' => '99',
+                                            default => null,
+                                        };
+
+                                        if ($satCode !== null) {
+                                            $set('sat_contract_type_code', $satCode);
+                                        }
+                                    }),
 
                                 Select::make('status')
                                     ->label('Estado')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-status-field'])
                                     ->options(self::statusOptions())
                                     ->default('draft')
-                                    ->required(),
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        $set(
+                                            'is_current',
+                                            (string) $state === 'active'
+                                        );
+                                    }),
 
                                 DatePicker::make('start_date')
-                                    ->label('Fecha inicio')
+                                    ->label('Fecha de inicio de este contrato')
+                                    ->native(true)
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-start-date-field'])
-                                    ->native(false)
-                                    ->required(),
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        static::calculateSdiForForm($get, $set);
+                                    }),
 
                                 DatePicker::make('end_date')
-                                    ->label('Fecha fin')
-                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-end-date-field'])
-                                    ->native(false),
+                                    ->label('Fecha de fin de este contrato')
+                                    ->native(true)
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-end-date-field']),
 
                                 DatePicker::make('signed_at')
-                                    ->label('Fecha firma')
-                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-signed-at-field'])
-                                    ->native(false),
+                                    ->label('Fecha de firma de este contrato')
+                                    ->native(true)
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-signed-at-field']),
 
                                 DatePicker::make('probation_end_date')
-                                    ->label('Fin periodo prueba')
-                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-probation-end-field'])
-                                    ->native(false),
+                                    ->label('Fin del periodo de prueba de este contrato')
+                                    ->native(true)
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-probation-end-field']),
 
                                 Toggle::make('is_current')
                                     ->label('Contrato vigente')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-current-field'])
-                                    ->helperText('Al guardar como vigente, se desmarcarán otros contratos vigentes del empleado.'),
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->helperText('Se controla automáticamente: únicamente un contrato con estado Activo puede ser vigente.'),
                             ]),
                     ]),
 
@@ -209,14 +310,102 @@ class EmployeeContractResource extends Resource
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-work-schedule-field'])
                                     ->options(fn () => self::workScheduleOptions())
                                     ->searchable()
-                                    ->preload(),
+                                    ->preload()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        $scheduleId = (int) ($state ?? 0);
+
+                                        if ($scheduleId <= 0) {
+                                            $set('sat_workday_type_code', null);
+                                            return;
+                                        }
+
+                                        $schedule = HrWorkSchedule::query()
+                                            ->find($scheduleId);
+
+                                        if (! $schedule) {
+                                            return;
+                                        }
+
+                                        $start = $schedule->start_time
+                                            ? substr((string) $schedule->start_time, 0, 5)
+                                            : null;
+
+                                        $end = $schedule->end_time
+                                            ? substr((string) $schedule->end_time, 0, 5)
+                                            : null;
+
+                                        $satCode = null;
+
+                                        /*
+                                         * Clasificación automática conservadora:
+                                         * - horario completamente diurno: 01
+                                         * - horario nocturno: 02
+                                         * - cruza zonas diurna/nocturna: 03
+                                         *
+                                         * El campo SAT permanece editable.
+                                         */
+                                        if ($start && $end) {
+                                            if ($start >= '06:00' && $end <= '20:00' && $end > $start) {
+                                                $satCode = '01';
+                                            } elseif (
+                                                $start >= '20:00'
+                                                || ($end <= '06:00' && $end < $start)
+                                            ) {
+                                                $satCode = '02';
+                                            } else {
+                                                $satCode = '03';
+                                            }
+                                        }
+
+                                        if ($satCode !== null) {
+                                            $set('sat_workday_type_code', $satCode);
+                                        }
+
+                                        if ($schedule->hours_per_week !== null) {
+                                            $set(
+                                                'hours_per_week',
+                                                number_format(
+                                                    (float) $schedule->hours_per_week,
+                                                    2,
+                                                    '.',
+                                                    ''
+                                                )
+                                            );
+                                        }
+                                    }),
 
                                 Select::make('payroll_employer_registration_id')
                                     ->label('Registro patronal')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-employer-registration-field'])
                                     ->options(fn () => self::employerRegistrationOptions())
                                     ->searchable()
-                                    ->preload(),
+                                    ->preload()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        $registrationId = (int) ($state ?? 0);
+
+                                        if ($registrationId <= 0) {
+                                            $set('sat_risk_position_code', null);
+                                            return;
+                                        }
+
+                                        $registration = PayrollEmployerRegistration::query()
+                                            ->find($registrationId);
+
+                                        $riskCode = match ((string) ($registration?->risk_class ?? '')) {
+                                            'I' => '1',
+                                            'II' => '2',
+                                            'III' => '3',
+                                            'IV' => '4',
+                                            'V' => '5',
+                                            default => null,
+                                        };
+
+                                        if ($riskCode !== null) {
+                                            $set('sat_risk_position_code', $riskCode);
+                                        }
+                                    }),
 
                                 Select::make('payroll_periodicity_id')
                                     ->label('Periodicidad nómina')
@@ -229,18 +418,70 @@ class EmployeeContractResource extends Resource
                                     ->label('Sueldo base')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-base-salary-field'])
                                     ->numeric()
-                                    ->prefix('$'),
+                                    ->prefix('$')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        $baseSalary = (float) ($state ?? 0);
+                                        $salaryType = (string) ($get('salary_type') ?? '');
+
+                                        $dailySalary = match ($salaryType) {
+                                            'weekly' => $baseSalary > 0 ? round($baseSalary / 7, 2) : null,
+                                            'monthly' => $baseSalary > 0 ? round($baseSalary / 30, 2) : null,
+                                            'daily' => $baseSalary > 0 ? round($baseSalary, 2) : null,
+                                            default => null,
+                                        };
+
+                                        if ($dailySalary !== null) {
+                                            $set('daily_salary', number_format($dailySalary, 2, '.', ''));
+                                            static::calculateSdiForForm($get, $set);
+                                        }
+                                    }),
+
+                                Select::make('payment_scheme')
+                                    ->label('Esquema de pago')
+                                    ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-payment-scheme-field'])
+                                    ->options([
+                                        'fixed' => 'Sueldo fijo',
+                                        'piecework' => 'Destajo',
+                                        'mixed' => 'Mixto',
+                                    ])
+                                    ->default('fixed')
+                                    ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        static::calculateSdiForForm($get, $set);
+                                    })
+                                    ->helperText('Indica si el empleado se paga por sueldo fijo, destajo o una combinación de ambos.'),
 
                                 Select::make('salary_type')
-                                    ->label('Tipo de sueldo')
+                                    ->label('Modalidad del sueldo')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-salary-type-field'])
                                     ->options([
+                                        'weekly' => 'Semanal',
                                         'monthly' => 'Mensual',
                                         'daily' => 'Diario',
                                         'hourly' => 'Por hora',
                                         'commission' => 'Comisión',
                                         'mixed' => 'Mixto',
-                                    ]),
+                                    ])
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        $baseSalary = (float) ($get('base_salary') ?? 0);
+                                        $salaryType = (string) ($state ?? '');
+
+                                        $dailySalary = match ($salaryType) {
+                                            'weekly' => $baseSalary > 0 ? round($baseSalary / 7, 2) : null,
+                                            'monthly' => $baseSalary > 0 ? round($baseSalary / 30, 2) : null,
+                                            'daily' => $baseSalary > 0 ? round($baseSalary, 2) : null,
+                                            default => null,
+                                        };
+
+                                        if ($dailySalary !== null) {
+                                            $set('daily_salary', number_format($dailySalary, 2, '.', ''));
+                                            static::calculateSdiForForm($get, $set);
+                                        }
+                                    })
+                                    ->helperText('Indica cómo está expresado el importe capturado en Sueldo base.'),
 
                                 TextInput::make('currency')
                                     ->label('Moneda')
@@ -251,7 +492,14 @@ class EmployeeContractResource extends Resource
                                 TextInput::make('hours_per_week')
                                     ->label('Horas por semana')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-hours-field'])
-                                    ->numeric(),
+                                    ->numeric()
+                                    ->step('0.01')
+                                    ->formatStateUsing(
+                                        fn ($state) => filled($state)
+                                            ? number_format((float) $state, 2, '.', '')
+                                            : null
+                                    )
+                                    ->helperText('Se completa automáticamente desde el horario laboral. Puede ajustarse manualmente si este contrato lo requiere.'),
                             ]),
                     ]),
 
@@ -331,19 +579,108 @@ class EmployeeContractResource extends Resource
                                     ->searchable()
                                     ->preload(),
 
+                                Select::make('sat_work_state_code')
+                                    ->label('Entidad federativa donde labora SAT')
+                                    ->extraAttributes([
+                                        'class' => 'bexia-employee-contract-field bexia-employee-contract-sat-work-state-field',
+                                    ])
+                                    ->options([
+                                        'AGU' => 'AGU - Aguascalientes',
+                                        'BCN' => 'BCN - Baja California',
+                                        'BCS' => 'BCS - Baja California Sur',
+                                        'CAM' => 'CAM - Campeche',
+                                        'CHH' => 'CHH - Chihuahua',
+                                        'CHP' => 'CHP - Chiapas',
+                                        'CMX' => 'CMX - Ciudad de México',
+                                        'COA' => 'COA - Coahuila',
+                                        'COL' => 'COL - Colima',
+                                        'DUR' => 'DUR - Durango',
+                                        'GRO' => 'GRO - Guerrero',
+                                        'GUA' => 'GUA - Guanajuato',
+                                        'HID' => 'HID - Hidalgo',
+                                        'JAL' => 'JAL - Jalisco',
+                                        'MEX' => 'MEX - Estado de México',
+                                        'MIC' => 'MIC - Michoacán',
+                                        'MOR' => 'MOR - Morelos',
+                                        'NAY' => 'NAY - Nayarit',
+                                        'NLE' => 'NLE - Nuevo León',
+                                        'OAX' => 'OAX - Oaxaca',
+                                        'PUE' => 'PUE - Puebla',
+                                        'QUE' => 'QUE - Querétaro',
+                                        'ROO' => 'ROO - Quintana Roo',
+                                        'SIN' => 'SIN - Sinaloa',
+                                        'SLP' => 'SLP - San Luis Potosí',
+                                        'SON' => 'SON - Sonora',
+                                        'TAB' => 'TAB - Tabasco',
+                                        'TAM' => 'TAM - Tamaulipas',
+                                        'TLA' => 'TLA - Tlaxcala',
+                                        'VER' => 'VER - Veracruz',
+                                        'YUC' => 'YUC - Yucatán',
+                                        'ZAC' => 'ZAC - Zacatecas',
+                                    ])
+                                    ->searchable()
+                                    ->preload()
+                                    ->helperText(
+                                        'Entidad federativa donde el trabajador presta sus servicios. '
+                                        . 'No es necesariamente su domicilio, INE ni domicilio fiscal.'
+                                    ),
+
+
                                 TextInput::make('daily_salary')
                                     ->label('Salario diario')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-daily-salary-field'])
                                     ->numeric()
+                                    ->step('0.01')
+                                    ->formatStateUsing(fn ($state) => filled($state) ? number_format((float) $state, 2, '.', '') : null)
                                     ->prefix('$')
-                                    ->helperText('Salario diario usado para CFDI nómina.'),
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(function ($state, $get, $set): void {
+                                        static::calculateSdiForForm($get, $set);
+                                    })
+                                    ->helperText('Se calcula automáticamente para sueldo semanal, mensual o diario. Puede ajustarse manualmente si es necesario.'),
 
                                 TextInput::make('integrated_daily_salary')
                                     ->label('Salario diario integrado')
                                     ->extraAttributes(['class' => 'bexia-employee-contract-field bexia-employee-contract-integrated-salary-field'])
                                     ->numeric()
+                                    ->step('0.0001')
+                                    ->formatStateUsing(fn ($state) => filled($state) ? number_format((float) $state, 4, '.', '') : null)
                                     ->prefix('$')
-                                    ->helperText('SDI usado para IMSS/CFDI nómina.'),
+                                    ->helperText('Para sueldo fijo se calcula con salario diario, antigüedad, aguinaldo y prima vacacional. Puede ajustarse manualmente.'),
+
+                                /*
+                                 * BEXIA_V5836_EXPLICIT_SBC_FIELD
+                                 *
+                                 * No copiar automáticamente el SDI:
+                                 * debe capturarse el SBC real con el
+                                 * que cotiza el trabajador.
+                                 */
+                                TextInput::make(
+                                    'social_security_base_salary'
+                                )
+                                    ->label(
+                                        'Salario base de cotización (SBC)'
+                                    )
+                                    ->numeric()
+                                    ->step('0.0001')
+                                    ->formatStateUsing(
+                                        fn ($state) =>
+                                            filled($state)
+                                                ? number_format(
+                                                    (float) $state,
+                                                    4,
+                                                    '.',
+                                                    ''
+                                                )
+                                                : null
+                                    )
+                                    ->prefix('$')
+                                    ->helperText(
+                                        'SBC diario real usado para cuotas '
+                                        . 'y aportaciones de seguridad social. '
+                                        . 'No se llena automáticamente con el '
+                                        . 'salario diario ni con el SDI.'
+                                    ),
 
                                 Toggle::make('is_unionized')
                                     ->label('Sindicalizado')
@@ -372,6 +709,87 @@ class EmployeeContractResource extends Resource
                             ->columnSpanFull(),
                     ]),
             ]);
+    }
+
+    protected static function calculateSdiForForm($get, $set): void
+    {
+        $paymentScheme = (string) ($get('payment_scheme') ?? 'fixed');
+
+        if ($paymentScheme !== 'fixed') {
+            return;
+        }
+
+        $employeeId = (int) ($get('employee_id') ?? 0);
+        $dailySalary = (float) ($get('daily_salary') ?? 0);
+
+        if ($employeeId <= 0 || $dailySalary <= 0) {
+            return;
+        }
+
+        $employee = Employee::query()->find($employeeId);
+
+        if (! $employee) {
+            return;
+        }
+
+        $formHireDate = $get('employee_hire_date');
+
+        if (filled($formHireDate)) {
+            $hireDate = \Carbon\CarbonImmutable::parse($formHireDate);
+
+            /*
+             * Para el cálculo inmediato usamos la fecha visible en el
+             * formulario, sin depender de una lectura posterior de BD.
+             */
+            $employee->setAttribute('hire_date', $hireDate);
+
+            /*
+             * La fecha también se conserva como dato maestro del empleado.
+             */
+            $storedHireDate = $employee->getOriginal('hire_date');
+
+            if (
+                blank($storedHireDate)
+                || \Carbon\CarbonImmutable::parse($storedHireDate)->toDateString()
+                    !== $hireDate->toDateString()
+            ) {
+                Employee::query()
+                    ->whereKey($employee->getKey())
+                    ->update([
+                        'hire_date' => $hireDate->toDateString(),
+                    ]);
+            }
+        }
+
+        $asOf = filled($get('start_date'))
+            ? \Carbon\CarbonImmutable::parse($get('start_date'))
+            : null;
+
+        $result = PayrollSdiCalculator::calculate(
+            $employee,
+            $dailySalary,
+            (int) $employee->company_id,
+            $asOf
+        );
+
+        if (! ($result['automatic_sdi'] ?? true)) {
+            return;
+        }
+
+        if (! ($result['can_calculate'] ?? false)) {
+            $set('integrated_daily_salary', null);
+            return;
+        }
+
+        $set(
+            'integrated_daily_salary',
+            number_format(
+                (float) $result['integrated_daily_salary'],
+                4,
+                '.',
+                ''
+            )
+        );
     }
 
     public static function contractTypeOptions(): array
@@ -458,10 +876,15 @@ class EmployeeContractResource extends Resource
         $tenantId = self::tenantId();
 
         return PayrollEmployerRegistration::query()
+            ->with('employerCompany')
             ->when($tenantId, fn ($query) => $query->where('company_id', $tenantId))
             ->where('is_active', true)
+            ->where('state', 'vigente')
             ->orderBy('name')
-            ->pluck('name', 'id')
+            ->get()
+            ->mapWithKeys(fn (PayrollEmployerRegistration $registration) => [
+                $registration->id => $registration->displayLabel(),
+            ])
             ->toArray();
     }
 
@@ -479,11 +902,27 @@ class EmployeeContractResource extends Resource
 
     public static function syncCurrentContract(EmployeeContract $contract): void
     {
-        if (! $contract->is_current) {
+        /*
+         * La vigencia depende exclusivamente del estado.
+         * Solo un contrato Activo puede ser el contrato vigente.
+         */
+        $shouldBeCurrent = $contract->status === 'active';
+
+        if ((bool) $contract->is_current !== $shouldBeCurrent) {
+            $contract->forceFill([
+                'is_current' => $shouldBeCurrent,
+                'updated_by_user_id' => auth()->id(),
+            ])->saveQuietly();
+
+            $contract->refresh();
+        }
+
+        if (! $shouldBeCurrent) {
             return;
         }
 
         EmployeeContract::query()
+            ->where('company_id', $contract->company_id)
             ->where('employee_id', $contract->employee_id)
             ->where('id', '!=', $contract->id)
             ->where('is_current', true)
@@ -499,7 +938,6 @@ class EmployeeContractResource extends Resource
             'hr_work_schedule_id' => $contract->hr_work_schedule_id,
             'payroll_employer_registration_id' => $contract->payroll_employer_registration_id,
             'payroll_periodicity_id' => $contract->payroll_periodicity_id,
-            'hire_date' => $contract->start_date,
         ];
 
         Employee::query()

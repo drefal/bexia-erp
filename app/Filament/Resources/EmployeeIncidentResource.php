@@ -192,18 +192,237 @@ class EmployeeIncidentResource extends Resource
                                     ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-quantity-field'])
                                     ->live(debounce: 500)
                                     ->numeric()
-                                    ->helperText('Ej. 1 día, 2 horas, 15 minutos.'),
+                                    /*
+                                     * BEXIA_V5836_INCAPACITY_QUANTITY_RULE
+                                     */
+                                    ->minValue(
+                                        fn (Get $get) =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                                ? 1
+                                                : null
+                                    )
+                                    ->step(
+                                        fn (Get $get) =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                                ? 1
+                                                : 'any'
+                                    )
+                                    ->required(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                    )
+                                    ->helperText(
+                                        fn (Get $get): string =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                                ? 'Días enteros de incapacidad dentro del periodo.'
+                                                : 'Ej. 1 día, 2 horas, 15 minutos.'
+                                    ),
 
                                 Select::make('quantity_unit')
                                     ->label('Unidad')
                                     ->extraAttributes(['class' => 'bexia-employee-incident-field bexia-employee-incident-quantity-unit-field'])
                                     ->live()
+                                    /*
+                                     * BEXIA_V5836_INCAPACITY_UNIT_RULE
+                                     */
+                                    ->options(
+                                        fn (Get $get): array =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                                ? [
+                                                    'days' => 'Días',
+                                                ]
+                                                : [
+                                                    'minutes' => 'Minutos',
+                                                    'hours' => 'Horas',
+                                                    'days' => 'Días',
+                                                    'events' => 'Eventos',
+                                                ]
+                                    )
+                                    ->default('days')
+                                    ->required(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                    ),
+
+                                /*
+                                 * BEXIA_V5836_INCAPACITY_SAT_FIELDS
+                                 *
+                                 * quantity = DiasIncapacidad.
+                                 * Debe capturarse en días enteros.
+                                 */
+                                Select::make('sat_incapacity_type_code')
+                                    ->label('Tipo de incapacidad SAT')
                                     ->options([
-                                        'minutes' => 'Minutos',
-                                        'hours' => 'Horas',
-                                        'days' => 'Días',
-                                        'events' => 'Eventos',
-                                    ]),
+                                        '01' => '01 - Riesgo de trabajo',
+                                        '02' => '02 - Enfermedad general',
+                                        '03' => '03 - Maternidad',
+                                        '04' => '04 - Licencia 140 Bis',
+                                    ])
+                                    ->required(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                    )
+                                    ->visible(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                    )
+                                    ->helperText(
+                                        'Clave SAT c_TipoIncapacidad.'
+                                    ),
+
+                                /*
+                                 * BEXIA_V5836_INCAPACITY_PAYROLL_EFFECT
+                                 */
+                                Select::make(
+                                    'incapacity_payroll_effect'
+                                )
+                                    ->label(
+                                        'Tratamiento en nómina'
+                                    )
+                                    ->options([
+                                        'none' =>
+                                            'Sólo incapacidad / sin importe',
+                                        'perception' =>
+                                            'Percepción por incapacidad',
+                                        'deduction' =>
+                                            'Deducción por incapacidad',
+                                    ])
+                                    ->required(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get(
+                                                    'hr_incident_type_id'
+                                                )
+                                            )
+                                    )
+                                    ->visible(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get(
+                                                    'hr_incident_type_id'
+                                                )
+                                            )
+                                    )
+                                    ->default('none')
+                                    ->live()
+                                    ->helperText(
+                                        'Define explícitamente el tratamiento '
+                                        . 'fiscal/económico de la incapacidad.'
+                                    ),
+
+                                /*
+                                 * BEXIA_V5836_INCAPACITY_SALARY_TREATMENT
+                                 */
+                                Select::make(
+                                    'incapacity_salary_treatment'
+                                )
+                                    ->label(
+                                        'Tratamiento del sueldo ordinario'
+                                    )
+                                    ->options([
+                                        'keep_salary' =>
+                                            'Conservar sueldo ordinario',
+                                        'replace_salary_days' =>
+                                            'Sustituir días de sueldo',
+                                    ])
+                                    ->required(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get(
+                                                    'hr_incident_type_id'
+                                                )
+                                            )
+                                            && in_array(
+                                                $get(
+                                                    'incapacity_payroll_effect'
+                                                ),
+                                                [
+                                                    'perception',
+                                                    'deduction',
+                                                ],
+                                                true
+                                            )
+                                    )
+                                    ->visible(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get(
+                                                    'hr_incident_type_id'
+                                                )
+                                            )
+                                            && in_array(
+                                                $get(
+                                                    'incapacity_payroll_effect'
+                                                ),
+                                                [
+                                                    'perception',
+                                                    'deduction',
+                                                ],
+                                                true
+                                            )
+                                    )
+                                    ->helperText(
+                                        'Define si la incapacidad conserva '
+                                        . 'el sueldo ordinario o sustituye '
+                                        . 'los días correspondientes.'
+                                    ),
+
+                                TextInput::make(
+                                    'incapacity_monetary_amount'
+                                )
+                                    ->label(
+                                        'Importe monetario de incapacidad'
+                                    )
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->prefix('$')
+                                    /*
+                                     * BEXIA_V5836_INCAPACITY_AMOUNT_CONDITIONAL
+                                     */
+                                    ->required(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get(
+                                                    'hr_incident_type_id'
+                                                )
+                                            )
+                                            && in_array(
+                                                $get(
+                                                    'incapacity_payroll_effect'
+                                                ),
+                                                [
+                                                    'perception',
+                                                    'deduction',
+                                                ],
+                                                true
+                                            )
+                                    )
+                                    ->visible(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get('hr_incident_type_id')
+                                            )
+                                    )
+                                    ->helperText(
+                                        'ImporteMonetario del nodo SAT '
+                                        . 'cuando corresponda.'
+                                    ),
 
                                 Placeholder::make('vacation_balance_summary')
                                     ->label('Resumen de vacaciones')
@@ -228,6 +447,47 @@ class EmployeeIncidentResource extends Resource
                                     ->label('Afecta nómina')
                                     ->visible(false)
                                     ->dehydrated(false),
+
+                                /*
+                                 * BEXIA_V5836_INCAPACITY_TAX_SPLIT
+                                 */
+                                TextInput::make(
+                                    'incapacity_taxable_amount'
+                                )
+                                    ->label('Importe gravado')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->prefix('$')
+                                    ->visible(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get(
+                                                    'hr_incident_type_id'
+                                                )
+                                            )
+                                            && $get(
+                                                'incapacity_payroll_effect'
+                                            ) === 'perception'
+                                    ),
+
+                                TextInput::make(
+                                    'incapacity_exempt_amount'
+                                )
+                                    ->label('Importe exento')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->prefix('$')
+                                    ->visible(
+                                        fn (Get $get): bool =>
+                                            self::isIncapacityTypeId(
+                                                $get(
+                                                    'hr_incident_type_id'
+                                                )
+                                            )
+                                            && $get(
+                                                'incapacity_payroll_effect'
+                                            ) === 'perception'
+                                    ),
 
                                 TextInput::make('payroll_amount')
                                     ->label('Monto nómina')
@@ -288,6 +548,22 @@ class EmployeeIncidentResource extends Resource
             ->orderBy('name')
             ->pluck('name', 'id')
             ->toArray();
+    }
+
+    /*
+     * BEXIA_V5836_INCAPACITY_TYPE_HELPER
+     */
+    public static function isIncapacityTypeId(
+        mixed $incidentTypeId
+    ): bool {
+        if (blank($incidentTypeId)) {
+            return false;
+        }
+
+        return HrIncidentType::query()
+            ->whereKey($incidentTypeId)
+            ->where('code', 'INCAPACIDAD')
+            ->exists();
     }
 
     public static function isVacationTypeId(mixed $incidentTypeId): bool

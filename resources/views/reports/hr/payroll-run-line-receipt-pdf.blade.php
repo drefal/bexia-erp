@@ -4,21 +4,24 @@
     <meta charset="utf-8">
     <title>Recibo interno de nómina</title>
     <style>
+        @page {
+            margin: 7mm 8mm;
+        }
         body {
             font-family: DejaVu Sans, sans-serif;
-            font-size: 11px;
+            font-size: 9px;
             color: #111827;
-            line-height: 1.35;
+            line-height: 1.18;
         }
 
         h1 {
-            font-size: 20px;
-            margin: 0 0 4px;
+            font-size: 16px;
+            margin: 0 0 2px;
         }
 
         h2 {
-            font-size: 13px;
-            margin: 16px 0 6px;
+            font-size: 11px;
+            margin: 7px 0 3px;
         }
 
         .muted {
@@ -29,15 +32,17 @@
             border: 1px solid #f59e0b;
             background: #fffbeb;
             color: #92400e;
-            padding: 8px;
-            margin: 12px 0;
+            padding: 3px 4px;
+            margin: 4px 0;
+            font-size: 7.5px;
+            line-height: 1.1;
             font-weight: bold;
         }
 
         .box {
             border: 1px solid #d1d5db;
-            padding: 10px;
-            margin-top: 10px;
+            padding: 3px 4px;
+            margin-top: 5px;
         }
 
         table {
@@ -47,14 +52,14 @@
 
         td, th {
             border: 1px solid #d1d5db;
-            padding: 6px;
+            padding: 3px 4px;
             vertical-align: top;
         }
 
         th {
             background: #111827;
             color: #ffffff;
-            font-size: 10px;
+            font-size: 8.5px;
             text-align: left;
         }
 
@@ -69,12 +74,12 @@
         }
 
         .total {
-            font-size: 14px;
+            font-size: 12px;
             font-weight: bold;
         }
 
         .signature {
-            margin-top: 42px;
+            margin-top: 12px;
             width: 48%;
             display: inline-block;
             text-align: center;
@@ -83,21 +88,103 @@
 
         .line {
             border-top: 1px solid #111827;
-            padding-top: 6px;
+            padding-top: 3px;
         }
 
         .small {
             font-size: 9px;
         }
+
+        table,
+        tr,
+        .box,
+        .warning {
+            page-break-inside: avoid;
+        }
+
     </style>
 </head>
 <body>
     <h1>Bexia ERP - Recibo interno de nómina</h1>
+
+    <div style="margin: 1px 0 3px 0; font-size: 8px;">
+        <strong>Modo:</strong>
+        {{ $calculationModeLabel ?? 'Nómina simple' }}
+    </div>
     <div class="muted">
         Generado: {{ $generatedAt->format('d/m/Y H:i') }}
     </div>
 
-    <div class="warning">
+
+@if(($showFiscalSection ?? false) && $fiscalResult)
+    <div style="
+        margin-top: 4px;
+        border: 1px solid #9ca3af;
+        page-break-inside: avoid;
+    ">
+        <div style="
+            padding: 2px 4px;
+            background: #f3f4f6;
+            font-size: 8.5px;
+            font-weight: bold;
+        ">
+            Resumen fiscal · Cálculo sin CFDI
+        </div>
+
+        <table style="
+            font-size: 8px;
+            margin: 0;
+        ">
+            <tr>
+                <td class="label">Base gravable</td>
+                <td class="right">
+                    {{ \App\Support\PayrollRunExportService::money($fiscalResult->taxable_income) }}
+                </td>
+
+                <td class="label">Exento</td>
+                <td class="right">
+                    {{ \App\Support\PayrollRunExportService::money($fiscalResult->exempt_income) }}
+                </td>
+
+                <td class="label">ISR antes subsidio</td>
+                <td class="right">
+                    {{ \App\Support\PayrollRunExportService::money($fiscalResult->isr_before_subsidy) }}
+                </td>
+            </tr>
+
+            <tr>
+                <td class="label">Subsidio causado</td>
+                <td class="right">
+                    {{ \App\Support\PayrollRunExportService::money($fiscalResult->subsidy_caused) }}
+                </td>
+
+                <td class="label">Subsidio aplicado</td>
+                <td class="right">
+                    {{ \App\Support\PayrollRunExportService::money($fiscalResult->subsidy_applied) }}
+                </td>
+
+                <td class="label">ISR retenido</td>
+                <td class="right">
+                    {{ \App\Support\PayrollRunExportService::money($fiscalResult->isr_withheld) }}
+                </td>
+            </tr>
+        </table>
+
+        <div style="
+            padding: 2px 4px;
+            font-size: 7.5px;
+            line-height: 1.1;
+        ">
+            Tarifa ISR:
+            <strong>{{ $fiscalResult->isr_tariff_code ?: '-' }}</strong>
+            &nbsp;&nbsp;·&nbsp;&nbsp;
+            Regla de subsidio:
+            <strong>{{ $fiscalResult->subsidy_rule_code ?: '-' }}</strong>
+        </div>
+    </div>
+@endif
+
+<div class="warning">
         {{ $legend }}
     </div>
 

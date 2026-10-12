@@ -31,6 +31,14 @@ class PayrollEmployerRegistrationResource extends Resource
     protected static ?int $navigationSort = 20;
     protected static ?string $tenantOwnershipRelationshipName = 'company';
 
+    /*
+     * Este catálogo conserva company_id como empresa administradora.
+     * El scoping se controla mediante UsesTenantCompany y la creación asigna
+     * explícitamente company_id. Evitamos que Filament intente usar una
+     * relación inversa payrollEmployerRegistrations() en Company.
+     */
+    protected static bool $isScopedToTenant = false;
+
     public static function form(Form $form): Form
     {
         return $form
@@ -44,6 +52,48 @@ class PayrollEmployerRegistrationResource extends Resource
                 ])
                 ->columns(2)
                 ->schema([
+                    Forms\Components\Select::make('employer_company_id')
+                        ->label('Empresa propietaria / patrón legal')
+                        ->options(function (): array {
+                            $currentCompanyId = static::currentCompanyId();
+
+                            if (! $currentCompanyId) {
+                                return [];
+                            }
+
+                            $currentCompany = \App\Models\Company::query()
+                                ->find($currentCompanyId);
+
+                            if (! $currentCompany) {
+                                return [];
+                            }
+
+                            $query = \App\Models\Company::query();
+
+                            if ($currentCompany->company_group_id) {
+                                $query->where(
+                                    'company_group_id',
+                                    $currentCompany->company_group_id
+                                );
+                            } elseif ($currentCompany->organization_id) {
+                                $query->where(
+                                    'organization_id',
+                                    $currentCompany->organization_id
+                                );
+                            } else {
+                                $query->whereKey($currentCompanyId);
+                            }
+
+                            return $query
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->toArray();
+                        })
+                        ->searchable()
+                        ->preload()
+                        ->required()
+                        ->helperText('Razón social del Grupo L7 a la que legalmente pertenece este registro patronal.'),
+
                     Forms\Components\TextInput::make('name')
                         ->extraAttributes([
                             'class' => 'bexia-perg-field bexia-perg-name-field bexia-perg-wide-field',
@@ -56,29 +106,59 @@ class PayrollEmployerRegistrationResource extends Resource
                         ->extraAttributes([
                             'class' => 'bexia-perg-field bexia-perg-registration-field bexia-perg-wide-field',
                         ])
-                        ->label('Registro patronal')
-                        ->maxLength(80),
+                        ->label('Número de registro patronal (IMSS)')
+                        ->required()
+                        ->maxLength(80)
+                        ->helperText('Número oficial asignado por el IMSS al patrón.'),
 
-                    Forms\Components\TextInput::make('risk_class')
+                    Forms\Components\Select::make('risk_class')
                         ->extraAttributes([
                             'class' => 'bexia-perg-field bexia-perg-risk-field bexia-perg-compact-field',
                         ])
-                        ->label('Clase de riesgo')
-                        ->maxLength(80),
+                        ->label('Clase de riesgo IMSS')
+                        ->options([
+                            'I' => 'Clase I',
+                            'II' => 'Clase II',
+                            'III' => 'Clase III',
+                            'IV' => 'Clase IV',
+                            'V' => 'Clase V',
+                        ])
+                        ->searchable()
+                        ->native(false)
+                        ->placeholder('Seleccionar clase')
+                        ->helperText('Clasificación de riesgo de trabajo asignada al patrón por el IMSS.'),
 
-                    Forms\Components\TextInput::make('state')
+                    Forms\Components\TextInput::make('risk_fraction')
+                        ->label('Fracción de riesgo IMSS')
+                        ->maxLength(20)
+                        ->placeholder('Ej. 682')
+                        ->helperText('Fracción o clave de actividad asignada al patrón por el IMSS.'),
+
+                    Forms\Components\TextInput::make('risk_premium_percent')
+                        ->label('Prima de Riesgo de Trabajo (%)')
+                        ->numeric()
+                        ->step('0.00001')
+                        ->minValue(0)
+                        ->suffix('%')
+                        ->placeholder('0.50000')
+                        ->helperText('Prima vigente de Riesgos de Trabajo informada al IMSS. Se captura como porcentaje, por ejemplo 0.50000.'),
+
+                    Forms\Components\Select::make('state')
                         ->extraAttributes([
                             'class' => 'bexia-perg-field bexia-perg-state-field bexia-perg-compact-field',
                         ])
-                        ->label('Estado')
-                        ->maxLength(80),
-
-                    Forms\Components\Toggle::make('is_active')
-                        ->extraAttributes([
-                            'class' => 'bexia-perg-field bexia-perg-active-field bexia-perg-toggle-field',
+                        ->label('Estatus del registro patronal')
+                        ->options([
+                            'vigente' => 'Vigente',
+                            'suspendido' => 'Suspendido',
+                            'baja' => 'Baja',
+                            'reanudacion' => 'En reanudación',
+                            'pendiente_alta' => 'Pendiente de alta',
                         ])
-                        ->label('Activo')
-                        ->default(true),
+                        ->default('vigente')
+                        ->required()
+                        ->native(false)
+                        ->helperText('Solo los registros vigentes podrán asignarse a nuevos empleados.'),
                 ]),
         ]);
     }
@@ -87,6 +167,13 @@ class PayrollEmployerRegistrationResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('employerCompany.name')
+                    ->label('Empresa propietaria')
+                    ->searchable()
+                    ->sortable()
+                    ->placeholder('Sin asignar')
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('name')
                     ->extraHeaderAttributes([
                         'class' => 'bexia-perg-header bexia-perg-col-name',
@@ -111,6 +198,19 @@ class PayrollEmployerRegistrationResource extends Resource
                         'class' => 'bexia-perg-cell bexia-perg-col-risk bexia-perg-col-compact',
                     ])
                     ->label('Riesgo')->toggleable(),
+                Tables\Columns\TextColumn::make('risk_fraction')
+                    ->label('Fracción')
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('risk_premium_percent')
+                    ->label('Prima R.T.')
+                    ->formatStateUsing(
+                        fn ($state): string => $state !== null
+                            ? number_format((float) $state, 5) . '%'
+                            : '-'
+                    )
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('state')
                     ->extraHeaderAttributes([
                         'class' => 'bexia-perg-header bexia-perg-col-state',
@@ -118,18 +218,28 @@ class PayrollEmployerRegistrationResource extends Resource
                     ->extraCellAttributes([
                         'class' => 'bexia-perg-cell bexia-perg-col-state bexia-perg-col-compact',
                     ])
-                    ->label('Estado')->toggleable(),
-                Tables\Columns\IconColumn::make('is_active')
-                    ->extraHeaderAttributes([
-                        'class' => 'bexia-perg-header bexia-perg-col-active',
-                    ])
-                    ->extraCellAttributes([
-                        'class' => 'bexia-perg-cell bexia-perg-col-active bexia-perg-col-bool',
-                    ])
-                    ->label('Activo')->boolean(),
+                    ->label('Estatus')
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'vigente' => 'Vigente',
+                        'suspendido' => 'Suspendido',
+                        'baja' => 'Baja',
+                        'reanudacion' => 'En reanudación',
+                        'pendiente_alta' => 'Pendiente de alta',
+                        default => $state ?: 'Sin definir',
+                    })
+                    ->badge()
+                    ->toggleable(),
             ])
             ->filters([
-                Tables\Filters\TernaryFilter::make('is_active')->label('Activo'),
+                Tables\Filters\SelectFilter::make('state')
+                    ->label('Estatus')
+                    ->options([
+                        'vigente' => 'Vigente',
+                        'suspendido' => 'Suspendido',
+                        'baja' => 'Baja',
+                        'reanudacion' => 'En reanudación',
+                        'pendiente_alta' => 'Pendiente de alta',
+                    ]),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

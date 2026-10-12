@@ -209,45 +209,136 @@ class EmployeeIncidentApprovalWorkflow
 
     protected static function approvalStepRows(object $step, EmployeeIncident $incident, bool $isFirstStep): array
     {
+        $approvalMode = in_array(
+            (string) ($step->approval_mode ?? ''),
+            ['any', 'all'],
+            true
+        )
+            ? (string) $step->approval_mode
+            : 'any';
+
         $base = [
             'approval_workflow_step_id' => $step->id,
             'step_order' => (int) ($step->sort_order ?? 1),
             'step_name' => (string) ($step->name ?? 'Aprobación'),
-            'approver_type' => (string) ($step->approver_type ?? 'specific_user'),
-            'approver_user_id' => $step->approver_user_id ?? null,
-            'approver_role_name' => $step->approver_role_name ?? null,
+            'approval_mode' => $approvalMode,
+            'approver_type' => (string) ($step->approver_type ?? 'multi'),
+            'approver_user_id' => null,
+            'approver_role_name' => null,
             'status' => $isFirstStep ? 'pending' : 'waiting',
             'created_at' => now(),
             'updated_at' => now(),
         ];
 
         /*
-         * V5.83.6J2AP1
+         * V5.83.6L2
          *
-         * Incidencias de asistencia:
-         * una sola etapa puede ser atendida por:
+         * La definición de aprobadores ya vive en
+         * approval_workflow_step_approvers.
          *
-         *  - jefe directo del empleado (supervisor_user_id), O
-         *  - cualquier usuario con el rol RRHH Aprobador Incidencias.
-         *
-         * Se conserva UNA sola fila de approval_request_steps.
-         * approver_user_id representa al jefe directo y
-         * approver_role_name representa a RRHH.
-         *
-         * No son dos aprobaciones. Es una relación OR.
+         * La lógica RRHH deja de depender del nombre de un rol
+         * "mágico" para agregar al jefe directo.
+         */
+        if (Schema::hasTable('approval_workflow_step_approvers')) {
+            $configuredApprovers = DB::table(
+                'approval_workflow_step_approvers'
+            )
+                ->where(
+                    'approval_workflow_step_id',
+                    $step->id
+                )
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get();
+
+            if ($configuredApprovers->isNotEmpty()) {
+                $rows = [];
+
+                foreach ($configuredApprovers as $approver) {
+                    foreach (
+                        static::configuredApproverRows(
+                            $approver,
+                            $incident,
+                            $base
+                        ) as $row
+                    ) {
+                        $rows[] = $row;
+                    }
+                }
+
+                if (empty($rows)) {
+                    throw new \RuntimeException(
+                        'La etapa "'
+                        . (string) ($step->name ?? 'Aprobación')
+                        . '" no resolvió ningún aprobador activo.'
+                    );
+                }
+
+                return $rows;
+            }
+        }
+
+        /*
+         * Compatibilidad con flujos legacy.
          */
         if (
             (string) $base['approver_type'] === 'role'
-            && trim((string) ($base['approver_role_name'] ?? '')) === self::HR_APPROVER_ROLE
+            && trim((string) ($step->approver_role_name ?? ''))
+                === self::HR_APPROVER_ROLE
         ) {
-            $base['approver_user_id'] = static::requesterManagerId($incident);
+            /*
+             * V5.83.6 RRHH:
+             * La revisión de incidencias puede ser atendida por
+             * cualquiera de:
+             *
+             * - jefe directo / supervisor del empleado;
+             * - RRHH Asistente;
+             * - RRHH Administrador;
+             * - RRHH Aprobador Incidencias.
+             *
+             * approval_mode=any hace que una sola resolución
+             * complete esta etapa.
+             */
+            $rows = [];
 
-            return [$base];
+            $managerUserId = static::requesterManagerId($incident);
+
+            if ($managerUserId) {
+                $managerRow = $base;
+                $managerRow['approver_type'] = 'requester_manager';
+                $managerRow['approver_user_id'] = $managerUserId;
+                $managerRow['approver_role_name'] = null;
+                $rows[] = $managerRow;
+            }
+
+            foreach ([
+                'RRHH Asistente',
+                'RRHH Administrador',
+                self::HR_APPROVER_ROLE,
+            ] as $roleName) {
+                $roleRow = $base;
+                $roleRow['approver_type'] = 'role';
+                $roleRow['approver_user_id'] = null;
+                $roleRow['approver_role_name'] = $roleName;
+                $rows[] = $roleRow;
+            }
+
+            return $rows;
         }
 
-        $userIds = static::approverUserIds($step, $incident);
+        $base['approver_role_name'] =
+            $step->approver_role_name ?? null;
+
+        $userIds = static::approverUserIds(
+            $step,
+            $incident
+        );
 
         if (empty($userIds)) {
+            $base['approver_user_id'] =
+                $step->approver_user_id ?? null;
+
             return [$base];
         }
 
@@ -262,6 +353,113 @@ class EmployeeIncidentApprovalWorkflow
             ->all();
     }
 
+    protected static function configuredApproverRows(
+        object $approver,
+        EmployeeIncident $incident,
+        array $base
+    ): array {
+        $type = (string) ($approver->approver_type ?? '');
+
+        $row = $base;
+        $row['approver_type'] = $type;
+        $row['approver_user_id'] = null;
+        $row['approver_role_name'] = null;
+
+        if (
+            $type === 'specific_user'
+            && ! empty($approver->approver_user_id)
+        ) {
+            $row['approver_user_id'] =
+                (int) $approver->approver_user_id;
+
+            return [$row];
+        }
+
+        if ($type === 'requester_manager') {
+            $pseudo = (object) [
+                'approver_type' => 'requester_manager',
+                'approver_user_id' => null,
+                'approver_role_name' => null,
+                'require_all' => false,
+            ];
+
+            $ids = static::approverUserIds(
+                $pseudo,
+                $incident
+            );
+
+            if (empty($ids)) {
+                return [];
+            }
+
+            $row['approver_user_id'] = (int) $ids[0];
+
+            return [$row];
+        }
+
+        if (
+            $type === 'role'
+            && ! empty($approver->approver_role_name)
+        ) {
+            $roleName = trim(
+                (string) $approver->approver_role_name
+            );
+
+            if (! (bool) ($approver->require_all_members ?? false)) {
+                $row['approver_role_name'] = $roleName;
+
+                return [$row];
+            }
+
+            $ids = static::userIdsWithAnyRole(
+                [$roleName],
+                $incident->company_id,
+                true
+            );
+
+            /*
+             * Para "todos los miembros" se materializan usuarios
+             * explícitos. No dejamos approver_role_name porque,
+             * de lo contrario, cualquier miembro del rol podría
+             * atender la fila de otro usuario.
+             */
+            return collect($ids)
+                ->map(function (int $userId) use ($row): array {
+                    $resolved = $row;
+                    $resolved['approver_user_id'] = $userId;
+                    $resolved['approver_role_name'] = null;
+
+                    return $resolved;
+                })
+                ->values()
+                ->all();
+        }
+
+        $pseudo = (object) [
+            'approver_type' => $type,
+            'approver_user_id' =>
+                $approver->approver_user_id ?? null,
+            'approver_role_name' =>
+                $approver->approver_role_name ?? null,
+            'require_all' => false,
+        ];
+
+        $ids = static::approverUserIds(
+            $pseudo,
+            $incident
+        );
+
+        return collect($ids)
+            ->map(function (int $userId) use ($row): array {
+                $resolved = $row;
+                $resolved['approver_user_id'] = $userId;
+
+                return $resolved;
+            })
+            ->values()
+            ->all();
+    }
+
     protected static function approverUserIds(object $step, EmployeeIncident $incident): array
     {
         $type = (string) ($step->approver_type ?? '');
@@ -271,13 +469,17 @@ class EmployeeIncidentApprovalWorkflow
         }
 
         if ($type === 'requester_manager') {
+            /*
+             * V5.83.6 RRHH:
+             * requester_manager significa exclusivamente
+             * supervisor real del empleado.
+             *
+             * Si no existe supervisor_user_id no se sustituye
+             * por Admin Empresa ni por otro rol.
+             */
             $managerId = static::requesterManagerId($incident);
 
-            if ($managerId) {
-                return [$managerId];
-            }
-
-            return static::userIdsWithAnyRole(['Admin Empresa', 'Administrador', 'admin'], $incident->company_id, false);
+            return $managerId ? [$managerId] : [];
         }
 
         if ($type === 'role' && ! empty($step->approver_role_name)) {
