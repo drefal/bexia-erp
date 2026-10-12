@@ -12155,6 +12155,9 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             ?? $pos->code
             ?? ('PDV #' . ($pos->id ?? ''));
 
+        // BEXIA_POS_CLOSE_COUNT_FIX1
+        $closePayload = $this->v5488iClosePayloadFromSessionNotes($session->notes ?? null);
+
         $openingCashPayload = $this->v5487OpeningCashPayloadFromSessionNotes($session->notes ?? null);
         $openingCashCount = collect($openingCashPayload['cash_count'] ?? [])
             ->filter(fn ($row) => is_array($row))
