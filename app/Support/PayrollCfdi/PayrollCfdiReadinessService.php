@@ -35,8 +35,11 @@ class PayrollCfdiReadinessService
         $this->warnField($warnings, $company, 'billing_csd_key_path', 'La empresa no tiene llave CSD cargada.');
         $this->warnField($warnings, $company, 'billing_csd_password', 'La empresa no tiene contraseña CSD configurada.');
 
-        $employeeResult = $this->validateEmployees($companyId);
-        $conceptResult = $this->validatePayrollConcepts($companyId);
+        $employeeResult = $this->validateEmployees(
+            $companyId,
+            $payrollRunId
+        );
+        $conceptResult = $this->validatePayrollConcepts($companyId, $payrollRunId);
         $runResult = $payrollRunId ? $this->validatePayrollRun($companyId, $payrollRunId) : [
             'errors' => [],
             'warnings' => ['No se validó una corrida de nómina específica porque no se envió --payroll-run.'],
@@ -58,7 +61,10 @@ class PayrollCfdiReadinessService
         ];
     }
 
-    private function validateEmployees(int $companyId): array
+    private function validateEmployees(
+        int $companyId,
+        ?int $payrollRunId = null
+    ): array
     {
         $errors = [];
         $warnings = [];
@@ -71,8 +77,49 @@ class PayrollCfdiReadinessService
             ];
         }
 
-        $employees = DB::table('employees')
-            ->where('company_id', $companyId)
+        /*
+         * BEXIA_V5836_READINESS_RUN_EMPLOYEES
+         *
+         * Si se valida una corrida concreta, sólo deben
+         * revisarse trabajadores incluidos en esa corrida.
+         */
+        $employeeQuery = DB::table('employees')
+            ->where('company_id', $companyId);
+
+        if (
+            $payrollRunId
+            && Schema::hasTable('payroll_run_lines')
+            && Schema::hasColumn(
+                'payroll_run_lines',
+                'employee_id'
+            )
+        ) {
+            $runEmployeeIds = DB::table(
+                'payroll_run_lines'
+            )
+                ->where(
+                    'company_id',
+                    $companyId
+                )
+                ->where(
+                    'payroll_run_id',
+                    $payrollRunId
+                )
+                ->whereNotNull(
+                    'employee_id'
+                )
+                ->distinct()
+                ->pluck(
+                    'employee_id'
+                );
+
+            $employeeQuery->whereIn(
+                'id',
+                $runEmployeeIds
+            );
+        }
+
+        $employees = $employeeQuery
             ->where(function ($query): void {
                 if (Schema::hasColumn('employees', 'active')) {
                     $query->where('active', true);
@@ -110,11 +157,94 @@ class PayrollCfdiReadinessService
             }
 
             $this->requireField($errors, $contract, 'contract_type', "Empleado {$label}: el contrato no tiene tipo interno.");
+            /*
+             * BEXIA_V5836_READINESS_FISCAL_DATES
+             */
+            $this->requireField(
+                $errors,
+                $contract,
+                'start_date',
+                "Empleado {$label}: el contrato no tiene FechaInicioRelLaboral."
+            );
+
             $this->requireField($errors, $contract, 'sat_contract_type_code', "Empleado {$label}: el contrato no tiene TipoContrato SAT.");
             $this->requireField($errors, $contract, 'sat_workday_type_code', "Empleado {$label}: el contrato no tiene TipoJornada SAT.");
             $this->requireField($errors, $contract, 'sat_regime_type_code', "Empleado {$label}: el contrato no tiene TipoRegimen SAT.");
+
+            $this->requireField(
+                $errors,
+                $contract,
+                'sat_work_state_code',
+                "Empleado {$label}: falta Entidad federativa donde labora SAT."
+            );
             $this->requireField($errors, $contract, 'payroll_periodicity_id', "Empleado {$label}: el contrato no tiene periodicidad de pago.");
-            $this->requireField($errors, $contract, 'payroll_employer_registration_id', "Empleado {$label}: el contrato no tiene registro patronal.");
+
+            /*
+             * BEXIA_V5836_READINESS_EMPLOYER_REGISTRATION_RULE
+             *
+             * SAT: TipoContrato 01-08 requiere RegistroPatronal.
+             * No basta con tener un ID: debe existir número real.
+             */
+            $satContractType = trim(
+                (string) (
+                    $contract->sat_contract_type_code
+                    ?? ''
+                )
+            );
+
+            $requiresEmployerRegistration = in_array(
+                $satContractType,
+                [
+                    '01',
+                    '02',
+                    '03',
+                    '04',
+                    '05',
+                    '06',
+                    '07',
+                    '08',
+                ],
+                true
+            );
+
+            if ($requiresEmployerRegistration) {
+                $registrationId = (int) (
+                    $contract
+                        ->payroll_employer_registration_id
+                    ?? 0
+                );
+
+                if ($registrationId <= 0) {
+                    $errors[] =
+                        "Empleado {$label}: TipoContrato "
+                        . "{$satContractType} requiere registro patronal.";
+                } else {
+                    $registrationNumber = DB::table(
+                        'payroll_employer_registrations'
+                    )
+                        ->where(
+                            'id',
+                            $registrationId
+                        )
+                        ->where(
+                            'company_id',
+                            $companyId
+                        )
+                        ->value(
+                            'registration_number'
+                        );
+
+                    if (
+                        trim(
+                            (string) $registrationNumber
+                        ) === ''
+                    ) {
+                        $errors[] =
+                            "Empleado {$label}: el registro patronal "
+                            . "seleccionado no tiene número válido.";
+                    }
+                }
+            }
 
             if ((float) ($contract->base_salary ?? 0) <= 0) {
                 $errors[] = "Empleado {$label}: el contrato no tiene sueldo base válido.";
@@ -122,6 +252,23 @@ class PayrollCfdiReadinessService
 
             if ((float) ($contract->daily_salary ?? 0) <= 0) {
                 $errors[] = "Empleado {$label}: el contrato no tiene salario diario para CFDI.";
+            }
+
+            /*
+             * BEXIA_V5836_READINESS_EXPLICIT_SBC
+             *
+             * El SBC no se sustituye por salario diario ni SDI.
+             */
+            if (
+                (float) (
+                    $contract
+                        ->social_security_base_salary
+                    ?? 0
+                ) <= 0
+            ) {
+                $errors[] =
+                    "Empleado {$label}: el contrato no tiene "
+                    . "Salario Base de Cotización (SBC) válido.";
             }
 
             if ((float) ($contract->integrated_daily_salary ?? 0) <= 0) {
@@ -142,7 +289,7 @@ class PayrollCfdiReadinessService
         ];
     }
 
-    private function validatePayrollConcepts(int $companyId): array
+    private function validatePayrollConcepts(int $companyId, ?int $payrollRunId = null): array
     {
         $errors = [];
         $warnings = [];
@@ -155,13 +302,67 @@ class PayrollCfdiReadinessService
             ];
         }
 
-        $concepts = DB::table('payroll_concepts')
+        $conceptQuery = DB::table('payroll_concepts')
             ->where('company_id', $companyId)
             ->where(function ($query): void {
-                if (Schema::hasColumn('payroll_concepts', 'is_active')) {
+                if (Schema::hasColumn(
+                    'payroll_concepts',
+                    'is_active'
+                )) {
                     $query->where('is_active', true);
                 }
-            })
+            });
+
+        /*
+         * Para validar una corrida concreta sólo deben revisarse
+         * los conceptos realmente utilizados en esa corrida.
+         *
+         * Evita bloquear un CFDI porque exista otro concepto activo
+         * no utilizado que todavía no tenga clasificación SAT.
+         */
+        if (
+            $payrollRunId
+            && Schema::hasTable('payroll_run_line_concepts')
+        ) {
+            $usedConceptIds = DB::table(
+                'payroll_run_line_concepts'
+            )
+                ->where('company_id', $companyId)
+                ->where(
+                    'payroll_run_id',
+                    $payrollRunId
+                )
+                ->whereNotNull('payroll_concept_id')
+                ->distinct()
+                ->pluck('payroll_concept_id');
+
+            /*
+             * BEXIA_V5836_READINESS_EMPTY_USED_CONCEPTS_FIX
+             *
+             * Si estamos validando una corrida concreta y ésta no
+             * tiene conceptos utilizados, NO debemos caer en la
+             * validación de todos los conceptos activos de empresa.
+             */
+            if ($usedConceptIds->isEmpty()) {
+                return [
+                    'errors' => [
+                        "La nómina {$payrollRunId} no tiene conceptos "
+                        . "utilizados para validar CFDI."
+                    ],
+                    'warnings' => [],
+                    'summary' => [
+                        'active_payroll_concepts_count' => 0,
+                    ],
+                ];
+            }
+
+            $conceptQuery->whereIn(
+                'id',
+                $usedConceptIds
+            );
+        }
+
+        $concepts = $conceptQuery
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
@@ -171,6 +372,43 @@ class PayrollCfdiReadinessService
 
             $this->requireField($errors, $concept, 'sat_key', "Concepto {$label}: falta clave SAT de nómina.");
 
+            /*
+             * BEXIA_V5836_READINESS_CFDI_CONCEPT_KEY
+             *
+             * Nómina 1.2 Clave admite 3..15 caracteres sin "|".
+             *
+             * Si cfdi_key está vacío, el código interno puede servir
+             * solamente cuando él mismo cumple el patrón.
+             */
+            $configuredCfdiKey = trim(
+                (string) (
+                    $concept->cfdi_key
+                    ?? ''
+                )
+            );
+
+            $effectiveCfdiKey =
+                $configuredCfdiKey !== ''
+                    ? $configuredCfdiKey
+                    : trim(
+                        (string) (
+                            $concept->code
+                            ?? ''
+                        )
+                    );
+
+            if (
+                ! preg_match(
+                    '/^[^|]{3,15}$/',
+                    $effectiveCfdiKey
+                )
+            ) {
+                $errors[] =
+                    "Concepto {$label}: Clave CFDI inválida. "
+                    . 'Configura una clave de 3 a 15 caracteres '
+                    . 'sin el carácter |.';
+            }
+
             if ($this->value($concept, 'type') === '') {
                 $errors[] = "Concepto {$label}: falta tipo perception/deduction.";
             }
@@ -179,7 +417,17 @@ class PayrollCfdiReadinessService
                 $warnings[] = "Concepto {$label}: falta categoría interna.";
             }
 
-            if (property_exists($concept, 'is_taxable') && $concept->is_taxable === null) {
+            /*
+             * Gravado/exento aplica a percepciones.
+             *
+             * Las deducciones, por ejemplo ISR, no deben producir
+             * una advertencia por is_taxable=NULL.
+             */
+            if (
+                $this->value($concept, 'type') === 'perception'
+                && property_exists($concept, 'is_taxable')
+                && $concept->is_taxable === null
+            ) {
                 $warnings[] = "Concepto {$label}: falta marcar si es gravado/exento para CFDI.";
             }
         }

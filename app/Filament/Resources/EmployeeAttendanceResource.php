@@ -442,6 +442,176 @@ class EmployeeAttendanceResource extends Resource
         return '';
     }
 
+
+    /**
+     * V5.83.6J2AR1
+     *
+     * Incidencias asociadas a una asistencia.
+     * Se mantiene un cache por request para evitar repetir consultas
+     * por cada columna de la misma fila.
+     */
+    protected static function attendanceIncidentRows(
+        $record
+    ): \Illuminate\Support\Collection {
+        static $cache = [];
+
+        $attendanceId = (int) ($record?->id ?? 0);
+
+        if ($attendanceId <= 0) {
+            return collect();
+        }
+
+        if (array_key_exists($attendanceId, $cache)) {
+            return $cache[$attendanceId];
+        }
+
+        $cache[$attendanceId] = \Illuminate\Support\Facades\DB::table(
+            'employee_incidents as incidents'
+        )
+            ->leftJoin(
+                'hr_incident_types as types',
+                'types.id',
+                '=',
+                'incidents.hr_incident_type_id'
+            )
+            ->where(
+                'incidents.employee_attendance_id',
+                $attendanceId
+            )
+            ->select([
+                'incidents.id',
+                'incidents.status',
+                'incidents.quantity',
+                'incidents.quantity_unit',
+                'incidents.approved_by_user_id',
+                'incidents.approved_at',
+                'types.code',
+                'types.name as type_name',
+            ])
+            ->orderBy('incidents.id')
+            ->get();
+
+        return $cache[$attendanceId];
+    }
+
+    /**
+     * Devuelve la cantidad mostrable de un tipo de incidencia.
+     *
+     * Ejemplos:
+     * 144 min
+     * 1 día
+     * —
+     */
+    protected static function incidentMetricLabel(
+        $record,
+        string $code
+    ): string {
+        $rows = static::attendanceIncidentRows($record)
+            ->filter(
+                fn ($row) =>
+                    strtoupper(
+                        trim((string) ($row->code ?? ''))
+                    ) === strtoupper($code)
+            );
+
+        if ($rows->isEmpty()) {
+            return '—';
+        }
+
+        $quantity = (float) $rows->sum(
+            fn ($row) => (float) ($row->quantity ?? 0)
+        );
+
+        $unit = strtolower(
+            trim(
+                (string) (
+                    $rows->first()->quantity_unit
+                    ?? ''
+                )
+            )
+        );
+
+        if (
+            in_array(
+                $unit,
+                ['day', 'days', 'dia', 'dias', 'día', 'días'],
+                true
+            )
+            || strtoupper($code) === 'FALTA'
+        ) {
+            $formatted = abs($quantity - round($quantity)) < 0.00001
+                ? (string) ((int) round($quantity))
+                : number_format($quantity, 2, '.', '');
+
+            return $formatted
+                . (
+                    abs($quantity - 1.0) < 0.00001
+                        ? ' día'
+                        : ' días'
+                );
+        }
+
+        $minutes = (int) round($quantity);
+
+        return $minutes . ' min';
+    }
+
+    /**
+     * Total de incidencias vinculadas a la asistencia.
+     */
+    protected static function incidentTotalCount(
+        $record
+    ): int {
+        return static::attendanceIncidentRows($record)
+            ->count();
+    }
+
+    /**
+     * Conteo por estado:
+     * approved / rejected / pending
+     */
+    protected static function incidentStatusCount(
+        $record,
+        string $status
+    ): int {
+        return static::attendanceIncidentRows($record)
+            ->filter(
+                fn ($row) =>
+                    strtolower(
+                        trim((string) ($row->status ?? ''))
+                    ) === strtolower($status)
+            )
+            ->count();
+    }
+
+    /**
+     * Marcaje incompleto.
+     *
+     * Se mantiene separado de JORNADA_INCOMPLETA:
+     * aquí hablamos de una marca faltante, no de minutos
+     * de jornada no cubiertos.
+     */
+    protected static function incompletePunchLabel(
+        $record
+    ): string {
+        $clockIn = $record?->clock_in_at ?? null;
+        $clockOut = $record?->clock_out_at ?? null;
+
+        if (! $clockIn && ! $clockOut) {
+            return 'Entrada y salida';
+        }
+
+        if (! $clockIn) {
+            return 'Sin entrada';
+        }
+
+        if (! $clockOut) {
+            return 'Sin salida';
+        }
+
+        return '—';
+    }
+
     protected static function incidentTableSummary(
         ?EmployeeAttendance $record
     ): string {
@@ -864,7 +1034,185 @@ class EmployeeAttendanceResource extends Resource
                     ->formatStateUsing(fn (?string $state): string => self::statusLabel($state))
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make(
+                Tables\Columns\TextColumn::make('incident_retardo')
+                    ->label('Retardo')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentMetricLabel(
+                                $record,
+                                'RETARDO'
+                            )
+                    )
+                    ->badge()
+                    ->color(
+                        fn ($state) =>
+                            $state === '—'
+                                ? 'gray'
+                                : 'danger'
+                    )
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_meal_excess')
+                    ->label('Comida excedida')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentMetricLabel(
+                                $record,
+                                'EXCESO_COMIDA'
+                            )
+                    )
+                    ->badge()
+                    ->color(
+                        fn ($state) =>
+                            $state === '—'
+                                ? 'gray'
+                                : 'danger'
+                    )
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_early_leave')
+                    ->label('Salida antes')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentMetricLabel(
+                                $record,
+                                'SALIDA_TEMPRANA'
+                            )
+                    )
+                    ->badge()
+                    ->color(
+                        fn ($state) =>
+                            $state === '—'
+                                ? 'gray'
+                                : 'danger'
+                    )
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_absence')
+                    ->label('Falta')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentMetricLabel(
+                                $record,
+                                'FALTA'
+                            )
+                    )
+                    ->badge()
+                    ->color(
+                        fn ($state) =>
+                            $state === '—'
+                                ? 'gray'
+                                : 'danger'
+                    )
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_incomplete_day')
+                    ->label('Jornada incompleta')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentMetricLabel(
+                                $record,
+                                'JORNADA_INCOMPLETA'
+                            )
+                    )
+                    ->badge()
+                    ->color(
+                        fn ($state) =>
+                            $state === '—'
+                                ? 'gray'
+                                : 'warning'
+                    )
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_incomplete_punch')
+                    ->label('Marcaje incompleto')
+                    ->state(
+                        fn ($record) =>
+                            static::incompletePunchLabel(
+                                $record
+                            )
+                    )
+                    ->badge()
+                    ->color(
+                        fn ($state) =>
+                            $state === '—'
+                                ? 'gray'
+                                : 'danger'
+                    )
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_total')
+                    ->label('Total')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentTotalCount(
+                                $record
+                            )
+                    )
+                    ->badge()
+                    ->color(
+                        fn ($state) =>
+                            ((int) $state) > 0
+                                ? 'info'
+                                : 'gray'
+                    )
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_approved')
+                    ->label('Aprobadas')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentStatusCount(
+                                $record,
+                                'approved'
+                            )
+                    )
+                    ->badge()
+                    ->color('success')
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_rejected')
+                    ->label('Rechazadas')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentStatusCount(
+                                $record,
+                                'rejected'
+                            )
+                    )
+                    ->badge()
+                    ->color('danger')
+                    ->alignCenter()
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('incident_pending')
+                    ->label('Pendientes')
+                    ->state(
+                        fn ($record) =>
+                            static::incidentStatusCount(
+                                $record,
+                                'pending'
+                            )
+                    )
+                    ->badge()
+                    ->color(
+                        fn ($state) =>
+                            ((int) $state) > 0
+                                ? 'warning'
+                                : 'success'
+                    )
+                    ->alignCenter()
+                    ->toggleable(),
+
+                                Tables\Columns\TextColumn::make(
                     'attendance_incidents_summary'
                 )
                     ->label('Incidencias')

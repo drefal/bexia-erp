@@ -90,7 +90,8 @@ class PayrollPolicy extends Model
         return [
             'none' => 'No descontar por retardo',
             'minutes' => 'Descontar minutos efectivos',
-            'accumulate_to_absence' => 'Acumular retardos como falta',
+            'accumulate_to_absence' => 'Minutos acumulados = falta',
+            'count_to_absence' => 'Número de retardos = falta',
         ];
     }
 

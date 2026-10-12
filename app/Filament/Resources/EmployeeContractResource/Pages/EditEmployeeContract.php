@@ -13,9 +13,8 @@ class EditEmployeeContract extends EditRecord
     {
         $data['updated_by_user_id'] = auth()->id();
 
-        if (($data['status'] ?? null) === 'active') {
-            $data['is_current'] = true;
-        }
+        $data['is_current'] =
+            (($data['status'] ?? 'draft') === 'active');
 
         return $data;
     }

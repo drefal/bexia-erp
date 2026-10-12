@@ -6,6 +6,7 @@ use App\Models\PayrollRun;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Support\PayrollTax\PayrollFiscalAccumulatorService;
 
 class PayrollRunApprovalWorkflow
 {
@@ -27,6 +28,16 @@ class PayrollRunApprovalWorkflow
             if (! $run->lines()->exists()) {
                 throw new \RuntimeException('La pre-nómina no tiene líneas calculadas.');
             }
+
+            /*
+             * La prenómina puede calcularse provisionalmente,
+             * pero no enviarse a aprobación mientras existan
+             * incidencias de asistencia sin resolver.
+             */
+            PayrollAttendanceIncidentGate::assertResolved(
+                $run,
+                'enviar la pre-nómina a aprobación'
+            );
 
             $existing = DB::table('approval_requests')
                 ->where('document_type', self::DOCUMENT_TYPE)
@@ -124,6 +135,15 @@ class PayrollRunApprovalWorkflow
 
     public static function approvePendingRequestForRun(PayrollRun $run, int $userId, ?string $comment = null): void
     {
+        /*
+         * Defensa adicional: si apareció una incidencia después de
+         * solicitar la aprobación, tampoco puede aprobarse la corrida.
+         */
+        PayrollAttendanceIncidentGate::assertResolved(
+            $run,
+            'aprobar la pre-nómina'
+        );
+
         DB::transaction(function () use ($run, $userId, $comment): void {
             $request = static::pendingRequest($run);
 
@@ -317,6 +337,18 @@ class PayrollRunApprovalWorkflow
             'rejection_reason' => null,
             'updated_by_user_id' => $userId,
         ]))->save();
+
+        /*
+         * FISCAL HARDENING FASE 2:
+         * sólo fiscal_cfdi aprobado participa
+         * en el acumulado fiscal definitivo.
+         */
+        if ($run->fresh()->enablesCfdi()) {
+            PayrollFiscalAccumulatorService
+                ::rebuildRunMonths(
+                    $run->fresh()
+                );
+        }
 
         static::notifyRequester($request, 'Pre-nómina aprobada', $comment ?: 'Tu pre-nómina fue aprobada.', 'payroll_run_approved', '');
     }

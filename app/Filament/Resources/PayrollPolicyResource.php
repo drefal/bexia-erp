@@ -182,6 +182,33 @@ class PayrollPolicyResource extends Resource
                             ->default('informational'),
                     ]),
 
+                Forms\Components\Section::make('Prestaciones e integración IMSS')
+                    ->description('Parámetros usados para calcular automáticamente el Salario Diario Integrado (SDI).')
+                    ->columns(3)
+                    ->schema([
+                        Forms\Components\TextInput::make('settings.aguinaldo_days')
+                            ->label('Días de aguinaldo')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step('0.01')
+                            ->default(15)
+                            ->helperText('Días de aguinaldo considerados para el factor de integración.'),
+
+                        Forms\Components\TextInput::make('settings.vacation_premium_percent')
+                            ->label('Prima vacacional (%)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->step('0.01')
+                            ->suffix('%')
+                            ->default(25)
+                            ->helperText('Porcentaje de prima vacacional usado para el SDI.'),
+
+                        Forms\Components\Toggle::make('settings.automatic_sdi')
+                            ->label('Calcular SDI automáticamente')
+                            ->default(true)
+                            ->helperText('Calcula el SDI de sueldo fijo usando salario diario, antigüedad y prestaciones.'),
+                    ]),
+
                 Forms\Components\Section::make('Retardos, salidas tempranas y faltas')
                     ->extraAttributes(['class' => 'bexia-ppol-section bexia-ppol-section-attendance'])
                     ->columns(3)
@@ -211,6 +238,14 @@ class PayrollPolicyResource extends Resource
                             ->integer()
                             ->required()
                             ->default(0),
+
+                        Forms\Components\TextInput::make('settings.late_count_to_absence')
+                            ->label('Número de retardos = 1 falta')
+                            ->numeric()
+                            ->minValue(0)
+                            ->integer()
+                            ->default(0)
+                            ->helperText('Ejemplo: 3 significa que cada 3 retardos dentro del periodo de nómina equivalen a 1 falta. Solo aplica cuando Modo retardo = Número de retardos = falta.'),
 
                         Forms\Components\Select::make('early_leave_discount_mode')
                             ->extraAttributes(['class' => 'bexia-ppol-field bexia-ppol-field-early-leave-mode bexia-ppol-select'])

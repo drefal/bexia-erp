@@ -37,6 +37,16 @@ class PayrollRunCloseService
                 throw new \RuntimeException('No se puede cerrar una pre-nómina sin líneas calculadas.');
             }
 
+            /*
+             * Defensa final.
+             * Una nómina no puede cerrarse con incidencias de
+             * asistencia todavía pendientes de resolución.
+             */
+            PayrollAttendanceIncidentGate::assertResolved(
+                $lockedRun,
+                'cerrar la nómina'
+            );
+
             $now = now();
 
             $lockedRun->forceFill(static::filterModel($lockedRun, [

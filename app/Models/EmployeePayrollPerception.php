@@ -39,6 +39,19 @@ class EmployeePayrollPerception extends Model
     protected static function booted(): void
     {
         static::saving(function (EmployeePayrollPerception $perception): void {
+            \App\Support\PayrollConceptGroupGuard::assertEligible(
+                $perception->employee_id
+                    ? (int) $perception->employee_id
+                    : null,
+                $perception->payroll_concept_id
+                    ? (int) $perception->payroll_concept_id
+                    : null,
+                'perception',
+                $perception->company_id
+                    ? (int) $perception->company_id
+                    : null
+            );
+
             if (blank($perception->status)) {
                 $perception->status = 'active';
             }

@@ -119,7 +119,12 @@ class EmployeePayrollDeductionResource extends Resource
                             )
                             ->searchable()
                             ->preload()
-                            ->required(),
+                            ->required()
+                            ->live()
+                            ->afterStateUpdated(
+                                fn ($state, Forms\Set $set) =>
+                                    $set('payroll_concept_id', null)
+                            ),
 
                         Forms\Components\Select::make('type')
                             ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-type bexia-epded-select'])
@@ -152,13 +157,27 @@ class EmployeePayrollDeductionResource extends Resource
                         Forms\Components\Select::make('payroll_concept_id')
                             ->extraAttributes(['class' => 'bexia-epded-field bexia-epded-field-concept bexia-epded-select'])
                             ->label('Concepto de nómina')
-                            ->relationship(
-                                'concept',
-                                'name',
-                                fn (Builder $query) => $tenantId ? $query->where('company_id', $tenantId)->where('type', 'deduction') : $query->where('type', 'deduction')
+                            ->options(
+                                fn (Forms\Get $get): array =>
+                                    \App\Support\PayrollConceptGroupGuard::options(
+                                        $get('employee_id')
+                                            ? (int) $get('employee_id')
+                                            : null,
+                                        'deduction',
+                                        $tenantId ? (int) $tenantId : null
+                                    )
                             )
                             ->searchable()
                             ->preload()
+                            ->disabled(
+                                fn (Forms\Get $get): bool =>
+                                    blank($get('employee_id'))
+                            )
+                            ->helperText(
+                                'Sólo muestra conceptos manuales, activos '
+                                . 'y habilitados para el grupo de nómina '
+                                . 'del empleado.'
+                            )
                             ->nullable(),
 
                         Forms\Components\Select::make('status')

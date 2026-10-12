@@ -109,6 +109,22 @@ class PayrollConceptResource extends Resource
                             ->disabled(filled($tenantId))
                             ->dehydrated(),
 
+                        Forms\Components\Select::make('payrollGroups')
+                            ->label('Grupos de nómina')
+                            ->relationship(
+                                'payrollGroups',
+                                'name'
+                            )
+                            ->multiple()
+                            ->preload()
+                            ->searchable()
+                            ->helperText(
+                                'Define en qué grupos puede utilizarse este concepto. '
+                                . 'Los conceptos actuales se asignarán inicialmente '
+                                . 'a todos los grupos de su empresa.'
+                            )
+                            ->columnSpan(2),
+
                         Forms\Components\TextInput::make('code')
                             ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-code bexia-payroll-concept-code-field'])
                             ->label('Código')
@@ -159,6 +175,20 @@ class PayrollConceptResource extends Resource
                             ->searchable()
                             ->preload()
                             ->helperText('Clave SAT del complemento de nómina según el tipo del concepto.'),
+
+                        /*
+                         * BEXIA_V5836_PAYROLL_CONCEPT_CFDI_KEY_UI
+                         */
+                        Forms\Components\TextInput::make('cfdi_key')
+                            ->label('Clave CFDI')
+                            ->maxLength(15)
+                            ->rule('regex:/^[^|]{3,15}$/')
+                            ->helperText(
+                                'Clave interna que se envía en el atributo Clave '
+                                . 'de Nómina 1.2. Debe tener de 3 a 15 caracteres '
+                                . 'y no puede contener |. Si el código interno ya '
+                                . 'cumple, puede dejarse vacío.'
+                            ),
 
                         Forms\Components\Toggle::make('is_taxable')
                             ->extraAttributes(['class' => 'bexia-payroll-concept-field bexia-payroll-concept-field-is-taxable bexia-payroll-concept-toggle'])
@@ -222,6 +252,9 @@ class PayrollConceptResource extends Resource
             '049' => '049 - Premios por asistencia',
             '050' => '050 - Viáticos',
             '051' => '051 - Pagos distintos',
+            '054' => '054 - Días de descanso laborados',
+            '055' => '055 - Días de descanso obligatorios laborados',
+            '057' => '057 - Premios por concursos científicos, artísticos, literarios u otorgados por la federación, Art. 93 fracción XXIV LISR',
         ];
 
         $deductions = [
@@ -241,11 +274,18 @@ class PayrollConceptResource extends Resource
             '015' => '015 - Pérdidas',
             '016' => '016 - Averías',
             '017' => '017 - Adquisición de artículos producidos por la empresa',
-            '018' => '018 - Cuotas sindicales',
-            '019' => '019 - Ausencia',
-            '020' => '020 - Cuotas obrero patronales',
-            '021' => '021 - Anticipo de viáticos',
+            '018' => '018 - Cuotas para la constitución y fomento de sociedades cooperativas y de cajas de ahorro',
+            '019' => '019 - Cuotas sindicales',
+            '020' => '020 - Ausencia (Ausentismo)',
+            '021' => '021 - Cuotas obrero patronales',
             '101' => '101 - ISR retenido de ejercicio anterior',
+            '107' => '107 - Ajuste al Subsidio Causado',
+            '108' => '108 - Ajuste a días de descanso laborados gravados',
+            '109' => '109 - Ajuste a días de descanso laborados exentos',
+            '110' => '110 - Ajuste a días de descanso obligatorios laborados gravados',
+            '111' => '111 - Ajuste a días de descanso obligatorios laborados exentos',
+            '114' => '114 - Ajuste a premios por concursos científicos, artísticos, literarios u otorgados por la federación gravados',
+            '115' => '115 - Ajuste a premios por concursos científicos, artísticos, literarios u otorgados por la federación exentos',
         ];
 
         return $type === 'deduction' ? $deductions : $perceptions;
@@ -310,6 +350,14 @@ class PayrollConceptResource extends Resource
                     ->extraCellAttributes(['class' => 'bexia-payroll-concept-col-unit bexia-payroll-concept-col-context'])
                     ->label('Unidad')
                     ->formatStateUsing(fn (?string $state): string => PayrollConcept::unitOptions()[$state] ?? ($state ?: '-'))
+                    ->toggleable(),
+
+                /*
+                 * BEXIA_V5836_PAYROLL_CONCEPT_CFDI_KEY_TABLE
+                 */
+                Tables\Columns\TextColumn::make('cfdi_key')
+                    ->label('Clave CFDI')
+                    ->placeholder('-')
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('sat_key')

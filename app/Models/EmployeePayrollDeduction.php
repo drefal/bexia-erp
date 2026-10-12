@@ -40,6 +40,19 @@ class EmployeePayrollDeduction extends Model
     protected static function booted(): void
     {
         static::saving(function (EmployeePayrollDeduction $deduction): void {
+            \App\Support\PayrollConceptGroupGuard::assertEligible(
+                $deduction->employee_id
+                    ? (int) $deduction->employee_id
+                    : null,
+                $deduction->payroll_concept_id
+                    ? (int) $deduction->payroll_concept_id
+                    : null,
+                'deduction',
+                $deduction->company_id
+                    ? (int) $deduction->company_id
+                    : null
+            );
+
             if (blank($deduction->status)) {
                 $deduction->status = 'active';
             }

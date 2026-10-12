@@ -4,7 +4,9 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PayrollRunResource\Pages;
 use App\Filament\Resources\PayrollRunResource\RelationManagers\LinesRelationManager;
+use App\Filament\Resources\PayrollRunResource\RelationManagers\VersionsRelationManager;
 use App\Models\PayrollRun;
+use App\Models\PayrollGroup;
 use App\Support\PayrollRunCalculator;
 use App\Support\PayrollRunExportService;
 use App\Support\PayrollRunApprovalWorkflow;
@@ -27,7 +29,7 @@ class PayrollRunResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
 
-    protected static ?string $navigationGroup = 'RRHH';
+    protected static ?string $navigationGroup = 'Nómina';
 
     protected static ?string $navigationLabel = 'Pre-nómina';
 
@@ -265,6 +267,99 @@ class PayrollRunResource extends Resource
      * Visual-only responsive marker.
      */
 
+    protected static function payrollGroupOptions(): array
+    {
+        $companyId = Filament::getTenant()?->getKey();
+
+        return PayrollGroup::query()
+            ->when(
+                $companyId,
+                fn (Builder $query): Builder =>
+                    $query->where('company_id', $companyId)
+            )
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(fn (PayrollGroup $group) => [
+                $group->id =>
+                    $group->displayLabel()
+                    . ' · '
+                    . (
+                        PayrollGroup::calculationModeOptions()[
+                            $group->calculationMode()
+                        ]
+                        ?? 'Nómina simple'
+                    ),
+            ])
+            ->toArray();
+    }
+
+    public static function periodTypeForPayrollGroup(?int $payrollGroupId): ?string
+    {
+        if (! $payrollGroupId) {
+            return null;
+        }
+
+        $group = PayrollGroup::query()
+            ->with('payrollPeriodicity')
+            ->find($payrollGroupId);
+
+        $periodicity = $group?->payrollPeriodicity;
+
+        if (! $periodicity) {
+            return null;
+        }
+
+        $satCode = trim((string) ($periodicity->sat_code ?? ''));
+
+        $bySatCode = [
+            '02' => 'semanal',
+            '03' => 'catorcenal',
+            '04' => 'quincenal',
+            '05' => 'mensual',
+        ];
+
+        if (isset($bySatCode[$satCode])) {
+            return $bySatCode[$satCode];
+        }
+
+        $name = mb_strtolower(
+            trim((string) ($periodicity->name ?? '')),
+            'UTF-8'
+        );
+
+        return match (true) {
+            str_contains($name, 'semanal') => 'semanal',
+            str_contains($name, 'catorcenal') => 'catorcenal',
+            str_contains($name, 'quincenal') => 'quincenal',
+            str_contains($name, 'mensual') => 'mensual',
+            default => null,
+        };
+    }
+
+    public static function calculationModeForPayrollGroup(
+        ?int $payrollGroupId
+    ): string {
+        if (! $payrollGroupId) {
+            return 'operational';
+        }
+
+        $group = PayrollGroup::query()
+            ->find($payrollGroupId);
+
+        $mode = (string) (
+            $group?->calculation_mode
+            ?: 'operational'
+        );
+
+        return array_key_exists(
+            $mode,
+            PayrollRun::calculationModeOptions()
+        )
+            ? $mode
+            : 'operational';
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -279,12 +374,88 @@ class PayrollRunResource extends Resource
                             ->required()
                             ->maxLength(255),
 
+                        Forms\Components\Select::make('payroll_group_id')
+                            ->label('Grupo de nómina')
+                            ->options(fn (): array => static::payrollGroupOptions())
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->disabled(
+                                fn ($record): bool =>
+                                    filled($record?->id)
+                            )
+                            ->dehydrated(true)
+                            ->live()
+                            ->afterStateUpdated(function ($state, $set): void {
+                                $groupId =
+                                    $state ? (int) $state : null;
+
+                                $periodType =
+                                    static::periodTypeForPayrollGroup(
+                                        $groupId
+                                    );
+
+                                if ($periodType !== null) {
+                                    $set(
+                                        'period_type',
+                                        $periodType
+                                    );
+                                }
+
+                                $set(
+                                    'calculation_mode_snapshot',
+                                    static::calculationModeForPayrollGroup(
+                                        $groupId
+                                    )
+                                );
+                            })
+                            ->helperText('Solo se incluirán empleados asignados a este grupo. La periodicidad se toma automáticamente del grupo.'),
+
+                        Forms\Components\Select::make('run_type')
+                            ->label('Tipo de nómina')
+                            ->options(
+                                PayrollRun::runTypeOptions()
+                            )
+                            ->default('ordinary')
+                            ->required()
+                            ->disabled(
+                                fn ($record): bool =>
+                                    filled($record?->id)
+                            )
+                            ->dehydrated(true)
+                            ->native(false)
+                            ->helperText(
+                                'Ordinaria para la nómina periódica normal. '
+                                . 'Extraordinaria para pagos especiales como '
+                                . 'bonos, aguinaldo, PTU u otros procesos separados.'
+                            ),
+
+                        Forms\Components\Select::make('calculation_mode_snapshot')
+                            ->label('Modo de nómina')
+                            ->options(
+                                PayrollRun::calculationModeOptions()
+                            )
+                            ->default('operational')
+                            ->disabled()
+                            ->dehydrated(true)
+                            ->helperText(
+                                'Se hereda del grupo al crear la corrida y queda '
+                                . 'congelado para conservar el histórico. '
+                                . 'Nómina simple no calcula ISR ni genera CFDI; '
+                                . 'Nómina fiscal sin timbrado calcula ISR y subsidio '
+                                . 'sin CFDI; Nómina fiscal con CFDI habilita el flujo '
+                                . 'fiscal y de comprobantes.'
+                            ),
+
                         Forms\Components\Select::make('period_type')
                             ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-cycle-kind'])
                             ->label('Periodicidad')
                             ->options(PayrollRun::periodTypeOptions())
                             ->default('quincenal')
-                            ->required(),
+                            ->required()
+                            ->disabled()
+                            ->dehydrated(true)
+                            ->helperText('Se determina automáticamente según el grupo de nómina.'),
 
                         Forms\Components\Select::make('status')
                             ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-state'])
@@ -297,21 +468,21 @@ class PayrollRunResource extends Resource
                         Forms\Components\DatePicker::make('period_start')
                             ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-date-from'])
                             ->label('Inicio')
-                            ->native(false)
+                            ->native(true)
                             ->default(now()->startOfMonth())
                             ->required(),
 
                         Forms\Components\DatePicker::make('period_end')
                             ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-date-to'])
                             ->label('Fin')
-                            ->native(false)
+                            ->native(true)
                             ->default(now()->endOfMonth())
                             ->required(),
 
                         Forms\Components\DatePicker::make('payment_date')
                             ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-paydate'])
                             ->label('Fecha de pago')
-                            ->native(false),
+                            ->native(true),
 
                         Forms\Components\TextInput::make('currency')
                             ->extraAttributes(['class' => 'bexia-payroll-run-field bexia-payroll-run-field-currency'])
@@ -398,6 +569,30 @@ class PayrollRunResource extends Resource
                     ->searchable()
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('run_type')
+                    ->label('Tipo')
+                    ->badge()
+                    ->formatStateUsing(
+                        fn (?string $state): string =>
+                            PayrollRun::runTypeOptions()[
+                                $state ?: 'ordinary'
+                            ]
+                            ?? ($state ?: 'Ordinaria')
+                    )
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('calculation_mode_snapshot')
+                    ->label('Modo')
+                    ->badge()
+                    ->formatStateUsing(
+                        fn (?string $state): string =>
+                            PayrollRun::calculationModeOptions()[
+                                $state ?: 'operational'
+                            ]
+                            ?? ($state ?: 'Nómina simple')
+                    )
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('period_type')
                     ->extraHeaderAttributes(['class' => 'bexia-payroll-run-col-cycle'])
                     ->extraCellAttributes(['class' => 'bexia-payroll-run-col-cycle'])
@@ -470,7 +665,12 @@ class PayrollRunResource extends Resource
                     ->requiresConfirmation()
                     ->modalHeading('Preparar recibos CFDI nomina')
                     ->modalDescription('Creara recibos CFDI de nomina en borrador para esta corrida cerrada. No timbra, no genera XML y no envia datos al PAC/SAT.')
-                    ->visible(fn ($record): bool => (bool) ($record->is_locked ?? false) && filled($record->closed_at))
+                    ->visible(
+                        fn ($record): bool =>
+                            $record->enablesCfdi()
+                            && (bool) ($record->is_locked ?? false)
+                            && filled($record->closed_at)
+                    )
                     ->action(function ($record): void {
                         $result = app(\App\Support\PayrollCfdi\PayrollCfdiReceiptPreparationService::class)->prepare(
                             companyId: (int) $record->company_id,
@@ -503,7 +703,17 @@ class PayrollRunResource extends Resource
                     ->requiresConfirmation()
                     ->modalHeading('Generar XML CFDI nomina')
                     ->modalDescription('Generara XML CFDI de nomina en borrador para los recibos de esta corrida. No timbra, no genera UUID y no envia datos al PAC/SAT.')
-                    ->visible(fn ($record): bool => filled($record->payroll_cfdi_status) && ((int) ($record->payroll_cfdi_ready_lines_count ?? 0) > 0))
+                    ->visible(
+                        fn ($record): bool =>
+                            $record->enablesCfdi()
+                            && filled($record->payroll_cfdi_status)
+                            && (
+                                (int) (
+                                    $record->payroll_cfdi_ready_lines_count
+                                    ?? 0
+                                ) > 0
+                            )
+                    )
                     ->action(function ($record): void {
                         $result = app(\App\Support\PayrollCfdi\PayrollCfdiXmlDraftService::class)->prepareForRun(
                             companyId: (int) $record->company_id,
@@ -533,7 +743,19 @@ class PayrollRunResource extends Resource
                     ->label('Ver CFDI')
                     ->icon('heroicon-o-eye')
                     ->color('gray')
-                    ->visible(fn ($record): bool => filled($record->payroll_cfdi_status) || ((int) ($record->payroll_cfdi_ready_lines_count ?? 0) > 0))
+                    ->visible(
+                        fn ($record): bool =>
+                            $record->enablesCfdi()
+                            && (
+                                filled($record->payroll_cfdi_status)
+                                || (
+                                    (int) (
+                                        $record->payroll_cfdi_ready_lines_count
+                                        ?? 0
+                                    ) > 0
+                                )
+                            )
+                    )
                     ->url(fn (): string => \App\Filament\Resources\PayrollCfdiReceiptResource::getUrl('index', [
                         'tenant' => \Filament\Facades\Filament::getTenant(),
                     ])),
@@ -852,6 +1074,7 @@ class PayrollRunResource extends Resource
     {
         return [
             LinesRelationManager::class,
+            VersionsRelationManager::class,
         ];
     }
 

@@ -188,6 +188,59 @@ class PayrollRunExportService
 
         $run = $line->payrollRun;
 
+        $fiscalResult = null;
+
+        if (
+            $run
+            && $run->calculatesFiscalTaxes()
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'payroll_fiscal_run_results'
+            )
+        ) {
+            $fiscalResult =
+                \App\Models\PayrollFiscalRunResult::query()
+                    ->where(
+                        'payroll_run_id',
+                        $run->id
+                    )
+                    ->where(
+                        'payroll_run_line_id',
+                        $line->id
+                    )
+                    ->where(
+                        'employee_id',
+                        $line->employee_id
+                    )
+                    ->orderByDesc(
+                        'payroll_run_version_id'
+                    )
+                    ->orderByDesc('id')
+                    ->first();
+        }
+
+        $mode = $run?->calculationMode()
+            ?: 'operational';
+
+        $modeLabel = $run
+            ? $run->calculationModeLabel()
+            : 'Nómina simple';
+
+        $legend = match ($mode) {
+            'fiscal_preview' =>
+                'CÁLCULO FISCAL SIN CFDI. Este documento es un recibo interno '
+                . 'con cálculo de ISR y subsidio. No fue timbrado ante PAC/SAT '
+                . 'y no sustituye un CFDI de nómina.',
+
+            'fiscal_cfdi' =>
+                'RECIBO INTERNO DE APOYO. La corrida está configurada para CFDI, '
+                . 'pero este documento no es por sí mismo un CFDI timbrado.',
+
+            default =>
+                'RECIBO INTERNO - NO CFDI. Este documento corresponde a una '
+                . 'nómina simple para control interno y no sustituye un CFDI '
+                . 'de nómina timbrado.',
+        };
+
         return [
             'line' => $line,
             'run' => $run,
@@ -197,7 +250,13 @@ class PayrollRunExportService
             'generatedAt' => now(),
             'statusOptions' => PayrollRun::statusOptions(),
             'periodTypeOptions' => PayrollRun::periodTypeOptions(),
-            'legend' => 'Recibo interno sin validez CFDI. Este documento es una vista operativa de pre-nómina y no sustituye el CFDI de nómina timbrado.',
+            'calculationMode' => $mode,
+            'calculationModeLabel' => $modeLabel,
+            'fiscalResult' => $fiscalResult,
+            'showFiscalSection' =>
+                $run?->calculatesFiscalTaxes()
+                && $fiscalResult !== null,
+            'legend' => $legend,
         ];
     }
 

@@ -16,15 +16,17 @@ class CreateEmployeeContract extends CreateRecord
         $data['created_by_user_id'] = auth()->id();
         $data['updated_by_user_id'] = auth()->id();
 
-        if (($data['status'] ?? null) === 'active') {
-            $data['is_current'] = true;
-        }
+        $data['is_current'] =
+            (($data['status'] ?? 'draft') === 'active');
 
         return $data;
     }
 
     protected function afterCreate(): void
     {
+        $this->record->assignAutomaticContractNumberIfMissing();
+        $this->record->refresh();
+
         EmployeeContractResource::syncCurrentContract($this->record);
     }
 }

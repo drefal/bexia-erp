@@ -99,6 +99,40 @@ class PayrollCfdiStampService
                 'message' => 'Enviando CFDI nomina al PAC SW desde ambiente permitido.',
             ]);
 
+            /*
+             * BEXIA_V5836_PAYROLL_SIGN_BEFORE_PAC
+             *
+             * El PAC nunca debe recibir el XML draft.
+             * Primero se firma localmente con el CSD de la empresa.
+             */
+            $signResult = app(
+                PayrollCfdiSigningService::class
+            )->sign(
+                $company,
+                $xml
+            );
+
+            if (! ($signResult['success'] ?? false)) {
+                throw new RuntimeException(
+                    (string) (
+                        $signResult['message']
+                        ?? 'No se pudo firmar CFDI Nómina.'
+                    )
+                );
+            }
+
+            $xml = (string) (
+                $signResult['xml']
+                ?? ''
+            );
+
+            /*
+             * Segunda barrera independiente antes de red.
+             */
+            app(
+                PayrollCfdiSigningService::class
+            )->assertSigned($xml);
+
             $pacResult = $this->swPacClient->stampSignedXml($company, $xml);
 
             if (! ($pacResult['success'] ?? false)) {
