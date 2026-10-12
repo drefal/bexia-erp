@@ -301,7 +301,7 @@ class ExpenseReportResource extends Resource
                         Forms\Components\DatePicker::make('report_date')
                             ->label('Fecha de comprobación')
                             ->default(now()->toDateString())
-                            ->native(false)
+                            ->native(true)
                             ->required(),
 
                         Forms\Components\Select::make('petty_cash_fund_id')
@@ -428,7 +428,7 @@ class ExpenseReportResource extends Resource
                                 Forms\Components\DatePicker::make('expense_date')
                                     ->label('Fecha del gasto')
                                     ->default(now()->toDateString())
-                                    ->native(false)
+                                    ->native(true)
                                     ->required(),
 
                                 Forms\Components\TextInput::make('supplier_name')
