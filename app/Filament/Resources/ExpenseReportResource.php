@@ -206,8 +206,13 @@ class ExpenseReportResource extends Resource
                     $fund->id =>
                         ($fund->number ? $fund->number . ' · ' : '')
                         . $fund->name
-                        . ' · Disponible $'
-                        . number_format((float) $fund->operational_balance, 2),
+                        . (ExpenseAccess::isAdmin()
+                            ? ' · Disponible $'
+                                . number_format(
+                                    (float) $fund->operational_balance,
+                                    2
+                                )
+                            : ''),
                 ];
             })
             ->toArray();
@@ -887,7 +892,11 @@ class ExpenseReportResource extends Resource
                                                 }
 
                                                 $existing = $query
-                                                    ->with('report:id,number')
+                                                    // GASTOS11S_UUID
+                                                     ->whereHas('report', function ($q) {
+                                                         return $q->where('status', '!=', 'cancelled');
+                                                     })
+                                                     ->with('report:id,number')
                                                     ->first();
 
                                                 if (! $existing) {
@@ -1285,6 +1294,52 @@ class ExpenseReportResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make()
                     ->label('Ver'),
+
+                Tables\Actions\Action::make('cancelDraftDocument')
+                    ->label('Cancelar')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(
+                        fn (\App\Models\ExpenseReport $record): bool =>
+                            \App\Support\Expenses\ExpenseDraftCancellationService::canCancel($record)
+                    )
+                    ->modalHeading('Cancelar comprobación en borrador')
+                    ->modalDescription(
+                        'El documento y su historial se conservarán.'
+                    )
+                    ->form([
+                        \Filament\Forms\Components\Textarea::make('reason')
+                            ->label('Motivo de cancelación')
+                            ->required()
+                            ->maxLength(1000)
+                            ->rows(3),
+                    ])
+                    ->modalSubmitActionLabel('Confirmar cancelación')
+                    ->action(function (
+                        \App\Models\ExpenseReport $record,
+                        array $data
+                    ): void {
+                        try {
+                            app(
+                                \App\Support\Expenses\ExpenseDraftCancellationService::class
+                            )->cancel(
+                                $record,
+                                (string) ($data['reason'] ?? '')
+                            );
+
+                            \Filament\Notifications\Notification::make()
+                                ->success()
+                                ->title('Comprobación cancelada')
+                                ->send();
+                        } catch (\Throwable $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('No se pudo cancelar')
+                                ->body($e->getMessage())
+                                ->persistent()
+                                ->send();
+                        }
+                    }),
 
                 Tables\Actions\EditAction::make()
                     ->visible(

@@ -153,6 +153,14 @@ class ExpenseReportSubmissionValidator
                         $line->cfdi_uuid
                     )
                     ->whereKeyNot($line->id)
+                    ->whereHas(
+                        'report',
+                        fn ($query) => $query->where(
+                            'status',
+                            '!=',
+                            'cancelled'
+                        )
+                    )
                     ->with('report:id,number')
                     ->first();
 
