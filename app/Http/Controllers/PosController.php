@@ -11931,6 +11931,66 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             }
         }
 
+        // BEXIA_V5836_POS_REFUND_FIX2B8L
+        // Separar reembolsos externos pendientes sin alterar
+        // el importe de devolucion reconocido sobre las ventas.
+        $pendingRefundsTotal = 0.0;
+
+        if (
+            isset($refundRows)
+            && $refundRows->isNotEmpty()
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'pos_order_refund_payments'
+            )
+        ) {
+            $refundAmounts = $refundRows->mapWithKeys(
+                fn ($refund) => [
+                    (int) $refund->id => round(
+                        abs((float) ($refund->payment_total ?? 0)),
+                        2
+                    ),
+                ]
+            );
+
+            $pendingRows = \Illuminate\Support\Facades\DB::table(
+                'pos_order_refund_payments'
+            )
+                ->whereIn(
+                    'pos_order_refund_id',
+                    $refundAmounts->keys()->all()
+                )
+                ->where('status', 'pending')
+                ->select('pos_order_refund_id')
+                ->selectRaw('SUM(ABS(amount)) AS pending_amount')
+                ->groupBy('pos_order_refund_id')
+                ->get();
+
+            foreach ($pendingRows as $pendingRow) {
+                $refundId = (int) $pendingRow->pos_order_refund_id;
+                $maximum = (float) (
+                    $refundAmounts->get($refundId) ?? 0
+                );
+
+                $pendingRefundsTotal += min(
+                    $maximum,
+                    round(
+                        abs((float) $pendingRow->pending_amount),
+                        2
+                    )
+                );
+            }
+        }
+
+        $pendingRefundsTotal = min(
+            $refundedTotal,
+            round($pendingRefundsTotal, 2)
+        );
+
+        $completedRefundsTotal = round(
+            $refundedTotal - $pendingRefundsTotal,
+            2
+        );
+
         $netSettledSalesTotal =
             round(
                 $settledSalesTotal
@@ -11941,7 +12001,7 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
         $netCashflowTotal =
             round(
                 $paymentsTotal
-                - $refundedTotal,
+                - $completedRefundsTotal,
                 2
             );
 
@@ -12229,6 +12289,10 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                     $outstandingAdvanceTotal,
                 'refunded_total' =>
                     $refundedTotal,
+                'pending_refunds_total' =>
+                    $pendingRefundsTotal,
+                'completed_refunds_total' =>
+                    $completedRefundsTotal,
                 'advance_refunds_total' =>
                     $advanceRefundsTotal,
                 'sale_refunds_total' =>

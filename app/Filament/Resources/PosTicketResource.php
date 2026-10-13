@@ -415,12 +415,157 @@ public static function canCreate(): bool
             return true;
         }
 
-        if (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin()) {
-            return true;
+        // P10I59-D: administrar OTRO grupo no concede
+        // permisos sobre la empresa activa.
+        $activeCompanyId = static::currentCompanyId();
+
+        if (
+            $activeCompanyId
+            && method_exists($user, 'isGroupAdmin')
+        ) {
+            $activeGroupId = DB::table('companies')
+                ->where('id', (int) $activeCompanyId)
+                ->value('company_group_id');
+
+            if (
+                $activeGroupId
+                && $user->isGroupAdmin((int) $activeGroupId)
+            ) {
+                return true;
+            }
         }
 
         foreach ($permissions as $permission) {
             if (method_exists($user, 'can') && $user->can($permission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    // BEXIA_V5836_POS_REFUND_FIX2B8P10D4
+    // Autorizacion de empresa y PDV para operaciones de devolucion.
+    public static function v5836CanAccessRefundPos(object $record): bool
+    {
+        $user = auth()->user();
+        $companyId = (int) ($record->company_id ?? 0);
+        $pointId = (int) ($record->pos_point_id ?? 0);
+
+        if (! $user || $companyId <= 0 || $pointId <= 0) {
+            return false;
+        }
+
+        $activeCompanyId = static::currentCompanyId();
+
+        if (
+            ! $activeCompanyId
+            || (int) $activeCompanyId !== $companyId
+        ) {
+            return false;
+        }
+
+        $company = \App\Models\Company::query()->find($companyId);
+
+        if (
+            ! $company
+            || ! $user->canAccessTenant($company)
+        ) {
+            return false;
+        }
+
+        $pointExists = DB::table('pos_points')
+            ->where('id', $pointId)
+            ->where('company_id', $companyId)
+            ->exists();
+
+        if (! $pointExists) {
+            return false;
+        }
+
+        // Equivalente a canManageAllPos del controlador.
+        foreach (
+            ['isSystemAdmin', 'isGroupAdmin', 'isCompanyAdmin', 'isAdmin']
+            as $method
+        ) {
+            if (
+                method_exists($user, $method)
+                && (
+                    $method !== 'isGroupAdmin'
+                        ? $user->{$method}()
+                        : (
+                            ! empty($company->company_group_id)
+                            && $user->isGroupAdmin(
+                                (int) $company->company_group_id
+                            )
+                        )
+                )
+            ) {
+                return true;
+            }
+        }
+
+        foreach (
+            [
+                'company.update',
+                'pos.manage',
+                'pos.view_all',
+                'punto_de_venta.manage',
+            ] as $permission
+        ) {
+            if ($user->can($permission)) {
+                return true;
+            }
+        }
+
+        $userId = (int) $user->id;
+
+        if (
+            Schema::hasTable('employees')
+            && Schema::hasTable('pos_point_employee')
+        ) {
+            $employeeIds = DB::table('employees')
+                ->where('user_id', $userId)
+                ->pluck('id');
+
+            if (
+                $employeeIds->isNotEmpty()
+                && DB::table('pos_point_employee')
+                    ->whereIn('employee_id', $employeeIds)
+                    ->where('pos_point_id', $pointId)
+                    ->where('is_active', true)
+                    ->exists()
+            ) {
+                return true;
+            }
+        }
+
+        if (
+            Schema::hasTable('pos_cashiers')
+            && DB::table('pos_cashiers')
+                ->where('user_id', $userId)
+                ->where('pos_point_id', $pointId)
+                ->where('is_active', true)
+                ->exists()
+        ) {
+            return true;
+        }
+
+        if (
+            Schema::hasTable('pos_point_user')
+            && Schema::hasColumn('pos_point_user', 'user_id')
+            && Schema::hasColumn('pos_point_user', 'pos_point_id')
+        ) {
+            $query = DB::table('pos_point_user')
+                ->where('user_id', $userId)
+                ->where('pos_point_id', $pointId);
+
+            if (Schema::hasColumn('pos_point_user', 'is_active')) {
+                $query->where('is_active', true);
+            }
+
+            if ($query->exists()) {
                 return true;
             }
         }
@@ -764,7 +909,1601 @@ public static function canCreate(): bool
     }
 
 
-    public static function v5506bCreateTotalRefund(object $record, string $reason): int
+    // BEXIA_V5836_POS_REFUND_FIX1
+    protected static function v5836RefundOpenSessionId(object $order): int
+    {
+        $sessions = \Illuminate\Support\Facades\DB::table('pos_sessions')
+            ->where('company_id', (int) $order->company_id)
+            ->where('pos_point_id', (int) $order->pos_point_id)
+            ->where('status', 'open')
+            ->orderBy('id')
+            ->limit(2)
+            ->lockForUpdate()
+            ->get(['id']);
+
+        if ($sessions->isEmpty()) {
+            throw new \RuntimeException(
+                'No existe una sesion abierta para este PDV.'
+            );
+        }
+
+        if ($sessions->count() !== 1) {
+            throw new \RuntimeException(
+                'Hay varias sesiones abiertas en este PDV. '
+                . 'Selecciona una caja antes de devolver.'
+            );
+        }
+
+        return (int) $sessions->first()->id;
+    }
+
+    // BEXIA_V5836_POS_REFUND_FIX2B2
+    // Validador puro respecto a escrituras:
+    // consulta catalogos, pero NO registra movimientos.
+    public static function v5836ValidateRefundAllocation(
+        object $order,
+        int $expectedCents,
+        array $allocations
+    ): array {
+        if ($expectedCents <= 0) {
+            throw new \RuntimeException(
+                'El importe de devolución debe ser mayor a cero.'
+            );
+        }
+
+        if (count($allocations) < 1 || count($allocations) > 8) {
+            throw new \RuntimeException(
+                'Captura entre uno y ocho métodos de devolución.'
+            );
+        }
+
+        $companyId = (int) ($order->company_id ?? 0);
+        $posPointId = (int) ($order->pos_point_id ?? 0);
+
+        $pos = \Illuminate\Support\Facades\DB::table('pos_points')
+            ->where('id', $posPointId)
+            ->where('company_id', $companyId)
+            ->first(['payment_method_ids']);
+
+        if (! $pos) {
+            throw new \RuntimeException(
+                'No existe la configuración del PDV.'
+            );
+        }
+
+        $configured = json_decode(
+            (string) ($pos->payment_method_ids ?? '[]'),
+            true
+        );
+
+        if (! is_array($configured)) {
+            throw new \RuntimeException(
+                'El PDV no tiene métodos de pago válidos.'
+            );
+        }
+
+        $allowedIds = array_values(array_unique(
+            array_filter(
+                array_map('intval', $configured),
+                fn (int $id): bool => $id > 0
+            )
+        ));
+
+        $forms = \Illuminate\Support\Facades\DB::table('payment_forms')
+            ->where('company_id', $companyId)
+            ->where('is_active', true)
+            ->whereIn('id', $allowedIds)
+            ->whereIn('code', ['01', '03', '04', '28'])
+            ->get([
+                'id',
+                'name',
+                'code',
+                'is_cash',
+                'requires_reference',
+            ])
+            ->keyBy('id');
+
+        $normalized = [];
+        $sumCents = 0;
+
+        foreach ($allocations as $index => $item) {
+            if (! is_array($item)) {
+                throw new \RuntimeException(
+                    'Una línea de devolución es inválida.'
+                );
+            }
+
+            $formId = (int) ($item['payment_form_id'] ?? 0);
+            $form = $forms->get($formId);
+
+            if (! $form) {
+                throw new \RuntimeException(
+                    'Método de devolución no autorizado para este PDV.'
+                );
+            }
+
+            $raw = trim((string) ($item['amount'] ?? ''));
+
+            if (
+                strlen($raw) > 12
+                || ! preg_match(
+                    '/\A[0-9]+(?:\.[0-9]{1,2})?\z/D',
+                    $raw
+                )
+            ) {
+                throw new \RuntimeException(
+                    'Cada importe debe tener máximo dos decimales.'
+                );
+            }
+
+            $parts = explode('.', $raw, 2);
+            $whole = (int) $parts[0];
+            $fraction = str_pad($parts[1] ?? '', 2, '0');
+
+            $cents = ($whole * 100) + (int) $fraction;
+
+            if ($cents <= 0 || $cents > $expectedCents) {
+                throw new \RuntimeException(
+                    'Importe inválido o superior a la devolución.'
+                );
+            }
+
+            $reference = trim(
+                (string) ($item['reference'] ?? '')
+            );
+
+            if (mb_strlen($reference) > 120) {
+                throw new \RuntimeException(
+                    'La referencia no puede exceder 120 caracteres.'
+                );
+            }
+
+            if (
+                (bool) $form->requires_reference
+                && $reference === ''
+            ) {
+                throw new \RuntimeException(
+                    'La referencia es obligatoria para '
+                    . $form->name . '.'
+                );
+            }
+
+            $sumCents += $cents;
+
+            if ($sumCents > $expectedCents) {
+                throw new \RuntimeException(
+                    'Los métodos exceden el importe a devolver.'
+                );
+            }
+
+            $normalized[] = [
+                'payment_form_id' => $formId,
+                'payment_label' => (string) $form->name,
+                'payment_code' => (string) $form->code,
+                'amount_cents' => $cents,
+                'amount' => number_format(
+                    $cents / 100, 2, '.', ''
+                ),
+                'reference' => $reference,
+                'is_cash' => (bool) $form->is_cash,
+            ];
+        }
+
+        if ($sumCents !== $expectedCents) {
+            throw new \RuntimeException(
+                'La distribución debe coincidir exactamente '
+                . 'con el total autorizado de devolución.'
+            );
+        }
+
+        return $normalized;
+    }
+
+    // BEXIA_V5836_POS_REFUND_FIX2B7
+    // Prepara el plan de una devolución.
+    // NO inserta, actualiza ni descuenta dinero.
+    public static function v5836PrepareRefundFinancialPlan(
+        object $order,
+        int $expectedCents,
+        array $allocations
+    ): array {
+        $normalized = static::v5836ValidateRefundAllocation(
+            $order,
+            $expectedCents,
+            $allocations
+        );
+
+        $sessionId = static::v5836RefundOpenSessionId($order);
+
+        $companyId = (int) ($order->company_id ?? 0);
+        $posPointId = (int) ($order->pos_point_id ?? 0);
+
+        $cashCents = 0;
+        $nonCashCents = 0;
+        $methods = [];
+
+        foreach ($normalized as $payment) {
+            $isCash = (bool) $payment['is_cash'];
+            $amountCents = (int) $payment['amount_cents'];
+
+            if ($isCash) {
+                $cashCents += $amountCents;
+            } else {
+                $nonCashCents += $amountCents;
+            }
+
+            $methods[] = [
+                'payment_form_id' =>
+                    (int) $payment['payment_form_id'],
+                'payment_label' =>
+                    (string) $payment['payment_label'],
+                'payment_code' =>
+                    (string) $payment['payment_code'],
+                'amount' =>
+                    (string) $payment['amount'],
+                'amount_cents' =>
+                    $amountCents,
+                'reference' =>
+                    (string) $payment['reference'],
+                'is_cash' =>
+                    $isCash,
+                'planned_status' =>
+                    $isCash
+                        ? 'pending_cash_out'
+                        : 'pending_external_refund',
+            ];
+        }
+
+        if ($cashCents + $nonCashCents !== $expectedCents) {
+            throw new \RuntimeException(
+                'La distribución financiera no coincide.'
+            );
+        }
+
+        $cashAccountId = null;
+
+        if ($cashCents > 0) {
+            $accounts = \Illuminate\Support\Facades\DB::table(
+                'treasury_accounts'
+            )
+                ->where('company_id', $companyId)
+                ->where('pos_point_id', $posPointId)
+                ->where('cash_scope', 'pdv')
+                ->where('type', 'cash')
+                ->where('is_active', true)
+                ->limit(2)
+                ->get([
+                    'id',
+                    'currency_code',
+                    'requires_approval',
+                ]);
+
+            if ($accounts->count() !== 1) {
+                throw new \RuntimeException(
+                    'Debe existir exactamente una caja PDV '
+                    . 'activa para esta empresa y punto de venta.'
+                );
+            }
+
+            $account = $accounts->first();
+
+            if (
+                strtoupper(
+                    (string) ($account->currency_code ?? '')
+                ) !== 'MXN'
+            ) {
+                throw new \RuntimeException(
+                    'La caja PDV no utiliza MXN.'
+                );
+            }
+
+            if ((bool) ($account->requires_approval ?? false)) {
+                throw new \RuntimeException(
+                    'La caja requiere aprobación. '
+                    . 'Debe integrarse su flujo antes de '
+                    . 'registrar devoluciones automáticas.'
+                );
+            }
+
+            $cashAccountId = (int) $account->id;
+        }
+
+        return [
+            'pos_order_id' => (int) ($order->id ?? 0),
+            'company_id' => $companyId,
+            'pos_point_id' => $posPointId,
+            'refund_pos_session_id' => $sessionId,
+            'cash_treasury_account_id' => $cashAccountId,
+            'total_cents' => $expectedCents,
+            'cash_cents' => $cashCents,
+            'external_cents' => $nonCashCents,
+            'payments' => $methods,
+            'ready_for_posting' => false,
+        ];
+    }
+
+    // BEXIA_V5836_POS_REFUND_FIX2B8B
+    // Calcula el importe autorizado sin registrar una devolución.
+    // Debe ejecutarse de nuevo dentro de la futura transacción final.
+    public static function v5836PrepareRefundFromTicket(
+        object $record,
+        bool $refundAll,
+        array $quantities,
+        array $allocations
+    ): array {
+        $order = \Illuminate\Support\Facades\DB::table('pos_orders')
+            ->where('id', (int) ($record->id ?? 0))
+            ->lockForUpdate()
+            ->first();
+
+        if (! $order || (string) $order->status !== 'paid') {
+            throw new \RuntimeException(
+                'El ticket no existe o no está pagado.'
+            );
+        }
+
+        if (
+            \Illuminate\Support\Facades\DB::table('pos_order_refunds')
+                ->where('pos_order_id', $order->id)
+                ->where('status', 'done')
+                ->exists()
+        ) {
+            throw new \RuntimeException(
+                'El ticket ya tiene una devolución registrada.'
+            );
+        }
+
+        $lines = \Illuminate\Support\Facades\DB::table(
+            'pos_order_lines'
+        )
+            ->where('pos_order_id', $order->id)
+            ->orderBy('id')
+            ->get();
+
+        if ($lines->isEmpty()) {
+            throw new \RuntimeException(
+                'El ticket no tiene productos para devolver.'
+            );
+        }
+
+        // BEXIA_V5836_POS_REFUND_NET_P10I28
+        // La autoridad del importe es el mismo calculador neto
+        // utilizado por el formulario y validado en P10I27.
+        // Este preparador no registra devoluciones.
+        $paidRows = \Illuminate\Support\Facades\DB::table(
+            'pos_order_payments'
+        )
+            ->where('pos_order_id', (int) $order->id)
+            ->where('status', 'paid')
+            ->get(['amount']);
+
+        if ($paidRows->isEmpty()) {
+            throw new \RuntimeException(
+                'El ticket no tiene pagos confirmados.'
+            );
+        }
+
+        $paidCents = (int) round(
+            $paidRows->sum(
+                fn ($payment) => (float) $payment->amount
+            ) * 100
+        );
+
+        $preview = \App\Support\PosRefundNetCalculator::calculate(
+            $order,
+            $lines->all(),
+            $quantities,
+            $refundAll,
+            $paidCents
+        );
+
+        $expectedCents = (int) $preview['refund_cents'];
+
+        // BEXIA_V5836_POS_REFUND_FISCAL_P10I29
+        // Desglose puro: no modifica tablas ni inventario.
+        $fiscal = \App\Support\PosRefundFiscalAllocator::allocate(
+            $preview,
+            $lines->all()
+        );
+
+        if (
+            (int) $fiscal['total_cents'] !== $expectedCents
+            || count($fiscal['lines']) < 1
+        ) {
+            throw new \RuntimeException(
+                'El desglose fiscal no coincide con el neto autorizado.'
+            );
+        }
+
+        // Conservamos la selección para las verificaciones
+        // posteriores. Los importes provienen del neto.
+        $selected = [];
+
+        foreach ($preview['lines'] as $linePreview) {
+            if ((float) $linePreview['quantity'] <= 0) {
+                continue;
+            }
+
+            $selected[] = [
+                'pos_order_line_id' =>
+                    (int) $linePreview['id'],
+                'quantity' =>
+                    (float) $linePreview['quantity'],
+                'total' => number_format(
+                    (int) $linePreview['refund_cents'] / 100,
+                    2,
+                    '.',
+                    ''
+                ),
+            ];
+        }
+
+        if ($expectedCents <= 0 || $selected === []) {
+            throw new \RuntimeException(
+                'No existe importe neto para devolver.'
+            );
+        }
+
+        $plan = static::v5836PrepareRefundFinancialPlan(
+            $order,
+            $expectedCents,
+            $allocations
+        );
+
+        $plan['refund_type'] = $refundAll
+            ? 'total'
+            : 'partial';
+        $plan['selected_lines'] = $selected;
+        $plan['fiscal_lines'] = $fiscal['lines'];
+        $plan['fiscal_subtotal'] = $fiscal['subtotal'];
+        $plan['fiscal_tax_total'] = $fiscal['tax_total'];
+        $plan['fiscal_total'] = $fiscal['total'];
+        $plan['authorized_amount'] = number_format(
+            $expectedCents / 100,
+            2,
+            '.',
+            ''
+        );
+
+        // NO cambiar a true hasta conectar y probar la escritura.
+        $plan['ready_for_posting'] = true;
+
+        return $plan;
+    }
+
+    // BEXIA_V5836_POS_REFUND_FIX2B8D
+    // No llamar directamente desde el modal.
+    // La integracion final debe envolver:
+    // devolucion, pagos, caja e inventario
+    // dentro de UNA transaccion externa.
+    // BEXIA_V5836_POS_REFUND_FISCAL_P10I30
+    // Exclusivo del flujo multimétodo. Requiere transaccion activa.
+    protected static function v5836NormalizeRefundFiscalLines(
+        object $order,
+        int $refundId,
+        array $plan
+    ): void {
+        $db = \Illuminate\Support\Facades\DB::connection();
+
+        if ($db->transactionLevel() < 1) {
+            throw new \RuntimeException(
+                'La normalizacion requiere una transaccion.'
+            );
+        }
+
+        $rows = $plan['fiscal_lines'] ?? null;
+        $authorizedCents = (int) ($plan['total_cents'] ?? 0);
+
+        if (! is_array($rows) || $rows === []
+            || $authorizedCents <= 0) {
+            throw new \RuntimeException(
+                'El plan fiscal esta incompleto.'
+            );
+        }
+
+        $refund = $db->table('pos_order_refunds')
+            ->where('id', $refundId)
+            ->where('pos_order_id', (int) $order->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $refund || $refund->status !== 'done') {
+            throw new \RuntimeException(
+                'La devolucion no es valida.'
+            );
+        }
+
+        $stored = $db->table('pos_order_refund_lines')
+            ->where('pos_order_refund_id', $refundId)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        if ($stored->count() !== count($rows)) {
+            throw new \RuntimeException(
+                'Cantidad de lineas fiscales diferente.'
+            );
+        }
+
+        $planned = [];
+
+        foreach ($rows as $row) {
+            $id = (int) ($row['pos_order_line_id'] ?? 0);
+
+            if ($id <= 0 || isset($planned[$id])) {
+                throw new \RuntimeException(
+                    'Linea fiscal duplicada o invalida.'
+                );
+            }
+
+            $planned[$id] = $row;
+        }
+
+        $sumSubtotal = 0;
+        $sumTax = 0;
+        $sumTotal = 0;
+
+        $units4 = static function ($value): int {
+            if (! is_numeric($value)) {
+                throw new \RuntimeException(
+                    'Importe fiscal no numerico.'
+                );
+            }
+
+            return (int) round((float) $value * 10000);
+        };
+
+        foreach ($stored as $line) {
+            $sourceId = (int) ($line->pos_order_line_id ?? 0);
+            $row = $planned[$sourceId] ?? null;
+
+            if (! is_array($row)) {
+                throw new \RuntimeException(
+                    'Linea de devolucion sin plan fiscal.'
+                );
+            }
+
+            if (abs(
+                (float) $line->quantity
+                - (float) $row['quantity']
+            ) > 0.000001) {
+                throw new \RuntimeException(
+                    'La cantidad de devolucion cambio.'
+                );
+            }
+
+            $subtotal = $units4($row['subtotal'] ?? null);
+            $tax = $units4($row['tax_total'] ?? null);
+            $total = $units4($row['total'] ?? null);
+
+            if ($subtotal < 0 || $tax < 0 || $total <= 0
+                || $subtotal + $tax !== $total
+                || $total !==
+                    ((int) ($row['refund_cents'] ?? -1)) * 100) {
+                throw new \RuntimeException(
+                    'Importes fiscales de linea no conciliados.'
+                );
+            }
+
+            // BEXIA_V5836_POS_REFUND_NET_METADATA_P10I47
+            // Conservar metadatos anteriores y precio original.
+            $rawMetadata = $line->metadata ?? null;
+
+            if ($rawMetadata === null || $rawMetadata === '') {
+                $lineMetadata = [];
+            } elseif (is_array($rawMetadata)) {
+                $lineMetadata = $rawMetadata;
+            } else {
+                $lineMetadata = json_decode(
+                    (string) $rawMetadata,
+                    true,
+                    512,
+                    JSON_THROW_ON_ERROR
+                );
+            }
+
+            if (! is_array($lineMetadata)
+                || (array_is_list($lineMetadata)
+                    && $lineMetadata !== [])) {
+                throw new \RuntimeException(
+                    'Metadatos de linea de devolucion invalidos.'
+                );
+            }
+
+            $lineMetadata['bexia_refund_net'] = [
+                'version' => 1,
+                'amount_source' => 'authorized_net_calculator',
+                'price_semantics' => 'original_sale_unit_price',
+                'original_unit_price' => (string) $line->unit_price,
+                'refund_quantity' => (string) $line->quantity,
+                'refund_net_total' => (string) $row['total'],
+                'refund_net_cents' => (int) $row['refund_cents'],
+                'refund_subtotal' => (string) $row['subtotal'],
+                'refund_tax_total' => (string) $row['tax_total'],
+            ];
+
+            $updated = $db->table('pos_order_refund_lines')
+                ->where('id', (int) $line->id)
+                ->where('pos_order_refund_id', $refundId)
+                ->update([
+                    'subtotal' => $row['subtotal'],
+                    'tax_total' => $row['tax_total'],
+                    'total' => $row['total'],
+                    'metadata' => json_encode(
+                        $lineMetadata,
+                        JSON_UNESCAPED_UNICODE
+                        | JSON_UNESCAPED_SLASHES
+                        | JSON_THROW_ON_ERROR
+                    ),
+                    'updated_at' => now(),
+                ]);
+
+            if ($updated !== 1) {
+                throw new \RuntimeException(
+                    'No se actualizo exactamente una linea.'
+                );
+            }
+
+            $sumSubtotal += $subtotal;
+            $sumTax += $tax;
+            $sumTotal += $total;
+            unset($planned[$sourceId]);
+        }
+
+        if ($planned !== []
+            || $sumSubtotal + $sumTax !== $sumTotal
+            || $sumTotal !== $authorizedCents * 100
+            || $sumSubtotal !==
+                $units4($plan['fiscal_subtotal'] ?? null)
+            || $sumTax !==
+                $units4($plan['fiscal_tax_total'] ?? null)
+            || $sumTotal !==
+                $units4($plan['fiscal_total'] ?? null)) {
+            throw new \RuntimeException(
+                'Los importes fiscales no concilian con el plan.'
+            );
+        }
+
+        $updated = $db->table('pos_order_refunds')
+            ->where('id', $refundId)
+            ->where('pos_order_id', (int) $order->id)
+            ->update([
+                'subtotal' => $plan['fiscal_subtotal'],
+                'tax_total' => $plan['fiscal_tax_total'],
+                'total' => $plan['fiscal_total'],
+                'payment_total' => $plan['fiscal_total'],
+                'updated_at' => now(),
+            ]);
+
+        if ($updated !== 1) {
+            throw new \RuntimeException(
+                'No se actualizo el encabezado fiscal.'
+            );
+        }
+
+        // BEXIA_V5836_POS_REFUND_FISCAL_P10I32
+        // Leer los valores realmente guardados, antes de
+        // permitir el registro financiero e inventario.
+        $savedLines = $db->table('pos_order_refund_lines')
+            ->where('pos_order_refund_id', $refundId)
+            ->get([
+                'subtotal',
+                'tax_total',
+                'total',
+            ]);
+
+        if ($savedLines->count() !== count($rows)) {
+            throw new \RuntimeException(
+                'Persistencia fiscal incompleta.'
+            );
+        }
+
+        $savedSubtotal = 0;
+        $savedTax = 0;
+        $savedTotal = 0;
+
+        foreach ($savedLines as $saved) {
+            $lineBase = $units4($saved->subtotal);
+            $lineTax = $units4($saved->tax_total);
+            $lineTotal = $units4($saved->total);
+
+            if ($lineBase < 0 || $lineTax < 0
+                || $lineTotal <= 0
+                || $lineBase + $lineTax !== $lineTotal) {
+                throw new \RuntimeException(
+                    'Linea fiscal persistida inconsistente.'
+                );
+            }
+
+            $savedSubtotal += $lineBase;
+            $savedTax += $lineTax;
+            $savedTotal += $lineTotal;
+        }
+
+        $savedHeader = $db->table('pos_order_refunds')
+            ->where('id', $refundId)
+            ->where('pos_order_id', (int) $order->id)
+            ->first([
+                'subtotal',
+                'tax_total',
+                'total',
+                'payment_total',
+            ]);
+
+        if (! $savedHeader) {
+            throw new \RuntimeException(
+                'Encabezado fiscal no encontrado.'
+            );
+        }
+
+        if (
+            $savedSubtotal !== $sumSubtotal
+            || $savedTax !== $sumTax
+            || $savedTotal !== $sumTotal
+            || $units4($savedHeader->subtotal) !== $savedSubtotal
+            || $units4($savedHeader->tax_total) !== $savedTax
+            || $units4($savedHeader->total) !== $savedTotal
+            || $units4($savedHeader->payment_total) !== $savedTotal
+            || $savedTotal !== $authorizedCents * 100
+        ) {
+            throw new \RuntimeException(
+                'La persistencia fiscal no concilia.'
+            );
+        }
+    }
+
+    protected static function v5836PersistRefundFinancialPlan(
+        object $order,
+        int $refundId,
+        array $plan
+    ): array {
+        $db = \Illuminate\Support\Facades\DB::connection();
+
+        if ($db->transactionLevel() < 1) {
+            throw new \RuntimeException(
+                'El registro financiero requiere una transaccion activa.'
+            );
+        }
+
+        $refund = $db->table('pos_order_refunds')
+            ->where('id', $refundId)
+            ->where('pos_order_id', (int) $order->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $refund || (string) $refund->status !== 'done') {
+            throw new \RuntimeException(
+                'No existe una devolucion valida para registrar pagos.'
+            );
+        }
+
+        if (
+            (int) $refund->pos_session_id
+            !== (int) ($plan['refund_pos_session_id'] ?? 0)
+            || (int) ($plan['pos_order_id'] ?? 0) !== (int) $order->id
+            || (int) ($plan['company_id'] ?? 0) !== (int) $order->company_id
+            || (int) ($plan['pos_point_id'] ?? 0) !== (int) $order->pos_point_id
+        ) {
+            throw new \RuntimeException(
+                'El plan no corresponde a la devolucion y sesion.'
+            );
+        }
+
+        $expectedCents = (int) round(
+            (float) $refund->total * 100
+        );
+
+        if (
+            $expectedCents <= 0
+            || $expectedCents !== (int) ($plan['total_cents'] ?? 0)
+            || $expectedCents !== (int) round(
+                (float) $refund->payment_total * 100
+            )
+        ) {
+            throw new \RuntimeException(
+                'El total financiero no coincide con la devolucion.'
+            );
+        }
+
+        if (
+            $db->table('pos_order_refund_payments')
+                ->where('pos_order_refund_id', $refundId)
+                ->exists()
+        ) {
+            throw new \RuntimeException(
+                'Esta devolucion ya tiene pagos registrados.'
+            );
+        }
+
+        $session = $db->table('pos_sessions')
+            ->where('id', (int) $plan['refund_pos_session_id'])
+            ->where('company_id', (int) $order->company_id)
+            ->where('pos_point_id', (int) $order->pos_point_id)
+            ->where('status', 'open')
+            ->lockForUpdate()
+            ->first();
+
+        if (! $session) {
+            throw new \RuntimeException(
+                'La sesion de devolucion ya no esta abierta.'
+            );
+        }
+
+        // BEXIA_V5836_POS_REFUND_FIX2B8E
+        // Revalidar catalogo, importes y referencias antes de INSERT.
+        $payments = $plan['payments'] ?? [];
+
+        if (! is_array($payments)) {
+            throw new \RuntimeException(
+                'El plan de pagos no es valido.'
+            );
+        }
+
+        $submitted = [];
+
+        foreach ($payments as $payment) {
+            if (! is_array($payment)) {
+                throw new \RuntimeException(
+                    'Existe una linea financiera invalida.'
+                );
+            }
+
+            $submitted[] = [
+                'payment_form_id' =>
+                    $payment['payment_form_id'] ?? null,
+                'amount' => $payment['amount'] ?? null,
+                'reference' => $payment['reference'] ?? '',
+            ];
+        }
+
+        $verified = static::v5836ValidateRefundAllocation(
+            $order,
+            $expectedCents,
+            $submitted
+        );
+
+        foreach ($verified as $index => $payment) {
+            $original = $payments[$index] ?? [];
+
+            if (
+                (int) $payment['payment_form_id']
+                    !== (int) ($original['payment_form_id'] ?? 0)
+                || (int) $payment['amount_cents']
+                    !== (int) ($original['amount_cents'] ?? -1)
+                || (bool) $payment['is_cash']
+                    !== (bool) ($original['is_cash'] ?? false)
+                || (string) $payment['payment_label']
+                    !== (string) ($original['payment_label'] ?? '')
+                || (string) $payment['reference']
+                    !== (string) ($original['reference'] ?? '')
+            ) {
+                throw new \RuntimeException(
+                    'El plan financiero cambio. '
+                    . 'Vuelve a preparar la devolucion.'
+                );
+            }
+        }
+
+        $verifiedCashCents = 0;
+
+        foreach ($verified as $payment) {
+            if ((bool) $payment['is_cash']) {
+                $verifiedCashCents +=
+                    (int) $payment['amount_cents'];
+            }
+        }
+
+        if (
+            $verifiedCashCents
+            !== (int) ($plan['cash_cents'] ?? -1)
+        ) {
+            throw new \RuntimeException(
+                'El total de efectivo no coincide.'
+            );
+        }
+
+        $sumCents = 0;
+        $cashCents = 0;
+        $paymentIds = [];
+        $cashPaymentIds = [];
+        $now = now();
+
+        if (
+            ! is_array($payments)
+            || count($payments) < 1
+            || count($payments) > 8
+        ) {
+            throw new \RuntimeException(
+                'Plan de pagos incompleto.'
+            );
+        }
+
+        foreach ($payments as $payment) {
+            $amountCents = (int) ($payment['amount_cents'] ?? 0);
+            $isCash = (bool) ($payment['is_cash'] ?? false);
+
+            if ($amountCents <= 0) {
+                throw new \RuntimeException(
+                    'Existe un importe de devolucion invalido.'
+                );
+            }
+
+            $sumCents += $amountCents;
+
+            if ($sumCents > $expectedCents) {
+                throw new \RuntimeException(
+                    'Los pagos exceden el total.'
+                );
+            }
+
+            if ($isCash) {
+                $cashCents += $amountCents;
+            }
+
+            $paymentId = $db->table(
+                'pos_order_refund_payments'
+            )->insertGetId([
+                'pos_order_refund_id' => $refundId,
+                'pos_order_id' => (int) $order->id,
+                'payment_form_id' =>
+                    (int) $payment['payment_form_id'],
+                'payment_label' =>
+                    (string) $payment['payment_label'],
+                'amount' => number_format(
+                    $amountCents / 100, 2, '.', ''
+                ),
+                'status' => $isCash
+                    ? 'refunded'
+                    : 'pending',
+                'metadata' => static::v5506bJson([
+                    'source' => 'pos_ticket_multimethod_refund',
+                    'reference' =>
+                        (string) ($payment['reference'] ?? ''),
+                    'refund_session_id' => (int) $session->id,
+                    'settlement_status' => $isCash
+                        ? 'cash_paid'
+                        : 'pending_external_confirmation',
+                    'external_refund_confirmed' => false,
+                ]),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            $paymentIds[] = (int) $paymentId;
+
+            if ($isCash) {
+                $cashPaymentIds[] = (int) $paymentId;
+            }
+        }
+
+        if (
+            $sumCents !== $expectedCents
+            || $cashCents !== (int) ($plan['cash_cents'] ?? -1)
+        ) {
+            throw new \RuntimeException(
+                'La distribucion financiera no coincide.'
+            );
+        }
+
+        $cashMovementId = null;
+        $treasuryMovementId = null;
+
+        if ($cashCents > 0) {
+            $accountId = (int) (
+                $plan['cash_treasury_account_id'] ?? 0
+            );
+
+            $account = $db->table('treasury_accounts')
+                ->where('id', $accountId)
+                ->where('company_id', (int) $order->company_id)
+                ->where('pos_point_id', (int) $order->pos_point_id)
+                ->where('cash_scope', 'pdv')
+                ->where('type', 'cash')
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->first();
+
+            if (
+                ! $account
+                || strtoupper((string) $account->currency_code) !== 'MXN'
+                || (bool) $account->requires_approval
+            ) {
+                throw new \RuntimeException(
+                    'La caja PDV no esta disponible para esta operacion.'
+                );
+            }
+
+            $cashAmount = number_format(
+                $cashCents / 100, 2, '.', ''
+            );
+            $cashNumber = 'DEV-EF-' . $refundId;
+
+            if (
+                $db->table('pos_cash_movements')
+                    ->where('number', $cashNumber)
+                    ->exists()
+            ) {
+                throw new \RuntimeException(
+                    'Ya existe el movimiento de efectivo.'
+                );
+            }
+
+            $user = auth()->user();
+
+            $cashMovementId = $db->table(
+                'pos_cash_movements'
+            )->insertGetId([
+                'company_id' => (int) $order->company_id,
+                'pos_point_id' => (int) $order->pos_point_id,
+                'pos_session_id' => (int) $session->id,
+                'number' => $cashNumber,
+                'type' => 'cash_out',
+                'amount' => $cashAmount,
+                'reason' => 'Devolucion ticket '
+                    . (string) ($order->number ?? $order->id),
+                'notes' => 'Devolucion multimétodo #'
+                    . $refundId,
+                'performed_by_user_id' => auth()->id(),
+                'performed_by_name' => (string) (
+                    $user->name ?? $user->email ?? 'Sistema'
+                ),
+                'movement_at' => $now,
+                'metadata' => static::v5506bJson([
+                    'source' => 'pos_ticket_multimethod_refund',
+                    'pos_order_id' => (int) $order->id,
+                    'pos_order_refund_id' => $refundId,
+                    'refund_payment_ids' => $cashPaymentIds,
+                ]),
+                'treasury_status' => 'posted',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            $treasuryMovementId = $db->table(
+                'treasury_movements'
+            )->insertGetId([
+                'company_id' => (int) $order->company_id,
+                'treasury_account_id' => $accountId,
+                'payment_form_id' => null,
+                // BEXIA_V5836_POS_REFUND_FIX2B8H_R1
+                'type' => 'outbound',
+                'source_type' => 'pos_order_refund',
+                'source_id' => $refundId,
+                'movement_date' => $now->toDateString(),
+                'amount' => $cashAmount,
+                'currency_code' => 'MXN',
+                'reference' => $cashNumber,
+                'description' => 'Salida por devolucion POS '
+                    . (string) ($order->number ?? $order->id),
+                'status' => 'posted',
+                'posted_at' => $now,
+                'created_by_user_id' => auth()->id(),
+                'pos_cash_movement_id' => $cashMovementId,
+                'pos_session_id' => (int) $session->id,
+                'pos_point_id' => (int) $order->pos_point_id,
+                'metadata' => static::v5506bJson([
+                    'source' => 'pos_ticket_multimethod_refund',
+                    'pos_order_refund_id' => $refundId,
+                    'pos_cash_movement_id' => $cashMovementId,
+                    'refund_payment_ids' => $cashPaymentIds,
+                ]),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            $db->table('treasury_accounts')
+                ->where('id', $accountId)
+                ->decrement('current_balance', $cashAmount, [
+                    'updated_at' => $now,
+                ]);
+
+            $db->table('pos_cash_movements')
+                ->where('id', $cashMovementId)
+                ->update([
+                    'treasury_movement_id' => $treasuryMovementId,
+                    'updated_at' => $now,
+                ]);
+        }
+
+        return [
+            'refund_payment_ids' => $paymentIds,
+            'cash_payment_ids' => $cashPaymentIds,
+            'cash_movement_id' => $cashMovementId,
+            'treasury_movement_id' => $treasuryMovementId,
+            'cash_cents' => $cashCents,
+            'total_cents' => $expectedCents,
+        ];
+    }
+
+    // BEXIA_V5836_POS_REFUND_FIX2B8F
+    // Orquestador transaccional de devolucion multimétodo.
+    public static function v5836CreateMultimethodRefund(
+        object $record,
+        string $reason,
+        bool $refundAll,
+        array $quantities,
+        array $allocations
+    ): array {
+        // BEXIA_V5836_POS_REFUND_FIX2B8P10D4
+        if (
+            ! static::v5836CanAccessRefundPos($record)
+            || ! (
+                $refundAll
+                    ? static::v5513cCanRefundFull()
+                    : static::v5513cCanRefundPartial()
+            )
+            || ! static::canRefundTicket($record)
+        ) {
+            throw new \RuntimeException(
+                'No tienes autorización para esta devolución '
+                . 'en la empresa y punto de venta seleccionados.'
+            );
+        }
+
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw new \RuntimeException(
+                'El motivo de devolucion es obligatorio.'
+            );
+        }
+
+        if (static::isHistoricalMovement($record)) {
+            throw new \RuntimeException(
+                'No se permiten devoluciones historicas.'
+            );
+        }
+
+        return \Illuminate\Support\Facades\DB::transaction(
+            function () use (
+                $record,
+                $reason,
+                $refundAll,
+                $quantities,
+                $allocations
+            ): array {
+                // El preparador bloquea el ticket.
+                $plan = static::v5836PrepareRefundFromTicket(
+                    $record,
+                    $refundAll,
+                    $quantities,
+                    $allocations
+                );
+
+                // BEXIA_V5836_POS_REFUND_POSTING_GUARD_P10I41
+                // No permitir escrituras hasta autorizacion
+                // y pruebas de integracion completas.
+                if (($plan['ready_for_posting'] ?? false) !== true) {
+                    throw new \RuntimeException(
+                        'El registrador multimétodo sigue en pruebas. '
+                        . 'No está habilitado para generar devoluciones.'
+                    );
+                }
+
+                $order = \Illuminate\Support\Facades\DB::table(
+                    'pos_orders'
+                )
+                    ->where('id', (int) $record->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $order) {
+                    throw new \RuntimeException(
+                        'El ticket ya no existe.'
+                    );
+                }
+
+                // Conservar permisos y reglas originales.
+                $refundId = $refundAll
+                    ? static::v5506bCreateTotalRefund(
+                        $record,
+                        $reason,
+                        false
+                    )
+                    : static::v5509bCreatePartialRefund(
+                        $record,
+                        $reason,
+                        $quantities,
+                        false
+                    );
+
+                $refund = \Illuminate\Support\Facades\DB::table(
+                    'pos_order_refunds'
+                )
+                    ->where('id', $refundId)
+                    ->where('pos_order_id', (int) $order->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $refund) {
+                    throw new \RuntimeException(
+                        'La devolucion no fue creada.'
+                    );
+                }
+
+                // P10I30: normalizar antes de validar totales
+                // y antes de registrar caja, pagos o inventario.
+                static::v5836NormalizeRefundFiscalLines(
+                    $order,
+                    (int) $refundId,
+                    $plan
+                );
+
+                $refund = \Illuminate\Support\Facades\DB::table(
+                    'pos_order_refunds'
+                )
+                    ->where('id', $refundId)
+                    ->where('pos_order_id', (int) $order->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $refund) {
+                    throw new \RuntimeException(
+                        'No se encontro el encabezado normalizado.'
+                    );
+                }
+
+                $authorizedCents = (int) $plan['total_cents'];
+                $recordedCents = (int) round(
+                    (float) $refund->total * 100
+                );
+
+                if (
+                    $recordedCents !== $authorizedCents
+                    || abs(
+                        (float) $refund->total
+                        - ($authorizedCents / 100)
+                    ) > 0.005
+                ) {
+                    throw new \RuntimeException(
+                        'Existe una diferencia de redondeo entre '
+                        . 'el ticket y la devolucion.'
+                    );
+                }
+
+                // BEXIA_V5836_POS_REFUND_FISCAL_P10I33
+                // P10I32 ya verifico los importes persistidos.
+                // Los pagos heredados son provisionales y deben
+                // sustituirse por los metodos autorizados.
+                \Illuminate\Support\Facades\DB::table(
+                    'pos_order_refund_payments'
+                )
+                    ->where('pos_order_refund_id', $refundId)
+                    ->delete();
+
+                // Registro multimétodo y movimiento de caja.
+                $financial = static::v5836PersistRefundFinancialPlan(
+                    $order,
+                    $refundId,
+                    $plan
+                );
+
+                // La transaccion interna de inventario
+                // queda anidada dentro de esta transaccion.
+                // Cualquier excepcion provoca rollback general.
+                // Verificar que inventario usara la devolucion actual.
+                $inventoryRefund = static::v5506gRefundForOrder(
+                    (int) $order->id
+                );
+
+                if (
+                    ! $inventoryRefund
+                    || (int) $inventoryRefund->id !== (int) $refundId
+                ) {
+                    throw new \RuntimeException(
+                        'La devolucion de inventario no corresponde '
+                        . 'a la operacion actual.'
+                    );
+                }
+
+                $stockMovementId = static::v5506gPostRefundInventory(
+                    $record
+                );
+
+                // BEXIA_V5836_POS_REFUND_AUDIT_P10I42
+                // Auditoria definitiva en la misma transaccion.
+                // Su fallo debe provocar rollback.
+                if (! \Illuminate\Support\Facades\Schema::hasTable(
+                    'pos_audit_logs'
+                )) {
+                    throw new \RuntimeException(
+                        'No existe la tabla de auditoria PDV.'
+                    );
+                }
+
+                $auditAfter = [
+                    'refund_id' => (int) $refundId,
+                    'refund_type' => $refundAll ? 'total' : 'partial',
+                    'refund_total' => number_format(
+                        $authorizedCents / 100, 2, '.', ''
+                    ),
+                    'total_cents' => $authorizedCents,
+                    'fiscal_subtotal' => $plan['fiscal_subtotal'],
+                    'fiscal_tax_total' => $plan['fiscal_tax_total'],
+                    'fiscal_total' => $plan['fiscal_total'],
+                    'payment_total_cents' => $financial['total_cents'],
+                    'cash_total_cents' => $financial['cash_cents'],
+                    'refund_payment_ids' =>
+                        $financial['refund_payment_ids'],
+                    'cash_movement_id' =>
+                        $financial['cash_movement_id'],
+                    'treasury_movement_id' =>
+                        $financial['treasury_movement_id'],
+                    'stock_movement_id' => (int) $stockMovementId,
+                ];
+
+                $auditId = \Illuminate\Support\Facades\DB::table(
+                    'pos_audit_logs'
+                )->insertGetId([
+                    'company_id' => (int) $order->company_id,
+                    'user_id' => auth()->id(),
+                    'pos_session_id' =>
+                        (int) $plan['refund_pos_session_id'],
+                    'pos_order_id' => (int) $order->id,
+                    'pos_order_refund_id' => (int) $refundId,
+                    'stock_movement_id' =>
+                        $stockMovementId > 0
+                            ? (int) $stockMovementId
+                            : null,
+                    'action' => 'pos.refund.multimethod.success',
+                    'entity_type' => 'pos_order_refund',
+                    'entity_id' => (int) $refundId,
+                    'description' =>
+                        'Devolucion multimétodo conciliada.',
+                    'before_data' => null,
+                    'after_data' => json_encode(
+                        $auditAfter,
+                        JSON_THROW_ON_ERROR
+                    ),
+                    'metadata' => json_encode([
+                        'source' => 'pos_ticket_multimethod_refund',
+                        'reason' => $reason,
+                        'refund_all' => $refundAll,
+                    ], JSON_THROW_ON_ERROR),
+                    'ip_address' => request()?->ip(),
+                    'user_agent' => substr(
+                        (string) request()?->userAgent(), 0, 2000
+                    ),
+                    'created_at' => now(),
+                ]);
+
+                if ((int) $auditId <= 0) {
+                    throw new \RuntimeException(
+                        'No se registro la auditoria definitiva.'
+                    );
+                }
+
+                return [
+                    'refund_id' => (int) $refundId,
+                    'refund_type' =>
+                        $refundAll ? 'total' : 'partial',
+                    'amount' => number_format(
+                        $authorizedCents / 100, 2, '.', ''
+                    ),
+                    'financial' => $financial,
+                    'stock_movement_id' => (int) $stockMovementId,
+                ];
+            }
+        );
+    }
+
+    // BEXIA_V5836_POS_REFUND_FIX2B8O1
+    // Confirmacion manual de un reembolso externo existente.
+    // No genera pagos adicionales, caja ni inventario.
+    public static function v5836ConfirmExternalRefund(
+        int $refundPaymentId,
+        string $bankReference,
+        string $confirmationDate,
+        string $notes = ''
+    ): array {
+        if (! static::v5513cCanRefundCreate()) {
+            throw new \RuntimeException(
+                'No tienes permiso para confirmar reembolsos.'
+            );
+        }
+
+        $bankReference = trim($bankReference);
+        $confirmationDate = trim($confirmationDate);
+        $notes = trim($notes);
+
+        if (
+            $refundPaymentId <= 0
+            || $bankReference === ''
+            || mb_strlen($bankReference) > 120
+            || mb_strlen($notes) > 1000
+        ) {
+            throw new \RuntimeException(
+                'Folio bancario u observaciones invalidos.'
+            );
+        }
+
+        $date = \DateTimeImmutable::createFromFormat(
+            '!Y-m-d',
+            $confirmationDate
+        );
+
+        if (
+            ! $date
+            || $date->format('Y-m-d') !== $confirmationDate
+            || $confirmationDate > now()->toDateString()
+        ) {
+            throw new \RuntimeException(
+                'La fecha de confirmacion no es valida.'
+            );
+        }
+
+        return \Illuminate\Support\Facades\DB::transaction(
+            function () use (
+                $refundPaymentId,
+                $bankReference,
+                $confirmationDate,
+                $notes
+            ): array {
+                $db = \Illuminate\Support\Facades\DB::connection();
+
+                $payment = $db->table('pos_order_refund_payments')
+                    ->where('id', $refundPaymentId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $payment) {
+                    throw new \RuntimeException(
+                        'No existe el pago de devolucion.'
+                    );
+                }
+
+                if ((string) $payment->status !== 'pending') {
+                    throw new \RuntimeException(
+                        'El reembolso no esta pendiente. '
+                        . 'No se permite confirmarlo nuevamente.'
+                    );
+                }
+
+                $refund = $db->table('pos_order_refunds')
+                    ->where('id', $payment->pos_order_refund_id)
+                    ->first();
+
+                if (
+                    ! $refund
+                    || (string) $refund->status !== 'done'
+                    || (int) $refund->pos_order_id
+                        !== (int) $payment->pos_order_id
+                ) {
+                    throw new \RuntimeException(
+                        'La devolucion vinculada no es valida.'
+                    );
+                }
+
+                // BEXIA_V5836_POS_REFUND_FIX2B8P10D4
+                if (
+                    ! static::v5836CanAccessRefundPos($refund)
+                    || ! static::v5513cCanRefundCreate()
+                ) {
+                    throw new \RuntimeException(
+                        'No tienes autorización para confirmar '
+                        . 'este reembolso en su empresa y PDV.'
+                    );
+                }
+
+                $form = $db->table('payment_forms')
+                    ->where('id', $payment->payment_form_id)
+                    ->where('company_id', $refund->company_id)
+                    ->first();
+
+                if (! $form || (bool) $form->is_cash) {
+                    throw new \RuntimeException(
+                        'Solo se confirman aqui reembolsos '
+                        . 'de tarjeta o transferencia.'
+                    );
+                }
+
+                $formName = mb_strtolower(
+                    trim((string) ($form->name ?? ''))
+                );
+
+                if (
+                    ! str_contains($formName, 'tarjeta')
+                    && ! str_contains($formName, 'transferencia')
+                ) {
+                    throw new \RuntimeException(
+                        'Metodo externo no admitido.'
+                    );
+                }
+
+                $metadata = json_decode(
+                    (string) ($payment->metadata ?? '{}'),
+                    true
+                );
+
+                if (! is_array($metadata)) {
+                    $metadata = [];
+                }
+
+                // Restringir la accion al nuevo flujo
+                // para no modificar devoluciones historicas.
+                if (
+                    ($metadata['source'] ?? null)
+                    !== 'pos_ticket_multimethod_refund'
+                    || ($metadata['settlement_status'] ?? null)
+                    !== 'pending_external_confirmation'
+                ) {
+                    throw new \RuntimeException(
+                        'Este pago no pertenece al nuevo flujo '
+                        . 'de confirmacion bancaria.'
+                    );
+                }
+
+                $userId = auth()->id();
+
+                if (! $userId) {
+                    throw new \RuntimeException(
+                        'Se requiere un usuario autenticado.'
+                    );
+                }
+
+                $metadata['settlement_status'] =
+                    'externally_confirmed';
+                $metadata['external_refund_confirmed'] = true;
+                $metadata['bank_confirmation_reference'] =
+                    $bankReference;
+                $metadata['bank_confirmation_date'] =
+                    $confirmationDate;
+                $metadata['bank_confirmation_notes'] = $notes;
+                $metadata['bank_confirmed_by_user_id'] =
+                    (int) $userId;
+                $metadata['bank_confirmed_at'] =
+                    now()->toDateTimeString();
+
+                $updated = $db->table('pos_order_refund_payments')
+                    ->where('id', $refundPaymentId)
+                    ->where('status', 'pending')
+                    ->update([
+                        'status' => 'refunded',
+                        'metadata' => static::v5506bJson($metadata),
+                        'updated_at' => now(),
+                    ]);
+
+                if ($updated !== 1) {
+                    throw new \RuntimeException(
+                        'No fue posible confirmar el reembolso.'
+                    );
+                }
+
+                static::v5515aWritePosAuditLog(
+                    'pos.refund.external.confirmed',
+                    [
+                        'pos_order_id' => (int) $refund->pos_order_id,
+                        'pos_order_refund_id' => (int) $refund->id,
+                        'pos_session_id' =>
+                            (int) $refund->pos_session_id,
+                        'entity_type' =>
+                            'pos_order_refund_payment',
+                        'entity_id' => $refundPaymentId,
+                        'description' =>
+                            'Reembolso bancario confirmado manualmente.',
+                        'after_data' => [
+                            'payment_id' => $refundPaymentId,
+                            'amount' => $payment->amount,
+                            'reference' => $bankReference,
+                            'confirmation_date' => $confirmationDate,
+                        ],
+                    ]
+                );
+
+                return [
+                    'refund_payment_id' => $refundPaymentId,
+                    'refund_id' => (int) $refund->id,
+                    'amount' => (string) $payment->amount,
+                    'status' => 'refunded',
+                    'bank_reference' => $bankReference,
+                    'confirmation_date' => $confirmationDate,
+                    'confirmed_by_user_id' => (int) $userId,
+                ];
+            }
+        );
+    }
+
+    public static function v5506bCreateTotalRefund(object $record, string $reason, bool $emitLegacySuccessAudit = true): int
     {
         // BEXIA_V582_P3_XLSM_A13_TOTAL_REFUND
         if (static::isHistoricalMovement($record)) {
@@ -807,7 +2546,7 @@ public static function canCreate(): bool
             }
         }
 
-        return DB::transaction(function () use ($record, $reason): int {
+        return DB::transaction(function () use ($record, $reason, $emitLegacySuccessAudit): int {
             $order = DB::table('pos_orders')
                 ->where('id', (int) $record->id)
                 ->lockForUpdate()
@@ -871,10 +2610,12 @@ public static function canCreate(): bool
 
             $orderMetadata = static::v5506bMetadataArray($order);
 
+            $refundSessionId = static::v5836RefundOpenSessionId($order);
+
             $refundId = DB::table('pos_order_refunds')->insertGetId([
                 'company_id' => $order->company_id ?? null,
                 'pos_order_id' => $order->id,
-                'pos_session_id' => $order->pos_session_id ?? null,
+                'pos_session_id' => $refundSessionId,
                 'pos_point_id' => $order->pos_point_id ?? null,
                 'customer_id' => $order->customer_id ?? null,
                 'number' => $refundNumber,
@@ -891,6 +2632,8 @@ public static function canCreate(): bool
                 'metadata' => static::v5506bJson([
                     'source' => 'filament_pos_ticket_total_refund',
                     'inventory_return_status' => 'pending',
+                    'original_pos_session_id' => $order->pos_session_id ?? null,
+                    'refund_pos_session_id' => $refundSessionId,
                     'original_order_number' => $order->number ?? null,
                     'original_order_status' => $order->status ?? null,
                     'original_stock_movement_id' => $orderMetadata['stock_movement_id'] ?? null,
@@ -976,6 +2719,10 @@ public static function canCreate(): bool
                     'updated_at' => now(),
                 ]);
 
+            // BEXIA_V5836_POS_REFUND_AUDIT_SELECTIVE_P10I49
+            // El flujo nuevo emite auditoria definitiva.
+            // El flujo tradicional conserva su evento.
+            if ($emitLegacySuccessAudit) {
                         static::v5515aWritePosAuditLog('pos.refund.total.success', [
                 'pos_order_id' => (int) ($record->id ?? 0),
                 'pos_session_id' => (int) ($record->pos_session_id ?? 0),
@@ -994,6 +2741,7 @@ public static function canCreate(): bool
                     'order_number' => $record->number ?? null,
                 ],
             ]);
+            }
 
 return (int) $refundId;
         });
@@ -1002,7 +2750,7 @@ return (int) $refundId;
 
 
 
-    public static function v5509bCreatePartialRefund(object $record, string $reason, array $quantities): int
+    public static function v5509bCreatePartialRefund(object $record, string $reason, array $quantities, bool $emitLegacySuccessAudit = true): int
     {
         // BEXIA_V582_P3_XLSM_A13_PARTIAL_REFUND
         if (static::isHistoricalMovement($record)) {
@@ -1046,7 +2794,7 @@ return (int) $refundId;
             }
         }
 
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($record, $reason, $quantities): int {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($record, $reason, $quantities, $emitLegacySuccessAudit): int {
             $order = \Illuminate\Support\Facades\DB::table('pos_orders')
                 ->where('id', (int) $record->id)
                 ->lockForUpdate()
@@ -1157,10 +2905,12 @@ return (int) $refundId;
             $refundNumber = static::v5506bNextRefundNumber($order);
             $orderMetadata = static::v5506bMetadataArray($order);
 
+            $refundSessionId = static::v5836RefundOpenSessionId($order);
+
             $refundId = \Illuminate\Support\Facades\DB::table('pos_order_refunds')->insertGetId([
                 'company_id' => $order->company_id ?? null,
                 'pos_order_id' => $order->id,
-                'pos_session_id' => $order->pos_session_id ?? null,
+                'pos_session_id' => $refundSessionId,
                 'pos_point_id' => $order->pos_point_id ?? null,
                 'customer_id' => $order->customer_id ?? null,
                 'number' => $refundNumber,
@@ -1177,6 +2927,8 @@ return (int) $refundId;
                 'metadata' => static::v5506bJson([
                     'source' => 'filament_pos_ticket_partial_refund',
                     'inventory_return_status' => 'pending',
+                    'original_pos_session_id' => $order->pos_session_id ?? null,
+                    'refund_pos_session_id' => $refundSessionId,
                     'original_order_number' => $order->number ?? null,
                     'original_order_status' => $order->status ?? null,
                     'original_stock_movement_id' => $orderMetadata['stock_movement_id'] ?? null,
@@ -1247,6 +2999,10 @@ return (int) $refundId;
                     'updated_at' => now(),
                 ]);
 
+            // BEXIA_V5836_POS_REFUND_AUDIT_SELECTIVE_P10I49
+            // El flujo nuevo emite auditoria definitiva.
+            // El flujo tradicional conserva su evento.
+            if ($emitLegacySuccessAudit) {
                         static::v5515aWritePosAuditLog('pos.refund.partial.success', [
                 'pos_order_id' => (int) ($record->id ?? 0),
                 'pos_session_id' => (int) ($record->pos_session_id ?? 0),
@@ -1266,6 +3022,7 @@ return (int) $refundId;
                     'quantities' => $quantities,
                 ],
             ]);
+            }
 
 return (int) $refundId;
         });
