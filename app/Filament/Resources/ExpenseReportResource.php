@@ -301,7 +301,7 @@ class ExpenseReportResource extends Resource
                         Forms\Components\DatePicker::make('report_date')
                             ->label('Fecha de comprobación')
                             ->default(now()->toDateString())
-                            ->native(false)
+                            ->native(true)
                             ->required(),
 
                         Forms\Components\Select::make('petty_cash_fund_id')
@@ -428,7 +428,7 @@ class ExpenseReportResource extends Resource
                                 Forms\Components\DatePicker::make('expense_date')
                                     ->label('Fecha del gasto')
                                     ->default(now()->toDateString())
-                                    ->native(false)
+                                    ->native(true)
                                     ->required(),
 
                                 Forms\Components\TextInput::make('supplier_name')
@@ -1152,9 +1152,51 @@ class ExpenseReportResource extends Resource
     {
         return $table
             ->columns([
+                // GASTOS10N8B_TABLE_COM
                 Tables\Columns\TextColumn::make('number')
                     ->label('Folio')
-                    ->searchable()
+                    ->formatStateUsing(
+                        fn (?string $state, ExpenseReport $record): string =>
+                            app(\App\Support\Expenses\PettyCashVoucherService::class)->existing('COM', (int) $record->id)
+                            ?: ($state ?: 'Sin folio')
+                    )
+                    ->description(null)
+                    ->searchable(
+                        query: function (
+                            Builder $query,
+                            string $search
+                        ): Builder {
+                            return $query->where(
+                                function (Builder $q) use ($search): void {
+                                    $q->where(
+                                        'expense_reports.number',
+                                        'ilike',
+                                        '%' . $search . '%'
+                                    )->orWhereExists(
+                                        function (
+                                            \Illuminate\Database\Query\Builder $sub
+                                        ) use ($search): void {
+                                            $sub->selectRaw('1')
+                                                ->from('petty_cash_vouchers')
+                                                ->whereColumn(
+                                                    'petty_cash_vouchers.source_id',
+                                                    'expense_reports.id'
+                                                )
+                                                ->where(
+                                                    'petty_cash_vouchers.source_type',
+                                                    'expense_report'
+                                                )
+                                                ->where(
+                                                    'petty_cash_vouchers.folio',
+                                                    'ilike',
+                                                    '%' . $search . '%'
+                                                );
+                                        }
+                                    );
+                                }
+                            );
+                        }
+                    )
                     ->placeholder('Sin folio'),
 
                 Tables\Columns\TextColumn::make('report_date')

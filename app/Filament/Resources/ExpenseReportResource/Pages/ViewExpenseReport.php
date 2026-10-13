@@ -18,6 +18,35 @@ class ViewExpenseReport extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+
+            Actions\Action::make('gastos10dTicket')
+                ->label('Vale de caja - Comprobación')
+                ->icon('heroicon-o-printer')
+                ->color('info')
+                ->visible(
+                    fn (): bool => in_array(
+                        (string) $this->record->status,
+                        ['approved', 'paid', 'closed'],
+                        true
+                    )
+                )
+                ->action(function (): void {
+                    $url = route(
+                        'expenses.reports.ticket',
+                        [
+                            'tenant' => $this->record->company_id,
+                            'expenseReport' => $this->record->getKey(),
+                        ]
+                    );
+
+                    $this->js(
+                        "window.open("
+                        . json_encode($url)
+                        . ", '_blank', 'width=420,height=760');"
+                    );
+                }),
+
+
             Actions\Action::make('approveExpense')
                 ->label('Aprobar')
                 ->icon('heroicon-o-check')

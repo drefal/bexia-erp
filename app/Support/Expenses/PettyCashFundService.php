@@ -101,6 +101,9 @@ class PettyCashFundService
                 'funding_treasury_account_id' => $fundingAccount?->id,
                 'number' => null,
                 'name' => $name,
+                'location' => filled($data['location'] ?? null)
+                    ? trim((string) $data['location'])
+                    : null,
                 'authorized_amount' => $authorizedAmount,
                 'operational_balance' => 0,
                 'currency_code' => (string) ($data['currency_code'] ?? 'MXN'),
@@ -164,6 +167,11 @@ class PettyCashFundService
             $fund->update([
                 'funding_treasury_account_id' => $fundingAccountId,
                 'name' => trim((string) ($data['name'] ?? $fund->name)),
+                'location' => array_key_exists('location', $data)
+                    ? (filled($data['location'])
+                        ? trim((string) $data['location'])
+                        : null)
+                    : $fund->location,
                 'authorized_amount' => $authorizedAmount,
                 'status' => (string) ($data['status'] ?? $fund->status),
                 'is_active' => (bool) ($data['is_active'] ?? $fund->is_active),

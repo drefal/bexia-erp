@@ -485,15 +485,19 @@ class ExpenseAdvanceResource extends Resource
                         $record !== null
                 )
                 ->schema([
+                    // GASTOS10N8B_FORM_ANT
                     Forms\Components\Placeholder::make(
                         'number_display'
                     )
                         ->label('Folio')
                         ->content(
-                            fn (?ExpenseAdvance $record):
-                                string =>
-                                    $record?->number
-                                    ?: 'Pendiente'
+                            fn (?ExpenseAdvance $record): string =>
+                                $record
+                                    ? (
+                                        app(\App\Support\Expenses\PettyCashVoucherService::class)->existing('ANT', (int) $record->id)
+                                        ?: ($record->number ?: 'Pendiente')
+                                    )
+                                    : 'Pendiente'
                         ),
 
                     Forms\Components\Placeholder::make(
@@ -558,11 +562,53 @@ class ExpenseAdvanceResource extends Resource
         return $table
             ->defaultSort('id', 'desc')
             ->columns([
+                // GASTOS10N8B_TABLE_ANT
                 Tables\Columns\TextColumn::make(
                     'number'
                 )
                     ->label('Folio')
-                    ->searchable()
+                    ->formatStateUsing(
+                        fn (?string $state, ExpenseAdvance $record): string =>
+                            app(\App\Support\Expenses\PettyCashVoucherService::class)->existing('ANT', (int) $record->id)
+                            ?: ($state ?: 'Pendiente')
+                    )
+                    ->description(null)
+                    ->searchable(
+                        query: function (
+                            Builder $query,
+                            string $search
+                        ): Builder {
+                            return $query->where(
+                                function (Builder $q) use ($search): void {
+                                    $q->where(
+                                        'expense_advances.number',
+                                        'ilike',
+                                        '%' . $search . '%'
+                                    )->orWhereExists(
+                                        function (
+                                            \Illuminate\Database\Query\Builder $sub
+                                        ) use ($search): void {
+                                            $sub->selectRaw('1')
+                                                ->from('petty_cash_vouchers')
+                                                ->whereColumn(
+                                                    'petty_cash_vouchers.source_id',
+                                                    'expense_advances.id'
+                                                )
+                                                ->where(
+                                                    'petty_cash_vouchers.source_type',
+                                                    'expense_advance'
+                                                )
+                                                ->where(
+                                                    'petty_cash_vouchers.folio',
+                                                    'ilike',
+                                                    '%' . $search . '%'
+                                                );
+                                        }
+                                    );
+                                }
+                            );
+                        }
+                    )
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make(
@@ -830,10 +876,17 @@ class ExpenseAdvanceResource extends Resource
             )
                 ->columns(2)
                 ->schema([
+                    // GASTOS10N8B_VIEW_ANT
                     Infolists\Components\TextEntry::make(
                         'number'
                     )
-                        ->label('Folio'),
+                        ->label('Folio')
+                        ->formatStateUsing(
+                            fn (?string $state, ExpenseAdvance $record): string =>
+                                app(\App\Support\Expenses\PettyCashVoucherService::class)->existing('ANT', (int) $record->id)
+                                ?: ($state ?: 'Pendiente')
+                        )
+                        ->hint(null),
 
                     Infolists\Components\TextEntry::make(
                         'status'
