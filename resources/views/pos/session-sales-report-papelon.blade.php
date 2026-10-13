@@ -134,6 +134,14 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
     </tbody>
 </table>
 
+{{-- BEXIA_V5836_POS_REFUND_FIX2B8P9D2 --}}
+@php
+    $refundLedger = \App\Support\PosSessionRefundDetail::build(
+        (int) ($session->id ?? 0)
+    );
+@endphp
+@include('pos.partials.session-refund-detail', ['refundLedger' => $refundLedger])
+
 <h2>Resumen final</h2>
 
 {{-- BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS --}}

@@ -437,6 +437,22 @@
 
     <div class="line"></div>
 
+    {{-- BEXIA_POS53C2M8H_FINAL_RECEIPT --}}
+    @php
+        $pos53ReceiptHasAdvances = collect($payments ?? [])
+            ->contains(function ($row) {
+                $raw = $row->metadata ?? null;
+                $meta = is_array($raw)
+                    ? $raw
+                    : (is_string($raw) ? json_decode($raw, true) : []);
+
+                return is_array($meta)
+                    && strtolower(trim(
+                        (string) ($meta['payment_kind'] ?? '')
+                    )) === 'advance'
+                    && (string) ($row->status ?? 'paid') === 'paid';
+            });
+    @endphp
     <div class="bold">Formas de pago</div>
     <table>
         @foreach($payments as $payment)
@@ -454,7 +470,48 @@
                 $v5530c5TenderedAmount = (float) ($v5530c5PaymentMetadata['tendered_amount'] ?? $v5530c5PaymentMetadata['cash_received'] ?? $payment->amount ?? 0);
             @endphp
             <tr>
-                <td>{{ $payment->payment_label ?? 'Pago' }}</td>
+                @php
+                    $pos53ReceiptPaymentKind = strtolower(trim(
+                        (string) ($v5530c5PaymentMetadata['payment_kind'] ?? '')
+                    ));
+
+                    $pos53ReceiptShowAdvance =
+                        $pos53ReceiptPaymentKind === 'advance';
+
+                    $pos53ReceiptShowSettlement =
+                        $pos53ReceiptHasAdvances
+                        && $pos53ReceiptPaymentKind === 'settlement';
+
+                    $pos53ReceiptPaymentDate = null;
+
+                    if (
+                        ($pos53ReceiptShowAdvance || $pos53ReceiptShowSettlement)
+                        && ! empty($payment->created_at)
+                    ) {
+                        try {
+                            $pos53ReceiptPaymentDate =
+                                \Carbon\Carbon::parse($payment->created_at)
+                                    ->format('d/m/Y H:i');
+                        } catch (\Throwable $e) {
+                            $pos53ReceiptPaymentDate = null;
+                        }
+                    }
+                @endphp
+                <td>
+                    @if($pos53ReceiptShowAdvance)
+                        <div class="small bold">ANTICIPO</div>
+                    @elseif($pos53ReceiptShowSettlement)
+                        <div class="small bold">LIQUIDACIÓN</div>
+                    @endif
+
+                    {{ $payment->payment_label ?? 'Pago' }}
+
+                    @if($pos53ReceiptPaymentDate !== null)
+                        <div class="small">
+                            Fecha: {{ $pos53ReceiptPaymentDate }}
+                        </div>
+                    @endif
+                </td>
                 <td class="right">${{ number_format($v5530c5TenderedAmount, 2) }}</td>
             </tr>
         @endforeach
