@@ -191,11 +191,10 @@ class ExpenseAdvanceResource extends Resource
                                 ?: ('#' . $fund->id))
                             . ' · '
                             . $fund->name
-                            . ' · Disponible $'
-                            . number_format(
-                                $balance,
-                                2
-                            ),
+                            . (ExpenseAccess::isAdmin()
+                                ? ' · Disponible $'
+                                    . number_format($balance, 2)
+                                : ''),
                     ];
                 }
             )

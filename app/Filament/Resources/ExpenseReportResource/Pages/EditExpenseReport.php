@@ -9,6 +9,7 @@ use App\Support\Expenses\ExpenseReportApprovalWorkflow;
 use App\Support\Expenses\ExpenseReportSubmissionValidator;
 use App\Models\ExpenseReport;
 use Filament\Actions;
+use Filament\Forms;
 use Filament\Actions\StaticAction;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\HtmlString;
@@ -88,6 +89,14 @@ class EditExpenseReport extends EditRecord
                         'expense_report_id',
                         '!=',
                         (int) $this->record->getKey()
+                    )
+                    ->whereHas(
+                        'report',
+                        fn ($query) => $query->where(
+                            'status',
+                            '!=',
+                            'cancelled'
+                        )
                     )
                     ->with('report:id,number')
                     ->first();
@@ -172,6 +181,62 @@ class EditExpenseReport extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+
+            Actions\Action::make('cancelDraftDocument')
+                ->label('Cancelar documento')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->modalHeading('Cancelar comprobación en borrador')
+                ->modalDescription(
+                    'El documento se conservará como cancelado. '
+                    . 'Esta acción no elimina folios ni movimientos.'
+                )
+                ->form([
+                    Forms\Components\Textarea::make('reason')
+                        ->label('Motivo de cancelación')
+                        ->required()
+                        ->maxLength(1000)
+                        ->rows(3),
+                ])
+                ->modalSubmitActionLabel('Confirmar cancelación')
+                ->visible(
+                    fn (): bool => \App\Support\Expenses\ExpenseDraftCancellationService::canCancel(
+                        $this->record
+                    )
+                )
+                ->action(function (array $data): void {{
+                    try {{
+                        app(
+                            \App\Support\Expenses\ExpenseDraftCancellationService::class
+                        )->cancel(
+                            $this->record,
+                            (string) ($data['reason'] ?? '')
+                        );
+
+                        $this->record->refresh();
+
+                        \Filament\Notifications\Notification::make()
+                            ->success()
+                            ->title('Documento cancelado')
+                            ->send();
+
+                        $this->redirect(
+                            static::getResource()::getUrl(
+                                'view',
+                                ['record' => $this->record]
+                            )
+                        );
+                    }} catch (\Throwable $e) {{
+                        \Filament\Notifications\Notification::make()
+                            ->danger()
+                            ->title('No se pudo cancelar')
+                            ->body($e->getMessage())
+                            ->persistent()
+                            ->send();
+                    }}
+                }}),
+
+
 
             Actions\Action::make('gastos10dTicket')
                 ->label('Vale de caja - Comprobación')
