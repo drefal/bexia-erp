@@ -144,6 +144,13 @@ class ViewPosSession extends ViewRecord
             'reportUrl' => url('/pos/sessions/' . $this->record->id . '/sales-report'),
             'closeTicketUrl' => url('/pos/sessions/' . $this->record->id . '/close-ticket/print'),
             'priceListChanges' => $this->priceListChanges(),
+            // BEXIA_V5836_POS_REFUND_FIX2B8P9C
+            'canViewSessionRefunds' =>
+                (auth()->user()?->can('pos.menu.view') ?? false),
+            'sessionRefundLedger' =>
+                (auth()->user()?->can('pos.menu.view') ?? false)
+                    ? $this->v5836SessionRefundLedger()
+                    : ['refunds' => [], 'total' => 0.0],
             // BEXIA_V5836_POS53C1_SESSION_TICKETS
             'canViewSessionTickets' => (auth()->user()?->can('pos.menu.view') ?? false),
             'sessionTickets' => (auth()->user()?->can('pos.menu.view') ?? false)
@@ -152,6 +159,141 @@ class ViewPosSession extends ViewRecord
             'canViewPriceListChanges' => auth()->user()?->can('pos.sessions.view_price_list_changes') ?? false,
             'canDownloadReport' => auth()->user()?->can('pos.sessions.download_report') ?? false,
             'canPrintCloseTicket' => auth()->user()?->can('pos.sessions.print_close_ticket') ?? false,
+        ];
+    }
+
+    // BEXIA_V5836_POS_REFUND_FIX2B8P9C
+    // Historial asociado a la sesion de devolucion,
+    // independientemente de la fecha de venta original.
+    protected function v5836SessionRefundLedger(): array
+    {
+        if (
+            ! Schema::hasTable('pos_order_refunds')
+            || ! Schema::hasTable('pos_order_refund_payments')
+            || ! Schema::hasTable('pos_orders')
+        ) {
+            return ['refunds' => [], 'total' => 0.0];
+        }
+
+        $sessionId = (int) $this->record->id;
+        $companyId = (int) $this->record->company_id;
+        $posPointId = (int) $this->record->pos_point_id;
+
+        $refunds = DB::table('pos_order_refunds as r')
+            ->leftJoin(
+                'pos_orders as o',
+                'o.id',
+                '=',
+                'r.pos_order_id'
+            )
+            ->where('r.pos_session_id', $sessionId)
+            ->where('r.company_id', $companyId)
+            ->where('r.pos_point_id', $posPointId)
+            ->whereNotIn('r.status', [
+                'cancelled', 'canceled', 'void',
+            ])
+            ->orderBy('r.created_at')
+            ->orderBy('r.id')
+            ->get([
+                'r.id',
+                'r.number',
+                'r.type',
+                'r.status',
+                'r.payment_total',
+                'r.created_at',
+                'r.created_by_user_id',
+                'r.pos_order_id',
+                'o.number as ticket_number',
+            ]);
+
+        $ids = $refunds->pluck('id')->all();
+
+        $payments = $ids === []
+            ? collect()
+            : DB::table('pos_order_refund_payments')
+                ->whereIn('pos_order_refund_id', $ids)
+                ->orderBy('id')
+                ->get()
+                ->groupBy('pos_order_refund_id');
+
+        $userIds = $refunds->pluck('created_by_user_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $users = $userIds === []
+            ? collect()
+            : DB::table('users')
+                ->whereIn('id', $userIds)
+                ->pluck('name', 'id');
+
+        $rows = [];
+        $totalCents = 0;
+
+        foreach ($refunds as $refund) {
+            $refundCents = (int) round(
+                abs((float) $refund->payment_total) * 100
+            );
+            $totalCents += $refundCents;
+
+            $methods = [];
+
+            foreach (
+                $payments->get((int) $refund->id, collect())
+                as $payment
+            ) {
+                $metadata = json_decode(
+                    (string) ($payment->metadata ?? '{}'),
+                    true
+                );
+                $metadata = is_array($metadata) ? $metadata : [];
+
+                $methods[] = [
+                    'id' => (int) $payment->id,
+                    'method' => (string) (
+                        $payment->payment_label ?: 'Sin metodo'
+                    ),
+                    'amount' => round(
+                        abs((float) $payment->amount),
+                        2
+                    ),
+                    'status' => (string) $payment->status,
+                    'settlement_status' => (string) (
+                        $metadata['settlement_status'] ?? ''
+                    ),
+                    'confirmed_at' => (string) (
+                        $metadata['bank_confirmed_at'] ?? ''
+                    ),
+                    'confirmed_by' =>
+                        $metadata['bank_confirmed_by_user_id'] ?? null,
+                ];
+            }
+
+            $rows[] = [
+                'id' => (int) $refund->id,
+                'number' => (string) $refund->number,
+                'ticket_id' => (int) $refund->pos_order_id,
+                'ticket_number' => (string) (
+                    $refund->ticket_number ?? ''
+                ),
+                'type' => (string) $refund->type,
+                'status' => (string) $refund->status,
+                'created_at' => (string) $refund->created_at,
+                'user' => (string) (
+                    $users->get($refund->created_by_user_id)
+                    ?: 'Usuario #' . (
+                        $refund->created_by_user_id ?? 'N/D'
+                    )
+                ),
+                'amount' => $refundCents / 100,
+                'methods' => $methods,
+            ];
+        }
+
+        return [
+            'refunds' => $rows,
+            'total' => $totalCents / 100,
         ];
     }
 
