@@ -75,6 +75,32 @@ class ExpenseReportPostingService
                         $metadata,
                 ])->save();
 
+
+                // GASTOS10N7D2B_ADVANCE_COM
+                // Comprobacion documental: no registrar otra salida.
+                if (
+                    (string) $locked->status !== 'approved'
+                    || (string) $locked->approval_status !== 'approved'
+                ) {
+                    throw new RuntimeException(
+                        'No se puede emitir COM sin aprobacion final.'
+                    );
+                }
+
+                if (! $locked->petty_cash_fund_id) {
+                    throw new RuntimeException(
+                        'La comprobacion no tiene caja chica.'
+                    );
+                }
+
+                app(PettyCashVoucherService::class)->issue(
+                    (int) $locked->company_id,
+                    (int) $locked->petty_cash_fund_id,
+                    PettyCashVoucherService::TYPE_REPORT,
+                    (int) $locked->id,
+                    $locked->approved_at
+                );
+
                 return $locked->refresh();
             }
 
@@ -467,6 +493,15 @@ class ExpenseReportPostingService
                     $metadata,
             ])->save();
 
+            // GASTOS10N7D2B_DIRECT_COM
+            // El posteo y ledger ya fueron procesados.
+            app(PettyCashVoucherService::class)->issue(
+                (int) $locked->company_id,
+                (int) $locked->petty_cash_fund_id,
+                PettyCashVoucherService::TYPE_REPORT,
+                (int) $locked->id,
+                $locked->approved_at
+            );
             return $locked->refresh();
         });
     }

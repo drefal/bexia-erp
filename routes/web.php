@@ -954,3 +954,14 @@ Route::get(
 )
     ->middleware('auth')
     ->name('expenses.advances.return.print');
+
+
+// V5.83.6-GASTOS10D - Ticket de comprobacion
+\Illuminate\Support\Facades\Route::get(
+    '/admin/{tenant}/expense-reports/{expenseReport}/ticket',
+    \App\Http\Controllers\Expenses\ExpenseReportTicketController::class
+)
+    ->middleware(['web', 'auth'])
+    ->whereNumber('tenant')
+    ->whereNumber('expenseReport')
+    ->name('expenses.reports.ticket');

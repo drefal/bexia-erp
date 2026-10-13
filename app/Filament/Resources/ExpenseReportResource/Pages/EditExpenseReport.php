@@ -173,6 +173,35 @@ class EditExpenseReport extends EditRecord
     {
         return [
 
+            Actions\Action::make('gastos10dTicket')
+                ->label('Vale de caja - Comprobación')
+                ->icon('heroicon-o-printer')
+                ->color('info')
+                ->visible(
+                    fn (): bool => in_array(
+                        (string) $this->record->status,
+                        ['approved', 'paid', 'closed'],
+                        true
+                    )
+                )
+                ->action(function (): void {
+                    $url = route(
+                        'expenses.reports.ticket',
+                        [
+                            'tenant' => $this->record->company_id,
+                            'expenseReport' => $this->record->getKey(),
+                        ]
+                    );
+
+                    $this->js(
+                        "window.open("
+                        . json_encode($url)
+                        . ", '_blank', 'width=420,height=760');"
+                    );
+                }),
+
+
+
             Actions\Action::make('sendToApproval')
                 ->label('Enviar a aprobación')
                 ->icon('heroicon-o-paper-airplane')

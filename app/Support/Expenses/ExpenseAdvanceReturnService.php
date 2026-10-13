@@ -442,6 +442,16 @@ class ExpenseAdvanceReturnService
                         $metadata,
                 ])->save();
 
+                // GASTOS10N7D1_DEV
+                // La devolucion fue registrada exitosamente.
+                app(PettyCashVoucherService::class)->issue(
+                    (int) $locked->company_id,
+                    (int) $locked->petty_cash_fund_id,
+                    PettyCashVoucherService::TYPE_RETURN,
+                    (int) $locked->id,
+                    $locked->returned_at
+                );
+
                 return $locked->refresh();
             }
         );

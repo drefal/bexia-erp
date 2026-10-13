@@ -81,7 +81,7 @@
 <head>
     <meta charset="utf-8">
 
-    <title>{{ $record->number }}</title>
+    <title>Vale de Caja - Anticipo {{ $voucherFolio ?: $record->number }}</title>
 
     <style>
         @page {
@@ -292,6 +292,34 @@
                 width: 72mm;
             }
         }
+
+        /* GASTOS10N6B: encabezado uniforme de vales */
+        .bexia-fund-name {
+            margin-top: 2mm;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
+        .bexia-fund-location {
+            margin-top: 1mm;
+            text-align: center;
+            font-size: 10px;
+            overflow-wrap: anywhere;
+        }
+
+        .bexia-original-reference {
+            margin-top: 1mm;
+            text-align: center;
+            font-size: 9px;
+            font-weight: 400;
+            overflow-wrap: anywhere;
+        }
+
+        .bexia-voucher-number {
+            overflow-wrap: anywhere;
+        }
     </style>
 </head>
 
@@ -310,12 +338,20 @@
             {{ $companyName }}
         </div>
 
-        <div class="document-title">
-            VALE DE ANTICIPO
+        <div class="bexia-fund-name">
+            {{ $record->pettyCashFund?->name ?? 'Caja sin asignar' }}
+        </div>
+        <div class="bexia-fund-location">
+            Ubicación:
+            {{ $record->pettyCashFund?->location ?: 'No especificada' }}
         </div>
 
-        <div class="folio">
-            {{ $record->number }}
+        <div class="document-title">
+            VALE DE CAJA - ANTICIPO
+        </div>
+
+        <div class="folio bexia-voucher-number">
+            {{ $voucherFolio ?: $record->number }}
         </div>
 
         <div class="section">

@@ -1093,6 +1093,17 @@ class PettyCashTransferService
             'metadata' =>
                 $metadataAdvance,
         ])->save();
+
+        // GASTOS10N7D1_REM
+        // El movimiento de reembolso ya fue registrado.
+        app(PettyCashVoucherService::class)->issue(
+            (int) $advance->company_id,
+            (int) $advance->petty_cash_fund_id,
+            PettyCashVoucherService::TYPE_REIMBURSEMENT,
+            (int) $advance->id,
+            $advance->reimbursed_at
+        );
+
     }
 
     protected function syncExpenseAdvance(
@@ -1333,6 +1344,8 @@ class PettyCashTransferService
             'petty_cash_fund_movement_id' =>
                 $pettyMovement->id,
         ])->save();
+
+
     }
 
     protected function syncFundToFundTransfer(
