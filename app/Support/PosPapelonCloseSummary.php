@@ -7,12 +7,19 @@ use Illuminate\Support\Facades\Schema;
 
 class PosPapelonCloseSummary
 {
-    public static function build(int $sessionId): array
+    // BEXIA_V5836_POS_AREAS3J
+    public static function build(
+        int $sessionId,
+        bool $useCompanyAreas = false
+    ): array
     {
-        return (new self())->handle($sessionId);
+        return (new self())->handle($sessionId, $useCompanyAreas);
     }
 
-    protected function handle(int $sessionId): array
+    protected function handle(
+        int $sessionId,
+        bool $useCompanyAreas = false
+    ): array
     {
         foreach (['pos_sessions', 'pos_orders', 'pos_order_payments', 'pos_order_lines', 'products', 'product_categories'] as $table) {
             if (! Schema::hasTable($table)) {
@@ -35,7 +42,7 @@ class PosPapelonCloseSummary
             ->join('pos_orders as o', 'o.id', '=', 'p.pos_order_id')
             ->where('o.pos_point_id', $posPointId);
 
-        if ($companyId > 0 && Schema::hasColumn('pos_orders', 'company_id')) {
+        if ($useCompanyAreas && $companyId > 0 && Schema::hasColumn('pos_orders', 'company_id')) {
             $paymentsQuery->where('o.company_id', $companyId);
         }
 
@@ -270,6 +277,55 @@ class PosPapelonCloseSummary
             ->get(['id', 'name', 'parent_id'])
             ->keyBy('id');
 
+        // BEXIA_V5836_POS_AREAS3B
+        // Los cierres historicos permanecen con su clasificacion anterior
+        // hasta incorporar el snapshot de areas en la fase siguiente.
+        $configuredAreas = [];
+
+        if (
+            (string) ($session->status ?? '') !== 'closed'
+            && $companyId > 0
+            && Schema::hasColumn('companies', 'pos_sales_areas')
+        ) {
+            $rawAreas = DB::table('companies')
+                ->where('id', $companyId)
+                ->value('pos_sales_areas');
+
+            $decodedAreas = is_array($rawAreas)
+                ? $rawAreas
+                : json_decode((string) ($rawAreas ?? ''), true);
+
+            if (is_array($decodedAreas)) {
+                foreach ($decodedAreas as $area) {
+                    if (! is_array($area)) {
+                        continue;
+                    }
+
+                    $name = trim((string) ($area['name'] ?? ''));
+
+                    if ($name === '') {
+                        continue;
+                    }
+
+                    $categoryIds = array_values(array_unique(
+                        array_filter(
+                            array_map('intval', $area['category_ids'] ?? []),
+                            fn ($id) => $id > 0
+                        )
+                    ));
+
+                    if ($categoryIds === []) {
+                        continue;
+                    }
+
+                    $configuredAreas[] = [
+                        'name' => $name,
+                        'category_ids' => $categoryIds,
+                    ];
+                }
+            }
+        }
+
         /*
          * BEXIA_V5836_PDV1_PRODUCT_REFERENCE_MAP
          *
@@ -371,9 +427,30 @@ class PosPapelonCloseSummary
                 $categories
             );
 
+            // BEXIA_V5836_POS_AREAS3B_CLASSIFICATION
             $section = $this->pathContains($path, 'Impresión y Copias')
                 ? 'IMPRESIÓN Y COPIAS'
                 : 'PAPELÓN';
+
+            if ($configuredAreas !== []) {
+                $section = 'General / Sin clasificar';
+
+                // La categoria mas especifica tiene prioridad.
+                foreach (array_reverse($path) as $categoryNode) {
+                    $categoryId = (int) ($categoryNode['id'] ?? 0);
+
+                    foreach ($configuredAreas as $area) {
+                        if (in_array(
+                            $categoryId,
+                            $area['category_ids'],
+                            true
+                        )) {
+                            $section = $area['name'];
+                            break 2;
+                        }
+                    }
+                }
+            }
 
             if ($orderPayments->isNotEmpty()) {
                 foreach ($orderPayments as $payment) {
@@ -535,7 +612,8 @@ class PosPapelonCloseSummary
             $lines->count(),
             $advancePaymentsTotal,
             $settledPaymentsTotal,
-            $outstandingAdvanceTotal
+            $outstandingAdvanceTotal,
+            array_column($configuredAreas, 'name')
         );
     }
 
@@ -772,12 +850,20 @@ class PosPapelonCloseSummary
         int $linesCount,
         float $advancePaymentsTotal = 0.0,
         float $settledPaymentsTotal = 0.0,
-        float $outstandingAdvanceTotal = 0.0
+        float $outstandingAdvanceTotal = 0.0,
+        array $configuredAreaNames = []
     ): array
     {
         $sections = [];
 
-        foreach (['PAPELÓN', 'IMPRESIÓN Y COPIAS'] as $name) {
+        // BEXIA_V5836_POS_AREAS3C
+        // Respetar el orden definido por la empresa.
+        // Sin configuracion conservar el formato historico.
+        $fixedNames = $configuredAreaNames !== []
+            ? array_values(array_unique($configuredAreaNames))
+            : ['PAPELÓN', 'IMPRESIÓN Y COPIAS'];
+
+        foreach ($fixedNames as $name) {
             $sections[] = [
                 'name' => $name,
                 'methods' => $this->sortedMethods($sectionMethods[$name] ?? [], true),
@@ -786,7 +872,7 @@ class PosPapelonCloseSummary
         }
 
         foreach ($sectionMethods as $name => $methods) {
-            if (in_array($name, ['PAPELÓN', 'IMPRESIÓN Y COPIAS'], true)) {
+            if (in_array($name, $fixedNames, true)) {
                 continue;
             }
 

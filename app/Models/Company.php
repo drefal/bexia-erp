@@ -13,6 +13,7 @@ class Company extends Model implements HasAvatar
 {
     protected $fillable = [
         'name',
+        'pos_sales_areas',
         'attendance_same_device_block_minutes',
         'attendance_qr_guard_enabled',
         'business_name',
@@ -75,6 +76,7 @@ class Company extends Model implements HasAvatar
         'attendance_default_accuracy_meters',];
 
     protected $casts = [
+        'pos_sales_areas' => 'array',
         'attendance_qr_guard_enabled' => 'boolean',
         'attendance_same_device_block_minutes' => 'integer',
         'active' => 'boolean',
