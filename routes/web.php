@@ -312,7 +312,9 @@ Route::get(
     [\App\Http\Controllers\PosController::class, 'v5829h6PointSessionState']
 )->name('pos.points.session-state');
 Route::get('/pos/sessions/{session}/close-ticket/print', [\App\Http\Controllers\PosController::class, 'printCloseSessionTicket'])->name('pos.sessions.close-ticket.print');
+Route::post('/pos/sessions/{session}/close-ticket/print-preview', [\App\Http\Controllers\PosController::class, 'printCloseSessionTicket'])->name('pos.sessions.close-ticket.print-preview');
 Route::get('/pos/sessions/{session}/sales-report', [\App\Http\Controllers\PosController::class, 'sessionSalesReport'])->name('pos.sessions.sales-report');
+Route::post('/pos/sessions/{session}/sales-report/preview', [\App\Http\Controllers\PosController::class, 'sessionSalesReport'])->name('pos.sessions.sales-report.preview');
 Route::get('/pos/sessions/{session}/payment-methods', [\App\Http\Controllers\PosController::class, 'paymentMethods'])->name('pos.sessions.payment-methods');
 Route::post('/pos/sessions/{session}/stock-refresh', [\App\Http\Controllers\PosController::class, 'stockRefresh'])->name('pos.sessions.stock-refresh');
 Route::get('/pos/orders/{order}/pending-ticket/print', [\App\Http\Controllers\PosController::class, 'printPendingTicket'])->name('pos.orders.pending-ticket.print');

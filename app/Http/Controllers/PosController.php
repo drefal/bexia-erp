@@ -2998,7 +2998,34 @@ abort_if(! $sessionRow, 404);
         abort(404);
     }
 
-    $difference = round((float) $request->input('closing_difference', 0), 2);
+    // BEXIA_RECON5: la diferencia la calcula siempre el servidor.
+    if ((string)($row->status ?? '') !== 'open') {
+        return redirect()->back()->with('error', 'La sesión ya no está abierta.');
+    }
+    $summaryForClose = $this->v5484BuildCloseSessionSummary($session);
+    $actualMethods = \App\Support\PosCloseReconciliation::validateActual(
+        $request->input('close_payment_actual', [])
+    );
+    $cashCountRaw = json_decode((string)$request->input('cash_count','[]'), true);
+    if (!is_array($cashCountRaw) || count($cashCountRaw) < 1 || count($cashCountRaw) > 40) {
+        return redirect()->back()->with('error','El conteo de efectivo no es válido.');
+    }
+    $cashCalculated = 0.0;
+    foreach ($cashCountRaw as $cashRow) {
+        if (!is_array($cashRow) || !isset($cashRow['value'],$cashRow['quantity'])
+            || !is_numeric($cashRow['value']) || !is_numeric($cashRow['quantity'])
+            || (float)$cashRow['value'] <= 0 || (float)$cashRow['value'] > 10000
+            || (float)$cashRow['quantity'] < 0 || (float)$cashRow['quantity'] > 100000
+            || floor((float)$cashRow['quantity']) !== (float)$cashRow['quantity']) {
+            return redirect()->back()->with('error','El conteo de efectivo contiene valores inválidos.');
+        }
+        $cashCalculated += (float)$cashRow['value'] * (float)$cashRow['quantity'];
+    }
+    $cashCalculated = round($cashCalculated,2);
+    $reconciliation = \App\Support\PosCloseReconciliation::calculate(
+        $summaryForClose, $actualMethods, $cashCalculated
+    );
+    $difference = $reconciliation['difference'];
     $note = trim((string) $request->input('closing_note', ''));
 
     if (abs($difference) > 0.009 && $note === '') {
@@ -3007,16 +3034,49 @@ abort_if(! $sessionRow, 404);
             ->with('error', 'Hay diferencia en el corte. La nota de cierre es obligatoria.');
     }
 
-    $closingAmount = $request->input('closing_amount', null);
+    $closingAmount = $cashCalculated;
     $cashCount = $request->input('cash_count', null);
 
     $notes = trim((string) ($row->notes ?? ''));
 
+    // BEXIA_RECON9N2F_SNAPSHOT
+    // Solo cierres nuevos con formato Papelon.
+    // Se guardan totales y devoluciones, no listas de productos.
+    $papelonCloseSnapshot = null;
+    $closePosPoint = $this->posPoint((int) $row->pos_point_id);
+    $closeFormat = mb_strtolower(trim(
+        (string) ($closePosPoint->session_close_format ?? '')
+    ));
+
+    if (in_array($closeFormat, ['papelon', 'papelón'], true)) {
+        $papelonCloseSummary = \App\Support\PosPapelonCloseSummary::build(
+            (int) $session
+        );
+
+        if (!empty($papelonCloseSummary['ok'])) {
+            $papelonCloseSnapshot = [
+                'version' => 1,
+                'captured_at' => now()->toDateTimeString(),
+                'refunds' => $papelonCloseSummary['refunds'] ?? [],
+                'totals' => $papelonCloseSummary['totals'] ?? [],
+            ];
+        } else {
+            // No generar un cierre con fotografia parcial.
+            return redirect()->back()->with(
+                'error',
+                'No fue posible generar el resumen Papelón del cierre.'
+            );
+        }
+    }
+
     $closePayload = [
+        'papelon_close_snapshot' => $papelonCloseSnapshot,
         'closed_by_user_id' => auth()->id(),
         'closing_note' => $note,
         'closing_difference' => $difference,
         'cash_count' => $cashCount,
+        'close_payment_actual' => $reconciliation['actual'],
+        'close_reconciliation' => $reconciliation,
         'closed_from' => 'pos_close_modal',
     ];
 
@@ -9894,6 +9954,7 @@ return response()->json([
         abort_unless(auth()->check(), 403);
 
         $summary = $this->v5484BuildCloseSessionSummary($session);
+        $summary['reconciliation'] = \App\Support\PosCloseReconciliation::calculate($summary);
 
         return response()->json([
             'ok' => true,
@@ -9925,9 +9986,93 @@ return response()->json([
         if ($v5521eCloseFormat === 'papelon') {
             $summary['papelon_close'] = \App\Support\PosPapelonCloseSummary::build($session);
 
+            // BEXIA_RECON9N2F_SNAPSHOT_RENDER
+            // En sesiones cerradas usar importes historicos.
+            // Para cierres anteriores sin snapshot no inventar datos.
+            $savedPapelon = $summary['session']['papelon_close_snapshot'] ?? null;
+
+            if (
+                (string) ($summary['session']['status'] ?? '') === 'closed'
+                && is_array($savedPapelon)
+                && (int) ($savedPapelon['version'] ?? 0) === 1
+                && is_array($savedPapelon['refunds'] ?? null)
+                && is_array($savedPapelon['totals'] ?? null)
+            ) {
+                $summary['papelon_close']['refunds'] = $savedPapelon['refunds'];
+                $summary['papelon_close']['totals'] = $savedPapelon['totals'];
+            }
+
             if (view()->exists('pos.session-sales-report-papelon')) {
                 $v5521eView = 'pos.session-sales-report-papelon';
             }
+        }
+
+        // BEXIA_V5836_PAPC16_PDF_PREVIEW
+        if ($request->isMethod('post')) {
+            abort_unless(
+                $request->is('pos/sessions/*/sales-report/preview')
+                && $v5521eCloseFormat === 'papelon',
+                422
+            );
+
+            $request->validate([
+                'preview_cash_count' => 'required|string|max:12000',
+                'preview_closing_note' => 'nullable|string|max:2000',
+            ]);
+
+            $inputRows = json_decode(
+                (string) $request->input('preview_cash_count'),
+                true
+            );
+
+            abort_unless(
+                is_array($inputRows)
+                && count($inputRows) >= 1
+                && count($inputRows) <= 40,
+                422
+            );
+
+            $clean = [];
+            foreach ($inputRows as $row) {
+                abort_unless(
+                    is_array($row)
+                    && isset($row['value'], $row['quantity'])
+                    && is_numeric($row['value'])
+                    && is_numeric($row['quantity']),
+                    422
+                );
+
+                $value = (float) $row['value'];
+                $quantity = (float) $row['quantity'];
+
+                abort_unless(
+                    is_finite($value)
+                    && is_finite($quantity)
+                    && $value > 0
+                    && $value <= 10000
+                    && $quantity >= 0
+                    && $quantity <= 100000
+                    && floor($quantity) === $quantity,
+                    422
+                );
+
+                $clean[] = [
+                    'value' => round($value, 2),
+                    'quantity' => (int) $quantity,
+                    'total' => round($value * $quantity, 2),
+                    'name' => mb_substr(
+                        (string) ($row['name'] ?? ''),
+                        0,
+                        70
+                    ),
+                ];
+            }
+
+            $summary['session']['closing_cash_count'] = $clean;
+            $summary['session']['close_payment_actual'] = \App\Support\PosCloseReconciliation::validateActual($request->input('preview_payment_actual', []));
+            $summary['session']['closing_note'] = trim(
+                (string) $request->input('preview_closing_note', '')
+            );
         }
 
         $v5521eLogoUrl = $summary['company']['logo_url'] ?? null;
@@ -10842,6 +10987,10 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                 'closing_amount' => round((float) ($session->closing_amount ?? 0), 2),
                 'closing_difference' => round((float) ($closePayload['closing_difference'] ?? 0), 2),
                 'closing_note' => (string) ($closePayload['closing_note'] ?? ''),
+                'close_reconciliation' => $closePayload['close_reconciliation'] ?? null,
+                // BEXIA_RECON9N2F_SNAPSHOT_READER
+                'papelon_close_snapshot' => $closePayload['papelon_close_snapshot'] ?? null,
+                'close_payment_actual' => $closePayload['close_payment_actual'] ?? null,
                 'closing_cash_count' => is_array($closePayload['cash_count'] ?? null) ? $closePayload['cash_count'] : [],
                 'staff_role' => (string) ($session->staff_role ?? ''),
             ],
@@ -10908,7 +11057,26 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                     'id' => (int) $row->id,
                     'number' => (string) ($row->number ?? ''),
                     'type' => (string) ($row->type ?? ''),
-                    'type_label' => (string) ($row->type ?? '') === 'cash_in' ? 'Entrada' : 'Retiro',
+                    'type_label' => (string) ($row->type ?? '') === 'cash_in'
+                        ? 'Entrada'
+                        : (
+                            (function () use ($row) {
+                                $meta = json_decode(
+                                    (string) ($row->metadata ?? ''),
+                                    true
+                                );
+                                $meta = is_array($meta) ? $meta : [];
+
+                                $isRefund =
+                                    ($meta['source'] ?? '') === 'pos_ticket_multimethod_refund'
+                                    || !empty($meta['pos_order_refund_id'])
+                                    || !empty($meta['refund_payment_ids']);
+
+                                return $isRefund
+                                    ? 'Devolución en efectivo'
+                                    : 'Retiro';
+                            })()
+                        ),
                     'amount' => round((float) ($row->amount ?? 0), 2),
                     'reason' => (string) ($row->reason ?? ''),
                     'performed_by_name' => (string) ($row->performed_by_name ?? ''),
@@ -11781,9 +11949,93 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
         if ($v5521eCloseFormat === 'papelon') {
             $summary['papelon_close'] = \App\Support\PosPapelonCloseSummary::build($session);
 
+            // BEXIA_RECON9N2F_SNAPSHOT_RENDER
+            // En sesiones cerradas usar importes historicos.
+            // Para cierres anteriores sin snapshot no inventar datos.
+            $savedPapelon = $summary['session']['papelon_close_snapshot'] ?? null;
+
+            if (
+                (string) ($summary['session']['status'] ?? '') === 'closed'
+                && is_array($savedPapelon)
+                && (int) ($savedPapelon['version'] ?? 0) === 1
+                && is_array($savedPapelon['refunds'] ?? null)
+                && is_array($savedPapelon['totals'] ?? null)
+            ) {
+                $summary['papelon_close']['refunds'] = $savedPapelon['refunds'];
+                $summary['papelon_close']['totals'] = $savedPapelon['totals'];
+            }
+
             if (view()->exists('pos.session-close-ticket-papelon')) {
                 $v5521eView = 'pos.session-close-ticket-papelon';
             }
+        }
+
+        // BEXIA_V5836_PAPC6_PREVIEW_SERVER
+        if (
+            $request->isMethod('post')
+            && $request->is('pos/sessions/*/close-ticket/print-preview')
+        ) {
+            abort_unless($v5521eCloseFormat === 'papelon', 422);
+
+            $request->validate([
+                'preview_cash_count' => 'required|string|max:12000',
+                'preview_closing_note' => 'nullable|string|max:2000',
+            ]);
+
+            $previewRows = json_decode(
+                (string) $request->input('preview_cash_count'),
+                true
+            );
+
+            abort_unless(
+                is_array($previewRows)
+                && count($previewRows) >= 1
+                && count($previewRows) <= 40,
+                422
+            );
+
+            $cleanRows = [];
+            foreach ($previewRows as $row) {
+                abort_unless(
+                    is_array($row)
+                    && isset($row['value'], $row['quantity'])
+                    && is_numeric($row['value'])
+                    && is_numeric($row['quantity']),
+                    422
+                );
+
+                $value = (float) $row['value'];
+                $quantity = (float) $row['quantity'];
+
+                abort_unless(
+                    is_finite($value)
+                    && is_finite($quantity)
+                    && $value > 0
+                    && $value <= 10000
+                    && $quantity >= 0
+                    && $quantity <= 100000
+                    && floor($quantity) === $quantity,
+                    422
+                );
+
+                $cleanRows[] = [
+                    'value' => round($value, 2),
+                    'quantity' => (int) $quantity,
+                    'total' => round($value * $quantity, 2),
+                    'name' => mb_substr((string) ($row['name'] ?? ''), 0, 70),
+                    'type' => in_array(($row['type'] ?? ''), ['bill','coin'], true)
+                        ? $row['type'] : '',
+                ];
+            }
+
+            $closePayload['cash_count'] = $cleanRows;
+            $closePayload['closing_note'] =
+                trim((string) $request->input('preview_closing_note', ''));
+
+            $summary['session']['closing_cash_count'] = $cleanRows;
+            $summary['session']['close_payment_actual'] = \App\Support\PosCloseReconciliation::validateActual($request->input('preview_payment_actual', []));
+            $summary['session']['closing_note'] =
+                $closePayload['closing_note'];
         }
 
         $v5521eLogoUrl = $summary['company']['logo_url'] ?? null;

@@ -11088,7 +11088,80 @@ document.addEventListener('DOMContentLoaded', function () {
 
     download?.addEventListener('click', function () {
         const sid = sessionId();
-        if (sid) window.open('/pos/sessions/' + sid + '/sales-report', '_blank');
+        if (!sid) return;
+
+        // BEXIA_V5836_PAPC20_GENERIC_PDF_GUARD
+        const closeFormat = String(
+            document.getElementById(
+                'v5484-close-session-body'
+            )?.dataset.bexiaCloseFormat || ''
+        ).toLowerCase().trim();
+
+        if (closeFormat !== 'papelon'
+            && closeFormat !== 'papelón') {
+            window.open(
+                '/pos/sessions/' + sid + '/sales-report',
+                '_blank'
+            );
+            return;
+        }
+
+        const rows = Array.from(
+            document.querySelectorAll(
+                '#v5485-denominations .v5485-denom-row'
+            )
+        );
+
+        if (rows.length === 0) {
+            window.open(
+                '/pos/sessions/' + sid + '/sales-report',
+                '_blank'
+            );
+            return;
+        }
+
+        const cashCount = rows.map(function (row) {
+            const value = Number(row.dataset.value || 0);
+            const input = row.querySelector('[data-v5485-denom-qty]');
+            const quantity = Number(input ? input.value : 0);
+            const name = String(
+                row.querySelector('strong')?.textContent || ''
+            ).trim();
+
+            return {
+                value: value,
+                quantity: quantity,
+                total: Number((value * quantity).toFixed(2)),
+                name: name
+            };
+        });
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action =
+            '/pos/sessions/' + sid + '/sales-report/preview';
+        form.target = '_blank';
+        form.style.display = 'none';
+
+        const data = {
+            _token: @json(csrf_token()),
+            preview_cash_count: JSON.stringify(cashCount),
+            preview_payment_actual: JSON.stringify(Object.fromEntries(Array.from(document.querySelectorAll('[data-recon5-actual]')).map(input => [input.dataset.recon5Actual, Number(input.value||0)]))),
+            preview_closing_note:
+                document.getElementById('v5485-closing-note')?.value || ''
+        };
+
+        Object.entries(data).forEach(function (entry) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = entry[0];
+            input.value = entry[1];
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+        form.remove();
     });
 
     confirm?.addEventListener('click', function () {
@@ -11523,9 +11596,30 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '<div><small>Esperado</small><strong style="display:block;">' + money(totals.expected_cash || 0) + '</strong></div>';
         html += '<div><small>Ventas efectivo</small><strong style="display:block;">' + money(totals.cash_payments_total || 0) + '</strong></div>';
         html += '<div><small>Entradas</small><strong style="display:block;">' + money(totals.cash_in_total || 0) + '</strong></div>';
-        html += '<div><small>Retiros</small><strong style="display:block;">' + money(totals.cash_out_total || 0) + '</strong></div>';
+        html += '<div><small>Retiros</small><strong style="display:block;">' + money((summary.reconciliation || {}).cash_out || 0) + '</strong></div>';
         html += '</div>';
 
+        // RECON5: capturas reales de métodos no efectivo.
+        const recon = summary.reconciliation || {};
+        const registered = recon.registered || {};
+        html += '<h3 style="font-size:15px;">Tarjetas y transferencias - importes reales</h3>';
+        [ ['credit','Tarjeta crédito'], ['debit','Tarjeta débito'], ['other_card','Otras tarjetas'], ['transfer','Transferencias'], ['other','Otros métodos'] ].forEach(function(item) {
+            const value = Number(registered[item[0]] || 0);
+            if (value === 0 && (item[0] === 'other_card' || item[0] === 'other')) return;
+            html += '<label style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:5px 0"><span>'+item[1]+' (registrado '+money(value)+')</span><input data-recon5-actual="'+item[0]+'" type="number" step="0.01" value="'+value.toFixed(2)+'" style="width:130px;max-width:45%;border:1px solid #94a3b8;border-radius:6px;padding:6px"></label>';
+        });
+        html += '<div style="margin:7px 0;padding:7px;border:1px solid #cbd5e1;border-radius:8px">'
+            + '<div>Retiros (+): <strong>'+money(recon.cash_out||0)+'</strong></div>'
+            + '<div>Devoluciones efectivo (-): <strong>'
+            +money((recon.refunds_paid||{}).cash||0)+'</strong></div>'
+            + '<div>Devoluciones crédito (-): <strong>'
+            +money((recon.refunds_paid||{}).credit||0)+'</strong></div>'
+            + '<div>Devoluciones pendientes: <strong>'
+            +money(Object.values(recon.refunds_pending||{}).reduce(
+                (a,b)=>a+Number(b||0),0
+            ))+'</strong></div>'
+            + '<div>Entradas (-): <strong>'+money(totals.cash_in_total||0)+'</strong></div>'
+            + '<div>Total conciliado: <strong id="recon5-total">'+money(0)+'</strong></div></div>';
         html += '<div id="v5485-denominations">';
 
         denominations.forEach(function (denom, index) {
@@ -11557,7 +11651,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 html += '<tr>';
                 html += '<td>' + row.type_label + '</td>';
                 html += '<td>' + row.reason + '</td>';
-                html += '<td style="text-align:right;font-weight:950;">' + money(row.amount || 0) + '</td>';
+                html += '<td style="text-align:right;font-weight:950;">'
+                    + (row.type_label === 'Devolución en efectivo' ? '-' : '')
+                    + money(row.amount || 0) + '</td>';
                 html += '<td><a href="' + row.print_url + '" target="_blank">Imprimir</a></td>';
                 html += '</tr>';
             });
@@ -11597,7 +11693,22 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
 
-        const diff = counted - expected;
+        const recon = lastCloseSummary.reconciliation || {};
+        const registered = recon.registered || {};
+        const actual = {};
+        document.querySelectorAll('[data-recon5-actual]').forEach(function(input) {
+            actual[input.dataset.recon5Actual] = Number(input.value || 0);
+        });
+        const otherTotal = ['credit','debit','other_card','transfer','other'].reduce(function(sum,key) {
+            return sum + (Object.prototype.hasOwnProperty.call(actual,key) ? actual[key] : Number(registered[key]||0));
+        },0);
+        const reconciled = counted + Number(recon.cash_out||0)
+            - Number((lastCloseSummary.totals||{}).cash_in_total||0)
+            + otherTotal;
+        const registeredTotal = Object.values(registered).reduce((sum,n) => sum+Number(n||0),0);
+        const diff = Number((reconciled-registeredTotal).toFixed(2));
+        const reconTotalEl = document.getElementById('recon5-total');
+        if (reconTotalEl) reconTotalEl.textContent = money(reconciled);
 
         const countedBox = document.getElementById('v5485-counted-cash');
         const diffBox = document.getElementById('v5485-cash-difference');
@@ -11646,11 +11757,12 @@ document.addEventListener('DOMContentLoaded', function () {
             counted: counted,
             difference: diff,
             cashCount: cashCount,
+            actual: actual,
         };
     }
 
     document.addEventListener('input', function (event) {
-        if (event.target && event.target.matches('[data-v5485-denom-qty]')) {
+        if (event.target && event.target.matches('[data-v5485-denom-qty], [data-recon5-actual]')) {
             recalcCashCount();
         }
 
@@ -11806,6 +11918,7 @@ document.addEventListener('DOMContentLoaded', function () {
         hidden('closing_difference', result.difference.toFixed(2));
         hidden('closing_note', note);
         hidden('cash_count', JSON.stringify(result.cashCount || []));
+        hidden('close_payment_actual', JSON.stringify(result.actual || {}));
     }, true);
 
     insertHeaderButtons();
@@ -12044,6 +12157,9 @@ document.addEventListener('DOMContentLoaded', function () {
         data.set('closing_difference', payload.difference.toFixed(2));
         data.set('closing_note', note);
         data.set('cash_count', JSON.stringify(payload.cashCount || []));
+        const actualInputs = {};
+        document.querySelectorAll('[data-recon5-actual]').forEach(function(input){ actualInputs[input.dataset.recon5Actual] = Number(input.value || 0); });
+        data.set('close_payment_actual', JSON.stringify(actualInputs));
 
         button.disabled = true;
         button.textContent = 'Cerrando...';
@@ -12353,7 +12469,95 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            window.open('/pos/sessions/' + sid + '/close-ticket/print', '_blank', 'width=420,height=760');
+            // BEXIA_V5836_PAPC19R2_GENERIC_PRINT_GUARD
+            const closeFormat = String(
+                document.getElementById(
+                    'v5484-close-session-body'
+                )?.dataset.bexiaCloseFormat || ''
+            ).toLowerCase().trim();
+
+            if (closeFormat !== 'papelon'
+                && closeFormat !== 'papelón') {
+                window.open(
+                    '/pos/sessions/' + sid + '/close-ticket/print',
+                    '_blank',
+                    'width=420,height=760'
+                );
+                return;
+            }
+
+            // BEXIA_V5836_PAPC6_PRINT_BUTTON_ONLY
+            const rows = Array.from(
+                document.querySelectorAll('#v5485-denominations .v5485-denom-row')
+            );
+
+            const cashCount = rows.map(function (row) {
+                const value = Number(row.dataset.value || 0);
+                const input = row.querySelector('[data-v5485-denom-qty]');
+                const quantity = Number(input ? input.value : 0);
+                const name = String(
+                    row.querySelector('strong')?.textContent || ''
+                ).trim();
+                const normalizedName = name.toLowerCase();
+                const type = normalizedName.includes('billete')
+                    ? 'bill'
+                    : (normalizedName.includes('moneda') ? 'coin' : '');
+
+                return {
+                    value: value,
+                    quantity: quantity,
+                    total: Number((value * quantity).toFixed(2)),
+                    name: name,
+                    type: type
+                };
+            });
+
+            const note = document.getElementById('v5485-closing-note')?.value || '';
+            // BEXIA_V5836_PAPC7_CSRF
+            // Token Laravel disponible al renderizar la vista.
+            const csrf = @json(csrf_token());
+
+            if (!csrf || rows.length === 0) {
+                alert('No se pudo obtener el conteo o la sesión de impresión.');
+                return;
+            }
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/pos/sessions/' + sid + '/close-ticket/print-preview';
+            // BEXIA_V5836_PAPC8_SMALL_PRINT_WINDOW
+            const printWindow = window.open(
+                '',
+                'bexia_papelon_cierre_preview',
+                'width=420,height=760,left=20,top=20,resizable=yes,scrollbars=yes'
+            );
+
+            if (!printWindow) {
+                alert('Permite las ventanas emergentes para imprimir el cierre.');
+                return;
+            }
+
+            printWindow.focus();
+
+            form.target = 'bexia_papelon_cierre_preview';
+            form.style.display = 'none';
+
+            function addField(name, value) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = String(value);
+                form.appendChild(input);
+            }
+
+            addField('_token', csrf);
+            addField('preview_cash_count', JSON.stringify(cashCount));
+            addField('preview_payment_actual', JSON.stringify(Object.fromEntries(Array.from(document.querySelectorAll('[data-recon5-actual]')).map(input => [input.dataset.recon5Actual, Number(input.value||0)]))));
+            addField('preview_closing_note', note);
+
+            document.body.appendChild(form);
+            form.submit();
+            form.remove();
         });
     }
 });

@@ -6,7 +6,22 @@
     $refunds = $papelon['refunds'] ?? [];
     $totals = $papelon['totals'] ?? [];
 
-    $money = fn ($value) => '$' . number_format((float) $value, 2);
+    // BEXIA_RECON9I_REPORT
+    $money = fn ($value) => ((float)$value < 0 ? '-$' : '$')
+        . number_format(abs((float)$value), 2);
+
+    $reportReconciliation = \App\Support\PosCloseReconciliation::calculate(
+        $summary
+    );
+    $reportPaidRefunds = round(array_sum(
+        $reportReconciliation['refunds_paid'] ?? []
+    ), 2);
+    $reportPendingRefunds = round(array_sum(
+        $reportReconciliation['refunds_pending'] ?? []
+    ), 2);
+    $reportNetFlow = (float)(
+        $reportReconciliation['recorded_total'] ?? 0
+    );
     $sessionNumber = (string) ($session->number ?? ('#' . ($session->id ?? '')));
     $openedAt = $session->opened_at ?? $session->created_at ?? null;
     $closedAt = $session->closed_at ?? null;
@@ -174,7 +189,7 @@ td{padding:2px 0;vertical-align:top}
         <td class="right">{{ $money($refunds['total_refunds_total'] ?? 0) }}</td>
     </tr>
     <tr>
-        <td>Devoluciones parciales</td>
+        <td>Devoluciones parciales solicitadas</td>
         <td class="right">{{ $money($refunds['partial_refunds_total'] ?? 0) }}</td>
     </tr>
     {{-- BEXIA_V5836G5H7C4B_ADVANCE_REFUND_VISUAL --}}
@@ -192,7 +207,11 @@ td{padding:2px 0;vertical-align:top}
     @endif
     <tr class="total-row">
         <td>Total devuelto</td>
-        <td class="right">-{{ $money($refunds['refunded_total'] ?? 0) }}</td>
+        <td class="right">-{{ $money($reportPaidRefunds) }}</td>
+    </tr>
+    <tr>
+        <td>Reembolsos pendientes (no descontados)</td>
+        <td class="right">{{ $money($reportPendingRefunds) }}</td>
     </tr>
 </table>
 
@@ -224,15 +243,15 @@ td{padding:2px 0;vertical-align:top}
     </tr>
     <tr>
         <td>Flujo neto cobrado</td>
-        <td class="right">{{ $money($totals['net_cashflow_total'] ?? 0) }}</td>
+        <td class="right">{{ $money($reportNetFlow) }}</td>
     </tr>
     <tr>
         <td>Devoluciones de venta</td>
-        <td class="right">-{{ $money($totals['sale_refunds_total'] ?? 0) }}</td>
+        <td class="right">-{{ $money($reportPaidRefunds) }}</td>
     </tr>
     <tr class="net-row">
-        <td>VENTA NETA LIQUIDADA</td>
-        <td class="right">{{ $money($totals['net_settled_sales_total'] ?? $totals['net_total'] ?? 0) }}</td>
+        <td>FLUJO NETO DE LA SESION</td>
+        <td class="right">{{ $money($reportNetFlow) }}</td>
     </tr>
 </table>
 
@@ -248,6 +267,119 @@ td{padding:2px 0;vertical-align:top}
     @endforeach
 </table>
 
+{{-- BEXIA_V5836_PAPC6_PAPELON_CLOSE_DETAIL --}}
+@php
+    $papc6Session = $summary['session'] ?? [];
+    $papc6Totals = $summary['totals'] ?? [];
+    $papc6Rows = $papc6Session['closing_cash_count']
+        ?? ($closePayload['cash_count'] ?? []);
+
+    if (is_string($papc6Rows)) {
+        $papc6Rows = json_decode($papc6Rows, true);
+    }
+
+    $papc6HasCount = is_array($papc6Rows) && count($papc6Rows) > 0;
+    $papc6Lines = [];
+
+    foreach (is_array($papc6Rows) ? $papc6Rows : [] as $row) {
+        if (!is_array($row)) continue;
+
+        $value = round((float) ($row['value'] ?? 0), 2);
+        $quantity = (int) ($row['quantity'] ?? 0);
+        if ($value <= 0 || $quantity < 0) continue;
+
+        $name = trim((string) ($row['name'] ?? ''));
+        $type = strtolower(trim((string) ($row['type'] ?? '')));
+
+        if ($type === '' && $name !== '') {
+            $lower = mb_strtolower($name);
+            $type = str_contains($lower, 'billete')
+                ? 'bill'
+                : (str_contains($lower, 'moneda') ? 'coin' : '');
+        }
+
+        if ($name === '') {
+            $label = number_format($value, $value < 1 ? 2 : 0);
+            $name = ($type === 'coin' ? 'Moneda de '
+                : ($type === 'bill' ? 'Billete de ' : '$')) . $label;
+        }
+
+        $papc6Lines[] = [
+            'value' => $value,
+            'quantity' => $quantity,
+            'name' => $name,
+            'type' => $type,
+            'total' => round($value * $quantity, 2),
+        ];
+    }
+
+    usort($papc6Lines, function ($a, $b) {
+        $byValue = $b['value'] <=> $a['value'];
+        if ($byValue !== 0) return $byValue;
+        if ($a['type'] === $b['type']) return 0;
+        if ($a['type'] === 'bill') return -1;
+        if ($b['type'] === 'bill') return 1;
+        return 0;
+    });
+
+    $papc6CashCounted = round(
+        array_sum(array_column($papc6Lines, 'total')), 2
+    );
+
+    $papc6CardCredit = 0.0;
+    $papc6CardDebit = 0.0;
+    $papc6CardOther = 0.0;
+    $papc6Transfer = 0.0;
+    $papc6Other = 0.0;
+    $papc6Sales = 0.0;
+
+    foreach ($methodTotals as $method) {
+        $name = mb_strtolower(
+            \Illuminate\Support\Str::ascii(
+                (string) ($method['method'] ?? '')
+            )
+        );
+        $amount = (float) ($method['total'] ?? 0);
+        $papc6Sales += $amount;
+
+        if (str_contains($name, 'efectivo') || str_contains($name, 'cash')) {
+            continue;
+        }
+        if (str_contains($name, 'transfer') || str_contains($name, 'spei')) {
+            $papc6Transfer += $amount;
+        } elseif (str_contains($name, 'tarjeta') || str_contains($name, 'card')) {
+            if (str_contains($name, 'credito')) {
+                $papc6CardCredit += $amount;
+            } elseif (str_contains($name, 'debito')) {
+                $papc6CardDebit += $amount;
+            } else {
+                $papc6CardOther += $amount;
+            }
+        } else {
+            $papc6Other += $amount;
+        }
+    }
+
+    $papc6Sales = round($papc6Sales, 2);
+    $papc6CardTotal = round(
+        $papc6CardCredit + $papc6CardDebit + $papc6CardOther, 2
+    );
+    $recon5 = \App\Support\PosCloseReconciliation::calculate(
+        $summary, $papc6Session['close_payment_actual'] ?? null, $papc6CashCounted
+    );
+    $papc6Total = $recon5['reconciled_total'];
+    $papc6Difference = $recon5['difference'];
+    $papc6CardCredit = $recon5['actual']['credit'];
+    $papc6CardDebit = $recon5['actual']['debit'];
+    $papc6CardOther = $recon5['actual']['other_card'];
+    $papc6Transfer = $recon5['actual']['transfer'];
+    $papc6Other = $recon5['actual']['other'];
+    $papc6Note = trim((string) (
+        $papc6Session['closing_note']
+        ?? ($closePayload['closing_note'] ?? '')
+    ));
+@endphp
+
 <div class="section-title">CUENTA EFECTIVO</div>
 <table class="cash-table">
     @foreach([1000,500,200,100,50,20,10,5,2,1,0.5] as $denom)
@@ -258,6 +390,58 @@ td{padding:2px 0;vertical-align:top}
         </tr>
     @endforeach
 </table>
+
+<div class="section-title">CONCILIACIÓN DEL CIERRE</div>
+<table>
+    <tr><td>Total neto registrado</td><td class="right">{{ $money($recon5['recorded_total']) }}</td></tr>
+    <tr><td>Efectivo contado</td><td class="right">{{ $papc6HasCount ? $money($papc6CashCounted) : 'Sin conteo' }}</td></tr>
+    {{-- BEXIA_RECON9N2C_TICKET_SALIDAS --}}
+    <tr>
+        <td>Salidas por devolución</td>
+        <td class="right">{{ $money(-array_sum($recon5['refunds_paid'] ?? [])) }}</td>
+    </tr>
+    <tr>
+        <td>Devoluciones pendientes (informativo)</td>
+        <td class="right">{{ $money(array_sum($recon5['refunds_pending'] ?? [])) }}</td>
+    </tr>
+        <tr><td>(+) Retiros del supervisor</td><td class="right">{{ $money($recon5['cash_out']) }}</td></tr>
+    <tr><td>(-) Entradas</td><td class="right">-{{ $money($recon5['cash_in']) }}</td></tr>
+    {{-- BEXIA_RECON9P6B_CASH_SUBTOTAL --}}
+    <tr class="total-row">
+        <td>TOTAL EFECTIVO CONCILIADO</td>
+        <td class="right">
+            {{ $papc6HasCount ? $money(round((float) $papc6CashCounted + (float) ($recon5['cash_out'] ?? 0) - (float) ($recon5['cash_in'] ?? 0), 2)) : 'Sin conteo' }}
+        </td>
+    </tr>
+    <tr><td>Tarjeta de crédito</td><td class="right">{{ $money($papc6CardCredit) }}</td></tr>
+    <tr><td>Tarjeta de débito</td><td class="right">{{ $money($papc6CardDebit) }}</td></tr>
+    @if(abs($papc6CardOther) > 0.009)
+        <tr><td>Otras tarjetas</td><td class="right">{{ $money($papc6CardOther) }}</td></tr>
+    @endif
+    <tr><td>Transferencias</td><td class="right">{{ $money($papc6Transfer) }}</td></tr>
+    @if(abs($papc6Other) > 0.009)
+        <tr><td>Otros métodos</td><td class="right">{{ $money($papc6Other) }}</td></tr>
+    @endif
+    <tr class="net-row">
+        <td>TOTAL CONCILIADO</td>
+        <td class="right">{{ $papc6HasCount ? $money($papc6Total) : 'Sin conteo' }}</td>
+    </tr>
+    <tr>
+        <td>DIFERENCIA VS COBRADO</td>
+        <td class="right bold">
+            {{ $papc6HasCount ? $money($papc6Difference) : 'Sin conteo' }}
+        </td>
+    </tr>
+    <tr><td>Observaciones</td><td class="right">________________</td></tr>
+</table>
+
+@if($papc6Note !== '')
+    <div class="sep"></div>
+    <div class="small">
+        <strong>Nota de cierre:</strong>
+        {{ $papc6Note }}
+    </div>
+@endif
 
 <div class="sep"></div>
 
