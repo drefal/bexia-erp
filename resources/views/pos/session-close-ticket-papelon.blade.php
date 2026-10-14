@@ -129,6 +129,85 @@ td{padding:2px 0;vertical-align:top}
         line-height:1!important;
     }
 
+
+    /*
+     * BEXIA_RECON9P7I_CONSOLAS_13PX
+     * Configuracion validada visualmente en ticket real.
+     * Exclusiva para impresion termica de 80 mm.
+     */
+    body{
+        width:72mm!important;
+        max-width:100%!important;
+        padding:1mm!important;
+        font-family:Consolas,"Courier New",monospace!important;
+        font-size:13px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+        color:#000!important;
+    }
+
+    .brand{
+        font-size:16px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+    }
+
+    .subtitle{
+        font-size:13px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+    }
+
+    .section-title{
+        font-size:13px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+        padding:4px 2px!important;
+        margin-top:5px!important;
+        background:transparent!important;
+        border:1px solid #000!important;
+    }
+
+    td{
+        font-size:13px!important;
+        font-weight:400!important;
+        padding:2px 1px!important;
+        line-height:1.2!important;
+        overflow-wrap:break-word;
+    }
+
+    td.right,
+    .right{
+        text-align:right!important;
+        white-space:nowrap;
+        font-variant-numeric:tabular-nums;
+    }
+
+    .bold{
+        font-weight:600!important;
+    }
+
+    .total-row td,
+    .net-row td{
+        font-size:14px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+        padding-top:5px!important;
+    }
+
+    .small{
+        font-size:11px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+    }
+
+    .cash-table td{
+        font-size:13px!important;
+        font-weight:400!important;
+        padding:2px 1px!important;
+        line-height:1.2!important;
+    }
+
     .no-print{
         display:none!important;
     }
