@@ -3048,17 +3048,55 @@ abort_if(! $sessionRow, 404);
         (string) ($closePosPoint->session_close_format ?? '')
     ));
 
-    if (in_array($closeFormat, ['papelon', 'papelón'], true)) {
+    if (
+        in_array($closeFormat, ['papelon', 'papelón'], true)
+        || (
+            (string) (
+                $closePosPoint->sales_breakdown_mode ?? 'default'
+            ) === 'areas'
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'companies',
+                'pos_sales_areas'
+            )
+        )
+    ) {
         $papelonCloseSummary = \App\Support\PosPapelonCloseSummary::build(
-            (int) $session
+            (int) $session,
+            (string) ($closePosPoint->sales_breakdown_mode ?? 'default')
+                === 'areas'
         );
 
         if (!empty($papelonCloseSummary['ok'])) {
             $papelonCloseSnapshot = [
-                'version' => 1,
+                // BEXIA_V5836_POS_AREAS3D_SNAPSHOT
+                'version' => 2,
+                // BEXIA_V5836_POS_AREAS3J
+                // BEXIA_V5836_POS_AREAS3I_SNAPSHOT
+                'breakdown_mode' => (
+                    (string) ($closePosPoint->sales_breakdown_mode ?? 'default')
+                ) === 'areas'
+                    && \Illuminate\Support\Facades\Schema::hasColumn(
+                        'companies',
+                        'pos_sales_areas'
+                    )
+                    && ! empty(
+                        json_decode(
+                            (string) (
+                                \Illuminate\Support\Facades\DB::table('companies')
+                                    ->where('id', (int) $row->company_id)
+                                    ->value('pos_sales_areas') ?? '[]'
+                            ),
+                            true
+                        )
+                    )
+                    ? 'areas'
+                    : 'default',
                 'captured_at' => now()->toDateTimeString(),
                 'refunds' => $papelonCloseSummary['refunds'] ?? [],
                 'totals' => $papelonCloseSummary['totals'] ?? [],
+                'sections' => $papelonCloseSummary['sections'] ?? [],
+                'method_totals' => $papelonCloseSummary['method_totals'] ?? [],
+                'products_by_section' => $papelonCloseSummary['products_by_section'] ?? [],
             ];
         } else {
             // No generar un cierre con fotografia parcial.
@@ -11328,7 +11366,11 @@ return response()->json([
         $v5521eView = 'pos.session-sales-report';
 
         if ($v5521eCloseFormat === 'papelon') {
-            $summary['papelon_close'] = \App\Support\PosPapelonCloseSummary::build($session);
+            $summary['papelon_close'] = \App\Support\PosPapelonCloseSummary::build(
+                $session,
+                (string) ($pos->sales_breakdown_mode ?? 'default')
+                    === 'areas'
+            );
 
             // BEXIA_RECON9N2F_SNAPSHOT_RENDER
             // En sesiones cerradas usar importes historicos.
@@ -11338,17 +11380,60 @@ return response()->json([
             if (
                 (string) ($summary['session']['status'] ?? '') === 'closed'
                 && is_array($savedPapelon)
-                && (int) ($savedPapelon['version'] ?? 0) === 1
+                && in_array(
+                    (int) ($savedPapelon['version'] ?? 0),
+                    [1, 2],
+                    true
+                )
                 && is_array($savedPapelon['refunds'] ?? null)
                 && is_array($savedPapelon['totals'] ?? null)
             ) {
                 $summary['papelon_close']['refunds'] = $savedPapelon['refunds'];
                 $summary['papelon_close']['totals'] = $savedPapelon['totals'];
+
+                // BEXIA_V5836_POS_AREAS3D_RENDER
+                // La v1 preserva el comportamiento historico.
+                // La v2 conserva tambien el desglose por area.
+                if ((int) ($savedPapelon['version'] ?? 0) === 2) {
+                    foreach ([
+                        'sections',
+                        'method_totals',
+                        'products_by_section',
+                    ] as $key) {
+                        if (is_array($savedPapelon[$key] ?? null)) {
+                            $summary['papelon_close'][$key] =
+                                $savedPapelon[$key];
+                        }
+                    }
+                }
             }
 
             if (view()->exists('pos.session-sales-report-papelon')) {
                 $v5521eView = 'pos.session-sales-report-papelon';
             }
+        }
+
+        // BEXIA_V5836_POS_AREAS3I_RENDER
+        $summary['sales_areas_display'] =
+            \App\Support\PosSalesAreasDisplay::resolve(
+                (int) $session,
+                $pos,
+                $summary
+            );
+
+        if (
+            $v5521eCloseFormat === 'papelon'
+            && ! empty(
+                $summary['sales_areas_display']['sections']
+            )
+        ) {
+            $summary['papelon_close']['sections'] =
+                $summary['sales_areas_display']['sections'];
+
+            $summary['papelon_close']['products_by_section'] =
+                $summary['sales_areas_display'][
+                    'products_by_section'
+                ] ?? [];
         }
 
         // BEXIA_V5836_PAPC16_PDF_PREVIEW
@@ -13293,7 +13378,11 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
         $v5521eView = 'pos.session-close-ticket';
 
         if ($v5521eCloseFormat === 'papelon') {
-            $summary['papelon_close'] = \App\Support\PosPapelonCloseSummary::build($session);
+            $summary['papelon_close'] = \App\Support\PosPapelonCloseSummary::build(
+                $session,
+                (string) ($pos->sales_breakdown_mode ?? 'default')
+                    === 'areas'
+            );
 
             // BEXIA_RECON9N2F_SNAPSHOT_RENDER
             // En sesiones cerradas usar importes historicos.
@@ -13303,17 +13392,60 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             if (
                 (string) ($summary['session']['status'] ?? '') === 'closed'
                 && is_array($savedPapelon)
-                && (int) ($savedPapelon['version'] ?? 0) === 1
+                && in_array(
+                    (int) ($savedPapelon['version'] ?? 0),
+                    [1, 2],
+                    true
+                )
                 && is_array($savedPapelon['refunds'] ?? null)
                 && is_array($savedPapelon['totals'] ?? null)
             ) {
                 $summary['papelon_close']['refunds'] = $savedPapelon['refunds'];
                 $summary['papelon_close']['totals'] = $savedPapelon['totals'];
+
+                // BEXIA_V5836_POS_AREAS3D_RENDER
+                // La v1 preserva el comportamiento historico.
+                // La v2 conserva tambien el desglose por area.
+                if ((int) ($savedPapelon['version'] ?? 0) === 2) {
+                    foreach ([
+                        'sections',
+                        'method_totals',
+                        'products_by_section',
+                    ] as $key) {
+                        if (is_array($savedPapelon[$key] ?? null)) {
+                            $summary['papelon_close'][$key] =
+                                $savedPapelon[$key];
+                        }
+                    }
+                }
             }
 
             if (view()->exists('pos.session-close-ticket-papelon')) {
                 $v5521eView = 'pos.session-close-ticket-papelon';
             }
+        }
+
+        // BEXIA_V5836_POS_AREAS3I_RENDER
+        $summary['sales_areas_display'] =
+            \App\Support\PosSalesAreasDisplay::resolve(
+                (int) $session,
+                $pos,
+                $summary
+            );
+
+        if (
+            $v5521eCloseFormat === 'papelon'
+            && ! empty(
+                $summary['sales_areas_display']['sections']
+            )
+        ) {
+            $summary['papelon_close']['sections'] =
+                $summary['sales_areas_display']['sections'];
+
+            $summary['papelon_close']['products_by_section'] =
+                $summary['sales_areas_display'][
+                    'products_by_section'
+                ] ?? [];
         }
 
         // BEXIA_V5836_PAPC6_PREVIEW_SERVER
