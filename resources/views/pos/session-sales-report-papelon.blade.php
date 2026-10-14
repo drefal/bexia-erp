@@ -490,8 +490,16 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
 @endif
 
 
-<div class="note">
-    Este formato separa visualmente Impresión y Copias, aunque la categoría sigue perteneciendo a PAPELÓN.
-</div>
+{{-- BEXIA_V5836_POS_AREAS3M --}}
+@php
+    $v5836AreasDisplay = $summary['sales_areas_display'] ?? [];
+    $v5836CustomAreas = ! empty($v5836AreasDisplay['sections']);
+@endphp
+
+@if(! $v5836CustomAreas)
+    <div class="note">
+        Este formato separa visualmente Impresión y Copias, aunque la categoría sigue perteneciendo a PAPELÓN.
+    </div>
+@endif
 </body>
 </html>

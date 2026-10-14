@@ -1445,6 +1445,9 @@ try {
     );
 ?>
 
+{{-- BEXIA_V5836_POS_AREAS3I --}}
+@include('pos.partials.session-sales-areas')
+
 <h2>Resumen de ventas y cobros</h2>
 
 {{-- BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS --}}

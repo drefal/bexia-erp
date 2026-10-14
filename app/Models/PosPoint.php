@@ -12,6 +12,11 @@ class PosPoint extends Model
 
     protected $casts = [
         'payment_method_ids' => 'array',
+        // BEXIA_V5836_PDV1_CLOSE_SETTINGS
+        'session_close_email_recipients' => 'array',
+        // BEXIA_V5836_POS_AREAS3E2_MODE
+        'sales_breakdown_mode' => 'string',
+        'session_close_email_enabled' => 'boolean',
         'show_order_reference_on_ticket' => 'boolean',
         'allow_partial_payment' => 'boolean',
         'is_bar_restaurant' => 'boolean',
