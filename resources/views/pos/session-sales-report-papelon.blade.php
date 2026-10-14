@@ -502,6 +502,13 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
         </tr>
         <tr><td>(+) Retiros del supervisor</td><td class="right">{{ $money($recon5['cash_out']) }}</td></tr>
         <tr><td>(-) Entradas</td><td class="right">-{{ $money($recon5['cash_in']) }}</td></tr>
+    {{-- BEXIA_RECON9P6B_CASH_SUBTOTAL --}}
+    <tr class="total-row">
+        <td>TOTAL EFECTIVO CONCILIADO</td>
+        <td class="right">
+            {{ $hasCashCount ? $money(round((float) $cashCounted + (float) ($recon5['cash_out'] ?? 0) - (float) ($recon5['cash_in'] ?? 0), 2)) : 'Sin conteo' }}
+        </td>
+    </tr>
         <tr><td>Tarjeta de crédito</td>
             <td class="right">{{ $money($cardsCredit) }}</td></tr>
         <tr><td>Tarjeta de débito</td>
