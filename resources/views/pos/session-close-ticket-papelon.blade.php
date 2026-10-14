@@ -211,6 +211,83 @@ td{padding:2px 0;vertical-align:top}
         display:none!important;
     }
 }
+
+/*
+ * BEXIA_RECON9P7O_CONSOLAS_SCREEN
+ * Mismo diseño aprobado visualmente en PROD.
+ * Solo pantalla: no modifica el CSS de impresion.
+ */
+@media screen {
+    body {
+        width:72mm!important;
+        max-width:100%!important;
+        padding:1mm!important;
+        font-family:Consolas,"Courier New",monospace!important;
+        font-size:13px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+        color:#000!important;
+    }
+
+    .brand {
+        font-size:16px!important;
+        font-weight:600!important;
+    }
+
+    .subtitle {
+        font-size:13px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+    }
+
+    .section-title {
+        font-size:13px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+        background:transparent!important;
+        padding:4px 2px!important;
+        border:1px solid #000!important;
+    }
+
+    td {
+        font-family:Consolas,"Courier New",monospace!important;
+        font-size:13px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+        padding:2px 1px!important;
+        overflow-wrap:break-word;
+    }
+
+    td.right,
+    .right {
+        text-align:right!important;
+        white-space:nowrap;
+        font-variant-numeric:tabular-nums;
+    }
+
+    .bold {
+        font-weight:600!important;
+    }
+
+    .total-row td,
+    .net-row td {
+        font-size:14px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+    }
+
+    .small {
+        font-size:11px!important;
+        font-weight:400!important;
+    }
+
+    .cash-table td {
+        font-size:13px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+    }
+}
+
 </style>
 </head>
 <body>
