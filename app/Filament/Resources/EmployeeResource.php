@@ -1020,6 +1020,12 @@ protected static function bexiaCanEmployeePermission(string $permission): bool
                                 ->orderBy('hr_attendance_locations.name')
                         )
                         ->multiple()
+                        ->pivotData(fn (): array => [
+                            'company_id' => (int) Filament::getTenant()?->getKey(),
+                            'is_active' => true,
+                            'created_by_user_id' => auth()->id(),
+                            'updated_by_user_id' => auth()->id(),
+                        ])
                         ->preload()
                         ->searchable()
                         ->helperText('Si no seleccionas ninguna, el empleado podrá validar contra cualquier geocerca activa de la empresa. Si seleccionas una o varias, solo esas serán válidas para su asistencia.'),
