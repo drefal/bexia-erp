@@ -162,6 +162,27 @@ class StockQuantResource extends Resource
                     ->label('Reservado')
                     ->alignRight()
                     ->formatStateUsing(fn ($state): string => number_format((float) $state, 2))
+                    // BEXIA_V5836_ANT9_RESERVATION_DETAIL
+                    ->action(
+                        Tables\Actions\Action::make('view_stock_reservations')
+                            ->modalHeading('Detalle de reservas')
+                            ->modalWidth('4xl')
+                            ->modalSubmitAction(false)
+                            ->modalCancelActionLabel('Cerrar')
+                            ->modalContent(fn (StockQuant $record) => view(
+                                'filament.inventory.stock-reservation-detail',
+                                [
+                                    'product' => static::productLabel($record->product_id),
+                                    'warehouse' => $record->warehouse?->name ?? '—',
+                                    'location' => $record->location?->name ?? '—',
+                                    'physical' => (float) $record->quantity,
+                                    'reserved' => (float) $record->reserved_quantity,
+                                    'available' => (float) $record->available_quantity,
+                                    'reservations' => static::activeReservationDetails($record),
+                                ]
+                            ))
+                    )
+                    ->disabled(fn (StockQuant $record): bool => (float) $record->reserved_quantity <= 0)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('available_quantity')
@@ -194,6 +215,12 @@ class StockQuantResource extends Resource
                     ->sortable(),
 ])
             ->filters([
+                Tables\Filters\Filter::make('with_reservations')
+                    ->label('Con reservas')
+                    ->query(fn (Builder $query): Builder =>
+                        $query->where('stock_quants.reserved_quantity', '>', 0)
+                    ),
+
                 Tables\Filters\SelectFilter::make('warehouse_id')
                     ->label('Almacén')
                     ->options(fn (): array => static::warehouseOptions()),
@@ -230,6 +257,81 @@ class StockQuantResource extends Resource
                 // Sin acciones masivas en existencias.
             ])
             ->defaultSort('updated_at', 'desc');
+    }
+
+    /**
+     * Consulta informativa de reservas activas, acotada a la fila
+     * de existencia, empresa, almacen, ubicacion, variante y lote.
+     */
+    protected static function activeReservationDetails(StockQuant $record): array
+    {
+        if (! Schema::hasTable('stock_reservations')) {
+            return [];
+        }
+
+        $companyId = static::currentCompanyId();
+
+        if (! $companyId || (int) $record->company_id !== $companyId) {
+            return [];
+        }
+
+        $query = DB::table('stock_reservations as r')
+            ->where('r.company_id', $companyId)
+            ->where('r.warehouse_id', $record->warehouse_id)
+            ->where('r.location_id', $record->location_id)
+            ->where('r.product_id', $record->product_id)
+            ->where('r.status', 'active');
+
+        foreach ([
+            'product_variant_id' => $record->product_variant_id,
+            'lot_id' => $record->lot_id,
+        ] as $column => $value) {
+            if ($value === null) {
+                $query->whereNull('r.' . $column);
+            } else {
+                $query->where('r.' . $column, $value);
+            }
+        }
+
+        if (Schema::hasTable('pos_orders')) {
+            $query->leftJoin('pos_orders as o', function ($join) use ($companyId): void {
+                $join->on('o.id', '=', 'r.pos_order_id')
+                    ->where('o.company_id', '=', $companyId);
+            });
+        }
+
+        $select = [
+            'r.id',
+            'r.source_type',
+            'r.source_id',
+            'r.pos_order_id',
+            'r.quantity',
+            'r.reserved_at',
+        ];
+
+        if (Schema::hasTable('pos_orders')) {
+            $select[] = 'o.number as pos_order_number';
+        }
+
+        return $query
+            ->orderBy('r.id')
+            ->get($select)
+            ->map(function ($row): array {
+                $folio = trim((string) ($row->pos_order_number ?? ''));
+
+                if ($folio === '') {
+                    $folio = ($row->source_type ?: 'Reserva')
+                        . ' #' . ($row->source_id ?: $row->id);
+                }
+
+                return [
+                    'folio' => $folio,
+                    'source' => (string) ($row->source_type ?? 'Reserva'),
+                    'quantity' => (float) $row->quantity,
+                    'reserved_at' => (string) ($row->reserved_at ?? ''),
+                ];
+            })
+            ->all();
     }
 
     public static function getPages(): array
