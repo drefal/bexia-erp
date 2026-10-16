@@ -194,10 +194,6 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
             <td class="right">-{{ $money($totals['advance_refunds_total'] ?? 0) }}</td>
         </tr>
         <tr>
-            <td>Anticipos pendientes</td>
-            <td class="right">{{ $money($totals['outstanding_advance_total'] ?? 0) }}</td>
-        </tr>
-        <tr>
             <td>Cobrado en sesión</td>
             <td class="right">{{ $money($totals['collected_total'] ?? $totals['payments_total'] ?? 0) }}</td>
         </tr>

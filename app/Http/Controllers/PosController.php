@@ -5139,6 +5139,27 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             }
         }
 
+        // BEXIA_V5836_POS_ANT4_PRINT_ADVANCE
+        // Mismo criterio de pagos confirmados usado en el modal PDV.
+        $pendingTicketAdvancePaid = 0.0;
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('pos_order_payments')) {
+            $pendingTicketAdvancePaid = round(
+                (float) \Illuminate\Support\Facades\DB::table('pos_order_payments')
+                    ->where('pos_order_id', (int) $orderRow->id)
+                    ->where('status', 'paid')
+                    ->sum('amount'),
+                2
+            );
+        }
+
+        $pendingTicketAdvancePaid = max(0.0, $pendingTicketAdvancePaid);
+
+        $pendingTicketBalance = round(
+            max(0.0, (float) ($orderRow->total ?? 0) - $pendingTicketAdvancePaid),
+            2
+        );
+
         return view('pos.pending-ticket-print', [
             'order' => $orderRow,
             'lines' => $lines,
@@ -5147,6 +5168,8 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             'logoUrl' => $logoUrl,
             'printedAt' => now(),
             'reprintCount' => $reprintCount ?? 0,
+            'pendingTicketAdvancePaid' => $pendingTicketAdvancePaid,
+            'pendingTicketBalance' => $pendingTicketBalance,
         ]);
     }
     public function printPaidTicket(\Illuminate\Http\Request $request, int $order)
