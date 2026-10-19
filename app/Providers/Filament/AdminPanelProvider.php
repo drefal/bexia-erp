@@ -87,6 +87,8 @@ class AdminPanelProvider extends PanelProvider
                 PanelsRenderHook::USER_MENU_AFTER,
                 fn (): string => view('filament.components.topbar-user-name')->render(),
             )
+            // BEXIA_PERF118_NO_NATIVE_TENANT_MENU
+            ->tenantMenu(false)
             ->tenant(
                 \App\Models\Company::class,
                 ownershipRelationship: 'companies'
