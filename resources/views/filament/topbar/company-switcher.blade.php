@@ -154,7 +154,8 @@
 
         @media (max-width: 760px) {
             .bexia-topbar-company-switcher {
-                display: none;
+                /* BEXIA_PERF118_MOBILE_SWITCHER */
+                display: inline-flex;
             }
         }
     </style>
