@@ -17,6 +17,7 @@ class Employee extends Model
         'avatar_path',
         'user_id',
         'supervisor_user_id',
+        'payroll_attendance_reviewer_user_id',
         'manager_employee_id',
         'coach_employee_id',
         'branch_id',

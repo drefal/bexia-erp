@@ -6,6 +6,8 @@ use App\Filament\Resources\Concerns\UsesTenantCompany;
 use App\Filament\Resources\PayrollGroupResource\Pages;
 use App\Models\PayrollGroup;
 use App\Models\PayrollPeriodicity;
+use App\Support\PayrollGroupAuthorization as GroupAuth;
+use Illuminate\Database\Eloquent\Model;
 use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -30,6 +32,52 @@ class PayrollGroupResource extends Resource
     protected static ?int $navigationSort = 18;
 
     protected static ?string $tenantOwnershipRelationshipName = 'company';
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return static::canViewAny();
+    }
+
+    public static function canViewAny(): bool
+    {
+        return GroupAuth::currentUserCan(GroupAuth::VIEW);
+    }
+
+    public static function canView(Model $record): bool
+    {
+        return static::recordBelongsToCurrentCompany($record)
+            && GroupAuth::currentUserCan(GroupAuth::VIEW);
+    }
+
+    public static function canCreate(): bool
+    {
+        return GroupAuth::currentUserCan(GroupAuth::CREATE);
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return static::recordBelongsToCurrentCompany($record)
+            && GroupAuth::currentUserCan(GroupAuth::EDIT);
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return false;
+    }
+
+    private static function recordBelongsToCurrentCompany(
+        Model $record
+    ): bool {
+        $companyId = GroupAuth::currentCompanyId();
+
+        return $companyId !== null
+            && (int) $record->getAttribute('company_id') === $companyId;
+    }
 
     public static function form(Form $form): Form
     {
