@@ -25,7 +25,8 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Corte de Caja Papelón</title>
+{{-- BEXIA_V5836_PAPELON_TICKET_FILENAME1 --}}
+<title>Corte_de_Caja_Papelon_{{ now('America/Mexico_City')->format('Ymd_His') }}</title>
 <style>
 *{box-sizing:border-box}
 body{width:80mm;margin:0 auto;padding:8px;font-family:DejaVu Sans,Arial,sans-serif;font-size:11px;color:#111}
@@ -345,11 +346,16 @@ td{padding:2px 0;vertical-align:top}
     $papc6CardTotal = round(
         $papc6CardCredit + $papc6CardDebit + $papc6CardOther, 2
     );
-    $papc6Total = round(
-        $papc6CashCounted + $papc6CardTotal
-        + $papc6Transfer + $papc6Other, 2
+    $recon5 = \App\Support\PosCloseReconciliation::calculate(
+        $summary, $papc6Session['close_payment_actual'] ?? null, $papc6CashCounted
     );
-    $papc6Difference = round($papc6Total - $papc6Sales, 2);
+    $papc6Total = $recon5['reconciled_total'];
+    $papc6Difference = $recon5['difference'];
+    $papc6CardCredit = $recon5['actual']['credit'];
+    $papc6CardDebit = $recon5['actual']['debit'];
+    $papc6CardOther = $recon5['actual']['other_card'];
+    $papc6Transfer = $recon5['actual']['transfer'];
+    $papc6Other = $recon5['actual']['other'];
     $papc6Note = trim((string) (
         $papc6Session['closing_note']
         ?? ($closePayload['closing_note'] ?? '')
@@ -375,10 +381,214 @@ td{padding:2px 0;vertical-align:top}
     </tr>
 </table>
 
+
+{{-- BEXIA_V5836_CASH_DENOMS_FIX2B_TICKET --}}
+@php
+    $v5836Withdrawals = \App\Support\PosCashWithdrawalBreakdown::forSession(
+        (int) ($summary['session']['id'] ?? 0)
+    );
+@endphp
+
+@if($v5836Withdrawals['withdrawal_count'] > 0)
+    <div class="section-title">RETIROS POR DENOMINACIÓN</div>
+    <table class="cash-table">
+        @foreach($v5836Withdrawals['denominations'] as $line)
+            <tr>
+                <td>
+                    {{ $line['type'] === 'coin' ? 'Moneda' : 'Billete' }}
+                    ${{ number_format($line['value'], 2) }}
+                </td>
+                <td class="center">x {{ $line['quantity'] }}</td>
+                <td class="right">{{ $money($line['total']) }}</td>
+            </tr>
+        @endforeach
+
+        @if($v5836Withdrawals['undetailed_total'] > 0)
+            <tr>
+                <td colspan="2">Sin desglose histórico</td>
+                <td class="right">
+                    {{ $money($v5836Withdrawals['undetailed_total']) }}
+                </td>
+            </tr>
+        @endif
+
+        <tr class="total-row">
+            <td colspan="2">
+                RETIROS ({{ $v5836Withdrawals['withdrawal_count'] }})
+            </td>
+            <td class="right">
+                {{ $money($v5836Withdrawals['recorded_total']) }}
+            </td>
+        </tr>
+    </table>
+@endif
+
+
+{{-- BEXIA_V5836_CASH_DENOMS_FIX2D_COMBINED --}}
+@php
+    $v5836Combined = [];
+
+    $v5836Add = function (
+        array $rows,
+        string $source
+    ) use (&$v5836Combined): void {
+        foreach ($rows as $line) {
+            if (!is_array($line)) continue;
+
+            $value = round((float) ($line['value'] ?? 0), 2);
+            $quantity = (int) ($line['quantity'] ?? 0);
+            $type = strtolower(trim(
+                (string) ($line['type'] ?? '')
+            ));
+
+            $name = strtolower(
+                (string) ($line['name'] ?? '')
+            );
+
+            if ($type === '') {
+                if (str_contains($name, 'moneda')) {
+                    $type = 'coin';
+                } elseif (str_contains($name, 'billete')) {
+                    $type = 'bill';
+                }
+            }
+
+            if ($value <= 0 || $quantity <= 0) continue;
+
+            $key = $type . '|' .
+                number_format($value, 2, '.', '');
+
+            if (!isset($v5836Combined[$key])) {
+                $v5836Combined[$key] = [
+                    'value' => $value,
+                    'type' => $type,
+                    'cash_quantity' => 0,
+                    'withdraw_quantity' => 0,
+                ];
+            }
+
+            $field = $source === 'cash'
+                ? 'cash_quantity'
+                : 'withdraw_quantity';
+
+            $v5836Combined[$key][$field] += $quantity;
+        }
+    };
+
+    $v5836Add($papc6Lines, 'cash');
+    $v5836Add(
+        $v5836Withdrawals['denominations'] ?? [],
+        'withdraw'
+    );
+
+    $v5836Combined = array_values($v5836Combined);
+
+    usort(
+        $v5836Combined,
+        static function ($a, $b) {
+            $valueCompare = $b['value'] <=> $a['value'];
+
+            if ($valueCompare !== 0) return $valueCompare;
+
+            return ($a['type'] === 'bill' ? 0 : 1)
+                <=> ($b['type'] === 'bill' ? 0 : 1);
+        }
+    );
+
+    $v5836CashTotal = 0;
+    $v5836WithdrawTotal = 0;
+@endphp
+
+@if(count($v5836Combined) > 0)
+    <div class="section-title">EFECTIVO CONSOLIDADO POR DENOMINACIÓN</div>
+    <table class="cash-table">
+        <thead>
+            <tr>
+                <th>Denominación</th>
+                <th class="center">Caja</th>
+                <th class="center">Ret.</th>
+                <th class="right">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($v5836Combined as $line)
+                @php
+                    $v5836Count = $line['cash_quantity']
+                        + $line['withdraw_quantity'];
+
+                    $v5836CashTotal +=
+                        (int) round($line['value'] * 100)
+                        * $line['cash_quantity'];
+
+                    $v5836WithdrawTotal +=
+                        (int) round($line['value'] * 100)
+                        * $line['withdraw_quantity'];
+                @endphp
+                <tr>
+                    <td>
+                        {{ $line['type'] === 'coin'
+                            ? 'Moneda'
+                            : ($line['type'] === 'bill'
+                                ? 'Billete'
+                                : 'Denom.') }}
+                        ${{ number_format($line['value'], 2) }}
+                    </td>
+                    <td class="center">
+                        {{ $line['cash_quantity'] }}
+                    </td>
+                    <td class="center">
+                        {{ $line['withdraw_quantity'] }}
+                    </td>
+                    <td class="right">
+                        {{ $money(
+                            $v5836Count * $line['value']
+                        ) }}
+                    </td>
+                </tr>
+            @endforeach
+            <tr class="total-row">
+                <td colspan="3">TOTAL DESGLOSADO</td>
+                <td class="right">
+                    {{ $money(
+                        ($v5836CashTotal + $v5836WithdrawTotal) / 100
+                    ) }}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    @if(($v5836Withdrawals['undetailed_total'] ?? 0) > 0)
+        <p>
+            Retiros sin denominaciones:
+            {{ $money($v5836Withdrawals['undetailed_total']) }}.
+            Incluidos en la conciliación financiera,
+            no en las cantidades anteriores.
+        </p>
+    @endif
+@endif
+
 <div class="section-title">CONCILIACIÓN DEL CIERRE</div>
 <table>
-    <tr><td>Total cobrado registrado</td><td class="right">{{ $money($papc6Sales) }}</td></tr>
+    <tr><td>Total neto registrado</td><td class="right">{{ $money($recon5['recorded_total']) }}</td></tr>
     <tr><td>Efectivo contado</td><td class="right">{{ $papc6HasCount ? $money($papc6CashCounted) : 'Sin conteo' }}</td></tr>
+    {{-- BEXIA_RECON9N2C_TICKET_SALIDAS --}}
+    <tr>
+        <td>Salidas por devolución</td>
+        <td class="right">{{ $money(-array_sum($recon5['refunds_paid'] ?? [])) }}</td>
+    </tr>
+    <tr>
+        <td>Devoluciones pendientes (informativo)</td>
+        <td class="right">{{ $money(array_sum($recon5['refunds_pending'] ?? [])) }}</td>
+    </tr>
+        <tr><td>(+) Retiros del supervisor</td><td class="right">{{ $money($recon5['cash_out']) }}</td></tr>
+    <tr><td>(-) Entradas</td><td class="right">-{{ $money($recon5['cash_in']) }}</td></tr>
+    {{-- BEXIA_RECON9P6B_CASH_SUBTOTAL --}}
+    <tr class="total-row">
+        <td>TOTAL EFECTIVO CONCILIADO</td>
+        <td class="right">
+            {{ $papc6HasCount ? $money(round((float) $papc6CashCounted + (float) ($recon5['cash_out'] ?? 0) - (float) ($recon5['cash_in'] ?? 0), 2)) : 'Sin conteo' }}
+        </td>
+    </tr>
     <tr><td>Tarjeta de crédito</td><td class="right">{{ $money($papc6CardCredit) }}</td></tr>
     <tr><td>Tarjeta de débito</td><td class="right">{{ $money($papc6CardDebit) }}</td></tr>
     @if(abs($papc6CardOther) > 0.009)
@@ -389,7 +599,7 @@ td{padding:2px 0;vertical-align:top}
         <tr><td>Otros métodos</td><td class="right">{{ $money($papc6Other) }}</td></tr>
     @endif
     <tr class="net-row">
-        <td>TOTAL CONTADO Y REGISTRADO</td>
+        <td>TOTAL CONCILIADO</td>
         <td class="right">{{ $papc6HasCount ? $money($papc6Total) : 'Sin conteo' }}</td>
     </tr>
     <tr>

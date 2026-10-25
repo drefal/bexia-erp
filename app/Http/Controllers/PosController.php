@@ -12496,7 +12496,99 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             ], 422);
         }
 
+        // BEXIA_V5836_CASH_DENOMS_FIX1_VALIDATE
+        $cashBreakdown = [];
         $amount = round((float) $request->input('amount', 0), 2);
+
+        if ($type === 'cash_out') {
+            $rawBreakdown = $request->input('cash_denominations');
+
+            if (!is_array($rawBreakdown)
+                || count($rawBreakdown) < 1
+                || count($rawBreakdown) > 30) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Captura las denominaciones del retiro.',
+                ], 422);
+            }
+
+            $allowedDenominations = $this->cashDenominationsForPos($pos);
+            $allowedKeys = [];
+
+            foreach ($allowedDenominations as $denom) {
+                $value = round((float) ($denom['value'] ?? 0), 2);
+                $kind = strtolower(trim((string) ($denom['type'] ?? '')));
+                if ($value > 0) {
+                    $allowedKeys[$kind . '|' . number_format($value, 2, '.', '')] = true;
+                }
+            }
+
+            $seen = [];
+            $totalCents = 0;
+
+            foreach ($rawBreakdown as $row) {
+                if (!is_array($row)) {
+                    return response()->json([
+                        'ok' => false,
+                        'message' => 'Desglose de retiro invalido.',
+                    ], 422);
+                }
+
+                $valueRaw = $row['value'] ?? null;
+                $quantityRaw = $row['quantity'] ?? null;
+                $kind = strtolower(trim((string) ($row['type'] ?? '')));
+
+                if (!is_numeric($valueRaw)
+                    || !is_numeric($quantityRaw)
+                    || !is_finite((float) $valueRaw)
+                    || !is_finite((float) $quantityRaw)
+                    || (float) $valueRaw <= 0
+                    || (float) $quantityRaw < 0
+                    || (float) $quantityRaw > 100000
+                    || floor((float) $quantityRaw) != (float) $quantityRaw) {
+                    return response()->json([
+                        'ok' => false,
+                        'message' => 'Hay denominaciones o cantidades invalidas.',
+                    ], 422);
+                }
+
+                $value = round((float) $valueRaw, 2);
+                $quantity = (int) $quantityRaw;
+                $key = $kind . '|' . number_format($value, 2, '.', '');
+
+                if (!isset($allowedKeys[$key]) || isset($seen[$key])) {
+                    return response()->json([
+                        'ok' => false,
+                        'message' => 'Denominacion duplicada o no configurada.',
+                    ], 422);
+                }
+
+                $seen[$key] = true;
+
+                if ($quantity === 0) {
+                    continue;
+                }
+
+                $cents = (int) round($value * 100);
+                $totalCents += $cents * $quantity;
+
+                if ($totalCents > 99999999900) {
+                    return response()->json([
+                        'ok' => false,
+                        'message' => 'El retiro supera el importe permitido.',
+                    ], 422);
+                }
+
+                $cashBreakdown[] = [
+                    'value' => $value,
+                    'type' => $kind,
+                    'quantity' => $quantity,
+                    'total' => round($value * $quantity, 2),
+                ];
+            }
+
+            $amount = round($totalCents / 100, 2);
+        }
 
         if ($amount <= 0) {
             return response()->json([
@@ -12604,6 +12696,16 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                         'requires_cashier_signature' => true,
                         'requires_supervisor_signature' => true,
                         'print_copies' => 2,
+                        // BEXIA_V5836_CASH_DENOMS_FIX1_METADATA
+                        'cash_denominations' => $type === 'cash_out'
+                            ? $cashBreakdown
+                            : null,
+                        'cash_denominations_total' => $type === 'cash_out'
+                            ? $amount
+                            : null,
+                        'cash_denominations_version' => $type === 'cash_out'
+                            ? 1
+                            : null,
                     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'created_at' => now(),
                     'updated_at' => now(),

@@ -11729,6 +11729,73 @@ document.addEventListener('DOMContentLoaded', function () {
                 <label class="v5485-label">Importe</label>
                 <input id="v5485-cash-movement-amount" class="v5485-input" type="number" min="0" step="0.01" inputmode="decimal">
             </div>
+            {{-- BEXIA_V5836_CASH_DENOMS_FIX1_FORM --}}
+            {{-- BEXIA_V5836_CASH_DENOMS_UI1_FORM --}}
+            <div id="v5836-withdrawal-denominations" style="display:none">
+                <style>
+                    #v5836-withdrawal-denominations .v5836-denom-grid{
+                        display:grid;
+                        grid-template-columns:repeat(2,minmax(0,1fr));
+                        gap:8px;
+                        max-height:320px;
+                        overflow-y:auto;
+                        padding-right:4px;
+                    }
+                    #v5836-withdrawal-denominations .v5836-denom-card{
+                        border:1px solid #d9e1ec;
+                        border-radius:12px;
+                        padding:8px 10px;
+                        background:#fafbfd;
+                    }
+                    #v5836-withdrawal-denominations .v5836-denom-title{
+                        font-size:13px;
+                        font-weight:800;
+                        line-height:1.15;
+                        color:#25324a;
+                    }
+                    #v5836-withdrawal-denominations .v5836-denom-row{
+                        display:grid;
+                        grid-template-columns:82px 1fr;
+                        gap:8px;
+                        align-items:center;
+                        margin-top:6px;
+                    }
+                    #v5836-withdrawal-denominations .v5836-denom-input{
+                        min-width:0;
+                        padding:7px 10px;
+                        font-size:14px;
+                    }
+                    #v5836-withdrawal-denominations .v5836-denom-subtotal{
+                        text-align:right;
+                        font-size:14px;
+                        font-weight:900;
+                        color:#1f2b45;
+                    }
+                    #v5836-withdrawal-denominations .v5836-denom-total{
+                        margin-top:10px;
+                        display:flex;
+                        justify-content:space-between;
+                        align-items:center;
+                        font-weight:900;
+                        font-size:15px;
+                    }
+                    @media (max-width: 900px){
+                        #v5836-withdrawal-denominations .v5836-denom-grid{
+                            grid-template-columns:1fr;
+                            max-height:260px;
+                        }
+                    }
+                </style>
+
+                <label class="v5485-label">Billetes y monedas que se retiran</label>
+
+                <div id="v5836-withdrawal-rows" class="v5836-denom-grid"></div>
+
+                <div class="v5836-denom-total">
+                    <span>Total calculado</span>
+                    <strong id="v5836-withdrawal-total">$0.00</strong>
+                </div>
+            </div>
 
             <div>
                 <label class="v5485-label">Motivo</label>
@@ -11909,6 +11976,153 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // BEXIA_V5836_CASH_DENOMS_FIX1_JS
+    const v5836WithdrawDenoms = @json($cashDenominationsReal ?? []);
+
+    function v5836WithdrawRows() {
+        const configured = Array.isArray(v5836WithdrawDenoms)
+            ? v5836WithdrawDenoms : [];
+
+        const unique = new Map();
+
+        configured.forEach(function(row) {
+            const value = Number(row.value || 0);
+            const type = String(row.type || '').toLowerCase();
+            if (!Number.isFinite(value) || value <= 0) return;
+            const key = type + '|' + value.toFixed(2);
+            if (!unique.has(key)) {
+                unique.set(key, {
+                    value: value,
+                    type: type,
+                    name: String(row.name || '$' + value.toFixed(2))
+                });
+            }
+        });
+
+        return Array.from(unique.values()).sort(function(a,b) {
+            if (a.value !== b.value) return b.value - a.value;
+            if (a.type === b.type) return 0;
+            return a.type === 'bill' ? -1 : 1;
+        });
+    }
+
+    function v5836RenderWithdrawRows() {
+        const box = document.getElementById('v5836-withdrawal-rows');
+        if (!box) return;
+        box.replaceChildren();
+
+        v5836WithdrawRows().forEach(function(d) {
+            const row = document.createElement('div');
+            row.className = 'v5836-denom-card';
+            row.dataset.value = String(d.value);
+            row.dataset.type = d.type;
+
+            const label = document.createElement('div');
+            label.className = 'v5836-denom-title';
+            label.textContent = d.name;
+
+            const meta = document.createElement('div');
+            meta.className = 'v5836-denom-row';
+
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '0';
+            input.step = '1';
+            input.value = '0';
+            input.className = 'v5485-input v5836-denom-input';
+            input.setAttribute('data-v5836-withdraw-qty','1');
+
+            const total = document.createElement('strong');
+            total.textContent = money(0);
+            total.className = 'v5836-denom-subtotal';
+            total.setAttribute('data-v5836-withdraw-row-total','1');
+
+            input.addEventListener('input', v5836RecalcWithdraw);
+
+            meta.append(input, total);
+            row.append(label, meta);
+            box.appendChild(row);
+        });
+
+        v5836RecalcWithdraw();
+    }
+
+    function v5836RecalcWithdraw() {
+        let cents = 0;
+        const breakdown = [];
+        let valid = true;
+
+        document.querySelectorAll(
+            '#v5836-withdrawal-rows [data-value]'
+        ).forEach(function(row) {
+            const value = Number(row.dataset.value || 0);
+            const input = row.querySelector('[data-v5836-withdraw-qty]');
+            const quantity = Number(input ? input.value : 0);
+
+            if (!Number.isInteger(quantity)
+                || quantity < 0
+                || quantity > 100000) {
+                valid = false;
+                return;
+            }
+
+            const lineCents = Math.round(value * 100) * quantity;
+            cents += lineCents;
+
+            const lineTotal = row.querySelector(
+                '[data-v5836-withdraw-row-total]'
+            );
+            if (lineTotal) lineTotal.textContent = money(lineCents / 100);
+
+            if (quantity > 0) {
+                breakdown.push({
+                    value: value,
+                    type: row.dataset.type || '',
+                    quantity: quantity
+                });
+            }
+        });
+
+        const amount = document.getElementById(
+            'v5485-cash-movement-amount'
+        );
+        if (amount) amount.value = (cents / 100).toFixed(2);
+
+        const label = document.getElementById('v5836-withdrawal-total');
+        if (label) label.textContent = money(cents / 100);
+
+        return {valid: valid, amount: cents / 100, rows: breakdown};
+    }
+
+    function v5836ToggleWithdraw() {
+        const type = document.getElementById(
+            'v5485-cash-movement-type'
+        )?.value;
+        const active = type === 'cash_out';
+
+        const box = document.getElementById(
+            'v5836-withdrawal-denominations'
+        );
+        if (box) box.style.display = active ? '' : 'none';
+
+        const amount = document.getElementById(
+            'v5485-cash-movement-amount'
+        );
+
+        if (amount) {
+            amount.readOnly = active;
+            amount.value = '';
+        }
+
+        if (active) {
+            v5836RenderWithdrawRows();
+        }
+    }
+
+    document.getElementById(
+        'v5485-cash-movement-type'
+    )?.addEventListener('change', v5836ToggleWithdraw);
+
     function openMovementModal(type) {
         const modal = document.getElementById('v5485-cash-movement-modal');
         const title = document.getElementById('v5485-cash-movement-title');
@@ -11924,6 +12138,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const supervisorSelect = document.getElementById('v5485-cash-movement-supervisor-employee');
         if (supervisorSelect) supervisorSelect.value = '';
         document.getElementById('v5485-cash-movement-notes').value = '';
+        v5836ToggleWithdraw();
 
         loadCashEmployees();
 
@@ -11959,8 +12174,22 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
+        const withdrawalType = document.getElementById(
+            'v5485-cash-movement-type'
+        ).value;
+        const withdrawalCount = withdrawalType === 'cash_out'
+            ? v5836RecalcWithdraw() : null;
+
+        if (withdrawalCount &&
+            (!withdrawalCount.valid || withdrawalCount.amount <= 0)) {
+            notice('Captura cantidades validas de billetes y monedas.');
+            return;
+        }
+
         const payload = {
             type: document.getElementById('v5485-cash-movement-type').value,
+            cash_denominations: withdrawalCount
+                ? withdrawalCount.rows : null,
             amount: Number(document.getElementById('v5485-cash-movement-amount').value || 0),
             reason: document.getElementById('v5485-cash-movement-reason').value || '',
             supervisor_employee_id: document.getElementById('v5485-cash-movement-supervisor-employee')?.value || '',

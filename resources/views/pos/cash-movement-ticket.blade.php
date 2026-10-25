@@ -83,6 +83,45 @@
 
             <div class="amount">${{ number_format((float) $movement->amount, 2) }}</div>
 
+            {{-- BEXIA_V5836_CASH_DENOMS_FIX1_TICKET --}}
+            @php
+                $v5836Meta = json_decode(
+                    (string) ($movement->metadata ?? ''),
+                    true
+                );
+                $v5836Meta = is_array($v5836Meta) ? $v5836Meta : [];
+                $v5836Rows = $v5836Meta['cash_denominations'] ?? [];
+                $v5836Rows = is_array($v5836Rows) ? $v5836Rows : [];
+            @endphp
+
+            @if((string) $movement->type === 'cash_out')
+                <div style="margin-top:10px;font-weight:900">
+                    DESGLOSE DEL RETIRO
+                </div>
+
+                @forelse($v5836Rows as $v5836Line)
+                    @php
+                        $v5836Value = (float) ($v5836Line['value'] ?? 0);
+                        $v5836Qty = (int) ($v5836Line['quantity'] ?? 0);
+                        $v5836Kind = (string) ($v5836Line['type'] ?? '');
+                    @endphp
+                    <div class="line">
+                        <span>
+                            {{ $v5836Kind === 'coin' ? 'Moneda' : 'Billete' }}
+                            ${{ number_format($v5836Value, 2) }}
+                            x {{ $v5836Qty }}
+                        </span>
+                        <strong>
+                            ${{ number_format($v5836Value * $v5836Qty, 2) }}
+                        </strong>
+                    </div>
+                @empty
+                    <div class="small">
+                        Retiro historico sin desglose de denominaciones.
+                    </div>
+                @endforelse
+            @endif
+
             <div class="line">
                 <span>Sesión:</span>
                 <strong>{{ $session->number ?? ('#'.$session->id) }}</strong>

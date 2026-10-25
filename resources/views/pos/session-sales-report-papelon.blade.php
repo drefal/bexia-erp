@@ -372,11 +372,16 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
         }
     }
 
-    $countedCombined = round(
-        $cashCounted + $cardsCredit + $cardsDebit
-        + $otherCards + $transfers + $otherMethods, 2
+    $recon5 = \App\Support\PosCloseReconciliation::calculate(
+        $summary, $summary['session']['close_payment_actual'] ?? null, $cashCounted
     );
-    $difference = round($countedCombined - $registered, 2);
+    $countedCombined = $recon5['reconciled_total'];
+    $difference = $recon5['difference'];
+    $cardsCredit = $recon5['actual']['credit'];
+    $cardsDebit = $recon5['actual']['debit'];
+    $otherCards = $recon5['actual']['other_card'];
+    $transfers = $recon5['actual']['transfer'];
+    $otherMethods = $recon5['actual']['other'];
     $closingNote = trim((string) (
         $summary['session']['closing_note'] ?? ''
     ));
@@ -414,12 +419,274 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
     </tbody>
 </table>
 
+
+{{-- BEXIA_V5836_CASH_DENOMS_FIX2B_PDF --}}
+@php
+    $v5836Withdrawals = \App\Support\PosCashWithdrawalBreakdown::forSession(
+        (int) ($summary['session']['id'] ?? 0)
+    );
+@endphp
+
+@if($v5836Withdrawals['withdrawal_count'] > 0)
+    <h2>Retiros de efectivo - detalle</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Retiros</th>
+                <th class="right">Con desglose</th>
+                <th class="right">Sin desglose</th>
+                <th class="right">Total retirado</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>{{ $v5836Withdrawals['withdrawal_count'] }}</td>
+                <td class="right">
+                    {{ $money($v5836Withdrawals['detailed_total']) }}
+                </td>
+                <td class="right">
+                    {{ $money($v5836Withdrawals['undetailed_total']) }}
+                </td>
+                <td class="right">
+                    {{ $money($v5836Withdrawals['recorded_total']) }}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    @foreach($v5836Withdrawals['withdrawals'] as $withdrawal)
+        <div style="margin-top:12px;page-break-inside:avoid;">
+            <strong>
+                Retiro {{ $withdrawal['number'] ?: ('#'.$withdrawal['id']) }}
+            </strong>
+            <div>
+                Fecha: {{ $withdrawal['movement_at'] }}
+                | Supervisor: {{ $withdrawal['supervisor'] ?: 'No registrado' }}
+            </div>
+            <div>Motivo: {{ $withdrawal['reason'] }}</div>
+            <div>
+                <strong>Importe: {{ $money($withdrawal['amount']) }}</strong>
+            </div>
+        </div>
+
+        @if($withdrawal['has_breakdown'])
+            <table>
+                <thead>
+                    <tr>
+                        <th>Denominación</th>
+                        <th class="center">Cantidad</th>
+                        <th class="right">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($withdrawal['denominations'] as $line)
+                        <tr>
+                            <td>
+                                {{ $line['type'] === 'coin' ? 'Moneda' : 'Billete' }}
+                                ${{ number_format($line['value'], 2) }}
+                            </td>
+                            <td class="center">{{ $line['quantity'] }}</td>
+                            <td class="right">{{ $money($line['total']) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @else
+            <p>Retiro histórico sin desglose de denominaciones.</p>
+        @endif
+    @endforeach
+
+    <h2>Consolidado de retiros por denominación</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Denominación</th>
+                <th class="center">Cantidad retirada</th>
+                <th class="right">Importe</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($v5836Withdrawals['denominations'] as $line)
+                <tr>
+                    <td>
+                        {{ $line['type'] === 'coin' ? 'Moneda' : 'Billete' }}
+                        ${{ number_format($line['value'], 2) }}
+                    </td>
+                    <td class="center">{{ $line['quantity'] }}</td>
+                    <td class="right">{{ $money($line['total']) }}</td>
+                </tr>
+            @endforeach
+
+            @if($v5836Withdrawals['undetailed_total'] > 0)
+                <tr>
+                    <td colspan="2">Sin desglose histórico</td>
+                    <td class="right">
+                        {{ $money($v5836Withdrawals['undetailed_total']) }}
+                    </td>
+                </tr>
+            @endif
+
+            <tr class="total-row">
+                <td colspan="2">TOTAL RETIRADO</td>
+                <td class="right">
+                    {{ $money($v5836Withdrawals['recorded_total']) }}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+@endif
+
+
+{{-- BEXIA_V5836_CASH_DENOMS_FIX2D_COMBINED --}}
+@php
+    $v5836Combined = [];
+
+    $v5836Add = function (
+        array $rows,
+        string $source
+    ) use (&$v5836Combined): void {
+        foreach ($rows as $line) {
+            if (!is_array($line)) continue;
+
+            $value = round((float) ($line['value'] ?? 0), 2);
+            $quantity = (int) ($line['quantity'] ?? 0);
+            $type = strtolower(trim(
+                (string) ($line['type'] ?? '')
+            ));
+
+            $name = strtolower(
+                (string) ($line['name'] ?? '')
+            );
+
+            if ($type === '') {
+                if (str_contains($name, 'moneda')) {
+                    $type = 'coin';
+                } elseif (str_contains($name, 'billete')) {
+                    $type = 'bill';
+                }
+            }
+
+            if ($value <= 0 || $quantity <= 0) continue;
+
+            $key = $type . '|' .
+                number_format($value, 2, '.', '');
+
+            if (!isset($v5836Combined[$key])) {
+                $v5836Combined[$key] = [
+                    'value' => $value,
+                    'type' => $type,
+                    'cash_quantity' => 0,
+                    'withdraw_quantity' => 0,
+                ];
+            }
+
+            $field = $source === 'cash'
+                ? 'cash_quantity'
+                : 'withdraw_quantity';
+
+            $v5836Combined[$key][$field] += $quantity;
+        }
+    };
+
+    $v5836Add($countLines, 'cash');
+    $v5836Add(
+        $v5836Withdrawals['denominations'] ?? [],
+        'withdraw'
+    );
+
+    $v5836Combined = array_values($v5836Combined);
+
+    usort(
+        $v5836Combined,
+        static function ($a, $b) {
+            $valueCompare = $b['value'] <=> $a['value'];
+
+            if ($valueCompare !== 0) return $valueCompare;
+
+            return ($a['type'] === 'bill' ? 0 : 1)
+                <=> ($b['type'] === 'bill' ? 0 : 1);
+        }
+    );
+
+    $v5836CashTotal = 0;
+    $v5836WithdrawTotal = 0;
+@endphp
+
+@if(count($v5836Combined) > 0)
+    <h2>Efectivo consolidado por denominación</h2>
+    <table class="cash-table">
+        <thead>
+            <tr>
+                <th>Denominación</th>
+                <th class="center">Caja</th>
+                <th class="center">Ret.</th>
+                <th class="right">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($v5836Combined as $line)
+                @php
+                    $v5836Count = $line['cash_quantity']
+                        + $line['withdraw_quantity'];
+
+                    $v5836CashTotal +=
+                        (int) round($line['value'] * 100)
+                        * $line['cash_quantity'];
+
+                    $v5836WithdrawTotal +=
+                        (int) round($line['value'] * 100)
+                        * $line['withdraw_quantity'];
+                @endphp
+                <tr>
+                    <td>
+                        {{ $line['type'] === 'coin'
+                            ? 'Moneda'
+                            : ($line['type'] === 'bill'
+                                ? 'Billete'
+                                : 'Denom.') }}
+                        ${{ number_format($line['value'], 2) }}
+                    </td>
+                    <td class="center">
+                        {{ $line['cash_quantity'] }}
+                    </td>
+                    <td class="center">
+                        {{ $line['withdraw_quantity'] }}
+                    </td>
+                    <td class="right">
+                        {{ $money(
+                            $v5836Count * $line['value']
+                        ) }}
+                    </td>
+                </tr>
+            @endforeach
+            <tr class="total-row">
+                <td colspan="3">TOTAL DESGLOSADO</td>
+                <td class="right">
+                    {{ $money(
+                        ($v5836CashTotal + $v5836WithdrawTotal) / 100
+                    ) }}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    @if(($v5836Withdrawals['undetailed_total'] ?? 0) > 0)
+        <p>
+            Retiros sin denominaciones:
+            {{ $money($v5836Withdrawals['undetailed_total']) }}.
+            Incluidos en la conciliación financiera,
+            no en las cantidades anteriores.
+        </p>
+    @endif
+@endif
+
 <h2>Conciliación del cierre</h2>
 <table>
     <tbody>
         <tr>
-            <td>Total cobrado registrado</td>
-            <td class="right">{{ $money($registered) }}</td>
+            <td>Total neto registrado</td>
+            <td class="right">{{ $money($recon5['recorded_total']) }}</td>
         </tr>
         <tr>
             <td>Efectivo esperado</td>
