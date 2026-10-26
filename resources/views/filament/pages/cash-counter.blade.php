@@ -64,6 +64,8 @@
             ticketLogo:
                 @js($cashCounterCompanyLogo),
 
+            concept: '',
+
             ticketUser:
                 @js($cashCounterUserName),
 
@@ -192,6 +194,7 @@
             },
 
             clearAll() {
+                this.concept = '';
                 this.rows.forEach(
                     row =>
                         row.quantity = 0
@@ -466,6 +469,20 @@
                     'Usuario:',
                     this.ticketUser
                 );
+
+                const conceptText =
+                    String(this.concept || '')
+                        .trim()
+                        .slice(0, 150);
+
+                if (conceptText !== '') {
+                    addRow(
+                        meta,
+                        'Concepto:',
+                        conceptText
+                    );
+                }
+
 
                 ticket.appendChild(meta);
                 ticket.appendChild(
@@ -1194,6 +1211,45 @@
             </div>
 
             <aside class="bcc-summary">
+                <!-- BEXIA_CASH_COUNTER_CONCEPT_V1 -->
+                <div
+                    style="
+                        padding: 14px;
+                        border-bottom: 1px solid #e2e8f0;
+                    "
+                >
+                    <label
+                        for="bcc-concept"
+                        style="
+                            display: block;
+                            font-size: 13px;
+                            font-weight: 700;
+                            margin-bottom: 7px;
+                        "
+                    >
+                        Concepto (opcional)
+                    </label>
+
+                    <input
+                        id="bcc-concept"
+                        type="text"
+                        maxlength="150"
+                        x-model="concept"
+                        placeholder="Ej. Retiro de efectivo"
+                        autocomplete="off"
+                        style="
+                            width: 100%;
+                            box-sizing: border-box;
+                            padding: 10px 12px;
+                            border: 1px solid #cbd5e1;
+                            border-radius: 9px;
+                            background: #ffffff;
+                            color: #0f172a;
+                            font-size: 14px;
+                        "
+                    >
+                </div>
+                <!-- /BEXIA_CASH_COUNTER_CONCEPT_V1 -->
                 <div class="bcc-summary-head">
                     <span>
                         Total contado
