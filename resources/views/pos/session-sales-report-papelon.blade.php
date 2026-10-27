@@ -45,6 +45,18 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
 .total-row td{font-weight:900;background:#f9fafb}
 .net-row td{font-weight:900;background:#111827;color:white;font-size:13px}
 .note{margin-top:12px;font-size:10px;color:#6b7280}
+/* BEXIA_V5836_POS_AREAS4F1 */
+.area-payment-block{
+    page-break-inside:avoid;
+    break-inside:avoid;
+}
+.area-payment-block h3{
+    page-break-after:avoid;
+}
+.area-payment-block table{
+    page-break-inside:avoid;
+}
+
 </style>
 </head>
 <body>
@@ -74,6 +86,7 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
 <h2>Resumen de cobros por sección y método de pago</h2>
 
 @foreach($sections as $section)
+    <div class="area-payment-block">
     <h3>{{ $section['name'] ?? 'SECCIÓN' }}</h3>
     <table>
         <thead>
@@ -101,6 +114,7 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
             </tr>
         </tbody>
     </table>
+    </div>
 @endforeach
 
 <h2>Devoluciones</h2>
@@ -734,8 +748,16 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
 @endif
 
 
-<div class="note">
-    Este formato separa visualmente Impresión y Copias, aunque la categoría sigue perteneciendo a PAPELÓN.
-</div>
+{{-- BEXIA_V5836_POS_AREAS3M --}}
+@php
+    $v5836AreasDisplay = $summary['sales_areas_display'] ?? [];
+    $v5836CustomAreas = ! empty($v5836AreasDisplay['sections']);
+@endphp
+
+@if(! $v5836CustomAreas)
+    <div class="note">
+        Este formato separa visualmente Impresión y Copias, aunque la categoría sigue perteneciendo a PAPELÓN.
+    </div>
+@endif
 </body>
 </html>
