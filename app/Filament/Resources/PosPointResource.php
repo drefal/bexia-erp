@@ -356,7 +356,224 @@ Forms\Components\TextInput::make('name')
                                             ->default('generic')
                                             ->required()
                                             ->native(false)
-                                            ->helperText('Genérico para la mayoría de empresas. Papelón usa el corte especial por secciones e impresiones.'),
+                                            ->helperText('Selecciona solamente el diseño del documento: Genérico o Papelón.'),
+
+                                        // BEXIA_V5836_POS_AREAS3E2
+                                        Forms\Components\Select::make('sales_breakdown_mode')
+                                            ->label('Desglose de ventas')
+                                            ->options([
+                                                'default' => 'Predeterminado',
+                                                'areas' => 'Por áreas',
+                                            ])
+                                            ->default('default')
+                                            ->required()
+                                            ->native(false)
+                                            ->helperText(
+                                                'Solo modifica las secciones informativas. '
+                                                . 'No altera cobros, devoluciones ni conciliación.'
+                                            )
+                                            ->live(),
+
+                                        Forms\Components\Placeholder::make('sales_areas_info')
+                                            ->label('Áreas de la empresa')
+                                            ->content(
+                                                'Las áreas y categorías se comparten entre '
+                                                . 'los puntos de venta de la misma empresa.'
+                                            ),
+
+                                        Forms\Components\Actions::make([
+                                            Forms\Components\Actions\Action::make('configureSalesAreas')
+                                                ->label('Configurar áreas')
+                                                ->icon('heroicon-o-squares-2x2')
+                                                ->modalHeading('Áreas de ventas de la empresa')
+                                                ->modalSubmitActionLabel('Guardar')
+                                                ->modalWidth('4xl')
+                                                ->visible(
+                                                    fn (?PosPoint $record): bool =>
+                                                        $record !== null
+                                                        && (int) $record->company_id > 0
+                                                )
+                                                ->fillForm(function (?PosPoint $record): array {
+                                                    if (! $record) {
+                                                        return ['areas' => []];
+                                                    }
+
+                                                    $companyId = (int) $record->company_id;
+                                                    $raw = DB::table('companies')
+                                                        ->where('id', $companyId)
+                                                        ->value('pos_sales_areas');
+
+                                                    $areas = is_array($raw)
+                                                        ? $raw
+                                                        : json_decode((string) ($raw ?? '[]'), true);
+
+                                                    return [
+                                                        'areas' => is_array($areas) ? $areas : [],
+                                                    ];
+                                                })
+                                                ->form([
+                                                    Forms\Components\Repeater::make('areas')
+                                                        ->label('Áreas y categorías')
+                                                        ->default([])
+                                                        ->schema([
+                                                            Forms\Components\TextInput::make('name')
+                                                                ->label('Nombre del área')
+                                                                ->maxLength(100)
+                                                                ->required(),
+
+                                                            Forms\Components\Select::make('category_ids')
+                                                                ->label('Categorías asociadas')
+                                                                ->multiple()
+                                                                ->options(function (?PosPoint $record): array {
+                                                                    if (! $record) {
+                                                                        return [];
+                                                                    }
+
+                                                                    return \App\Models\ProductCategory::query()
+                                                                        ->where(
+                                                                            'company_id',
+                                                                            (int) $record->company_id
+                                                                        )
+                                                                        ->orderBy('name')
+                                                                        ->pluck('name', 'id')
+                                                                        ->all();
+                                                                })
+                                                                ->searchable()
+                                                                ->preload()
+                                                                ->required(),
+                                                        ])
+                                                        ->reorderable()
+                                                        ->collapsible()
+                                                        ->addActionLabel('Agregar área'),
+                                                ])
+                                                ->action(function (
+                                                    array $data,
+                                                    ?PosPoint $record
+                                                ): void {
+                                                    abort_unless($record, 422);
+
+                                                    $user = auth()->user();
+                                                    abort_unless($user, 403);
+
+                                                    abort_unless(
+                                                        (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin())
+                                                        || (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin())
+                                                        || $user->can('company.update'),
+                                                        403
+                                                    );
+
+                                                    $companyId = (int) $record->company_id;
+                                                    abort_unless($companyId > 0, 422);
+
+                                                    $currentCompanyId = static::currentCompanyId();
+
+                                                    if ($currentCompanyId) {
+                                                        abort_unless(
+                                                            (int) $currentCompanyId === $companyId,
+                                                            403
+                                                        );
+                                                    }
+
+                                                    abort_unless(
+                                                        DB::table('companies')
+                                                            ->where('id', $companyId)
+                                                            ->exists(),
+                                                        404
+                                                    );
+
+                                                    $areas = $data['areas'] ?? [];
+                                                    abort_unless(is_array($areas), 422);
+
+                                                    $clean = [];
+                                                    $names = [];
+                                                    $categories = [];
+
+                                                    foreach ($areas as $area) {
+                                                        abort_unless(is_array($area), 422);
+
+                                                        $name = trim((string) ($area['name'] ?? ''));
+
+                                                        abort_unless(
+                                                            $name !== ''
+                                                            && mb_strlen($name) <= 100,
+                                                            422
+                                                        );
+
+                                                        $key = mb_strtolower($name);
+
+                                                        abort_if(
+                                                            isset($names[$key]),
+                                                            422,
+                                                            'Nombre de área repetido.'
+                                                        );
+
+                                                        $names[$key] = true;
+
+                                                        $inputIds = $area['category_ids'] ?? [];
+                                                        abort_unless(is_array($inputIds), 422);
+
+                                                        $ids = [];
+
+                                                        foreach ($inputIds as $rawId) {
+                                                            abort_unless(
+                                                                is_scalar($rawId)
+                                                                && ctype_digit((string) $rawId)
+                                                                && (int) $rawId > 0,
+                                                                422,
+                                                                'Categoría inválida.'
+                                                            );
+
+                                                            $id = (int) $rawId;
+
+                                                            abort_if(
+                                                                isset($categories[$id]),
+                                                                422,
+                                                                'Una categoría solo puede estar en un área.'
+                                                            );
+
+                                                            $categories[$id] = true;
+                                                            $ids[] = $id;
+                                                        }
+
+                                                        abort_if(
+                                                            count($ids) === 0,
+                                                            422,
+                                                            'Cada área necesita categorías.'
+                                                        );
+
+                                                        $clean[] = [
+                                                            'name' => $name,
+                                                            'category_ids' => $ids,
+                                                        ];
+                                                    }
+
+                                                    $validCount = \App\Models\ProductCategory::query()
+                                                        ->where('company_id', $companyId)
+                                                        ->whereIn('id', array_keys($categories))
+                                                        ->count();
+
+                                                    abort_unless(
+                                                        $validCount === count($categories),
+                                                        422,
+                                                        'Las categorías deben pertenecer a la empresa.'
+                                                    );
+
+                                                    DB::table('companies')
+                                                        ->where('id', $companyId)
+                                                        ->update([
+                                                            'pos_sales_areas' => json_encode(
+                                                                $clean,
+                                                                JSON_UNESCAPED_UNICODE
+                                                                | JSON_UNESCAPED_SLASHES
+                                                            ),
+                                                        ]);
+
+                                                    \Filament\Notifications\Notification::make()
+                                                        ->title('Áreas de ventas guardadas')
+                                                        ->success()
+                                                        ->send();
+                                                }),
+                                        ])->columnSpanFull(),
                                     ]),
 
                                 /*
