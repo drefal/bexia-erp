@@ -83,7 +83,7 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
     </tr>
 </table>
 
-<h2>Resumen de cobros por sección y método de pago</h2>
+<h2>Resumen por sección y método de pago</h2>
 
 @foreach($sections as $section)
     <div class="area-payment-block">
@@ -105,9 +105,9 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
             <tr class="total-row">
                 <td>
                     @if(($section['name'] ?? '') === 'IMPRESIÓN Y COPIAS')
-                        TOTAL COBRADO IMPRESIONES
+                        SUBTOTAL SECCIÓN IMPRESIONES
                     @else
-                        Total cobrado {{ $section['name'] ?? '' }}
+                        Subtotal sección {{ $section['name'] ?? '' }}
                     @endif
                 </td>
                 <td class="right">{{ $money($section['total'] ?? 0) }}</td>

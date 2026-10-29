@@ -601,6 +601,30 @@ class PosPapelonCloseSummary
         $methodTotals =
             $directMethodTotals;
 
+        /*
+         * BEXIA_V5836_PAPELON_REFUNDS_AREAS_FIX1
+         * Solo ajustar secciones en el modo de areas.
+         * Conservar importes brutos generales por metodo.
+         */
+        if ($useCompanyAreas && $configuredAreas !== []) {
+            $allocations = $this->refundAreaAllocations(
+                $session,
+                $configuredAreas,
+                $categories
+            );
+
+            foreach ($allocations as $area => $methods) {
+                foreach ($methods as $method => $amount) {
+                    $sectionMethods[$area][$method] =
+                        round(
+                            ($sectionMethods[$area][$method] ?? 0)
+                            - $amount,
+                            4
+                        );
+                }
+            }
+        }
+
         return $this->result(
             $sectionMethods,
             $methodTotals,
@@ -675,6 +699,206 @@ class PosPapelonCloseSummary
         }
 
         return 0.0;
+    }
+
+    /*
+     * BEXIA_V5836_PAPELON_REFUNDS_AREAS_FIX1
+     *
+     * Atribucion de reembolsos efectivamente realizados
+     * a las areas de los productos devueltos.
+     *
+     * No altera documentos financieros ni totales de caja.
+     */
+    protected function refundAreaAllocations(
+        object $session,
+        array $configuredAreas,
+        $categories
+    ): array {
+        foreach ([
+            'pos_order_refunds',
+            'pos_order_refund_lines',
+            'pos_order_refund_payments',
+        ] as $table) {
+            if (! Schema::hasTable($table)) {
+                return [];
+            }
+        }
+
+        $refunds = DB::table('pos_order_refunds as r')
+            ->where('r.pos_session_id', (int) $session->id)
+            ->where('r.company_id', (int) $session->company_id)
+            ->where('r.pos_point_id', (int) $session->pos_point_id)
+            ->whereNotIn(
+                'r.status',
+                ['cancelled', 'canceled', 'void']
+            )
+            ->get([
+                'r.id',
+                'r.type',
+                'r.payment_total',
+            ]);
+
+        if ($refunds->isEmpty()) {
+            return [];
+        }
+
+        $refundIds = $refunds->pluck('id')->all();
+
+        $lines = DB::table('pos_order_refund_lines as rl')
+            ->leftJoin(
+                'products as p',
+                'p.id',
+                '=',
+                'rl.product_id'
+            )
+            ->whereIn('rl.pos_order_refund_id', $refundIds)
+            ->orderBy('rl.id')
+            ->get([
+                'rl.pos_order_refund_id',
+                'rl.total',
+                'p.product_category_id',
+            ])
+            ->groupBy('pos_order_refund_id');
+
+        $payments = DB::table('pos_order_refund_payments')
+            ->whereIn('pos_order_refund_id', $refundIds)
+            ->orderBy('id')
+            ->get([
+                'pos_order_refund_id',
+                'payment_form_id',
+                'payment_label',
+                'amount',
+                'status',
+            ])
+            ->groupBy('pos_order_refund_id');
+
+        $paymentForms = DB::table('payment_forms')
+            ->pluck('name', 'id');
+
+        $result = [];
+
+        foreach ($refunds as $refund) {
+            if (str_contains(
+                $this->norm((string) ($refund->type ?? '')),
+                'advance'
+            )) {
+                continue;
+            }
+
+            $refundId = (int) $refund->id;
+            $lineRows = $lines->get($refundId, collect());
+            $paymentRows = $payments->get($refundId, collect());
+
+            $areaWeights = [];
+
+            foreach ($lineRows as $line) {
+                $cents = (int) round(
+                    abs((float) ($line->total ?? 0)) * 100
+                );
+
+                if ($cents <= 0) {
+                    continue;
+                }
+
+                $path = $this->categoryPath(
+                    ! empty($line->product_category_id)
+                        ? (int) $line->product_category_id
+                        : null,
+                    $categories
+                );
+
+                $areaName = 'Devoluciones sin clasificar';
+
+                foreach (array_reverse($path) as $node) {
+                    $categoryId = (int) ($node['id'] ?? 0);
+
+                    foreach ($configuredAreas as $area) {
+                        $ids = array_map(
+                            'intval',
+                            $area['category_ids'] ?? []
+                        );
+
+                        if (in_array($categoryId, $ids, true)) {
+                            $areaName = (string) $area['name'];
+                            break 2;
+                        }
+                    }
+                }
+
+                $areaWeights[$areaName] =
+                    ($areaWeights[$areaName] ?? 0) + $cents;
+            }
+
+            if (!$areaWeights) {
+                $areaWeights = [
+                    'Devoluciones sin clasificar' => 1
+                ];
+            }
+
+            $weightTotal = array_sum($areaWeights);
+
+            foreach ($paymentRows as $payment) {
+                $status = $this->norm(
+                    (string) ($payment->status ?? '')
+                );
+
+                if (! in_array($status, [
+                    'refunded',
+                    'paid',
+                    'done',
+                    'confirmed',
+                    'completed',
+                    'posted',
+                ], true)) {
+                    continue;
+                }
+
+                $cents = (int) round(
+                    abs((float) ($payment->amount ?? 0)) * 100
+                );
+
+                if ($cents <= 0) {
+                    continue;
+                }
+
+                $label = trim(
+                    (string) ($payment->payment_label ?? '')
+                );
+
+                if ($label === '') {
+                    $label = (string) $paymentForms->get(
+                        (int) ($payment->payment_form_id ?? 0),
+                        ''
+                    );
+                }
+
+                $method = $this->paymentMethod($label);
+                $remaining = $cents;
+                $areas = array_keys($areaWeights);
+                $last = count($areas) - 1;
+
+                foreach ($areas as $index => $areaName) {
+                    if ($index === $last) {
+                        $part = $remaining;
+                    } else {
+                        $part = (int) floor(
+                            $cents
+                            * $areaWeights[$areaName]
+                            / $weightTotal
+                        );
+                        $part = min($part, $remaining);
+                    }
+
+                    $remaining -= $part;
+
+                    $result[$areaName][$method] =
+                        ($result[$areaName][$method] ?? 0)
+                        + ($part / 100);
+                }
+            }
+        }
+
+        return $result;
     }
 
     protected function refunds(object $session, $orderIds): array
@@ -752,6 +976,7 @@ class PosPapelonCloseSummary
 
         $select = [
             DB::raw("r.{$amountColumn} as refund_amount"),
+            DB::raw('r.id as refund_id'),
         ];
 
         if (in_array('type', $columns, true)) {
@@ -760,7 +985,11 @@ class PosPapelonCloseSummary
             $select[] = DB::raw('NULL as refund_type');
         }
 
-        foreach ($query->get($select) as $row) {
+        $refundRows = $query->get($select);
+        $refundKinds = [];
+        $refundAmountsCents = [];
+
+        foreach ($refundRows as $row) {
             $amount = round(abs((float) ($row->refund_amount ?? 0)), 2);
 
             if ($amount <= 0) {
@@ -768,6 +997,14 @@ class PosPapelonCloseSummary
             }
 
             $type = $this->norm($row->refund_type ?? '');
+
+            $refundId = (int) ($row->refund_id ?? 0);
+            $refundKinds[$refundId] =
+                str_contains($type, 'advance')
+                    ? 'advance'
+                    : 'sale';
+            $refundAmountsCents[$refundId] =
+                (int) round($amount * 100);
 
             $summary['refunded_total'] += $amount;
             $summary['refunds_count']++;
@@ -835,6 +1072,105 @@ class PosPapelonCloseSummary
         ] as $key) {
             $summary[$key] = round((float) $summary[$key], 2);
         }
+
+        /*
+         * BEXIA_V5836_PAPELON_REFUNDS_PAID_STAGE3
+         *
+         * Mantener los importes documentales.
+         * Calcular por separado reembolsos confirmados y
+         * pendientes. Solo usar flujo pagado cuando todas
+         * las devoluciones tienen desglose conciliado.
+         */
+        $summary['paid_refunds_total'] = 0.0;
+        $summary['paid_sale_refunds_total'] = 0.0;
+        $summary['paid_advance_refunds_total'] = 0.0;
+        $summary['pending_refunds_total'] = 0.0;
+        $summary['paid_breakdown_reconciled'] = false;
+
+        if (
+            $refundAmountsCents === []
+            || ! Schema::hasTable('pos_order_refund_payments')
+        ) {
+            if ($refundAmountsCents === []) {
+                $summary['paid_breakdown_reconciled'] = true;
+            }
+            return $summary;
+        }
+
+        $paymentRows = DB::table('pos_order_refund_payments')
+            ->whereIn(
+                'pos_order_refund_id',
+                array_keys($refundAmountsCents)
+            )
+            ->get([
+                'pos_order_refund_id',
+                'amount',
+                'status',
+            ]);
+
+        $paidByRefund = [];
+        $pendingByRefund = [];
+        $otherByRefund = [];
+
+        foreach ($paymentRows as $payment) {
+            $id = (int) $payment->pos_order_refund_id;
+            $cents = (int) round(
+                abs((float) ($payment->amount ?? 0)) * 100
+            );
+            $status = $this->norm($payment->status ?? '');
+
+            if (in_array($status, [
+                'refunded', 'paid', 'done', 'confirmed',
+                'completed', 'posted',
+            ], true)) {
+                $paidByRefund[$id] =
+                    ($paidByRefund[$id] ?? 0) + $cents;
+            } elseif ($status === 'pending') {
+                $pendingByRefund[$id] =
+                    ($pendingByRefund[$id] ?? 0) + $cents;
+            } else {
+                $otherByRefund[$id] =
+                    ($otherByRefund[$id] ?? 0) + $cents;
+            }
+        }
+
+        $reconciled = true;
+        $totalPaidCents = 0;
+        $totalPendingCents = 0;
+        $paidSaleCents = 0;
+        $paidAdvanceCents = 0;
+
+        foreach ($refundAmountsCents as $id => $documentCents) {
+            $paid = $paidByRefund[$id] ?? 0;
+            $pending = $pendingByRefund[$id] ?? 0;
+            $other = $otherByRefund[$id] ?? 0;
+
+            if (
+                abs(($paid + $pending + $other) - $documentCents) > 1
+                || $other > 0
+            ) {
+                $reconciled = false;
+            }
+
+            $totalPaidCents += $paid;
+            $totalPendingCents += $pending;
+
+            if (($refundKinds[$id] ?? '') === 'advance') {
+                $paidAdvanceCents += $paid;
+            } else {
+                $paidSaleCents += $paid;
+            }
+        }
+
+        $summary['paid_refunds_total'] =
+            round($totalPaidCents / 100, 2);
+        $summary['paid_sale_refunds_total'] =
+            round($paidSaleCents / 100, 2);
+        $summary['paid_advance_refunds_total'] =
+            round($paidAdvanceCents / 100, 2);
+        $summary['pending_refunds_total'] =
+            round($totalPendingCents / 100, 2);
+        $summary['paid_breakdown_reconciled'] = $reconciled;
 
         return $summary;
     }
@@ -956,10 +1292,22 @@ class PosPapelonCloseSummary
                 2
             );
 
+        /*
+         * BEXIA_V5836_PAPELON_REFUNDS_PAID_STAGE3
+         * Si los pagos estan conciliados, el flujo solo
+         * descuenta dinero efectivamente reembolsado.
+         * En registros legacy incompletos se conserva
+         * el comportamiento historico.
+         */
+        $cashflowRefundTotal =
+            ! empty($refunds['paid_breakdown_reconciled'])
+                ? (float) ($refunds['paid_refunds_total'] ?? 0)
+                : $refundedTotal;
+
         $netCashflowTotal =
             round(
                 $paymentsTotal
-                - $refundedTotal,
+                - $cashflowRefundTotal,
                 2
             );
 
