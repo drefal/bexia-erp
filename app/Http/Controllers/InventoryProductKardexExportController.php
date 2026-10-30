@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\Inventory\ProductKardexService;
+use App\Support\Security\InventoryTenantScope;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +20,8 @@ class InventoryProductKardexExportController extends Controller
         $rows = $service->rows($filters);
         $summary = $service->summary($filters);
         $company = $this->company($filters['company_id'] ?? null);
+        $metadata = $this->exportMetadata($filters);
+        $reconciliation = $this->exportReconciliation($filters);
 
         $pdf = Pdf::loadView('inventory.kardex-print', [
             'rows' => $rows,
@@ -27,6 +30,8 @@ class InventoryProductKardexExportController extends Controller
             'company' => $company,
             'logoDataUri' => $this->companyLogoDataUri($company),
             'generatedAt' => now(),
+            'metadata' => $metadata,
+            'reconciliation' => $reconciliation,
         ])->setPaper('letter', 'landscape');
 
         return $pdf->stream('kardex_producto_' . now()->format('Ymd_His') . '.pdf');
@@ -38,6 +43,8 @@ class InventoryProductKardexExportController extends Controller
         $service = app(ProductKardexService::class);
         $rows = $service->rows($filters);
         $summary = $service->summary($filters);
+        $metadata = $this->exportMetadata($filters);
+        $reconciliation = $this->exportReconciliation($filters);
 
         $headers = [
             'Empresa',
@@ -67,12 +74,37 @@ class InventoryProductKardexExportController extends Controller
         $data = [];
         $data[] = ['Kardex por producto'];
         $data[] = ['Generado', now()->format('d/m/Y H:i:s')];
-        $data[] = ['Método', $this->methodText((string) ($summary['valuation_method'] ?? ''))];
+        $data[] = ['Empresa', $metadata['company']];
+        $data[] = ['Almacén', $metadata['warehouse']];
+        $data[] = ['Producto', $metadata['product']];
+        $data[] = ['Periodo', $metadata['period']];
+        if ($reconciliation !== null) {
+            $data[] = ['Conciliación actual', now()->format('d/m/Y H:i:s')];
+            $data[] = ['Existencia registrada', $reconciliation['quantity']];
+            $data[] = ['Saldo por movimientos confirmados', $reconciliation['ledger']];
+            $data[] = ['Diferencia por conciliar', $reconciliation['difference']];
+            $data[] = ['Aviso', 'Comparación actual, no constituye apertura histórica'];
+        }
+        $data[] = [
+            'Método',
+            ($summary['rows'] ?? 0) > 0
+                ? $this->methodText((string) ($summary['valuation_method'] ?? ''))
+                : 'Sin historial',
+        ];
         $data[] = [
             'Entradas', $summary['in_qty'] ?? 0,
             'Salidas', $summary['out_qty'] ?? 0,
             'Saldo', $summary['balance_qty'] ?? 0,
-            'Saldo valorizado', $summary['balance_value'] ?? 0,
+            'Saldo valorizado',
+            ($summary['rows'] ?? 0) > 0
+                ? ($summary['balance_value'] ?? 0)
+                : 'No determinado',
+        ];
+        $data[] = [];
+        $data[] = [
+            'Aviso',
+            'La valorización se basa en movimientos disponibles; '
+            . 'el saldo histórico de apertura puede no estar documentado.',
         ];
         $data[] = [];
         $data[] = $headers;
@@ -114,6 +146,63 @@ class InventoryProductKardexExportController extends Controller
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ])
             ->deleteFileAfterSend(true);
+    }
+
+
+    protected function exportMetadata(array $filters): array
+    {
+        $companyId = (int) ($filters['company_id'] ?? 0);
+        $allowed = $companyId > 0 && InventoryTenantScope::isAllowedCompany($companyId);
+        $company = $allowed ? DB::table('companies')->where('id', $companyId)->value('name') : 'No seleccionada';
+        $warehouse = 'Todos';
+        $product = 'Todos';
+        if ($allowed && !empty($filters['warehouse_id'])) {
+            $w = DB::table('warehouses')->where('company_id', $companyId)
+                ->where('id', (int) $filters['warehouse_id'])->first();
+            $warehouse = $w ? ($w->name . ' #' . $w->id) : 'No autorizado';
+        }
+        if ($allowed && !empty($filters['product_id'])) {
+            $p = DB::table('products')->where('id', (int) $filters['product_id'])->first();
+            $product = $p ? ($p->name . ' #' . $p->id) : 'No encontrado';
+        }
+        return [
+            'company' => $company ?: 'No seleccionada',
+            'warehouse' => $warehouse,
+            'product' => $product,
+            'period' => ($filters['date_from'] ?: 'Inicio') . ' a ' . ($filters['date_to'] ?: 'Hoy'),
+        ];
+    }
+
+    protected function exportReconciliation(array $filters): ?array
+    {
+        $companyId = (int) ($filters['company_id'] ?? 0);
+        $warehouseId = (int) ($filters['warehouse_id'] ?? 0);
+        $productId = (int) ($filters['product_id'] ?? 0);
+        if (!$companyId || !$warehouseId || !$productId
+            || !InventoryTenantScope::isAllowedCompany($companyId)
+            || !empty($filters['location_id'])
+            || !empty($filters['product_variant_id'])
+            || !empty($filters['lot_id'])
+            || !empty($filters['stock_serial_number_id'])
+            || !Schema::hasTable('stock_quants')) {
+            return null;
+        }
+        if (!DB::table('warehouses')->where('id', $warehouseId)->where('company_id', $companyId)->exists()) {
+            return null;
+        }
+        $quantity = (float) DB::table('stock_quants')
+            ->where('company_id', $companyId)->where('warehouse_id', $warehouseId)
+            ->where('product_id', $productId)->sum('quantity');
+        $historyFilters = $filters;
+        unset($historyFilters['date_from'], $historyFilters['date_to']);
+        $historyFilters['status'] = 'done';
+        $summary = app(ProductKardexService::class)->summary($historyFilters);
+        $ledger = (float) ($summary['balance_qty'] ?? 0);
+        return [
+            'quantity' => round($quantity, 6),
+            'ledger' => round($ledger, 6),
+            'difference' => round($quantity - $ledger, 6),
+        ];
     }
 
     protected function filters(Request $request): array

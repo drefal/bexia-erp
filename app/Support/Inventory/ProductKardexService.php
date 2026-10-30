@@ -88,20 +88,34 @@ class ProductKardexService
                 'l.notes',
             ]);
 
-        $this->applyFilters($query, $filters);
+        // INV10A: conservar operaciones anteriores al periodo.
+        $calculationFilters = $filters;
+        unset(
+            $calculationFilters['date_from'],
+            $calculationFilters['date_to']
+        );
+        $calculationFilters['status'] = 'done';
+        $this->applyFilters($query, $calculationFilters);
 
         $records = $query
             ->orderByRaw('coalesce(m.movement_at, m.created_at, l.created_at) asc')
             ->orderBy('l.id')
-            ->limit((int) ($filters['limit'] ?? 1000))
+            ->limit(50001)
             ->get();
+
+        if ($records->count() > 50000) {
+            throw new \RuntimeException(
+                'El Kardex supera 50,000 líneas. ' .
+                'Seleccione un producto o almacén.'
+            );
+        }
 
         $selectedMethod = $this->normalizeMethod((string) ($filters['valuation_method'] ?? self::METHOD_AUTO));
         $warehouseFilter = ! empty($filters['warehouse_id']) ? (int) $filters['warehouse_id'] : null;
         $locationFilter = ! empty($filters['location_id']) ? (int) $filters['location_id'] : null;
         $states = [];
 
-        return $records->map(function ($row) use (&$states, $selectedMethod, $warehouseFilter, $locationFilter) {
+        $mapped = $records->map(function ($row) use (&$states, $selectedMethod, $warehouseFilter, $locationFilter) {
             if ($warehouseFilter !== null) {
                 $row->effective_warehouse_id = $warehouseFilter;
                 $row->effective_warehouse_name =
@@ -210,6 +224,35 @@ class ProductKardexService
                 'notes' => $row->notes,
             ];
         });
+
+        // El rango de fechas limita las filas visibles,
+        // pero no reinicia el saldo acumulado.
+        $from = ! empty($filters['date_from'])
+            ? (string) $filters['date_from']
+            : null;
+        $to = ! empty($filters['date_to'])
+            ? (string) $filters['date_to']
+            : null;
+
+        return $mapped->filter(
+            static function ($row) use ($from, $to): bool {
+                $date = substr(
+                    (string) ($row->date ?? ''),
+                    0,
+                    10
+                );
+
+                if ($from && $date < $from) {
+                    return false;
+                }
+
+                if ($to && $date > $to) {
+                    return false;
+                }
+
+                return true;
+            }
+        )->values();
     }
 
     public function summary(array $filters = []): array
