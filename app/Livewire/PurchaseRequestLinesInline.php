@@ -93,7 +93,7 @@ class PurchaseRequestLinesInline extends Component
             return;
         }
 
-        $this->variantSearch = $this->productLabel($variantId, true);
+        $this->variantSearch = $this->variantDisplayLabel($variantId);
         $this->unit_cost_without_tax = $this->productCostWithoutTax($variantId) * (float) $this->currentPurchaseUnitFactor();
         $this->tax_rate = $this->normalizeTaxRateOptionKey($this->productPurchaseTaxRate($variantId));
     }
@@ -154,7 +154,7 @@ class PurchaseRequestLinesInline extends Component
         $this->unit_cost_without_tax = (float) $line->unit_cost_without_tax;
         $this->tax_rate = $this->normalizeTaxRateOptionKey($line->tax_rate ?? 16);
         $this->productSearch = $this->product_id ? $this->productLabel($this->product_id) : '';
-        $this->variantSearch = $this->product_variant_id ? $this->productLabel($this->product_variant_id, true) : '';
+        $this->variantSearch = $this->product_variant_id ? $this->variantDisplayLabel($this->product_variant_id) : '';
     }
 
     public function deleteLine(int $lineId): void
@@ -268,7 +268,7 @@ class PurchaseRequestLinesInline extends Component
             'product_id' => $this->product_id,
             'product_variant_id' => $this->product_variant_id,
             'product_label' => $this->productLabel($this->product_id),
-            'variant_label' => $this->product_variant_id ? $this->productLabel($this->product_variant_id, true) : '—',
+            'variant_label' => $this->product_variant_id ? $this->variantDisplayLabel($this->product_variant_id) : '—',
             'requested_quantity' => $quantity,
 
             'purchase_unit_type' => $this->purchase_unit_type ?: 'piece',
@@ -498,15 +498,72 @@ class PurchaseRequestLinesInline extends Component
             ->limit(30)
             ->get()
             ->mapWithKeys(fn ($product): array => [
-                $product->id => $this->productLabelFromRow($product, true),
+                $product->id => $this->variantDisplayLabelFromRow($product),
             ])
             ->all();
 
         if ($selectedId && ! isset($options[$selectedId])) {
-            $options[$selectedId] = $this->productLabel($selectedId, true);
+            $options[$selectedId] = $this->variantDisplayLabel($selectedId);
         }
 
         return $options;
+    }
+
+    protected function variantDisplayLabel(?int $variantId): string
+    {
+        if (! $variantId || ! Schema::hasTable('products')) {
+            return '—';
+        }
+
+        $product = DB::table('products')
+            ->where('id', $variantId)
+            ->first();
+
+        return $product
+            ? $this->variantDisplayLabelFromRow($product)
+            : 'Producto #' . $variantId;
+    }
+
+    protected function variantDisplayLabelFromRow(object $product): string
+    {
+        $name = trim($this->productLabelFromRow($product, true));
+        $reference = '';
+
+        foreach (['internal_reference', 'reference', 'code', 'sku'] as $column) {
+            if (property_exists($product, $column)) {
+                $candidate = trim((string) ($product->{$column} ?? ''));
+
+                if ($candidate !== '') {
+                    $reference = $candidate;
+                    break;
+                }
+            }
+        }
+
+        if ($reference === '') {
+            return $name;
+        }
+
+        if ($name === '' || $name === '—') {
+            return $reference;
+        }
+
+        if (mb_strtolower($name) === mb_strtolower($reference)) {
+            return $name;
+        }
+
+        return $name . ' — ' . $reference;
+    }
+
+    public function displayedLineVariant(object $line): string
+    {
+        $variantId = (int) ($line->product_variant_id ?? 0);
+
+        if ($variantId > 0) {
+            return $this->variantDisplayLabel($variantId);
+        }
+
+        return (string) ($line->variant_label ?: '—');
     }
 
     protected function productLabel(?int $productId, bool $variant = false): string
