@@ -151,7 +151,7 @@
                 <thead>
                     <tr style="background:#f8fafc;">
                         <th style="text-align:left;padding:10px;border-bottom:1px solid #e5e7eb;">Producto</th>
-                        <th style="text-align:left;padding:10px;border-bottom:1px solid #e5e7eb;">Variante</th>
+                        <th style="text-align:left;padding:10px;border-bottom:1px solid #e5e7eb;">Variante — Referencia</th>
                         <th style="text-align:left;padding:10px;border-bottom:1px solid #e5e7eb;">Unidad</th>
                         <th style="text-align:right;padding:10px;border-bottom:1px solid #e5e7eb;">Cantidad</th>
                         <th style="text-align:right;padding:10px;border-bottom:1px solid #e5e7eb;">Cant. base</th>
@@ -167,7 +167,7 @@
                     @forelse($this->lines as $line)
                         <tr style="background:#ffffff;">
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;font-weight:600;">{{ $line->product_label }}</td>
-                            <td style="padding:10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ $line->variant_label ?: '—' }}</td>
+                            <td style="padding:10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ $this->displayedLineVariant($line) }}</td>
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;">{{ $line->purchase_unit_label ?? 'Pieza' }}</td>
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;text-align:right;">{{ number_format((float) $line->requested_quantity, 2) }}</td>
                             <td style="padding:10px;border-bottom:1px solid #f1f5f9;text-align:right;">{{ number_format((float) ($line->base_quantity ?? $line->requested_quantity), 2) }}</td>
