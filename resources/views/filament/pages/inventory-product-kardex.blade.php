@@ -242,8 +242,11 @@
                     </div>
 
                     <div>
-                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500">Límite</label>
-                        <input type="number" min="50" max="5000" wire:model.live="limit" class="mt-1 w-full rounded-xl border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                        <label class="text-xs font-semibold uppercase tracking-wide text-gray-500">Límite de seguridad</label>
+                        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                            Máximo 50,000 movimientos para calcular el Kardex.
+                            Acota la consulta por empresa, almacén o producto si supera el límite.
+                        </p>
                     </div>
 
                     <div style="display:flex; align-items:center; justify-content:center; min-height:4.75rem;">
@@ -263,7 +266,7 @@
         <div style="display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem;">
             <div class="rounded-2xl border bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                 <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Método</div>
-                <div class="mt-2 text-lg font-bold">{{ $methodLabels[$summary['valuation_method'] ?? 'mixed'] ?? ($summary['valuation_method'] ?? '—') }}</div>
+                <div class="mt-2 text-lg font-bold">{{ ($summary['rows'] ?? 0) > 0 ? ($methodLabels[$summary['valuation_method'] ?? 'mixed'] ?? ($summary['valuation_method'] ?? '—')) : 'Sin historial' }}</div>
             </div>
             <div class="rounded-2xl border bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                 <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Entradas</div>
@@ -274,14 +277,81 @@
                 <div class="mt-2 text-2xl font-bold">{{ number_format($summary['out_qty'] ?? 0, 2) }}</div>
             </div>
             <div class="rounded-2xl border bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo físico</div>
+                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo según movimientos</div>
                 <div class="mt-2 text-2xl font-bold">{{ number_format($summary['balance_qty'] ?? 0, 2) }}</div>
             </div>
             <div class="rounded-2xl border bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                 <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo valorizado</div>
-                <div class="mt-2 text-2xl font-bold">$ {{ number_format($summary['balance_value'] ?? 0, 2) }}</div>
+                <div class="mt-2 text-2xl font-bold">
+                    @if (($summary['rows'] ?? 0) > 0)
+                        $ {{ number_format($summary['balance_value'] ?? 0, 2) }}
+                    @else
+                        No determinado
+                    @endif
+                </div>
             </div>
         </div>
+
+        @php
+            $reconciliation = $this->currentStockReconciliation();
+        @endphp
+
+        @if ($reconciliation !== null)
+            <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <h3 class="text-base font-bold">
+                    Conciliación actual de inventario
+                </h3>
+                <p class="mt-2 text-sm text-gray-500">
+                    Comparación al {{ $reconciliation['as_of'] }}.
+                    No representa un saldo inicial histórico ni modifica existencias.
+                </p>
+                <div class="mt-4 grid gap-4 md:grid-cols-3">
+                    <div>
+                        <div class="text-xs text-gray-500">
+                            Existencia registrada
+                        </div>
+                        <div class="text-xl font-bold">
+                            {{ number_format($reconciliation['quantity'], 2) }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">
+                            Saldo según movimientos confirmados
+                        </div>
+                        <div class="text-xl font-bold">
+                            {{ number_format($reconciliation['ledger'], 2) }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-500">
+                            Diferencia pendiente de conciliar
+                        </div>
+                        <div class="text-xl font-bold">
+                            {{ number_format($reconciliation['difference'], 2) }}
+                        </div>
+                    </div>
+                </div>
+                @if (abs($reconciliation['difference']) > 0.000001)
+                    <p class="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                        Historial incompleto o diferencia por investigar.
+                        No se ha generado ningún movimiento de apertura.
+                    </p>
+                @else
+                    <p class="mt-3 text-sm text-green-700 dark:text-green-300">
+                        Las cantidades coinciden para los filtros seleccionados.
+                    </p>
+                @endif
+                <p class="mt-2 text-xs text-gray-500">
+                    La valorización y el historial anterior a la carga inicial
+                    no se consideran verificados por esta comparación.
+                </p>
+            </div>
+        @endif
+
+        <p class="px-2 text-xs text-gray-500">
+            El saldo y valor de los movimientos no acreditan por sí solos
+            el inventario de apertura. Los costos históricos pueden estar incompletos.
+        </p>
 
         <div class="overflow-hidden rounded-2xl border bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div class="border-b border-gray-100 px-6 py-4 dark:border-gray-800">

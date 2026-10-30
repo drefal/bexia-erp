@@ -101,6 +101,7 @@
         .muted { color: #6b7280; font-size: 7.5px; }
         .bold { font-weight: bold; }
         .nowrap { white-space: nowrap; }
+        td.money { white-space: nowrap; font-size: 7px; }
     </style>
 </head>
 <body>
@@ -111,6 +112,9 @@
                     <div class="title">Kardex por producto</div>
                     <div class="subtitle">{{ $company->name ?? 'Empresa' }}</div>
                     <div class="subtitle">Generado: {{ $generatedAt->format('d/m/Y H:i') }}</div>
+                    <div class="subtitle">Producto: {{ $metadata['product'] }}</div>
+                    <div class="subtitle">Almacén: {{ $metadata['warehouse'] }}</div>
+                    <div class="subtitle">Periodo: {{ $metadata['period'] }}</div>
                 </td>
                 <td style="text-align:right;">
                     @if ($logoDataUri)
@@ -125,11 +129,33 @@
         <tr>
             <td><div class="label">Entradas</div><div class="value">{{ number_format($summary['in_qty'] ?? 0, 2) }}</div></td>
             <td><div class="label">Salidas</div><div class="value">{{ number_format($summary['out_qty'] ?? 0, 2) }}</div></td>
-            <td><div class="label">Saldo físico</div><div class="value">{{ number_format($summary['balance_qty'] ?? 0, 2) }}</div></td>
-            <td><div class="label">Saldo valorizado</div><div class="value">$ {{ number_format($summary['balance_value'] ?? 0, 2) }}</div></td>
+            <td><div class="label">Saldo según movimientos</div><div class="value">{{ number_format($summary['balance_qty'] ?? 0, 2) }}</div></td>
+            <td><div class="label">Saldo valorizado</div><div class="value">
+                @if (($summary['rows'] ?? 0) > 0)
+                    $ {{ number_format($summary['balance_value'] ?? 0, 2) }}
+                @else
+                    No determinado
+                @endif
+            </div></td>
         </tr>
     </table>
 
+    <p style="font-size:10px;color:#555;">
+        Valorización calculada con los movimientos disponibles.
+        Los saldos históricos de apertura pueden no estar documentados.
+        Sin movimientos, el valor no puede determinarse con este reporte.
+    </p>
+    @if ($reconciliation !== null)
+        <table style="width:100%;border-collapse:collapse;margin:4px 0 10px 0;">
+            <tr>
+                <td><strong>Conciliación actual</strong></td>
+                <td>Existencia registrada: {{ number_format($reconciliation['quantity'], 2) }}</td>
+                <td>Saldo por movimientos: {{ number_format($reconciliation['ledger'], 2) }}</td>
+                <td>Diferencia: {{ number_format($reconciliation['difference'], 2) }}</td>
+            </tr>
+        </table>
+        <div class="muted">Comparación actual, no representa una apertura histórica ni modifica existencias.</div>
+    @endif
     <table class="data">
         <thead>
             <tr>
@@ -146,8 +172,8 @@
                 <th class="right">Entrada</th>
                 <th class="right">Salida</th>
                 <th class="right">Saldo</th>
-                <th class="right">Costo</th>
-                <th class="right">Saldo valor</th>
+                <th class="right">Costo ($)</th>
+                <th class="right">Saldo valor ($)</th>
             </tr>
         </thead>
         <tbody>
@@ -169,8 +195,8 @@
                     <td class="right">{{ $row->in_qty ? number_format($row->in_qty, 2) : '' }}</td>
                     <td class="right">{{ $row->out_qty ? number_format($row->out_qty, 2) : '' }}</td>
                     <td class="right bold">{{ number_format($row->balance_qty, 2) }}</td>
-                    <td class="right">$ {{ number_format($row->applied_unit_cost, 4) }}</td>
-                    <td class="right bold">$ {{ number_format($row->balance_value, 2) }}</td>
+                    <td class="right money">{{ number_format($row->applied_unit_cost, 4) }}</td>
+                    <td class="right money bold">{{ number_format($row->balance_value, 2) }}</td>
                 </tr>
             @endforeach
         </tbody>

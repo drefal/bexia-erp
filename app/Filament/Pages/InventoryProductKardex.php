@@ -180,6 +180,90 @@ class InventoryProductKardex extends Page
     }
 
 
+    public function currentStockReconciliation(): ?array
+    {
+        // INV10A FIX2A: comparacion actual, NO apertura historica.
+        // Solo para un producto y un almacen especificos.
+        if (
+            ! $this->company_id
+            || ! $this->warehouse_id
+            || ! $this->product_id
+            || $this->stock_serial_number_id
+            || $this->location_id
+            || $this->product_variant_id
+            || $this->lot_id
+            || ! Schema::hasTable('stock_quants')
+        ) {
+            return null;
+        }
+
+        $companyId = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            (int) $this->company_id
+        );
+
+        if (! $companyId) {
+            return null;
+        }
+
+        // Impedir comparar almacenes de otra empresa.
+        $warehouseAllowed = DB::table('warehouses')
+            ->where('id', (int) $this->warehouse_id)
+            ->where('company_id', (int) $companyId)
+            ->exists();
+
+        if (! $warehouseAllowed) {
+            return null;
+        }
+
+        $query = DB::table('stock_quants')
+            ->where('company_id', (int) $companyId)
+            ->where('warehouse_id', (int) $this->warehouse_id)
+            ->where('product_id', (int) $this->product_id);
+
+        if ($this->location_id) {
+            $locationAllowed = DB::table('stock_locations')
+                ->where('id', (int) $this->location_id)
+                ->where('warehouse_id', (int) $this->warehouse_id)
+                ->exists();
+
+            if (! $locationAllowed) {
+                return null;
+            }
+
+            $query->where('location_id', (int) $this->location_id);
+        }
+
+        if ($this->product_variant_id) {
+            $query->where(
+                'product_variant_id',
+                (int) $this->product_variant_id
+            );
+        }
+
+        if ($this->lot_id) {
+            $query->where('lot_id', (int) $this->lot_id);
+        }
+
+        $quantity = round((float) $query->sum('quantity'), 6);
+
+        // Calcular contra TODO el historial confirmado,
+        // sin aplicar el filtro visual de fechas.
+        $filters = $this->filters();
+        unset($filters['date_from'], $filters['date_to']);
+        $filters['status'] = 'done';
+
+        $summary = app(ProductKardexService::class)->summary($filters);
+        $ledger = round((float) ($summary['balance_qty'] ?? 0), 6);
+
+        return [
+            'quantity' => $quantity,
+            'ledger' => $ledger,
+            'difference' => round($quantity - $ledger, 6),
+            'movement_rows' => (int) ($summary['rows'] ?? 0),
+            'as_of' => now()->format('d/m/Y H:i'),
+        ];
+    }
+
     public function exportParams(): array
     {
         return array_filter($this->filters(), fn ($value) => $value !== null && $value !== '');
@@ -283,35 +367,67 @@ class InventoryProductKardex extends Page
     public function productOptions(): array
     {
         if (
-            ! Schema::hasTable('stock_movement_lines')
+            ! Schema::hasTable('products')
+            || ! Schema::hasTable('stock_quants')
             || ! Schema::hasTable('stock_movements')
-            || ! Schema::hasTable('products')
+            || ! Schema::hasTable('stock_movement_lines')
         ) {
+            return [];
+        }
+
+        $companyId = (int) ($this->company_id ?? 0);
+
+        // Nunca ampliar la busqueda entre empresas.
+        if (! $companyId) {
             return [];
         }
 
         $search = trim($this->product_search);
 
-        /*
-         * El producto puede ser compartido entre empresas.
-         * La autoridad de tenancy para Kardex es el movimiento de inventario,
-         * no products.company_id.
-         */
-        $query = DB::table('stock_movement_lines as l')
-            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id')
-            ->join('products as p', 'p.id', '=', 'l.product_id');
-
-        if ($this->company_id) {
-            $query->where('m.company_id', $this->company_id);
-        }
+        $query = DB::table('products as p')
+            ->where(function ($query) use ($companyId): void {
+                $query->whereExists(
+                    function ($sub) use ($companyId): void {
+                        $sub->selectRaw('1')
+                            ->from('stock_quants as q')
+                            ->whereColumn('q.product_id', 'p.id')
+                            ->where('q.company_id', $companyId)
+                            ->where('q.quantity', '<>', 0);
+                    }
+                )->orWhereExists(
+                    function ($sub) use ($companyId): void {
+                        $sub->selectRaw('1')
+                            ->from('stock_movement_lines as l')
+                            ->join(
+                                'stock_movements as m',
+                                'm.id',
+                                '=',
+                                'l.stock_movement_id'
+                            )
+                            ->whereColumn('l.product_id', 'p.id')
+                            ->where('m.company_id', $companyId)
+                            ->where('m.status', 'done');
+                    }
+                );
+            });
 
         if ($search !== '') {
-            $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $search) . '%';
+            $like = '%' . str_replace(
+                ['%', '_'],
+                ['\\%', '\\_'],
+                $search
+            ) . '%';
 
             $query->where(function ($q) use ($like): void {
                 $q->where('p.name', 'ilike', $like);
+                if (ctype_digit(trim($this->product_search))) {
+                    $q->orWhere('p.id', (int) trim($this->product_search));
+                }
 
-                foreach (['sku', 'barcode', 'internal_reference', 'variant_name'] as $column) {
+                foreach (
+                    ['sku', 'barcode', 'internal_reference', 'variant_name']
+                    as $column
+                ) {
                     if (Schema::hasColumn('products', $column)) {
                         $q->orWhere("p.{$column}", 'ilike', $like);
                     }
