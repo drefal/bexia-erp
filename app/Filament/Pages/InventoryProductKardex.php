@@ -409,6 +409,18 @@ class InventoryProductKardex extends Page
                             ->where('m.status', 'done');
                     }
                 );
+
+                // INV10B: catalogo activo de la empresa,
+                // aun sin existencias ni movimientos.
+                if (
+                    Schema::hasColumn('products', 'company_id')
+                    && Schema::hasColumn('products', 'is_active')
+                ) {
+                    $query->orWhere(function ($catalog) use ($companyId): void {
+                        $catalog->where('p.company_id', $companyId)
+                            ->where('p.is_active', true);
+                    });
+                }
             });
 
         if ($search !== '') {
@@ -439,7 +451,7 @@ class InventoryProductKardex extends Page
             ->select('p.id', 'p.name')
             ->distinct()
             ->orderBy('p.name')
-            ->limit($search === '' ? 20 : 8)
+            ->limit($search === '' ? 20 : 50)
             ->pluck('p.name', 'p.id')
             ->all();
     }
