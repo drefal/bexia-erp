@@ -124,7 +124,76 @@ public static function canCreate(): bool
                     ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-number bexia-pos-ticket-col-primary'])
                     ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-number bexia-pos-ticket-col-primary'])
                     ->label('Folio')
-                    ->searchable()
+                    ->searchable(query: function (
+                        Builder $query,
+                        string $search
+                    ): Builder {
+                        // BEXIA_V5836_POS_MOV_GLOBAL_SEARCH_FIX2
+                        $term = trim($search);
+
+                        if ($term === '') {
+                            return $query;
+                        }
+
+                        $escaped = str_replace(
+                            ['\\', '%', '_'],
+                            ['\\\\', '\\%', '\\_'],
+                            $term
+                        );
+                        $like = '%' . $escaped . '%';
+
+                        $orderId = $query->getModel()
+                            ->qualifyColumn('id');
+
+                        return $query->where(
+                            function (Builder $tickets) use (
+                                $like,
+                                $orderId
+                            ): void {
+                                $tickets
+                                    ->where(
+                                        'number',
+                                        'ilike',
+                                        $like
+                                    )
+                                    ->orWhereExists(
+                                        function (
+                                            \Illuminate\Database\Query\Builder $lines
+                                        ) use ($like, $orderId): void {
+                                            $lines->selectRaw('1')
+                                                ->from('pos_order_lines as pml')
+                                                ->leftJoin(
+                                                    'products as pmp',
+                                                    'pmp.id',
+                                                    '=',
+                                                    'pml.product_id'
+                                                )
+                                                ->whereColumn(
+                                                    'pml.pos_order_id',
+                                                    $orderId
+                                                )
+                                                ->where(
+                                                    function ($products) use ($like): void {
+                                                        foreach ([
+                                                            'pml.product_name',
+                                                            'pml.product_reference',
+                                                            'pmp.name',
+                                                            'pmp.sku',
+                                                            'pmp.internal_reference',
+                                                            'pmp.barcode',
+                                                        ] as $column) {
+                                                            $products->orWhereRaw(
+                                                                "COALESCE({$column}, '') ILIKE ?",
+                                                                [$like]
+                                                            );
+                                                        }
+                                                    }
+                                                );
+                                        }
+                                    );
+                            }
+                        );
+                    })
                     ->sortable()
                     ->weight('bold'),
                 Tables\Columns\TextColumn::make('status')
@@ -256,6 +325,75 @@ public static function canCreate(): bool
                     ->toggleable(),
             ])
             ->filters([
+
+                // BEXIA_V5836_POS_MOV_PRODUCT_SEARCH_FIX1
+                Tables\Filters\Filter::make('product_search')
+                    ->label('Buscar producto')
+                    ->form([
+                        \Filament\Forms\Components\TextInput::make('term')
+                            ->label('Nombre, SKU o código de barras')
+                            ->placeholder('Ej. Engrapadora, 0182 o código de barras')
+                            ->maxLength(150),
+                    ])
+                    ->query(function (
+                        Builder $query,
+                        array $data
+                    ): Builder {
+                        $term = trim((string) ($data['term'] ?? ''));
+
+                        if ($term === '') {
+                            return $query;
+                        }
+
+                        // Buscar por coincidencia parcial.
+                        // Escapar caracteres especiales de LIKE.
+                        $escaped = str_replace(
+                            ['\\', '%', '_'],
+                            ['\\\\', '\\%', '\\_'],
+                            $term
+                        );
+
+                        $like = '%' . $escaped . '%';
+
+                        $orderId = $query->getModel()
+                            ->qualifyColumn('id');
+
+                        return $query->whereExists(
+                            function (
+                                \Illuminate\Database\Query\Builder $sub
+                            ) use ($orderId, $like): void {
+                                $sub->selectRaw('1')
+                                    ->from('pos_order_lines as pml')
+                                    ->leftJoin(
+                                        'products as pmp',
+                                        'pmp.id',
+                                        '=',
+                                        'pml.product_id'
+                                    )
+                                    ->whereColumn(
+                                        'pml.pos_order_id',
+                                        $orderId
+                                    )
+                                    ->where(function ($match) use ($like): void {
+                                        foreach ([
+                                            'pml.product_name',
+                                            'pml.product_reference',
+                                            'pmp.name',
+                                            'pmp.sku',
+                                            'pmp.internal_reference',
+                                            'pmp.barcode',
+                                        ] as $column) {
+                                            $match->orWhereRaw(
+                                                "COALESCE({$column}, '') ILIKE ?",
+                                                [$like]
+                                            );
+                                        }
+                                    });
+                            }
+                        );
+                    }),
+
+
 
                 // BEXIA_V582_P3_XLSM_A8B_FILTERS
                 Tables\Filters\SelectFilter::make('movement_origin')
