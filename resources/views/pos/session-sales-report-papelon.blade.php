@@ -73,12 +73,13 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
             <h1>Corte de Caja</h1>
             <div class="muted">Reporte especial por sección de cierre</div>
             <div><strong>Sesión:</strong> {{ $sessionNumber }}</div>
+            {{-- BEXIA_V5836_DAILY_CUT_FIX3B_STATUS --}}
+            <div><strong>Estado:</strong> {{ $isClosed ? 'Cerrada' : 'Abierta' }}</div>
             <div><strong>Apertura:</strong> {{ $openedAt ?: 'N/D' }}</div>
             @if($isClosed)
                 <div><strong>Cierre:</strong> {{ $closedAt }}</div>
-            @else
-                <div><strong>Generado:</strong> {{ now()->format('Y-m-d H:i:s') }}</div>
             @endif
+            <div><strong>Generado:</strong> {{ now()->format('Y-m-d H:i:s') }}</div>
         </td>
     </tr>
 </table>
@@ -102,7 +103,11 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
                     <td class="right">{{ $money($method['total'] ?? 0) }}</td>
                 </tr>
             @endforeach
-            <tr class="total-row">
+            {{-- BEXIA_V5836_PAPELON_PRINT_SPLIT_FIX1 --}}
+@if(($section['name'] ?? '') === 'IMPRESIÓN Y COPIAS')
+    @include('pos.partials.papelon-print-breakdown')
+@endif
+<tr class="total-row">
                 <td>
                     @if(($section['name'] ?? '') === 'IMPRESIÓN Y COPIAS')
                         SUBTOTAL SECCIÓN IMPRESIONES
@@ -191,8 +196,36 @@ td{border:1px solid #e5e7eb;padding:5px 6px;vertical-align:top}
 <h2>Totales cobrados por método</h2>
 <table>
     <tbody>
-        @foreach($methodTotals as $method)
-            <tr>
+        {{-- BEXIA_V5836_PAPELON_ELECTRONIC_FIX1 --}}
+@php
+    $electronicTotal = 0.0;
+
+    foreach ($methodTotals as $electronicMethod) {
+        if (in_array(
+            $electronicMethod['method'] ?? '',
+            [
+                'Tarjeta de crédito',
+                'Tarjeta de débito',
+                'Transferencia',
+            ],
+            true
+        )) {
+            $electronicTotal +=
+                (float) ($electronicMethod['total'] ?? 0);
+        }
+    }
+
+    $electronicTotal = round($electronicTotal, 2);
+@endphp
+@foreach($methodTotals as $method)
+            {{-- BEXIA_V5836_PAPELON_ELECTRONIC_ROW_FIX1 --}}
+@if(($method['method'] ?? '') === 'Tarjeta de crédito')
+<tr class="total-row">
+    <td>MÉTODOS ELECTRÓNICOS</td>
+    <td class="right">{{ $money($electronicTotal) }}</td>
+</tr>
+@endif
+<tr>
                 <td>{{ $method['method'] ?? 'Método' }}</td>
                 <td class="right">{{ $money($method['total'] ?? 0) }}</td>
             </tr>
