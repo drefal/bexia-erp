@@ -130,12 +130,13 @@ td{padding:2px 0;vertical-align:top}
     @endif
     <div class="subtitle">CORTE DE CAJA</div>
     <div>Sesión: {{ $sessionNumber }}</div>
+    {{-- BEXIA_V5836_DAILY_CUT_FIX3B_STATUS --}}
+    <div><strong>Estado: {{ $isClosed ? 'Cerrada' : 'Abierta' }}</strong></div>
     <div>Apertura: {{ $openedAt ?: 'N/D' }}</div>
     @if($isClosed)
         <div>Cierre: {{ $closedAt }}</div>
-    @else
-        <div>Generado: {{ now()->format('Y-m-d H:i:s') }}</div>
     @endif
+    <div>Generado: {{ now()->format('Y-m-d H:i:s') }}</div>
 </div>
 
 <div class="sep"></div>
@@ -153,7 +154,11 @@ td{padding:2px 0;vertical-align:top}
                 <td class="right">{{ $money($method['total'] ?? 0) }}</td>
             </tr>
         @endforeach
-        <tr class="total-row">
+        {{-- BEXIA_V5836_PAPELON_PRINT_SPLIT_FIX1 --}}
+@if(($section['name'] ?? '') === 'IMPRESIÓN Y COPIAS')
+    @include('pos.partials.papelon-print-breakdown')
+@endif
+<tr class="total-row">
             <td>
                 @if(($section['name'] ?? '') === 'IMPRESIÓN Y COPIAS')
                     TOTAL COBRADO IMPRESIONES
@@ -241,8 +246,36 @@ td{padding:2px 0;vertical-align:top}
 
 <div class="section-title">TOTALES COBRADOS POR MÉTODO</div>
 <table>
-    @foreach($methodTotals as $method)
-        <tr>
+    {{-- BEXIA_V5836_PAPELON_ELECTRONIC_FIX1 --}}
+@php
+    $electronicTotal = 0.0;
+
+    foreach ($methodTotals as $electronicMethod) {
+        if (in_array(
+            $electronicMethod['method'] ?? '',
+            [
+                'Tarjeta de crédito',
+                'Tarjeta de débito',
+                'Transferencia',
+            ],
+            true
+        )) {
+            $electronicTotal +=
+                (float) ($electronicMethod['total'] ?? 0);
+        }
+    }
+
+    $electronicTotal = round($electronicTotal, 2);
+@endphp
+@foreach($methodTotals as $method)
+        {{-- BEXIA_V5836_PAPELON_ELECTRONIC_ROW_FIX1 --}}
+@if(($method['method'] ?? '') === 'Tarjeta de crédito')
+<tr class="total-row">
+    <td>MÉTODOS ELECTRÓNICOS</td>
+    <td class="right">{{ $money($electronicTotal) }}</td>
+</tr>
+@endif
+<tr>
             <td>{{ $method['method'] ?? 'Método' }}</td>
             <td class="right">{{ $money($method['total'] ?? 0) }}</td>
         </tr>

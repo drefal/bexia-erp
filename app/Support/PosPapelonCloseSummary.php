@@ -581,7 +581,8 @@ class PosPapelonCloseSummary
             ][
                 'total'
             ] +=
-                $lineGross;
+                /* BEXIA_V5836_DAILY_CUT_FIX2_NET_PRINT */
+                ($section === 'IMPRESIÓN Y COPIAS' ? $lineNet : $lineGross);
         }
 
         $grossTotal = round(
