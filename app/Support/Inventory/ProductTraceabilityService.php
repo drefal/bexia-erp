@@ -310,6 +310,18 @@ class ProductTraceabilityService
             return 'out';
         }
 
+        // TRACE_ADJUST_SIGN_FIX1B
+        // Los ajustes negativos representan salidas.
+        if (
+            $sourceType === 'stock_adjustment'
+            || str_starts_with($origin, 'stock_adjustment:')
+            || str_contains($reference, '/aju/')
+        ) {
+            if ((float) ($row->done_quantity ?? 0) < 0) {
+                return 'out';
+            }
+        }
+
         return 'in';
     }
 
