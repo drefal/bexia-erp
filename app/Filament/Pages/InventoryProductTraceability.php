@@ -155,9 +155,27 @@ class InventoryProductTraceability extends Page
             return null;
         }
 
-        $product = DB::table('products')->where('id', $this->product_id)->first();
+        $query = DB::table('products')
+            ->where('id', $this->product_id);
 
-        return $product ? trim(($product->name ?? 'Producto') . ' #' . $product->id) : null;
+        if ($this->company_id) {
+            $query->where('company_id', $this->company_id);
+        }
+
+        $product = $query->first([
+            'id', 'name', 'internal_reference',
+        ]);
+
+        if (! $product) {
+            return null;
+        }
+
+        $reference = trim((string) ($product->internal_reference ?? ''));
+        $name = trim((string) ($product->name ?? ''));
+
+        return $reference !== ''
+            ? $reference . ' — ' . $name
+            : $name . ' #' . $product->id;
     }
 
     public function companyOptions(): array
@@ -209,10 +227,11 @@ class InventoryProductTraceability extends Page
 
         $query = DB::table('stock_movement_lines as l')
             ->join('products as p', 'p.id', '=', 'l.product_id')
-            ->leftJoin('stock_movements as m', 'm.id', '=', 'l.stock_movement_id');
+            ->join('stock_movements as m', 'm.id', '=', 'l.stock_movement_id');
 
         if ($this->company_id) {
-            $query->where('m.company_id', $this->company_id);
+            $query->where('m.company_id', $this->company_id)
+                ->where('p.company_id', $this->company_id);
         }
 
         if ($search !== '') {
@@ -226,16 +245,40 @@ class InventoryProductTraceability extends Page
                         $q->orWhere("p.{$column}", 'ilike', $like);
                     }
                 }
+
+                // Buscar tambien por el ID numerico de Bexia.
+                $q->orWhereRaw('CAST(p.id AS TEXT) ILIKE ?', [$like]);
             });
         }
 
-        return $query
-            ->select('p.id', 'p.name')
-            ->distinct()
+        $query->select('p.id', 'p.name', 'p.internal_reference')
+            ->groupBy('p.id', 'p.name', 'p.internal_reference');
+
+        // Priorizar el ID exacto si se escribe un numero.
+        if ($search !== '' && ctype_digit($search)) {
+            $query->orderByRaw(
+                'CASE WHEN p.id = ? THEN 0 ELSE 1 END',
+                [(int) $search]
+            );
+        }
+
+        $products = $query
             ->orderBy('p.name')
             ->limit($search === '' ? 20 : 10)
-            ->pluck('p.name', 'p.id')
-            ->all();
+            ->get();
+
+        $options = [];
+
+        foreach ($products as $product) {
+            $reference = trim((string) ($product->internal_reference ?? ''));
+            $name = trim((string) ($product->name ?? ''));
+
+            $options[$product->id] = $reference !== ''
+                ? $reference . ' — ' . $name
+                : $name . ' #' . $product->id;
+        }
+
+        return $options;
     }
 
     public function variantOptions(): array
