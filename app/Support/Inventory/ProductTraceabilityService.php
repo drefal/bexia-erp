@@ -41,8 +41,10 @@ class ProductTraceabilityService
                 'm.transit_location_id',
                 'm.source_location_id',
                 'src.name as source_location_name',
+                'src.tracks_stock as source_tracks_stock',
                 'm.destination_location_id',
                 'dst.name as destination_location_name',
+                'dst.tracks_stock as destination_tracks_stock',
                 'm.movement_at',
                 'm.created_at as movement_created_at',
                 'm.created_by',
@@ -268,6 +270,29 @@ class ProductTraceabilityService
             && ! empty($row->source_location_id)
             && ! empty($row->destination_location_id)
             && (int) $row->source_location_id !== (int) $row->destination_location_id;
+
+        // TRACE_NON_STOCK_LOCATION_FIX2
+        // Un traslado hacia una ubicacion que no controla stock
+        // representa una salida del inventario disponible.
+        $kindForTransfer = strtolower((string) ($row->operation_kind ?? ''));
+        $referenceForTransfer = strtolower((string) ($row->reference ?? ''));
+
+        $isInternalTransfer =
+            $kindForTransfer === 'internal_transfer'
+            || str_contains($referenceForTransfer, '/int/');
+
+        if ($isInternalTransfer) {
+            $sourceTracksStock = (bool) ($row->source_tracks_stock ?? false);
+            $destinationTracksStock = (bool) ($row->destination_tracks_stock ?? false);
+
+            if ($sourceTracksStock && ! $destinationTracksStock) {
+                return 'out';
+            }
+
+            if (! $sourceTracksStock && $destinationTracksStock) {
+                return 'in';
+            }
+        }
 
         if ($sameWarehouseTransfer) {
             if ($locationFilter !== null) {
