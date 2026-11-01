@@ -2220,6 +2220,205 @@ function setPriceListButtonLabel(name, id) {
     }
 </style>
 
+
+<!-- BEXIA V5.83.6 POS PRODUCT HOVER FIX1 -->
+<style id="v5836-pos-product-hover-style">
+#v5836-pos-hover {
+  position: fixed;
+  z-index: 2147483000;
+  width: max-content;
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 12px 35px rgba(15,23,42,.22);
+  font: 13px/1.45 system-ui, sans-serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px);
+  transition: opacity .2s ease, transform .2s ease,
+              visibility .2s ease;
+}
+#v5836-pos-hover.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+#v5836-pos-hover .hover-name {
+  font-size: 14px;
+  font-weight: 750;
+  margin-bottom: 6px;
+}
+#v5836-pos-hover .hover-meta {
+  color: #475569;
+  margin-top: 3px;
+}
+#v5836-pos-hover .hover-stock {
+  font-weight: 750;
+  margin-top: 8px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 8px;
+}
+</style>
+<script id="v5836-pos-product-hover-script">
+(function () {
+  'use strict';
+
+  function init() {
+    if (window.BEXIA_POS_PRODUCT_HOVER_V5836) return;
+    window.BEXIA_POS_PRODUCT_HOVER_V5836 = true;
+
+    const DELAY_MS = 1500;
+    let activeCard = null;
+    let timer = null;
+
+    const tooltip = document.createElement('div');
+    tooltip.id = 'v5836-pos-hover';
+    tooltip.setAttribute('role', 'tooltip');
+    tooltip.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(tooltip);
+
+    function hide() {
+      clearTimeout(timer);
+      timer = null;
+      activeCard = null;
+      tooltip.classList.remove('visible');
+      tooltip.setAttribute('aria-hidden', 'true');
+    }
+
+    function appendLine(className, value) {
+      const line = document.createElement('div');
+      line.className = className;
+      line.textContent = value;
+      tooltip.appendChild(line);
+    }
+
+    function display(card) {
+      if (activeCard !== card || !card.isConnected) return;
+
+      const data = card.dataset;
+      const name = data.productName ||
+        card.querySelector('.pname')?.textContent?.trim() ||
+        'Producto';
+
+      const reference = data.productReference || '';
+      const variant = data.productVariantName ||
+        data.variantName || '';
+
+      tooltip.replaceChildren();
+      appendLine('hover-name', name);
+
+      if (variant && variant !== name) {
+        appendLine('hover-meta', 'Variante: ' + variant);
+      }
+      if (reference) {
+        appendLine('hover-meta', 'SKU / Ref.: ' + reference);
+      }
+
+      const service = data.productIsService === '1' ||
+        data.productType === 'service';
+
+      if (service) {
+        appendLine('hover-stock', 'Servicio');
+      } else if (
+        data.productStock !== undefined &&
+        data.productStock !== ''
+      ) {
+        const stock = Number(data.productStock);
+        appendLine(
+          'hover-stock',
+          'Existencia PDV: ' +
+          (Number.isFinite(stock)
+            ? new Intl.NumberFormat('es-MX', {
+                maximumFractionDigits: 4
+              }).format(stock)
+            : 'No disponible')
+        );
+      } else {
+        appendLine('hover-stock', 'Existencia no disponible');
+      }
+
+      tooltip.style.left = '12px';
+      tooltip.style.top = '12px';
+      tooltip.classList.add('visible');
+      tooltip.setAttribute('aria-hidden', 'false');
+
+      const rect = card.getBoundingClientRect();
+      const box = tooltip.getBoundingClientRect();
+      const margin = 12;
+
+      let left = rect.right + margin;
+      if (left + box.width > window.innerWidth - margin) {
+        left = rect.left - box.width - margin;
+      }
+      if (left < margin) {
+        left = Math.max(
+          margin,
+          Math.min(rect.left, window.innerWidth - box.width - margin)
+        );
+      }
+
+      let top = rect.top;
+      if (top + box.height > window.innerHeight - margin) {
+        top = window.innerHeight - box.height - margin;
+      }
+
+      tooltip.style.left = Math.max(margin, left) + 'px';
+      tooltip.style.top = Math.max(margin, top) + 'px';
+    }
+
+    document.addEventListener('pointerover', function (event) {
+      if (event.pointerType && event.pointerType !== 'mouse') return;
+
+      const target = event.target;
+      const card = target instanceof Element
+        ? target.closest('.product[data-product-id]')
+        : null;
+
+      if (!card) return;
+      if (card === activeCard) return;
+
+      hide();
+      activeCard = card;
+      timer = setTimeout(function () {
+        display(card);
+      }, DELAY_MS);
+    });
+
+    document.addEventListener('pointerout', function (event) {
+      if (!activeCard) return;
+
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!activeCard.contains(target)) return;
+
+      const next = event.relatedTarget;
+      if (next instanceof Node && activeCard.contains(next)) {
+        return;
+      }
+
+      hide();
+    });
+
+    document.addEventListener('pointerdown', hide);
+    window.addEventListener('scroll', hide, true);
+    window.addEventListener('resize', hide);
+    window.addEventListener('blur', hide);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+
 <script id="v5333-pos-stable-script">
 document.addEventListener('DOMContentLoaded', function () {
     function norm(text) {
