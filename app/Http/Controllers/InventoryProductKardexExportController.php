@@ -96,15 +96,15 @@ class InventoryProductKardexExportController extends Controller
             'Salidas', $summary['out_qty'] ?? 0,
             'Saldo', $summary['balance_qty'] ?? 0,
             'Saldo valorizado',
-            ($summary['rows'] ?? 0) > 0
-                ? ($summary['balance_value'] ?? 0)
+            ($summary['rows'] ?? 0) > 0 && ($summary['balance_value'] ?? null) !== null
+                ? $summary['balance_value']
                 : 'No determinado',
         ];
         $data[] = [];
         $data[] = [
             'Aviso',
             'La valorización se basa en movimientos disponibles; '
-            . 'el saldo histórico de apertura puede no estar documentado.',
+            . 'los saldos de apertura Odoo son documentales y su costo historico no esta certificado.',
         ];
         $data[] = [];
         $data[] = $headers;
@@ -129,7 +129,7 @@ class InventoryProductKardexExportController extends Controller
                 (float) ($row->applied_unit_cost ?? 0),
                 (float) ($row->recorded_unit_cost ?? 0),
                 (float) ($row->movement_value ?? 0),
-                (float) ($row->balance_value ?? 0),
+                $row->balance_value === null ? 'No certificado' : (float) $row->balance_value,
                 $this->methodText((string) ($row->valuation_method ?? '')),
                 $this->methodText((string) ($row->costing_method ?? '')),
                 $this->costSourceText((string) ($row->cost_source ?? '')),

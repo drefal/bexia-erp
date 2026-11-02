@@ -264,6 +264,33 @@ class InventoryProductKardex extends Page
         ];
     }
 
+
+    /**
+     * INV11 FIX1C: conciliacion informativa, sin escrituras.
+     * Solo se habilita en el contexto ya validado para empresa,
+     * almacen y producto del usuario.
+     */
+    public function openingSnapshotAudit(): ?array
+    {
+        if ($this->currentStockReconciliation() === null) {
+            return null;
+        }
+
+        $companyId = \App\Support\Security\InventoryTenantScope::ensureAllowedCompanyId(
+            (int) $this->company_id
+        );
+
+        if (! $companyId) {
+            return null;
+        }
+
+        return app(ProductKardexService::class)->openingReconciliation([
+            'company_id' => $companyId,
+            'warehouse_id' => (int) $this->warehouse_id,
+            'product_id' => (int) $this->product_id,
+        ]);
+    }
+
     public function exportParams(): array
     {
         return array_filter($this->filters(), fn ($value) => $value !== null && $value !== '');

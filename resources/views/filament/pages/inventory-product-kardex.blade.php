@@ -277,14 +277,14 @@
                 <div class="mt-2 text-2xl font-bold">{{ number_format($summary['out_qty'] ?? 0, 2) }}</div>
             </div>
             <div class="rounded-2xl border bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo según movimientos</div>
+                <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo cronológico</div>
                 <div class="mt-2 text-2xl font-bold">{{ number_format($summary['balance_qty'] ?? 0, 2) }}</div>
             </div>
             <div class="rounded-2xl border bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                 <div class="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo valorizado</div>
                 <div class="mt-2 text-2xl font-bold">
-                    @if (($summary['rows'] ?? 0) > 0)
-                        $ {{ number_format($summary['balance_value'] ?? 0, 2) }}
+                    @if (($summary['rows'] ?? 0) > 0 && ($summary['balance_value'] ?? null) !== null)
+                        $ {{ number_format($summary['balance_value'], 2) }}
                     @else
                         No determinado
                     @endif
@@ -295,6 +295,81 @@
         @php
             $reconciliation = $this->currentStockReconciliation();
         @endphp
+
+
+        @php
+            $openingAudit = $reconciliation !== null
+                ? $this->openingSnapshotAudit()
+                : null;
+        @endphp
+
+        @if ($openingAudit !== null)
+            <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <h3 class="text-base font-bold">
+                    Apertura historica de inventario - Odoo
+                </h3>
+
+                <p class="mt-2 text-sm text-gray-500">
+                    Fotografia de origen:
+                    {{ $openingAudit['snapshot_at'] }}.
+                    Consulta documental; no genera movimientos,
+                    ajustes ni cambios de existencias.
+                </p>
+
+                <div class="mt-4 grid gap-4 md:grid-cols-4">
+                    <div>
+                        <div class="text-xs text-gray-500">Saldo inicial Odoo</div>
+                        <div class="text-xl font-bold">
+                            {{ number_format($openingAudit['opening_qty'], 2) }}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-gray-500">Movimientos posteriores netos</div>
+                        <div class="text-xl font-bold">
+                            {{ number_format($openingAudit['movement_net'], 2) }}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-gray-500">Saldo calculado</div>
+                        <div class="text-xl font-bold">
+                            {{ number_format($openingAudit['calculated_qty'], 2) }}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-gray-500">Diferencia actual</div>
+                        <div class="text-xl font-bold">
+                            {{ number_format($openingAudit['difference'], 2) }}
+                        </div>
+                    </div>
+                </div>
+
+                @if (!$openingAudit['opening_documented'])
+                    <p class="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                        Este producto no tiene saldo inicial en la fotografia
+                        consultada. Se muestran sus movimientos posteriores.
+                    </p>
+                @elseif (abs($openingAudit['difference']) > 0.000001)
+                    <p class="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                        Existe una diferencia pendiente de investigar.
+                        No se generara ningun ajuste automatico.
+                    </p>
+                @else
+                    <p class="mt-3 text-sm text-green-700 dark:text-green-300">
+                        Apertura y movimientos conciliados con el inventario actual.
+                    </p>
+                @endif
+
+                <p class="mt-3 text-xs text-gray-500">
+                    Fuente: {{ $openingAudit['source'] }}.
+                    Valoracion historica no verificada.
+                    Las filas del listado usan saldo inicial documental.
+                    La valorizacion historica de la apertura no esta certificada.
+                </p>
+            </div>
+        @endif
 
         @if ($reconciliation !== null)
             <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -410,7 +485,7 @@
                                 <td class="px-4 py-3 text-right">$ {{ number_format($row->applied_unit_cost, 4) }}</td>
                                 <td class="px-4 py-3 text-right text-gray-500">$ {{ number_format($row->recorded_unit_cost, 4) }}</td>
                                 <td class="px-4 py-3 text-right">$ {{ number_format($row->movement_value, 2) }}</td>
-                                <td class="px-4 py-3 text-right font-bold">$ {{ number_format($row->balance_value, 2) }}</td>
+                                <td class="px-4 py-3 text-right font-bold">$ {{ $row->balance_value === null ? 'No certificado' : '$ ' . number_format($row->balance_value, 2) }}</td>
                                 <td class="px-4 py-3">
                                     <span class="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
                                         {{ $methodText($row->valuation_method) }}
