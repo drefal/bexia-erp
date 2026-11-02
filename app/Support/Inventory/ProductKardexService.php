@@ -14,7 +14,178 @@ class ProductKardexService
     public const METHOD_STANDARD = 'standard';
     public const METHOD_RECORDED = 'recorded';
 
+    /**
+     * INV11 FIX1D. Apertura historica documental (no transaccion).
+     * Fase controlada: empresa y almacen seleccionados; variante/serie no
+     * se infieren. El saldo en unidades se reconstruye cronologicamente.
+     * La valoracion afectada por la apertura NO esta certificada.
+     */
     public function rows(array $filters = []): Collection
+    {
+        $companyId = (int) ($filters['company_id'] ?? 0);
+        $warehouseId = (int) ($filters['warehouse_id'] ?? 0);
+
+        if ($companyId <= 0 || $warehouseId <= 0
+            || ! empty($filters['product_variant_id'])
+            || ! empty($filters['stock_serial_number_id'])
+            || (! empty($filters['product_search']) && empty($filters['product_id']))
+            || ! \App\Support\Security\InventoryTenantScope::isAllowedCompany($companyId)
+        ) {
+            return $this->movementRows($filters);
+        }
+
+        // Garantia contra mezcla de empresas en la seleccion de almacen.
+        if (! DB::table('warehouses')->where('id', $warehouseId)
+            ->where('company_id', $companyId)->exists()) {
+            return collect();
+        }
+
+        $opening = app(InventoryOpeningSnapshotService::class)->rows([
+            'company_id' => $companyId,
+            'warehouse_id' => $warehouseId,
+            'location_id' => $filters['location_id'] ?? null,
+            'product_id' => $filters['product_id'] ?? null,
+        ]);
+
+        if (! empty($filters['lot_id'])) {
+            $lotId = (int) $filters['lot_id'];
+            $opening = $opening->filter(
+                static fn ($r) => (int) ($r->lot_id ?? 0) === $lotId
+            )->values();
+        }
+
+        // Ninguna apertura para estos filtros: historial sin alteraciones.
+        if ($opening->isEmpty()) {
+            return $this->movementRows($filters);
+        }
+
+        $fullFilters = $filters;
+        unset($fullFilters['date_from'], $fullFilters['date_to']);
+        $fullFilters['status'] = 'done';
+        $movements = $this->movementRows($fullFilters);
+        $snapshot = InventoryOpeningSnapshotService::SNAPSHOT;
+        $start = ! empty($filters['date_from']) ? (string) $filters['date_from'] : null;
+        $end = ! empty($filters['date_to']) ? (string) $filters['date_to'] : null;
+        $warehouseName = (string) DB::table('warehouses')
+            ->where('id', $warehouseId)->value('name');
+        $companyName = (string) DB::table('companies')
+            ->where('id', $companyId)->value('name');
+
+        // Agrupar solo las filas del mismo lote; nunca fundir lotes.
+        $initial = [];
+        foreach ($opening as $item) {
+            $key = implode('|', [
+                $companyId, $warehouseId, (int) $item->product_id,
+                0, (int) ($item->lot_id ?? 0), 0,
+            ]);
+            if (! isset($initial[$key])) {
+                $initial[$key] = [
+                    'qty' => 0.0,
+                    'item' => $item,
+                ];
+            }
+            $initial[$key]['qty'] = round(
+                $initial[$key]['qty'] + (float) $item->quantity, 6
+            );
+        }
+
+        $entries = collect();
+        foreach ($initial as $key => $initialRow) {
+            $item = $initialRow['item'];
+            $qty = $initialRow['qty'];
+            $entries->push((object) [
+                'id' => 'odoo-' . $item->balance_id,
+                'balance_key' => $key,
+                'stock_movement_id' => null,
+                'company_id' => $companyId,
+                'company_name' => $companyName,
+                'date' => $snapshot,
+                'reference' => 'SALDO INICIAL ODOO',
+                'origin_document' => 'Fotografia historica de inventario',
+                'status' => 'done',
+                'warehouse_name' => $warehouseName,
+                'source_location_name' => null,
+                'destination_location_name' => null,
+                'source_type' => 'odoo_opening',
+                'source_line_type' => 'snapshot',
+                'product_id' => $item->product_id,
+                'product_name' => $item->product_name,
+                'product_variant_id' => null,
+                'variant_name' => null,
+                'lot_id' => $item->lot_id,
+                'lot_number' => $item->lot_number,
+                'stock_serial_number_id' => null,
+                'serial_number' => null,
+                'direction' => 'opening',
+                'quantity' => $qty,
+                'in_qty' => 0.0,
+                'out_qty' => 0.0,
+                'recorded_unit_cost' => 0.0,
+                'recorded_total_cost' => 0.0,
+                'applied_unit_cost' => 0.0,
+                'movement_value' => 0.0,
+                'signed_value' => 0.0,
+                'balance_qty' => $qty,
+                'balance_value' => null,
+                'average_cost' => null,
+                'valuation_method' => 'opening',
+                'costing_method' => null,
+                'cost_source' => 'odoo_stock_snapshot_uncertified',
+                'notes' => 'Apertura documental: no es entrada fisica; costo no certificado',
+            ]);
+        }
+
+        $balances = [];
+        $all = $entries->concat($movements->filter(
+            static function ($row) use ($snapshot, $initial): bool {
+                // Movimientos anteriores a la apertura ya estan contenidos
+                // en la foto de Odoo para las mismas claves.
+                return ! isset($initial[$row->balance_key])
+                    || (string) $row->date > $snapshot;
+            }
+        ))->sort(function ($a, $b) {
+            $dateCmp = strcmp((string) $a->date, (string) $b->date);
+            if ($dateCmp !== 0) {
+                return $dateCmp;
+            }
+            return ($a->source_type === 'odoo_opening' ? -1 : 1)
+                <=> ($b->source_type === 'odoo_opening' ? -1 : 1);
+        })->values();
+
+        $result = $all->map(function ($row) use (&$balances, $initial) {
+            $key = $row->balance_key;
+            if ($row->source_type === 'odoo_opening') {
+                $balances[$key] = (float) $row->quantity;
+                return $row;
+            }
+            if (isset($initial[$key])) {
+                $balances[$key] = round(
+                    ($balances[$key] ?? $initial[$key]['qty'])
+                    + (float) $row->in_qty - (float) $row->out_qty,
+                    6
+                );
+                $row->balance_qty = $balances[$key];
+                $row->balance_value = null;
+                $row->average_cost = null;
+            }
+            return $row;
+        });
+
+        // La apertura permanece visible como antecedente aunque date_from
+        // sea posterior. Nunca se fecha falsamente dentro del periodo.
+        return $result->filter(static function ($row) use ($start, $end): bool {
+            $date = substr((string) $row->date, 0, 10);
+            if ($end && $date > $end) {
+                return false;
+            }
+            if ($row->source_type === 'odoo_opening') {
+                return true;
+            }
+            return ! $start || $date >= $start;
+        })->values();
+    }
+
+    protected function movementRows(array $filters = []): Collection
     {
         if (! Schema::hasTable('stock_movement_lines') || ! Schema::hasTable('stock_movements')) {
             return collect();
@@ -44,8 +215,12 @@ class ProductKardexService
                 'm.transit_location_id',
                 'm.source_location_id',
                 'sl_from.name as source_location_name',
+                'sl_from.warehouse_id as source_location_warehouse_id',
+                'sl_from.tracks_stock as source_tracks_stock',
                 'm.destination_location_id',
                 'sl_to.name as destination_location_name',
+                'sl_to.warehouse_id as destination_location_warehouse_id',
+                'sl_to.tracks_stock as destination_tracks_stock',
                 'm.reference',
                 'm.origin_document',
                 'm.status',
@@ -110,12 +285,99 @@ class ProductKardexService
             );
         }
 
+        /*
+         * INV11 FIX1F:
+         * Incidencias de mercancía faltante asociadas a cada línea.
+         *
+         * La cantidad faltante NO se recibe en el destino durante
+         * el traslado original. Su resolución puede generar
+         * posteriormente una entrada real independiente.
+         *
+         * No se modifica ningún movimiento ni incidencia.
+         */
+        $missingByLine = [];
+
+        if (
+            Schema::hasTable('stock_movement_incidents')
+            && $records->isNotEmpty()
+        ) {
+            $lineIds = $records->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+            foreach (array_chunk($lineIds, 1000) as $chunk) {
+                $incidents = DB::table('stock_movement_incidents')
+                    ->whereIn('stock_movement_line_id', $chunk)
+                    ->where('incident_type', 'missing')
+                    ->whereIn('status', ['open', 'resolved'])
+                    ->select(
+                        'id',
+                        'company_id',
+                        'stock_movement_id',
+                        'stock_movement_line_id',
+                        'quantity'
+                    )
+                    ->get();
+
+                foreach ($incidents as $incident) {
+                    $lineId = (int) $incident->stock_movement_line_id;
+
+                    $original = $records->first(
+                        static fn ($r) => (int) $r->id === $lineId
+                    );
+
+                    if (
+                        ! $original
+                        || (int) $original->company_id
+                            !== (int) $incident->company_id
+                        || (int) $original->stock_movement_id
+                            !== (int) $incident->stock_movement_id
+                    ) {
+                        throw new \RuntimeException(
+                            'Incidencia de faltante inconsistente: '
+                            . $incident->id
+                        );
+                    }
+
+                    $missingByLine[$lineId] = round(
+                        ($missingByLine[$lineId] ?? 0)
+                            + (float) $incident->quantity,
+                        6
+                    );
+                }
+            }
+
+            foreach ($records as $original) {
+                $missing = (float) (
+                    $missingByLine[(int) $original->id] ?? 0
+                );
+
+                $documentQty = abs((float) (
+                    $original->done_quantity
+                    ?? $original->requested_quantity
+                    ?? 0
+                ));
+
+                if (
+                    $missing < 0
+                    || $missing > $documentQty + 0.000001
+                ) {
+                    throw new \RuntimeException(
+                        'Faltante excede cantidad de línea: '
+                        . $original->id
+                    );
+                }
+            }
+        }
+
         $selectedMethod = $this->normalizeMethod((string) ($filters['valuation_method'] ?? self::METHOD_AUTO));
         $warehouseFilter = ! empty($filters['warehouse_id']) ? (int) $filters['warehouse_id'] : null;
         $locationFilter = ! empty($filters['location_id']) ? (int) $filters['location_id'] : null;
         $states = [];
 
-        $mapped = $records->map(function ($row) use (&$states, $selectedMethod, $warehouseFilter, $locationFilter) {
+        $mapped = $records->map(function ($row) use (&$states, $selectedMethod, $warehouseFilter, $locationFilter, $missingByLine) {
             if ($warehouseFilter !== null) {
                 $row->effective_warehouse_id = $warehouseFilter;
                 $row->effective_warehouse_name =
@@ -137,6 +399,35 @@ class ProductKardexService
 
             $direction = $this->direction($row, $warehouseFilter, $locationFilter);
             $qty = abs((float) ($row->done_quantity ?? $row->requested_quantity ?? 0));
+            /*
+             * La cantidad documental sigue siendo $qty.
+             * Solo la cantidad recibida modifica el saldo.
+             *
+             * No descontar faltantes en:
+             * - Salida del almacén origen.
+             * - Movimientos de cuarentena.
+             * - Resoluciones posteriores.
+             * - Consultas sin almacén destino específico.
+             */
+            $effectiveQty = $qty;
+            $missingQty = (float) (
+                $missingByLine[(int) $row->id] ?? 0
+            );
+
+            if (
+                $missingQty > 0
+                && $direction === 'in'
+                && $warehouseFilter !== null
+                && (int) (
+                    $row->destination_location_warehouse_id ?? 0
+                ) === $warehouseFilter
+            ) {
+                $effectiveQty = max(
+                    0.0,
+                    round($qty - $missingQty, 6)
+                );
+            }
+
 
             /*
              * Un traslado entre ubicaciones del mismo almacén no cambia
@@ -151,7 +442,7 @@ class ProductKardexService
              */
             $valuationQty = $direction === 'transfer'
                 ? 0.0
-                : $qty;
+                : $effectiveQty;
 
             $valuation = match ($method) {
                 self::METHOD_FIFO => $this->applyFifo(
@@ -206,7 +497,7 @@ class ProductKardexService
 
                 'direction' => $direction,
                 'quantity' => $qty,
-                'in_qty' => $direction === 'in' ? $qty : 0.0,
+                'in_qty' => $direction === 'in' ? $effectiveQty : 0.0,
                 'out_qty' => $direction === 'out' ? $qty : 0.0,
 
                 'recorded_unit_cost' => (float) ($row->unit_cost ?? 0),
@@ -270,6 +561,10 @@ class ProductKardexService
             ->unique()
             ->values();
 
+        $uncertified = $rows->contains(
+            static fn ($r) => $r->balance_value === null
+        );
+
         return [
             'rows' => $rows->count(),
             'in_qty' => round((float) $rows->sum('in_qty'), 6),
@@ -277,8 +572,130 @@ class ProductKardexService
             'balance_qty' => round((float) collect($lastByKey)->sum('balance_qty'), 6),
             'in_value' => round((float) $rows->where('direction', 'in')->sum('movement_value'), 6),
             'out_value' => round((float) $rows->where('direction', 'out')->sum('movement_value'), 6),
-            'balance_value' => round((float) collect($lastByKey)->sum('balance_value'), 6),
+            'balance_value' => $uncertified ? null : round((float) collect($lastByKey)->sum('balance_value'), 6),
             'valuation_method' => $methods->count() === 1 ? $methods->first() : 'mixed',
+        ];
+    }
+
+
+    /**
+     * INV11: conciliacion documental de apertura Odoo.
+     *
+     * No escribe movimientos ni quants y no modifica el metodo
+     * rows() que utiliza la pantalla actual.
+     *
+     * Solo admite una empresa, almacen y producto especificos.
+     */
+    public function openingReconciliation(array $filters): array
+    {
+        $companyId = (int) ($filters['company_id'] ?? 0);
+        $warehouseId = (int) ($filters['warehouse_id'] ?? 0);
+        $productId = (int) ($filters['product_id'] ?? 0);
+
+        if ($companyId <= 0 || $warehouseId <= 0 || $productId <= 0) {
+            throw new \InvalidArgumentException(
+                'Seleccione empresa, almacen y producto.'
+            );
+        }
+
+        if (
+            ! empty($filters['product_variant_id'])
+            || ! empty($filters['stock_serial_number_id'])
+        ) {
+            throw new \InvalidArgumentException(
+                'La conciliacion de apertura por variante o serie '
+                . 'requiere validacion adicional.'
+            );
+        }
+
+        if (! Schema::hasTable('stock_quants')) {
+            throw new \RuntimeException('No existe stock_quants.');
+        }
+
+        $reader = app(InventoryOpeningSnapshotService::class);
+
+        $openingRows = $reader->rows([
+            'company_id' => $companyId,
+            'warehouse_id' => $warehouseId,
+            'product_id' => $productId,
+            'location_id' => $filters['location_id'] ?? null,
+        ]);
+
+        if (! empty($filters['lot_id'])) {
+            $lotId = (int) $filters['lot_id'];
+            $openingRows = $openingRows
+                ->filter(fn ($r) => (int) ($r->lot_id ?? 0) === $lotId)
+                ->values();
+        }
+
+        $openingQty = round(
+            (float) $openingRows->sum('quantity'), 6
+        );
+
+        // El lector conserva la fecha exacta de la fotografia
+        // y los movimientos anteriores no se suman otra vez.
+        $snapshot = InventoryOpeningSnapshotService::SNAPSHOT;
+
+        $movementFilters = [
+            'company_id' => $companyId,
+            'warehouse_id' => $warehouseId,
+            'product_id' => $productId,
+            'location_id' => $filters['location_id'] ?? null,
+            'lot_id' => $filters['lot_id'] ?? null,
+            'status' => 'done',
+            'valuation_method' => 'auto',
+        ];
+
+        $movementRows = $this->rows($movementFilters)
+            ->filter(
+                static fn ($r) =>
+                    (string) ($r->date ?? '') > $snapshot
+            )
+            ->values();
+
+        $movementNet = round(
+            (float) $movementRows->sum(
+                static fn ($r) =>
+                    (float) ($r->in_qty ?? 0)
+                    - (float) ($r->out_qty ?? 0)
+            ),
+            6
+        );
+
+        $calculated = round($openingQty + $movementNet, 6);
+
+        $quants = DB::table('stock_quants')
+            ->where('company_id', $companyId)
+            ->where('warehouse_id', $warehouseId)
+            ->where('product_id', $productId);
+
+        if (! empty($filters['location_id'])) {
+            $quants->where(
+                'location_id', (int) $filters['location_id']
+            );
+        }
+
+        if (! empty($filters['lot_id'])) {
+            $quants->where('lot_id', (int) $filters['lot_id']);
+        }
+
+        $actual = round((float) $quants->sum('quantity'), 6);
+
+        return [
+            'company_id' => $companyId,
+            'warehouse_id' => $warehouseId,
+            'product_id' => $productId,
+            'opening_documented' => $openingRows->isNotEmpty(),
+            'opening_rows' => $openingRows->count(),
+            'opening_qty' => $openingQty,
+            'movement_rows' => $movementRows->count(),
+            'movement_net' => $movementNet,
+            'calculated_qty' => $calculated,
+            'actual_qty' => $actual,
+            'difference' => round($actual - $calculated, 6),
+            'snapshot_at' => $snapshot,
+            'source' => InventoryOpeningSnapshotService::SOURCE,
+            'valuation_verified' => false,
         ];
     }
 
@@ -494,6 +911,55 @@ class ProductKardexService
         ?int $locationFilter = null
     ): string
     {
+        /*
+         * INV11 FIX1E:
+         * La cabecera del movimiento puede señalar un almacén
+         * administrativo distinto del almacén donde cambió el stock.
+         * Para el saldo total usamos las ubicaciones reales.
+         *
+         * Esto evita contar como entrada al almacén de origen
+         * un movimiento desde una ubicación virtual externa.
+         */
+        if ($warehouseFilter !== null && $locationFilter === null
+            && ! empty($row->source_location_id)
+            && ! empty($row->destination_location_id)) {
+
+            $sourceWarehouse = (int) (
+                $row->source_location_warehouse_id ?? 0
+            );
+            $destinationWarehouse = (int) (
+                $row->destination_location_warehouse_id ?? 0
+            );
+
+            $sourceInside = $sourceWarehouse === $warehouseFilter;
+            $destinationInside =
+                $destinationWarehouse === $warehouseFilter;
+
+            if ($sourceInside && $destinationInside) {
+                if (
+                    (int) $row->source_location_id
+                    !== (int) $row->destination_location_id
+                ) {
+                    return 'transfer';
+                }
+
+                // Ajuste en una misma ubicación:
+                // conservar la interpretación por cantidad y origen.
+            } elseif ($sourceInside && ! $destinationInside) {
+                return 'out';
+            } elseif (! $sourceInside && $destinationInside) {
+                return 'in';
+            } elseif (
+                $sourceWarehouse > 0
+                || $destinationWarehouse > 0
+                || ! empty($row->source_location_id)
+            ) {
+                // El movimiento no afecta existencias de este
+                // almacén; mantenerlo neutro en el cálculo.
+                return 'transfer';
+            }
+        }
+
         $sameWarehouseTransfer =
             ! empty($row->warehouse_id)
             && ! empty($row->destination_warehouse_id)

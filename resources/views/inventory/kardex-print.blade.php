@@ -129,10 +129,10 @@
         <tr>
             <td><div class="label">Entradas</div><div class="value">{{ number_format($summary['in_qty'] ?? 0, 2) }}</div></td>
             <td><div class="label">Salidas</div><div class="value">{{ number_format($summary['out_qty'] ?? 0, 2) }}</div></td>
-            <td><div class="label">Saldo según movimientos</div><div class="value">{{ number_format($summary['balance_qty'] ?? 0, 2) }}</div></td>
+            <td><div class="label">Saldo cronológico</div><div class="value">{{ number_format($summary['balance_qty'] ?? 0, 2) }}</div></td>
             <td><div class="label">Saldo valorizado</div><div class="value">
-                @if (($summary['rows'] ?? 0) > 0)
-                    $ {{ number_format($summary['balance_value'] ?? 0, 2) }}
+                @if (($summary['rows'] ?? 0) > 0 && ($summary['balance_value'] ?? null) !== null)
+                    $ {{ number_format($summary['balance_value'], 2) }}
                 @else
                     No determinado
                 @endif
@@ -142,7 +142,7 @@
 
     <p style="font-size:10px;color:#555;">
         Valorización calculada con los movimientos disponibles.
-        Los saldos históricos de apertura pueden no estar documentados.
+        Las aperturas documentadas de Odoo se muestran como saldo inicial, no como entradas.
         Sin movimientos, el valor no puede determinarse con este reporte.
     </p>
     @if ($reconciliation !== null)
@@ -196,7 +196,7 @@
                     <td class="right">{{ $row->out_qty ? number_format($row->out_qty, 2) : '' }}</td>
                     <td class="right bold">{{ number_format($row->balance_qty, 2) }}</td>
                     <td class="right money">{{ number_format($row->applied_unit_cost, 4) }}</td>
-                    <td class="right money bold">{{ number_format($row->balance_value, 2) }}</td>
+                    <td class="right money bold">{{ $row->balance_value === null ? 'No certificado' : number_format($row->balance_value, 2) }}</td>
                 </tr>
             @endforeach
         </tbody>
