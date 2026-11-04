@@ -374,7 +374,7 @@ public static function canCreate(): bool
                         ));
 
                         return $historical !== ''
-                            ? $historical . ' (empleado del ticket; histórico)'
+                            ? $historical
                             : 'No identificado';
                     })
                     ->wrap()
