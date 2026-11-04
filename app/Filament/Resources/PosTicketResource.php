@@ -69,10 +69,11 @@ public static function canCreate(): bool
             'bexia_payment_methods' => DB::table('pos_order_payments as bmp')
                 ->selectRaw("string_agg(COALESCE(NULLIF(bmp.payment_label, ''), 'Pago') || ' $' || trim(to_char(bmp.amount, '9999999990.00')), ' + ' ORDER BY bmp.id) FILTER (WHERE bmp.status = 'paid')")
                 ->whereColumn('bmp.pos_order_id', 'pos_orders.id'),
-            'bexia_payment_cashiers' => DB::table('pos_order_payments as bmp')
-                ->leftJoin('users as bmu', DB::raw("bmp.metadata::jsonb->>'paid_by_user_id'"), '=', DB::raw('bmu.id::text'))
-                ->selectRaw("string_agg(DISTINCT bmu.name, ', ') FILTER (WHERE bmp.status = 'paid' AND bmu.id IS NOT NULL)")
-                ->whereColumn('bmp.pos_order_id', 'pos_orders.id'),
+            'bexia_payment_cashiers' => DB::table('employees as bme')
+                ->select('bme.name')
+                ->whereColumn('bme.id', 'pos_orders.employee_id')
+                ->whereColumn('bme.company_id', 'pos_orders.company_id')
+                ->limit(1),
             'bexia_done_refund_type' => DB::table('pos_order_refunds as bmr')
                 ->select('bmr.type')
                 ->whereColumn('bmr.pos_order_id', 'pos_orders.id')
@@ -442,26 +443,14 @@ public static function canCreate(): bool
                     ->label('Cajero')
                     ->options(fn (): array => static::bexiaCashierFilterOptions())
                     ->query(function (Builder $query, array $data): Builder {
-                        $userId = (int) ($data['value'] ?? 0);
+                        $employeeId = (int) ($data['value'] ?? 0);
 
-                        if ($userId <= 0) {
-                            return $query;
-                        }
-
-                        return $query->whereExists(function ($payments) use ($userId): void {
-                            $payments->selectRaw('1')
-                                ->from('pos_order_payments as cashier_payments')
-                                ->whereColumn(
-                                    'cashier_payments.pos_order_id',
-                                    'pos_orders.id'
-                                )
-                                ->where('cashier_payments.status', 'paid')
-                                ->whereRaw(
-                                    "cashier_payments.metadata::jsonb->>'paid_by_user_id' = ?",
-                                    [(string) $userId]
-                                );
-                        });
+                        return $employeeId > 0
+                            ? $query->where('pos_orders.employee_id', $employeeId)
+                            : $query;
                     }),
+
+
 
                 // BEXIA_V5836_POS_MOV_PRODUCT_SEARCH_FIX1
                 Tables\Filters\Filter::make('product_search')
@@ -559,40 +548,71 @@ public static function canCreate(): bool
                         return $query;
                     }),
 
-                Tables\Filters\Filter::make('movement_date')
-                    ->label('Fecha')
+                Tables\Filters\Filter::make('movement_datetime_v8')
+                    ->label('Fecha y hora')
                     ->form([
-                        \Filament\Forms\Components\DatePicker::make('from')->label('Desde')
-                            ->default(fn (): string => now('America/Mexico_City')->toDateString()),
-                        \Filament\Forms\Components\DatePicker::make('until')->label('Hasta')
-                            ->default(fn (): string => now('America/Mexico_City')->toDateString()),
+                        \Filament\Forms\Components\TextInput::make('from')
+                            ->label('Desde')
+                            ->default(fn (): string => now('America/Mexico_City')->format('Y-m-d') . 'T00:00'),
+                        \Filament\Forms\Components\TextInput::make('until')
+                            ->label('Hasta')
+                            ->default(fn (): string => now('America/Mexico_City')->format('Y-m-d') . 'T23:59'),
                     ])
                     ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder {
-                        // BEXIA_POS_MOV_DATES_FIX6
-                        // Comparaciones directas para aprovechar indices.
-                        // El limite superior incluye todo el dia Hasta.
-                        $from = $data['from'] ?? null;
-                        $until = $data['until'] ?? null;
+                        // BEXIA_POS_MOV_FIX7D
+                        // Hasta incluye el ultimo segundo del minuto elegido.
+                        $from = trim((string) ($data['from'] ?? ''));
+                        $until = trim((string) ($data['until'] ?? ''));
 
-                        return $query
-                            ->when(
-                                filled($from),
-                                fn ($inner) => $inner->where(
-                                    'ordered_at',
-                                    '>=',
-                                    \Carbon\Carbon::parse($from)->startOfDay()
-                                )
-                            )
-                            ->when(
-                                filled($until),
-                                fn ($inner) => $inner->where(
-                                    'ordered_at',
-                                    '<',
-                                    \Carbon\Carbon::parse($until)
-                                        ->addDay()
-                                        ->startOfDay()
-                                )
+                        $pattern = '/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/';
+
+                        if ($from !== '') {
+                            if (!preg_match($pattern, $from)) {
+                                return $query->whereRaw('1 = 0');
+                            }
+
+                            try {
+                                $start = \Carbon\Carbon::createFromFormat(
+                                    '!Y-m-d\TH:i',
+                                    $from,
+                                    'America/Mexico_City'
+                                );
+                                if (!$start || $start->format('Y-m-d\TH:i') !== $from) {
+                                    return $query->whereRaw('1 = 0');
+                                }
+                            } catch (\Throwable $e) {
+                                return $query->whereRaw('1 = 0');
+                            }
+
+                            $query->where('pos_orders.ordered_at', '>=', $start);
+                        }
+
+                        if ($until !== '') {
+                            if (!preg_match($pattern, $until)) {
+                                return $query->whereRaw('1 = 0');
+                            }
+
+                            try {
+                                $end = \Carbon\Carbon::createFromFormat(
+                                    '!Y-m-d\TH:i',
+                                    $until,
+                                    'America/Mexico_City'
+                                );
+                                if (!$end || $end->format('Y-m-d\TH:i') !== $until) {
+                                    return $query->whereRaw('1 = 0');
+                                }
+                            } catch (\Throwable $e) {
+                                return $query->whereRaw('1 = 0');
+                            }
+
+                            $query->where(
+                                'pos_orders.ordered_at',
+                                '<',
+                                $end->addMinute()
                             );
+                        }
+
+                        return $query;
                     }),
 
                 // BEXIA_POS_MOV_IMPROVE_FIX1 - todos por defecto (sin selección).
@@ -2593,25 +2613,24 @@ return (int) $refundId;
     // BEXIA_POS_MOV_FILTERS_FIX2
     public static function bexiaCashierFilterOptions(): array
     {
+        // BEXIA_POS_MOV_FIX7_CASHIER_OPTIONS
         $companyId = static::currentCompanyId();
 
         if (!$companyId) {
             return [];
         }
 
-        return DB::table('users as u')
-            ->join(
-                'pos_order_payments as p',
-                DB::raw("p.metadata::jsonb->>'paid_by_user_id'"),
-                '=',
-                DB::raw('u.id::text')
-            )
-            ->join('pos_orders as o', 'o.id', '=', 'p.pos_order_id')
+        return DB::table('employees as e')
+            ->join('pos_orders as o', function ($join): void {
+                $join->on('o.employee_id', '=', 'e.id')
+                    ->on('o.company_id', '=', 'e.company_id');
+            })
             ->where('o.company_id', (int) $companyId)
-            ->where('p.status', 'paid')
+            ->whereNotNull('e.name')
+            ->where('e.name', '<>', '')
             ->distinct()
-            ->orderBy('u.name')
-            ->pluck('u.name', 'u.id')
+            ->orderBy('e.name')
+            ->pluck('e.name', 'e.id')
             ->mapWithKeys(
                 fn ($name, $id): array => [(string) $id => (string) $name]
             )
