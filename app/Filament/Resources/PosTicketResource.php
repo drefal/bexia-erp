@@ -69,11 +69,27 @@ public static function canCreate(): bool
             'bexia_payment_methods' => DB::table('pos_order_payments as bmp')
                 ->selectRaw("string_agg(COALESCE(NULLIF(bmp.payment_label, ''), 'Pago') || ' $' || trim(to_char(bmp.amount, '9999999990.00')), ' + ' ORDER BY bmp.id) FILTER (WHERE bmp.status = 'paid')")
                 ->whereColumn('bmp.pos_order_id', 'pos_orders.id'),
-            'bexia_payment_cashiers' => DB::table('employees as bme')
-                ->select('bme.name')
-                ->whereColumn('bme.id', 'pos_orders.employee_id')
-                ->whereColumn('bme.company_id', 'pos_orders.company_id')
-                ->limit(1),
+            'bexia_payment_cashiers' =>
+                DB::table('pos_order_payments as bpc')
+                    ->selectRaw(
+                        "string_agg(DISTINCT NULLIF("
+                        . "bpc.metadata::jsonb ->> 'paid_by_employee_name',"
+                        . " ''), ', ')"
+                        . " FILTER (WHERE bpc.status = 'paid'"
+                        . " AND bpc.metadata::jsonb ->> "
+                        . "'cashier_identity_source' = "
+                        . "'paying_session_employee_snapshot'"
+                        . " AND NULLIF(bpc.metadata::jsonb ->> "
+                        . "'paid_by_employee_id', '') IS NOT NULL)"
+                    )
+                    ->whereColumn('bpc.pos_order_id', 'pos_orders.id'),
+            // Referencia historica: no prueba quien cobro.
+            'bexia_ticket_employee_name' =>
+                DB::table('employees as bme')
+                    ->select('bme.name')
+                    ->whereColumn('bme.id', 'pos_orders.employee_id')
+                    ->whereColumn('bme.company_id', 'pos_orders.company_id')
+                    ->limit(1),
             'bexia_done_refund_type' => DB::table('pos_order_refunds as bmr')
                 ->select('bmr.type')
                 ->whereColumn('bmr.pos_order_id', 'pos_orders.id')
@@ -344,7 +360,23 @@ public static function canCreate(): bool
                 // BEXIA_POS_MOV_IMPROVE_FIX1 - responsables y desglose.
                 Tables\Columns\TextColumn::make('bexia_payment_cashiers')
                     ->label('Cobrado por')
-                    ->state(fn (PosOrder $record): string => trim((string) ($record->bexia_payment_cashiers ?? '')) ?: 'No identificado')
+                    ->state(function (PosOrder $record): string {
+                        $verified = trim((string) (
+                            $record->bexia_payment_cashiers ?? ''
+                        ));
+
+                        if ($verified !== '') {
+                            return $verified;
+                        }
+
+                        $historical = trim((string) (
+                            $record->bexia_ticket_employee_name ?? ''
+                        ));
+
+                        return $historical !== ''
+                            ? $historical . ' (empleado del ticket; histórico)'
+                            : 'No identificado';
+                    })
                     ->wrap()
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('bexia_payment_methods')
@@ -445,9 +477,63 @@ public static function canCreate(): bool
                     ->query(function (Builder $query, array $data): Builder {
                         $employeeId = (int) ($data['value'] ?? 0);
 
-                        return $employeeId > 0
-                            ? $query->where('pos_orders.employee_id', $employeeId)
-                            : $query;
+                        // BEXIA_POS_CASHIER_UI2
+                        if ($employeeId <= 0) {
+                            return $query;
+                        }
+
+                        return $query->where(
+                            function (Builder $cashierQuery) use ($employeeId): void {
+                                // Pagos con identidad individual verificable.
+                                $cashierQuery->whereExists(
+                                    function ($payments) use ($employeeId): void {
+                                        $payments->selectRaw('1')
+                                            ->from('pos_order_payments as bcp')
+                                            ->whereColumn(
+                                                'bcp.pos_order_id',
+                                                'pos_orders.id'
+                                            )
+                                            ->where('bcp.status', 'paid')
+                                            ->whereRaw(
+                                                "bcp.metadata::jsonb ->> "
+                                                . "'cashier_identity_source' = "
+                                                . "'paying_session_employee_snapshot'"
+                                            )
+                                            ->whereRaw(
+                                                "bcp.metadata::jsonb ->> "
+                                                . "'paid_by_employee_id' = ?",
+                                                [(string) $employeeId]
+                                            );
+                                    }
+                                );
+
+                                // Compatibilidad: tickets sin ningun
+                                // pago con identidad individual.
+                                $cashierQuery->orWhere(
+                                    function (Builder $historical) use ($employeeId): void {
+                                        $historical->where(
+                                            'pos_orders.employee_id',
+                                            $employeeId
+                                        )->whereNotExists(
+                                            function ($payments): void {
+                                                $payments->selectRaw('1')
+                                                    ->from('pos_order_payments as bhp')
+                                                    ->whereColumn(
+                                                        'bhp.pos_order_id',
+                                                        'pos_orders.id'
+                                                    )
+                                                    ->where('bhp.status', 'paid')
+                                                    ->whereRaw(
+                                                        "bhp.metadata::jsonb ->> "
+                                                        . "'cashier_identity_source' = "
+                                                        . "'paying_session_employee_snapshot'"
+                                                    );
+                                            }
+                                        );
+                                    }
+                                );
+                            }
+                        );
                     }),
 
 
@@ -2613,22 +2699,44 @@ return (int) $refundId;
     // BEXIA_POS_MOV_FILTERS_FIX2
     public static function bexiaCashierFilterOptions(): array
     {
-        // BEXIA_POS_MOV_FIX7_CASHIER_OPTIONS
+        // BEXIA_POS_CASHIER_UI2
         $companyId = static::currentCompanyId();
 
-        if (!$companyId) {
+        if (! $companyId) {
             return [];
         }
 
         return DB::table('employees as e')
-            ->join('pos_orders as o', function ($join): void {
-                $join->on('o.employee_id', '=', 'e.id')
-                    ->on('o.company_id', '=', 'e.company_id');
-            })
-            ->where('o.company_id', (int) $companyId)
+            ->where('e.company_id', (int) $companyId)
             ->whereNotNull('e.name')
-            ->where('e.name', '<>', '')
-            ->distinct()
+            ->where(function ($query) use ($companyId): void {
+                $query->whereExists(function ($orders) use ($companyId): void {
+                    $orders->selectRaw('1')
+                        ->from('pos_orders as eo')
+                        ->whereColumn('eo.employee_id', 'e.id')
+                        ->where('eo.company_id', (int) $companyId);
+                })->orWhereExists(function ($payments) use ($companyId): void {
+                    $payments->selectRaw('1')
+                        ->from('pos_order_payments as ep')
+                        ->join(
+                            'pos_orders as eop',
+                            'eop.id',
+                            '=',
+                            'ep.pos_order_id'
+                        )
+                        ->where('eop.company_id', (int) $companyId)
+                        ->where('ep.status', 'paid')
+                        ->whereRaw(
+                            "ep.metadata::jsonb ->> "
+                            . "'cashier_identity_source' = "
+                            . "'paying_session_employee_snapshot'"
+                        )
+                        ->whereRaw(
+                            "ep.metadata::jsonb ->> "
+                            . "'paid_by_employee_id' = e.id::text"
+                        );
+                });
+            })
             ->orderBy('e.name')
             ->pluck('e.name', 'e.id')
             ->mapWithKeys(

@@ -8402,6 +8402,98 @@ return response()->json([
              * Cada anticipo queda como una fila independiente.
              */
 
+            /*
+             * BEXIA_POS_CASHIER_FIX1_PAYMENT_IDENTITY
+             *
+             * Identidad inmutable del cajero al cobrar.
+             * La sesion se bloquea para serializar el pago
+             * con el cambio de cajero de esa misma sesion.
+             *
+             * No atribuir identidad cuando no existe evidencia.
+             */
+            $bexiaPaymentEmployeeId = null;
+            $bexiaPaymentEmployeeName = null;
+            $bexiaPaymentIdentitySource = 'unidentified';
+
+            if (
+                $payingSessionId
+                && \Illuminate\Support\Facades\Schema::hasTable(
+                    'pos_sessions'
+                )
+            ) {
+                $bexiaLockedPayingSession =
+                    \Illuminate\Support\Facades\DB::table(
+                        'pos_sessions'
+                    )
+                        ->where('id', (int) $payingSessionId)
+                        ->lockForUpdate()
+                        ->first();
+
+                $bexiaSessionValid =
+                    $bexiaLockedPayingSession
+                    && (string) (
+                        $bexiaLockedPayingSession->status ?? ''
+                    ) === 'open'
+                    && (int) (
+                        $bexiaLockedPayingSession->company_id ?? 0
+                    ) === (int) ($orderRow->company_id ?? 0)
+                    && (int) (
+                        $bexiaLockedPayingSession->pos_point_id ?? 0
+                    ) === (int) ($orderRow->pos_point_id ?? 0);
+
+                if (
+                    ! $bexiaSessionValid
+                    && $requestedPayingSessionId > 0
+                ) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'paying_session_id' => [
+                            'La sesion de cobro cambio o se cerro. '
+                            . 'Actualiza la pantalla antes de cobrar.',
+                        ],
+                    ]);
+                }
+
+                if ($bexiaSessionValid) {
+                    $bexiaActiveEmployeeId = (int) (
+                        $bexiaLockedPayingSession->employee_id ?? 0
+                    );
+
+                    if (
+                        $bexiaActiveEmployeeId > 0
+                        && \Illuminate\Support\Facades\Schema::hasTable(
+                            'employees'
+                        )
+                    ) {
+                        $bexiaActiveEmployee =
+                            \Illuminate\Support\Facades\DB::table(
+                                'employees'
+                            )
+                                ->where(
+                                    'id',
+                                    $bexiaActiveEmployeeId
+                                )
+                                ->where(
+                                    'company_id',
+                                    (int) $orderRow->company_id
+                                )
+                                ->first();
+
+                        if ($bexiaActiveEmployee) {
+                            $bexiaPaymentEmployeeId =
+                                (int) $bexiaActiveEmployee->id;
+
+                            $bexiaPaymentEmployeeName =
+                                (string) (
+                                    $bexiaActiveEmployee->name ?? ''
+                                );
+
+                            $bexiaPaymentIdentitySource =
+                                'paying_session_employee_snapshot';
+                        }
+                    }
+                }
+            }
+
             foreach ($normalized as $paymentIndex => $payment) {
                 $paymentId = \Illuminate\Support\Facades\DB::table('pos_order_payments')->insertGetId([
                     'pos_order_id' => $orderRow->id,
@@ -8429,6 +8521,12 @@ return response()->json([
                         'balance_after_batch' =>
                             $remainingAfter,
                         'paid_by_user_id' => auth()->id(),
+                        'paid_by_employee_id' =>
+                            $bexiaPaymentEmployeeId,
+                        'paid_by_employee_name' =>
+                            $bexiaPaymentEmployeeName,
+                        'cashier_identity_source' =>
+                            $bexiaPaymentIdentitySource,
                         'session_id' =>
                             $payingSessionId,
                         'order_session_id' =>
