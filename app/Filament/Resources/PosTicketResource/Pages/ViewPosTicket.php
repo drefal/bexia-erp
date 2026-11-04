@@ -327,16 +327,77 @@ class ViewPosTicket extends ViewRecord
             ));
         }
 
-        $collectorName = $employeeName !== ''
-            ? $employeeName
-            : 'No identificado';
+        // BEXIA_POS_CASHIER_UI2
+        // Los pagos recientes tienen su propia identidad inmutable.
+        // Los anteriores solo permiten identificar al empleado
+        // asociado al ticket: no se le atribuye el cobro real.
+        $verifiedCollectors = [];
+        $historicalPaymentCount = 0;
 
         foreach ($payments as $payment) {
-            $payment->bexia_collected_by = $collectorName;
+            $paymentMetadata = is_array($payment->metadata ?? null)
+                ? $payment->metadata
+                : json_decode(
+                    (string) ($payment->metadata ?? '{}'),
+                    true
+                );
+
+            if (! is_array($paymentMetadata)) {
+                $paymentMetadata = [];
+            }
+
+            $source = (string) (
+                $paymentMetadata['cashier_identity_source'] ?? ''
+            );
+            $snapshotId = (int) (
+                $paymentMetadata['paid_by_employee_id'] ?? 0
+            );
+            $snapshotName = trim((string) (
+                $paymentMetadata['paid_by_employee_name'] ?? ''
+            ));
+
+            if (
+                $source === 'paying_session_employee_snapshot'
+                && $snapshotId > 0
+                && $snapshotName !== ''
+            ) {
+                $payment->bexia_collected_by = $snapshotName;
+                $payment->bexia_collected_by_source =
+                    'Cajero identificado al cobrar';
+                $verifiedCollectors[$snapshotId] = $snapshotName;
+            } else {
+                $historicalPaymentCount++;
+
+                $payment->bexia_collected_by = $employeeName !== ''
+                    ? $employeeName
+                    : 'No identificado';
+
+                $payment->bexia_collected_by_source =
+                    $employeeName !== ''
+                        ? 'Empleado del ticket (histórico, no verificado)'
+                        : 'Cajero no identificado';
+            }
+        }
+
+        if ($verifiedCollectors !== []) {
+            $bexiaCollectors = implode(
+                ', ',
+                array_values($verifiedCollectors)
+            );
+
+            if ($historicalPaymentCount > 0) {
+                $bexiaCollectors .=
+                    ' / incluye pagos históricos sin identificar';
+            }
+        } elseif ($employeeName !== '') {
+            $bexiaCollectors =
+                $employeeName . ' (empleado del ticket; histórico)';
+        } else {
+            $bexiaCollectors = 'No identificado';
         }
 
         return [
-            'bexiaCollectors' => $collectorName,
+            'bexiaCollectors' => $bexiaCollectors,
             'order' => $this->record,
             'metadata' => PosTicketResource::metadataArray($this->record),
             'lines' => PosTicketResource::orderLines((int) $this->record->id),

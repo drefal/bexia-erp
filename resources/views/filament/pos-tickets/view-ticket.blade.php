@@ -175,7 +175,15 @@
                         @forelse($payments as $payment)
                             <tr class="border-b border-gray-100 dark:border-gray-800">
                                 <td class="px-3 py-2">{{ $payment->payment_label ?? 'Pago' }}</td>
-                                <td class="px-3 py-2">{{ $payment->bexia_collected_by ?? 'No identificado' }}</td>
+                                <td class="px-3 py-2">
+                                    <div class="font-medium">
+                                        {{ $payment->bexia_collected_by ?? 'No identificado' }}
+                                    </div>
+                                    {{-- BEXIA_POS_CASHIER_UI2 --}}
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                                        {{ $payment->bexia_collected_by_source ?? 'Cajero no identificado' }}
+                                    </div>
+                                </td>
                                 <td class="px-3 py-2 text-right font-bold">${{ number_format((float) ($payment->amount ?? 0), 2) }}</td>
                                 <td class="px-3 py-2">
                                     @php
