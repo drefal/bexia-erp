@@ -308,11 +308,37 @@ class ViewPosTicket extends ViewRecord
 
     protected function getViewData(): array
     {
+        // BEXIA_POS_MOV_IMPROVE_FIX1: usuario del pago, no el de apertura.
+        $payments = PosTicketResource::orderPayments((int) $this->record->id);
+        $operatorIds = [];
+        foreach ($payments as $payment) {
+            $meta = $payment->metadata ?? [];
+            $meta = is_string($meta) ? json_decode($meta, true) : (is_array($meta) ? $meta : []);
+            $id = (int) ($meta['paid_by_user_id'] ?? 0);
+            if ($id > 0) {
+                $operatorIds[$id] = $id;
+            }
+        }
+        $operatorNames = $operatorIds
+            ? DB::table('users')->whereIn('id', array_values($operatorIds))->pluck('name', 'id')->all()
+            : [];
+        $collectors = [];
+        foreach ($payments as $payment) {
+            $meta = $payment->metadata ?? [];
+            $meta = is_string($meta) ? json_decode($meta, true) : (is_array($meta) ? $meta : []);
+            $id = (int) ($meta['paid_by_user_id'] ?? 0);
+            $name = trim((string) ($operatorNames[$id] ?? ''));
+            $payment->bexia_collected_by = $name !== '' ? $name : 'No identificado';
+            if ($name !== '' && (string) ($payment->status ?? '') === 'paid') {
+                $collectors[$id] = $name;
+            }
+        }
         return [
+            'bexiaCollectors' => $collectors ? implode(', ', array_values($collectors)) : 'No identificado',
             'order' => $this->record,
             'metadata' => PosTicketResource::metadataArray($this->record),
             'lines' => PosTicketResource::orderLines((int) $this->record->id),
-            'payments' => PosTicketResource::orderPayments((int) $this->record->id),
+            'payments' => $payments,
             'movement' => PosTicketResource::stockMovementForOrder($this->record),
             'pendingPrintUrl' => PosTicketResource::pendingPrintUrl($this->record),
             'receiptPrintUrl' => PosTicketResource::receiptPrintUrl($this->record),
