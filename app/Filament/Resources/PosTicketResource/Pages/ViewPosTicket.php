@@ -391,7 +391,7 @@ class ViewPosTicket extends ViewRecord
             }
         } elseif ($employeeName !== '') {
             $bexiaCollectors =
-                $employeeName . ' (empleado del ticket; histórico)';
+                $employeeName;
         } else {
             $bexiaCollectors = 'No identificado';
         }
