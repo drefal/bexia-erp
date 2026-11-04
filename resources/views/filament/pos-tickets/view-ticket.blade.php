@@ -105,6 +105,10 @@
                 </div>
 
                 <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Cobrado por</div>
+                    <div class="mt-0.5 font-bold">{{ $bexiaCollectors }}</div>
+                </div>
+                <div>
                     <div class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Total</div>
                     <div class="mt-0.5 text-lg font-black">
                         ${{ number_format((float) ($order->total ?? 0), 2) }}
@@ -161,6 +165,7 @@
                     <thead>
                         <tr class="border-b border-gray-200 dark:border-gray-700">
                             <th class="px-3 py-2 text-left">Método</th>
+                            <th class="px-3 py-2 text-left">Cobrado por</th>
                             <th class="px-3 py-2 text-right">Importe</th>
                             <th class="px-3 py-2 text-left">Estado</th>
                             <th class="px-3 py-2 text-left">Fecha</th>
@@ -170,6 +175,7 @@
                         @forelse($payments as $payment)
                             <tr class="border-b border-gray-100 dark:border-gray-800">
                                 <td class="px-3 py-2">{{ $payment->payment_label ?? 'Pago' }}</td>
+                                <td class="px-3 py-2">{{ $payment->bexia_collected_by ?? 'No identificado' }}</td>
                                 <td class="px-3 py-2 text-right font-bold">${{ number_format((float) ($payment->amount ?? 0), 2) }}</td>
                                 <td class="px-3 py-2">
                                     @php
@@ -190,7 +196,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="px-3 py-4 text-center text-gray-500">Sin pagos registrados.</td>
+                                <td colspan="5" class="px-3 py-4 text-center text-gray-500">Sin pagos registrados.</td>
                             </tr>
                         @endforelse
                     </tbody>

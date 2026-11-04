@@ -60,6 +60,27 @@ public static function canCreate(): bool
     {
         $query = parent::getEloquentQuery();
 
+        // BEXIA_POS_MOV_IMPROVE_FIX1: subconsultas indexadas en vez de
+        // consultas por cada celda. No cambia pagos ni movimientos.
+        $query->addSelect([
+            'bexia_payment_count' => DB::table('pos_order_payments as bmp')
+                ->selectRaw('count(*)')
+                ->whereColumn('bmp.pos_order_id', 'pos_orders.id'),
+            'bexia_payment_methods' => DB::table('pos_order_payments as bmp')
+                ->selectRaw("string_agg(COALESCE(NULLIF(bmp.payment_label, ''), 'Pago') || ' $' || trim(to_char(bmp.amount, '9999999990.00')), ' + ' ORDER BY bmp.id) FILTER (WHERE bmp.status = 'paid')")
+                ->whereColumn('bmp.pos_order_id', 'pos_orders.id'),
+            'bexia_payment_cashiers' => DB::table('pos_order_payments as bmp')
+                ->leftJoin('users as bmu', DB::raw("bmp.metadata::jsonb->>'paid_by_user_id'"), '=', DB::raw('bmu.id::text'))
+                ->selectRaw("string_agg(DISTINCT bmu.name, ', ') FILTER (WHERE bmp.status = 'paid' AND bmu.id IS NOT NULL)")
+                ->whereColumn('bmp.pos_order_id', 'pos_orders.id'),
+            'bexia_done_refund_type' => DB::table('pos_order_refunds as bmr')
+                ->select('bmr.type')
+                ->whereColumn('bmr.pos_order_id', 'pos_orders.id')
+                ->where('bmr.status', 'done')
+                ->orderByDesc('bmr.id')
+                ->limit(1),
+        ]);
+
         $companyId = static::currentCompanyId();
 
         if ($companyId && Schema::hasColumn('pos_orders', 'company_id')) {
@@ -110,6 +131,9 @@ public static function canCreate(): bool
             // BEXIA_V582_P3_XLSM_A26_DISABLE_PERSISTED_SORT
             ->persistSortInSession(false)
             ->recordUrl(fn ($record): string => static::getUrl('view', ['record' => $record]))
+            ->paginated([25, 50, 100])
+            ->defaultPaginationPageOption(50)
+            // BEXIA_POS_MOV_FILTERS_FIX2
             ->columns([
 
                 // BEXIA_V582_P3_XLSM_A8B_ORIGIN_COLUMN
@@ -316,15 +340,128 @@ public static function canCreate(): bool
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                // BEXIA_POS_MOV_IMPROVE_FIX1 - responsables y desglose.
+                Tables\Columns\TextColumn::make('bexia_payment_cashiers')
+                    ->label('Cobrado por')
+                    ->state(fn (PosOrder $record): string => trim((string) ($record->bexia_payment_cashiers ?? '')) ?: 'No identificado')
+                    ->wrap()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('bexia_payment_methods')
+                    ->label('Métodos de pago')
+                    ->state(fn (PosOrder $record): string => trim((string) ($record->bexia_payment_methods ?? '')) ?: 'Sin pagos confirmados')
+                    ->wrap()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('payment_count')
                     ->extraHeaderAttributes(['class' => 'bexia-pos-ticket-col-payment-count bexia-pos-ticket-col-compact'])
                     ->extraCellAttributes(['class' => 'bexia-pos-ticket-col-payment-count bexia-pos-ticket-col-compact'])
                     ->label('Pagos')
-                    ->state(fn ($record): string => (string) static::paymentCount($record->id))
+                    ->state(fn ($record): string => (string) ($record->bexia_payment_count ?? 0))
                     ->alignCenter()
                     ->toggleable(),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('movement_payment')
+                    ->label('Método de pago')
+                    ->options([
+                        'cash' => 'Efectivo',
+                        'debit' => 'Tarjeta de débito',
+                        'credit' => 'Tarjeta de crédito',
+                        'transfer' => 'Transferencia',
+                        'clip' => 'Tarjeta / CLIP',
+                        'other' => 'Otros históricos',
+                    ])
+                    ->query(function (
+                        \Illuminate\Database\Eloquent\Builder $query,
+                        array $data
+                    ): \Illuminate\Database\Eloquent\Builder {
+                        $value = (string) ($data['value'] ?? '');
+
+                        if (!in_array($value, [
+                            'cash', 'debit', 'credit',
+                            'transfer', 'clip', 'other',
+                        ], true)) {
+                            return $query;
+                        }
+
+                        $orderId = $query->getModel()->qualifyColumn('id');
+
+                        return $query->whereExists(
+                            function ($payments) use ($value, $orderId): void {
+                                $payments->selectRaw('1')
+                                    ->from('pos_order_payments as b4p')
+                                    ->leftJoin(
+                                        'payment_forms as b4f',
+                                        'b4f.id',
+                                        '=',
+                                        'b4p.payment_form_id'
+                                    )
+                                    ->whereColumn(
+                                        'b4p.pos_order_id',
+                                        $orderId
+                                    )
+                                    ->where('b4p.status', 'paid')
+                                    ->where(function ($m) use ($value): void {
+                                        $label = "lower(coalesce(b4p.payment_label, ''))";
+                                        $code = "coalesce(b4f.code, '')";
+
+                                        switch ($value) {
+                                            case 'cash':
+                                                $m->whereRaw("$code = '01'")
+                                                    ->orWhereRaw("$label LIKE '%efectivo%'");
+                                                break;
+                                            case 'debit':
+                                                $m->whereRaw("$code = '28'")
+                                                    ->orWhereRaw("$label LIKE '%débito%'")
+                                                    ->orWhereRaw("$label LIKE '%debito%'");
+                                                break;
+                                            case 'credit':
+                                                $m->whereRaw("$code = '04'")
+                                                    ->orWhereRaw("$label LIKE '%crédito%'")
+                                                    ->orWhereRaw("$label LIKE '%credito%'");
+                                                break;
+                                            case 'transfer':
+                                                $m->whereRaw("$code = '03'")
+                                                    ->orWhereRaw("$label LIKE '%transferencia%'");
+                                                break;
+                                            case 'clip':
+                                                $m->whereRaw("$label LIKE '%clip%'");
+                                                break;
+                                            case 'other':
+                                                $m->whereRaw("$label LIKE '%histor%'")
+                                                    ->orWhereRaw("$label LIKE '%no identificad%'")
+                                                    ->orWhereRaw("$label LIKE '%cortesía%'")
+                                                    ->orWhereRaw("$label LIKE '%cortesia%'");
+                                                break;
+                                        }
+                                    });
+                            }
+                        );
+                    }),
+
+                Tables\Filters\SelectFilter::make('movement_cashier')
+                    ->label('Cajero')
+                    ->options(fn (): array => static::bexiaCashierFilterOptions())
+                    ->query(function (Builder $query, array $data): Builder {
+                        $userId = (int) ($data['value'] ?? 0);
+
+                        if ($userId <= 0) {
+                            return $query;
+                        }
+
+                        return $query->whereExists(function ($payments) use ($userId): void {
+                            $payments->selectRaw('1')
+                                ->from('pos_order_payments as cashier_payments')
+                                ->whereColumn(
+                                    'cashier_payments.pos_order_id',
+                                    'pos_orders.id'
+                                )
+                                ->where('cashier_payments.status', 'paid')
+                                ->whereRaw(
+                                    "cashier_payments.metadata::jsonb->>'paid_by_user_id' = ?",
+                                    [(string) $userId]
+                                );
+                        });
+                    }),
 
                 // BEXIA_V5836_POS_MOV_PRODUCT_SEARCH_FIX1
                 Tables\Filters\Filter::make('product_search')
@@ -425,40 +562,40 @@ public static function canCreate(): bool
                 Tables\Filters\Filter::make('movement_date')
                     ->label('Fecha')
                     ->form([
-                        \Filament\Forms\Components\DatePicker::make('from')->label('Desde'),
-                        \Filament\Forms\Components\DatePicker::make('until')->label('Hasta'),
+                        \Filament\Forms\Components\DatePicker::make('from')->label('Desde')
+                            ->default(fn (): string => now('America/Mexico_City')->toDateString()),
+                        \Filament\Forms\Components\DatePicker::make('until')->label('Hasta')
+                            ->default(fn (): string => now('America/Mexico_City')->toDateString()),
                     ])
                     ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder {
+                        // BEXIA_POS_MOV_DATES_FIX6
+                        // Comparaciones directas para aprovechar indices.
+                        // El limite superior incluye todo el dia Hasta.
+                        $from = $data['from'] ?? null;
+                        $until = $data['until'] ?? null;
+
                         return $query
-                            ->when($data['from'] ?? null, fn ($inner, $date) => $inner->whereDate('ordered_at', '>=', $date))
-                            ->when($data['until'] ?? null, fn ($inner, $date) => $inner->whereDate('ordered_at', '<=', $date));
+                            ->when(
+                                filled($from),
+                                fn ($inner) => $inner->where(
+                                    'ordered_at',
+                                    '>=',
+                                    \Carbon\Carbon::parse($from)->startOfDay()
+                                )
+                            )
+                            ->when(
+                                filled($until),
+                                fn ($inner) => $inner->where(
+                                    'ordered_at',
+                                    '<',
+                                    \Carbon\Carbon::parse($until)
+                                        ->addDay()
+                                        ->startOfDay()
+                                )
+                            );
                     }),
 
-                Tables\Filters\SelectFilter::make('movement_payment')
-                    ->label('Forma de pago')
-                    ->options([
-                        'cash' => 'Efectivo',
-                        'card' => 'Tarjeta / CLIP',
-                    ])
-                    ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder {
-                        $value = $data['value'] ?? null;
-                        if (! in_array($value, ['cash', 'card'], true)) {
-                            return $query;
-                        }
-                        $qualifiedOrderId = $query->getModel()->qualifyColumn('id');
-                        return $query->whereIn($qualifiedOrderId, function ($payments) use ($value): void {
-                            $payments->select('pos_order_id')->from('pos_order_payments');
-                            if ($value === 'cash') {
-                                $payments->whereRaw("lower(coalesce(payment_label, '')) like '%efectivo%'");
-                            } else {
-                                $payments->where(function ($inner): void {
-                                    $inner->whereRaw("lower(coalesce(payment_label, '')) like '%tarjeta%'")
-                                        ->orWhereRaw("upper(coalesce(metadata::jsonb->>'processor', '')) = 'CLIP'");
-                                });
-                            }
-                        });
-                    }),
-
+                // BEXIA_POS_MOV_IMPROVE_FIX1 - todos por defecto (sin selección).
                 Tables\Filters\SelectFilter::make('movement_pos_point')
                     ->label('Punto de venta')
                     ->options(function (): array {
@@ -526,7 +663,11 @@ public static function canCreate(): bool
 
     public static function v5509dRefundStatusLabel(object $record): string
     {
-        $refund = static::v5509dRefundForTicket($record);
+        $refund = array_key_exists('bexia_done_refund_type', $record->getAttributes())
+            ? ($record->bexia_done_refund_type === null
+                ? null
+                : (object) ['type' => $record->bexia_done_refund_type])
+            : static::v5509dRefundForTicket($record);
 
         if (! $refund) {
             return static::statusLabel((string) ($record->status ?? ''));
@@ -2447,6 +2588,34 @@ return (int) $refundId;
         }
 
         return [];
+    }
+
+    // BEXIA_POS_MOV_FILTERS_FIX2
+    public static function bexiaCashierFilterOptions(): array
+    {
+        $companyId = static::currentCompanyId();
+
+        if (!$companyId) {
+            return [];
+        }
+
+        return DB::table('users as u')
+            ->join(
+                'pos_order_payments as p',
+                DB::raw("p.metadata::jsonb->>'paid_by_user_id'"),
+                '=',
+                DB::raw('u.id::text')
+            )
+            ->join('pos_orders as o', 'o.id', '=', 'p.pos_order_id')
+            ->where('o.company_id', (int) $companyId)
+            ->where('p.status', 'paid')
+            ->distinct()
+            ->orderBy('u.name')
+            ->pluck('u.name', 'u.id')
+            ->mapWithKeys(
+                fn ($name, $id): array => [(string) $id => (string) $name]
+            )
+            ->all();
     }
 
     public static function paymentCount(int $orderId): int
