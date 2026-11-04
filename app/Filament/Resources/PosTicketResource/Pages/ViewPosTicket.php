@@ -310,31 +310,33 @@ class ViewPosTicket extends ViewRecord
     {
         // BEXIA_POS_MOV_IMPROVE_FIX1: usuario del pago, no el de apertura.
         $payments = PosTicketResource::orderPayments((int) $this->record->id);
-        $operatorIds = [];
-        foreach ($payments as $payment) {
-            $meta = $payment->metadata ?? [];
-            $meta = is_string($meta) ? json_decode($meta, true) : (is_array($meta) ? $meta : []);
-            $id = (int) ($meta['paid_by_user_id'] ?? 0);
-            if ($id > 0) {
-                $operatorIds[$id] = $id;
-            }
+        // BEXIA_POS_MOV_FIX7_CASHIER
+        // Solo podemos atribuir el empleado registrado en el ticket.
+        // El usuario tecnico paid_by_user_id no acredita identidad del cajero.
+        $employeeName = '';
+
+        $employeeId = (int) ($this->record->employee_id ?? 0);
+        $companyId = (int) ($this->record->company_id ?? 0);
+
+        if ($employeeId > 0 && $companyId > 0) {
+            $employeeName = trim((string) (
+                DB::table('employees')
+                    ->where('id', $employeeId)
+                    ->where('company_id', $companyId)
+                    ->value('name') ?? ''
+            ));
         }
-        $operatorNames = $operatorIds
-            ? DB::table('users')->whereIn('id', array_values($operatorIds))->pluck('name', 'id')->all()
-            : [];
-        $collectors = [];
+
+        $collectorName = $employeeName !== ''
+            ? $employeeName
+            : 'No identificado';
+
         foreach ($payments as $payment) {
-            $meta = $payment->metadata ?? [];
-            $meta = is_string($meta) ? json_decode($meta, true) : (is_array($meta) ? $meta : []);
-            $id = (int) ($meta['paid_by_user_id'] ?? 0);
-            $name = trim((string) ($operatorNames[$id] ?? ''));
-            $payment->bexia_collected_by = $name !== '' ? $name : 'No identificado';
-            if ($name !== '' && (string) ($payment->status ?? '') === 'paid') {
-                $collectors[$id] = $name;
-            }
+            $payment->bexia_collected_by = $collectorName;
         }
+
         return [
-            'bexiaCollectors' => $collectors ? implode(', ', array_values($collectors)) : 'No identificado',
+            'bexiaCollectors' => $collectorName,
             'order' => $this->record,
             'metadata' => PosTicketResource::metadataArray($this->record),
             'lines' => PosTicketResource::orderLines((int) $this->record->id),

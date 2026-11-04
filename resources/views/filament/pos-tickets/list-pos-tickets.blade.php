@@ -1,4 +1,4 @@
-{{-- BEXIA_POS_MOV_UI_FIX5 --}}
+{{-- BEXIA_POS_MOV_UI_FIX5 / BEXIA_POS_MOV_FIX7D --}}
 <x-filament-panels::page>
 
     <style>
@@ -71,6 +71,7 @@
                 max-width: 100%;
             }
         }
+
     </style>
 
     <div class="bexia-pdv-filters">
@@ -125,11 +126,12 @@
                    class="bexia-pdv-filter-label">
                 Desde
             </label>
-
             <input
                 id="bexia-from"
-                type="date"
-                wire:model.live="tableFilters.movement_date.from"
+                type="datetime-local"
+                lang="en-GB"
+                step="60"
+                wire:model.live="tableFilters.movement_datetime_v8.from"
                 class="bexia-pdv-filter-input"
             />
         </div>
@@ -139,17 +141,18 @@
                    class="bexia-pdv-filter-label">
                 Hasta
             </label>
-
             <input
                 id="bexia-until"
-                type="date"
-                wire:model.live="tableFilters.movement_date.until"
+                type="datetime-local"
+                lang="en-GB"
+                step="60"
+                wire:model.live="tableFilters.movement_datetime_v8.until"
                 class="bexia-pdv-filter-input"
             />
         </div>
 
     </div>
 
-    {{ $this->table }}
+        {{ $this->table }}
 
 </x-filament-panels::page>
