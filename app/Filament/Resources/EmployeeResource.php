@@ -684,7 +684,6 @@ protected static function bexiaCanEmployeePermission(string $permission): bool
                                             ->options(fn (?Employee $record): array => self::employeeHierarchyOptions($record))
                                             ->searchable()
                                             ->preload()
-                                            ->live()
                                             ->nullable()
                                             ->helperText('Solo se muestran empleados activos de la misma empresa. No se permite seleccionar al mismo empleado ni generar ciclos de jerarquía.'),
 
