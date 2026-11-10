@@ -68,6 +68,15 @@
         <ul class="org-children"
             x-show="filtering() || !collapsed.includes({{ $employeeId }})"
             x-cloak>
+            <li class="org-team-label">
+                <span class="org-team-label-name">
+                    Equipo de {{ $node['name'] }}
+                </span>
+                <span class="org-team-label-count">
+                    {{ count($nodeChildren) }}
+                    {{ count($nodeChildren) === 1 ? 'colaborador directo' : 'colaboradores directos' }}
+                </span>
+            </li>
             @foreach ($nodeChildren as $childId)
                 @include('filament.pages.partials.employee-org-node', [
                     'node' => $byId[$childId],
