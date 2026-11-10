@@ -9,8 +9,6 @@
             $byId[(int) $row['id']] = $row;
         }
 
-        // Reconstruir el arbol usando el recorrido ya
-        // validado por chartPayload(), sin alterar jefes.
         foreach ($chart['nodes'] as $row) {
             $id = (int) $row['id'];
             $ancestors = $row['ancestors'] ?? [];
@@ -27,8 +25,6 @@
         $managerIds = array_keys($children);
         $initialCollapsed = [];
 
-        // Mantener visible la primera linea de mando.
-        // Los siguientes niveles empiezan contraidos.
         foreach ($managerIds as $id) {
             if (($byId[$id]['depth'] ?? 0) >= 1) {
                 $initialCollapsed[] = (int) $id;
@@ -39,109 +35,167 @@
     <style>
         [x-cloak] { display: none !important; }
 
-        .org-shell {
+        .orgx-page {
             display: flex;
             flex-direction: column;
-            gap: 1.2rem;
+            gap: 1rem;
         }
 
-        .org-panel {
-            border: 1px solid #e2e8f0;
-            background: #fff;
-            border-radius: 14px;
-            padding: 18px;
+        .orgx-hero {
+            border: 1px solid #dbe4f0;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+            padding: 22px 24px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, .05);
         }
 
-        .org-heading {
-            font-size: 1.25rem;
-            line-height: 1.5;
-            font-weight: 750;
-            color: #0f172a;
-        }
-
-        .org-muted {
-            font-size: .85rem;
-            color: #64748b;
-        }
-
-        .org-area-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
-            gap: 10px;
-        }
-
-        .org-area-card {
-            text-align: left;
-            padding: 14px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            background: white;
-            transition: border-color .15s, box-shadow .15s;
-        }
-
-        .org-area-card:hover {
-            border-color: #94a3b8;
-            box-shadow: 0 2px 10px rgba(15, 23, 42, .07);
-        }
-
-        .org-area-card-selected {
-            border-color: #2563eb !important;
-            box-shadow: 0 0 0 2px rgba(37, 99, 235, .14);
-        }
-
-        .org-area-title {
-            font-size: .85rem;
-            font-weight: 650;
-            color: #334155;
-        }
-
-        .org-area-number {
-            font-size: 1.6rem;
-            line-height: 1.5;
-            font-weight: 750;
-            color: #0f172a;
-        }
-
-        .org-toolbar {
+        .orgx-hero-grid {
             display: flex;
             flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 16px;
             align-items: center;
-            gap: 10px;
         }
 
-        .org-search {
-            flex: 1 1 270px;
+        .orgx-title {
+            font-size: 1.8rem;
+            line-height: 1.2;
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .orgx-subtitle {
+            margin-top: 6px;
+            color: #64748b;
+            font-size: .92rem;
+        }
+
+        .orgx-total {
+            min-width: 180px;
+            text-align: right;
+        }
+
+        .orgx-total-number {
+            font-size: 2.2rem;
+            line-height: 1;
+            font-weight: 800;
+            color: #1d4ed8;
+        }
+
+        .orgx-total-label {
+            margin-top: 4px;
+            color: #64748b;
+            font-size: .88rem;
+        }
+
+        .orgx-areas {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+
+        .orgx-area {
+            border: 1px solid #dbe4f0;
+            border-radius: 16px;
+            background: #fff;
+            padding: 14px 16px;
+            text-align: left;
+            box-shadow: 0 3px 10px rgba(15, 23, 42, .03);
+            transition: .15s ease;
+        }
+
+        .orgx-area:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(15, 23, 42, .06);
+        }
+
+        .orgx-area-selected {
+            border-color: #2563eb !important;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
+            background: #f8fbff;
+        }
+
+        .orgx-area-name {
+            font-size: .86rem;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        .orgx-area-count {
+            margin-top: 6px;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .orgx-toolbar {
+            border: 1px solid #dbe4f0;
+            border-radius: 16px;
+            background: #fff;
+            padding: 16px;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+        }
+
+        .orgx-toolbar-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .orgx-search {
+            flex: 1 1 320px;
             min-width: 0;
             border: 1px solid #cbd5e1;
-            border-radius: 9px;
-            padding: 9px 12px;
-            font-size: .875rem;
+            border-radius: 12px;
+            padding: 11px 14px;
+            font-size: .9rem;
             background: #fff;
             color: #0f172a;
         }
 
-        .org-action {
+        .orgx-btn {
             border: 1px solid #cbd5e1;
-            border-radius: 9px;
-            padding: 9px 12px;
-            font-size: .8rem;
-            font-weight: 600;
-            color: #334155;
             background: #fff;
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: .84rem;
+            font-weight: 700;
+            color: #334155;
+            transition: .15s ease;
         }
 
-        .org-action:hover {
-            background: #f1f5f9;
+        .orgx-btn:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
         }
 
-        .org-chart-canvas {
-            padding: 24px;
-            overflow-x: auto;
+        .orgx-btn-primary {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
+
+        .orgx-btn-primary:hover {
+            background: #1d4ed8;
+            border-color: #1d4ed8;
+        }
+
+        .orgx-hint {
+            margin-top: 10px;
+            color: #64748b;
+            font-size: .82rem;
+        }
+
+        .orgx-canvas {
+            border: 1px solid #dbe4f0;
+            border-radius: 18px;
             background:
-                radial-gradient(#e2e8f0 0.7px, transparent 0.7px);
+                radial-gradient(#e7eef7 0.7px, transparent 0.7px),
+                #fbfdff;
             background-size: 18px 18px;
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
+            padding: 22px;
+            overflow-x: auto;
         }
 
         .org-roots,
@@ -154,175 +208,405 @@
         .org-roots {
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 16px;
         }
 
         .org-node {
             position: relative;
-            min-width: 0;
+        }
+
+        .org-node-root > .org-card {
+            margin-left: 0;
         }
 
         .org-children {
             position: relative;
-            margin-left: 20px;
-            padding-left: 23px;
-            padding-top: 10px;
-            border-left: 2px solid #cbd5e1;
-        }
-
-        .org-children > .org-node {
-            margin-bottom: 9px;
+            margin-top: 10px;
+            margin-left: 32px;
+            padding-left: 26px;
+            border-left: 2px solid #c7d6ea;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
         .org-children > .org-node::before {
             content: '';
             position: absolute;
-            top: 27px;
-            left: -23px;
-            width: 23px;
-            border-top: 2px solid #cbd5e1;
+            left: -26px;
+            top: 36px;
+            width: 26px;
+            border-top: 2px solid #c7d6ea;
         }
 
         .org-card {
-            display: block;
-            width: min(100%, 660px);
-            border: 1px solid #dbe3ed;
-            border-radius: 12px;
-            padding: 12px 14px;
+            width: min(100%, 860px);
+            border: 1px solid #d7e3f2;
+            border-radius: 18px;
             background: #fff;
-            box-shadow: 0 2px 5px rgba(15, 23, 42, .035);
+            box-shadow: 0 6px 20px rgba(15, 23, 42, .05);
+            padding: 16px 18px;
         }
 
         .org-card-root {
-            border-color: #93b4ea;
-            border-top: 3px solid #2563eb;
-            background: #eff6ff;
+            background: linear-gradient(135deg, #eef5ff 0%, #f8fbff 100%);
+            border-color: #8cb4f7;
         }
 
         .org-card-match {
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, .18);
             border-color: #2563eb;
-            box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
         }
 
-        .org-card-top {
+        .org-card-main {
             display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .org-avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #2563eb 0%, #60a5fa 100%);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .95rem;
+            font-weight: 800;
+            flex: 0 0 52px;
+            box-shadow: 0 6px 16px rgba(37, 99, 235, .25);
+        }
+
+        .org-card-body {
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .org-card-row {
+            display: flex;
+            justify-content: space-between;
             align-items: flex-start;
             gap: 12px;
         }
 
-        .org-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex: 0 0 30px;
-            height: 30px;
-            border: 1px solid #bfdbfe;
-            border-radius: 8px;
-            background: #eff6ff;
-            color: #1d4ed8;
-            font-weight: 750;
-            cursor: pointer;
-        }
-
-        .org-leaf {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex: 0 0 30px;
-            color: #94a3b8;
-        }
-
-        .org-card-info {
-            min-width: 0;
-        }
-
         .org-person-name {
-            font-size: .94rem;
-            font-weight: 750;
-            line-height: 1.4;
-            overflow-wrap: anywhere;
+            font-size: 1rem;
+            font-weight: 800;
+            line-height: 1.3;
             color: #0f172a;
+            overflow-wrap: anywhere;
         }
 
         .org-person-position {
-            margin-top: 3px;
-            font-size: .82rem;
+            margin-top: 4px;
             color: #475569;
+            font-size: .88rem;
         }
 
-        .org-card-meta {
+        .org-toggle {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 1.1rem;
+            font-weight: 800;
+            flex: 0 0 34px;
+        }
+
+        .org-meta {
             display: flex;
             flex-wrap: wrap;
-            align-items: center;
             gap: 8px;
-            margin-top: 8px;
+            margin-top: 11px;
         }
 
-        .org-area-pill {
+        .org-badge-area,
+        .org-badge-muted,
+        .org-badge-count {
             border-radius: 999px;
+            padding: 5px 10px;
+            font-size: .72rem;
+            line-height: 1.1;
+        }
+
+        .org-badge-area {
+            background: #eaf2ff;
+            color: #1e40af;
+            font-weight: 700;
+        }
+
+        .org-badge-muted {
             background: #f1f5f9;
             color: #475569;
-            padding: 3px 9px;
-            font-size: .7rem;
         }
 
-        .org-team-count {
-            font-size: .7rem;
+        .org-badge-count {
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-weight: 700;
+        }
+
+        .orgx-footer {
             color: #64748b;
+            font-size: .8rem;
+            text-align: center;
         }
 
-        .dark .org-panel,
-        .dark .org-area-card,
-        .dark .org-card,
-        .dark .org-search,
-        .dark .org-action {
+        @media print {
+            .orgx-toolbar,
+            .orgx-areas,
+            .fi-topbar,
+            .fi-sidebar,
+            .fi-header {
+                display: none !important;
+            }
+
+            .orgx-canvas,
+            .org-card,
+            .orgx-hero {
+                box-shadow: none !important;
+            }
+
+            .orgx-page {
+                gap: .6rem;
+            }
+
+            .org-card {
+                break-inside: avoid;
+            }
+        }
+
+        .dark .orgx-hero,
+        .dark .orgx-area,
+        .dark .orgx-toolbar,
+        .dark .org-card {
             background: #111827;
             border-color: #374151;
         }
 
-        .dark .org-heading,
-        .dark .org-area-title,
-        .dark .org-area-number,
+        .dark .orgx-title,
+        .dark .orgx-area-count,
         .dark .org-person-name {
             color: #f9fafb;
         }
 
+        .dark .orgx-subtitle,
+        .dark .orgx-total-label,
+        .dark .orgx-hint,
+        .dark .orgx-area-name,
         .dark .org-person-position,
-        .dark .org-muted {
+        .dark .orgx-footer {
             color: #cbd5e1;
         }
 
-        .dark .org-chart-canvas {
-            background-color: #0b1220;
+        .dark .orgx-canvas {
+            background:
+                radial-gradient(#243041 0.7px, transparent 0.7px),
+                #0b1220;
             border-color: #374151;
         }
 
-        .dark .org-card-root {
-            background: #172554;
-            border-top-color: #60a5fa;
+        .dark .org-badge-area {
+            background: #1e3a8a;
+            color: #dbeafe;
         }
 
-        .dark .org-area-pill {
+        .dark .org-badge-muted {
             background: #374151;
             color: #e5e7eb;
         }
 
-        .dark .org-search,
-        .dark .org-action {
+        .dark .org-badge-count {
+            background: #172554;
+            color: #bfdbfe;
+        }
+
+        .dark .orgx-search,
+        .dark .orgx-btn {
+            background: #111827;
             color: #f9fafb;
+            border-color: #4b5563;
         }
 
         @media (max-width: 640px) {
-            .org-chart-canvas { padding: 12px; }
-            .org-children {
-                margin-left: 9px;
-                padding-left: 13px;
+            .orgx-total {
+                text-align: left;
             }
+
+            .orgx-title {
+                font-size: 1.4rem;
+            }
+
+            .org-card {
+                padding: 14px;
+            }
+
+            .org-children {
+                margin-left: 14px;
+                padding-left: 14px;
+            }
+
             .org-children > .org-node::before {
-                left: -13px;
-                width: 13px;
+                left: -14px;
+                width: 14px;
             }
         }
+
+        /* ORG02 FIX4 - Arbol ejecutivo vertical */
+        .orgx-page { gap: 14px; }
+
+        .orgx-hero {
+            border-radius: 16px;
+            background: linear-gradient(120deg,#eff6ff,#ffffff);
+            border-top: 4px solid #1d4ed8;
+            padding: 16px 20px;
+        }
+
+        .orgx-title {
+            font-size: 1.5rem;
+            letter-spacing: -.025em;
+        }
+
+        .orgx-areas {
+            grid-template-columns: repeat(auto-fit,minmax(135px,1fr));
+            gap: 8px;
+        }
+
+        .orgx-area {
+            padding: 10px 12px;
+            border-radius: 10px;
+        }
+
+        .orgx-area-count {
+            margin-top: 2px;
+            font-size: 1.3rem;
+        }
+
+        .orgx-toolbar {
+            padding: 12px;
+            border-radius: 12px;
+        }
+
+        .orgx-canvas {
+            display: block;
+            padding: 20px 12px;
+            overflow-x: auto;
+        }
+
+        .org-roots,.org-children {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            border-left: 0;
+        }
+
+        .org-roots { width: 100%; }
+
+        .org-node,
+        .org-node-root {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            margin: 0;
+        }
+
+        .org-children {
+            position: relative;
+            width: min(100%, 650px);
+            margin: 0;
+            padding: 22px 12px 12px;
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+            background: rgba(239,246,255,.35);
+        }
+
+        .org-children::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: 50%;
+            height: 22px;
+            border-left: 2px solid #93b4dd;
+        }
+
+        .org-children > .org-node::before {
+            content: '';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            width: 0;
+            height: 12px;
+            border-top: 0;
+            border-left: 2px solid #93b4dd;
+        }
+
+        .org-children > .org-node:first-child::before {
+            display: none;
+        }
+
+        .org-card {
+            width: min(100%, 510px);
+            padding: 10px 13px;
+            border-radius: 12px;
+            border-left: 3px solid #bfd6f8;
+            box-shadow: 0 2px 7px rgba(15,23,42,.06);
+        }
+
+        .org-card-root {
+            border-left: 4px solid #1d4ed8;
+            background: #eef5ff;
+        }
+
+        .org-card-main { gap: 10px; align-items: center; }
+
+        .org-avatar {
+            width: 42px;
+            height: 42px;
+            flex: 0 0 42px;
+            overflow: hidden;
+            border: 2px solid #dbeafe;
+            box-shadow: none;
+        }
+
+        .org-person-name {
+            font-size: .91rem;
+            line-height: 1.25;
+        }
+
+        .org-person-position {
+            margin-top: 2px;
+            font-size: .78rem;
+        }
+
+        .org-meta { margin-top: 5px; gap: 5px; }
+
+        .org-badge-area,.org-badge-count {
+            padding: 3px 7px;
+            font-size: .66rem;
+        }
+
+        .org-toggle {
+            width: 28px;
+            height: 28px;
+            flex: 0 0 28px;
+            border-radius: 7px;
+        }
+
+        @media(max-width:640px) {
+            .org-children { padding: 20px 6px 8px; }
+            .org-card { width: 100%; }
+        }
+
     </style>
 
     <div
@@ -405,83 +689,80 @@
 
             matchedCount() {
                 return this.nodes.filter(row => this.matches(row)).length;
+            },
+
+            printPdf() {
+                window.print();
             }
         }"
-        class="org-shell"
+        class="orgx-page"
     >
-        <section class="org-panel">
-            <div class="flex flex-wrap items-center justify-between gap-4">
+        <section class="orgx-hero">
+            <div class="orgx-hero-grid">
                 <div>
-                    <h2 class="org-heading">Organigrama corporativo</h2>
-                    <p class="org-muted mt-1">
-                        Estructura basada en los jefes directos registrados en RRHH.
-                    </p>
-                </div>
-                <div class="text-right">
-                    <div class="text-3xl font-bold text-gray-950 dark:text-white">
-                        {{ $chart['total'] }}
+                    <div class="orgx-title">Organigrama corporativo</div>
+                    <div class="orgx-subtitle">
+                        Vista ejecutiva de la estructura organizacional de Grupo Línea 7.
                     </div>
-                    <div class="org-muted">Empleados activos</div>
+                </div>
+
+                <div class="orgx-total">
+                    <div class="orgx-total-number">{{ $chart['total'] }}</div>
+                    <div class="orgx-total-label">Empleados activos</div>
                 </div>
             </div>
         </section>
 
-        <section class="org-area-grid">
+        <section class="orgx-areas">
             @foreach ($chart['areas'] as $areaItem)
                 <button
                     type="button"
-                    class="org-area-card"
+                    class="orgx-area"
                     x-on:click="area = area === @js($areaItem['name']) ? '' : @js($areaItem['name'])"
-                    x-bind:class="area === @js($areaItem['name'])
-                        ? 'org-area-card-selected'
-                        : ''"
+                    x-bind:class="area === @js($areaItem['name']) ? 'orgx-area-selected' : ''"
                     x-bind:aria-pressed="area === @js($areaItem['name'])"
                 >
-                    <div class="org-area-title">
-                        {{ $areaItem['name'] }}
-                    </div>
-                    <div class="org-area-number">
-                        {{ $areaItem['count'] }}
-                    </div>
-                    <div class="org-muted">colaboradores</div>
+                    <div class="orgx-area-name">{{ $areaItem['name'] }}</div>
+                    <div class="orgx-area-count">{{ $areaItem['count'] }}</div>
+                    <div class="orgx-subtitle">colaboradores</div>
                 </button>
             @endforeach
         </section>
 
-        <section class="org-panel">
-            <div class="org-toolbar">
+        <section class="orgx-toolbar">
+            <div class="orgx-toolbar-row">
                 <input
                     type="search"
                     x-model.debounce.200ms="query"
                     placeholder="Buscar empleado, puesto, departamento o jefe..."
-                    aria-label="Buscar empleado en organigrama"
-                    class="org-search"
+                    aria-label="Buscar en organigrama"
+                    class="orgx-search"
                 />
 
-                <button type="button" class="org-action"
-                    x-on:click="expandAll()">
+                <button type="button" class="orgx-btn orgx-btn-primary" wire:click="downloadPdf" wire:loading.attr="disabled" wire:target="downloadPdf">
+                    Descargar PDF
+                </button>
+
+                <button type="button" class="orgx-btn" x-on:click="expandAll()">
                     Expandir todo
                 </button>
 
-                <button type="button" class="org-action"
-                    x-on:click="collapseAll()">
+                <button type="button" class="orgx-btn" x-on:click="collapseAll()">
                     Contraer todo
                 </button>
 
-                <button type="button" class="org-action"
-                    x-on:click="resetFilters()">
+                <button type="button" class="orgx-btn" x-on:click="resetFilters()">
                     Restablecer
                 </button>
             </div>
 
-            <p class="org-muted mt-3">
+            <div class="orgx-hint">
                 <span x-text="matchedCount()"></span>
-                empleados coinciden con el filtro.
-                La búsqueda conserva visibles sus superiores.
-            </p>
+                empleados coinciden con el filtro. La búsqueda conserva visibles sus superiores para no perder el contexto.
+            </div>
         </section>
 
-        <section class="org-chart-canvas">
+        <section class="orgx-canvas">
             @if (count($roots))
                 <ul class="org-roots">
                     @foreach ($roots as $rootId)
@@ -493,15 +774,14 @@
                     @endforeach
                 </ul>
             @else
-                <div class="org-muted text-center">
+                <div class="orgx-footer">
                     No hay empleados activos para mostrar.
                 </div>
             @endif
         </section>
 
-        <p class="org-muted">
-            Vista de consulta. Los filtros y controles no modifican
-            empleados, departamentos ni jefes directos.
-        </p>
+        <div class="orgx-footer">
+            Vista de consulta. Los filtros y controles no modifican empleados, departamentos ni jefes directos.
+        </div>
     </div>
 </x-filament-panels::page>

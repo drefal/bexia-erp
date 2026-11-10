@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Employee;
+use Illuminate\Support\Facades\Storage;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
 
@@ -65,6 +66,12 @@ class EmployeeOrganizationChart extends Page
                     ?: $employee->department
                     ?: 'Sin departamento'
                 ),
+                'avatar_url' => filled($employee->avatar_path)
+                    && ! str_contains((string) $employee->avatar_path, '..')
+                    ? Storage::disk('public')->url(
+                        ltrim((string) $employee->avatar_path, '/')
+                    )
+                    : null,
                 'manager_id' => $employee->manager_employee_id
                     ? (int) $employee->manager_employee_id
                     : null,
@@ -164,4 +171,71 @@ class EmployeeOrganizationChart extends Page
             'total' => count($people),
         ];
     }
+
+    public function downloadPdf()
+    {
+        $payload = $this->chartPayload();
+        $rows = $payload['nodes'];
+
+        // Insertar imagenes locales validas como data URI para
+        // que Dompdf no dependa de peticiones HTTP externas.
+        foreach ($rows as &$row) {
+            $row['avatar_data'] = null;
+
+            $employee = Employee::query()
+                ->where('company_id', (int) (
+                    Filament::getTenant()?->getKey() ?? 0
+                ))
+                ->whereKey($row['id'])
+                ->first(['id', 'avatar_path']);
+
+            $path = (string) ($employee?->avatar_path ?? '');
+
+            if ($path === '' || str_contains($path, '..')) {
+                continue;
+            }
+
+            $disk = Storage::disk('public');
+            $path = ltrim($path, '/');
+
+            if (! $disk->exists($path)) {
+                continue;
+            }
+
+            $mime = $disk->mimeType($path);
+
+            if (! in_array($mime, ['image/jpeg', 'image/png'], true)) {
+                continue;
+            }
+
+            if ($disk->size($path) > 250000) {
+                continue;
+            }
+
+            $row['avatar_data'] = 'data:' . $mime . ';base64,'
+                . base64_encode($disk->get($path));
+        }
+        unset($row);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
+            'filament.pages.employee-organization-pdf',
+            [
+                'rows' => $rows,
+                'total' => count($rows),
+                'generatedAt' => now()->format('d/m/Y H:i'),
+            ]
+        )->setPaper('a4', 'landscape');
+
+        $filename = 'organigrama-gl7-'
+            . now()->format('Ymd-His') . '.pdf';
+
+        return response()->streamDownload(
+            static function () use ($pdf): void {
+                echo $pdf->output();
+            },
+            $filename,
+            ['Content-Type' => 'application/pdf']
+        );
+    }
+
 }
