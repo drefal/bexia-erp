@@ -12352,7 +12352,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         html += '<div style="border-top:1px solid #e2e8f0;margin-top:10px;padding-top:10px;display:grid;gap:5px;">';
         html += '<div style="display:flex;justify-content:space-between;"><span>Efectivo contado</span><strong id="v5485-counted-cash">' + money(0) + '</strong></div>';
-        html += '<div style="display:flex;justify-content:space-between;"><span>Diferencia</span><strong id="v5485-cash-difference">' + money(0) + '</strong></div>';
+        html += '<div style="display:flex;justify-content:space-between;"><span>Diferencia efectivo</span><strong id="v5485-cash-only-difference" style="color:#b91c1c;">' + money(0) + '</strong></div>';
+        html += '<div style="display:flex;justify-content:space-between;"><span>Diferencia global</span><strong id="v5485-cash-difference">' + money(0) + '</strong></div>';
         html += '</div>';
 
         html += '<div style="margin-top:10px;">';
@@ -12413,11 +12414,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const countedBox = document.getElementById('v5485-counted-cash');
         const diffBox = document.getElementById('v5485-cash-difference');
+        const cashOnlyDiffBox = document.getElementById('v5485-cash-only-difference');
 
         if (countedBox) countedBox.textContent = money(counted);
+        const cashOnlyDiff = Number((counted - expected).toFixed(2));
+        if (cashOnlyDiffBox) {
+            cashOnlyDiffBox.textContent = money(cashOnlyDiff);
+            cashOnlyDiffBox.style.color = Math.abs(cashOnlyDiff) > 0.009 ? '#b91c1c' : '#166534';
+        }
+        const globalAvailable = Boolean(lastCloseSummary && lastCloseSummary.reconciliation);
         if (diffBox) {
-            diffBox.textContent = money(diff);
-            diffBox.style.color = Math.abs(diff) > 0.009 ? '#b91c1c' : '#166534';
+            diffBox.textContent = globalAvailable ? money(diff) : 'No disponible';
+            diffBox.style.color = !globalAvailable ? '#64748b' : (Math.abs(diff) > 0.009 ? '#b91c1c' : '#166534');
         }
 
         const noteLabel = document.getElementById('v5485-closing-note-label');
