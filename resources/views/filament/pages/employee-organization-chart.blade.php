@@ -1153,6 +1153,79 @@
                 grid-template-columns: minmax(0, 1fr);
             }
         }
+        /* ORG02 FIX10 - Separacion estructural */
+
+        /*
+         * La vista general representa un solo nivel:
+         * direccion y sus reportes directos.
+         *
+         * Los subordinados de segundo nivel NO deben
+         * aumentar la altura de las columnas.
+         */
+        .orgx-canvas:not(.orgx-filtering)
+        .org-node-root > .org-children
+        > .org-node > .org-children {
+            display: none !important;
+        }
+
+        /*
+         * Las columnas mantienen el mismo ancho.
+         * Cada elemento de la cuadricula representa
+         * exclusivamente un colaborador directo.
+         */
+        .orgx-canvas:not(.orgx-filtering)
+        .org-node-root > .org-children {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            align-items: stretch;
+            gap: 14px 16px;
+        }
+
+        /*
+         * Los encabezados ocupan toda la fila,
+         * sin desplazar las tarjetas.
+         */
+        .orgx-canvas:not(.orgx-filtering)
+        .org-node-root > .org-children > .org-team-label {
+            grid-column: 1 / -1;
+        }
+
+        /*
+         * Los responsables que tienen equipo
+         * mantienen su enlace para navegar
+         * a la vista enfocada.
+         */
+        .orgx-canvas:not(.orgx-filtering)
+        .org-node-root > .org-children > .org-node {
+            width: 100%;
+            min-width: 0;
+            align-items: stretch;
+        }
+
+        /*
+         * Mientras se busca, se conserva el
+         * comportamiento original que permite
+         * mostrar coincidencias en niveles inferiores.
+         */
+        .orgx-canvas.orgx-filtering
+        .org-node-root > .org-children
+        > .org-node > .org-children {
+            display: flex;
+        }
+
+        @media (max-width: 1100px) {
+            .orgx-canvas:not(.orgx-filtering)
+            .org-node-root > .org-children {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 700px) {
+            .orgx-canvas:not(.orgx-filtering)
+            .org-node-root > .org-children {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
     </style>
 
 {{-- ORG02 FIX8 - uniformar tarjetas focus grid --}}
@@ -1612,7 +1685,7 @@ document.addEventListener('DOMContentLoaded', function () {
             </template>
         </section>
 
-        <section class="orgx-canvas" x-show="focusId === null">
+        <section class="orgx-canvas" x-show="focusId === null" x-bind:class="{ 'orgx-filtering': filtering() }">
 
             @if (count($roots))
                 <ul class="org-roots">
