@@ -1059,6 +1059,100 @@
             color: #e2e8f0;
         }
 
+        /* ORG02 FIX9 - Tarjetas generales uniformes */
+
+        /*
+         * El grid general es distinto del grid enfocado.
+         * Los doce responsables directos usan tarjetas
+         * iguales, independientemente de sus subordinados.
+         */
+        .org-node-root > .org-children {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            align-items: stretch;
+            column-gap: 14px;
+            row-gap: 14px;
+        }
+
+        .org-node-root > .org-children > .org-node {
+            min-width: 0;
+            width: 100%;
+            align-items: stretch;
+        }
+
+        /*
+         * La tarjeta principal tiene una altura uniforme.
+         * Los equipos expandidos siguen debajo de ella.
+         */
+        .org-node-root > .org-children
+        > .org-node > .org-card {
+            box-sizing: border-box;
+            width: 100%;
+            height: 116px;
+            min-height: 116px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            padding: 11px 12px;
+            overflow: visible;
+        }
+
+        .org-node-root > .org-children
+        > .org-node > .org-card > .org-card-main {
+            width: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+            align-items: flex-start;
+        }
+
+        .org-node-root > .org-children
+        > .org-node > .org-card .org-card-body {
+            min-width: 0;
+        }
+
+        .org-node-root > .org-children
+        > .org-node > .org-card .org-person-name,
+        .org-node-root > .org-children
+        > .org-node > .org-card .org-person-position {
+            overflow-wrap: anywhere;
+        }
+
+        /*
+         * Quienes tienen subordinados muestran la accion
+         * alineada abajo. Las demas tarjetas conservan
+         * exactamente la misma altura.
+         */
+        .org-node-root > .org-children
+        > .org-node > .org-card > .orgx-focus-open {
+            display: block;
+            align-self: flex-start;
+            flex: 0 0 auto;
+            margin-top: auto !important;
+            margin-bottom: 0 !important;
+            padding-top: 7px;
+            line-height: 1.25;
+        }
+
+        /*
+         * Los elementos internos no heredan la altura fija
+         * del nivel directivo.
+         */
+        .org-node-root > .org-children
+        > .org-node > .org-children .org-card {
+            height: auto;
+            min-height: 0;
+        }
+
+        @media (max-width: 1100px) {
+            .org-node-root > .org-children {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 700px) {
+            .org-node-root > .org-children {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
     </style>
 
 {{-- ORG02 FIX8 - uniformar tarjetas focus grid --}}
