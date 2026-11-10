@@ -13228,6 +13228,7 @@ document.addEventListener('DOMContentLoaded', function () {
         },0);
         const reconciled = counted + Number(recon.cash_out||0)
             - Number((lastCloseSummary.totals||{}).cash_in_total||0)
+            - Number((lastCloseSummary.totals||{}).opening_cash_amount||0)
             + otherTotal;
         const registeredTotal = Object.values(registered).reduce((sum,n) => sum+Number(n||0),0);
         const diff = Number((reconciled-registeredTotal).toFixed(2));
