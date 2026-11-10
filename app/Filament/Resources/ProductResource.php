@@ -3575,6 +3575,12 @@ variants_inner_table')
             ->modifyQueryUsing(fn ($query) => $query
                 ->with(['category', 'unit']))
             ->deferLoading()
+            // BEXIA_V5836_INV_SEARCH_PROD_FIX1
+            // Persistencia de busqueda y filtros.
+            ->persistSearchInSession()
+            ->persistFiltersInSession()
+            ->persistSortInSession()
+            ->persistColumnSearchesInSession()
             ->defaultPaginationPageOption(25)
             ->paginationPageOptions([10, 25, 50])
             ->columns([

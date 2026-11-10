@@ -50,7 +50,15 @@ class CreateExpenseReport extends CreateRecord
                 $advance->employee_id,
             'purpose' =>
                 'Comprobación del anticipo '
-                . $advance->number,
+                . (
+                    // GASTOS10N17A_R1_OFFICIAL_ANT_PURPOSE
+                    app(\App\Support\Expenses\PettyCashVoucherService::class)
+                        ->existing(
+                            \App\Support\Expenses\PettyCashVoucherService::TYPE_ADVANCE,
+                            (int) $advance->id
+                        )
+                    ?: $advance->number
+                ),
             'notes' => null,
             'lines' => [
                 [
@@ -138,6 +146,41 @@ class CreateExpenseReport extends CreateRecord
         }
 
         return $data;
+    }
+
+    // GASTOS10N12B_R3_CREATE_COM
+    // Folio definitivo en la transaccion de creacion.
+    protected function handleRecordCreation(
+        array $data
+    ): \Illuminate\Database\Eloquent\Model {
+        return \Illuminate\Support\Facades\DB::transaction(
+            function () use ($data): ExpenseReport {
+                $record = ExpenseReport::query()->create($data);
+
+                if (
+                    (string) $record->type
+                    === ExpenseReport::TYPE_PETTY_CASH
+                ) {
+                    if (! $record->petty_cash_fund_id) {
+                        throw new \RuntimeException(
+                            'La comprobacion de caja chica requiere una caja.'
+                        );
+                    }
+
+                    app(
+                        \App\Support\Expenses\PettyCashVoucherService::class
+                    )->issue(
+                        (int) $record->company_id,
+                        (int) $record->petty_cash_fund_id,
+                        \App\Support\Expenses\PettyCashVoucherService::TYPE_REPORT,
+                        (int) $record->id,
+                        $record->created_at
+                    );
+                }
+
+                return $record;
+            }
+        );
     }
 
     protected function afterCreate(): void

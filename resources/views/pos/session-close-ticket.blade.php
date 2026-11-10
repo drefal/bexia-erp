@@ -998,6 +998,9 @@
 
 <div class="line"></div>
 
+{{-- BEXIA_V5836_POS_AREAS3I --}}
+@include('pos.partials.session-sales-areas')
+
 <div class="bold">Resumen de ventas y cobros</div>
 
 {{-- BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS --}}

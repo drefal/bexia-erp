@@ -206,8 +206,13 @@ class ExpenseReportResource extends Resource
                     $fund->id =>
                         ($fund->number ? $fund->number . ' · ' : '')
                         . $fund->name
-                        . ' · Disponible $'
-                        . number_format((float) $fund->operational_balance, 2),
+                        . (ExpenseAccess::isAdmin()
+                            ? ' · Disponible $'
+                                . number_format(
+                                    (float) $fund->operational_balance,
+                                    2
+                                )
+                            : ''),
                 ];
             })
             ->toArray();
@@ -301,7 +306,7 @@ class ExpenseReportResource extends Resource
                         Forms\Components\DatePicker::make('report_date')
                             ->label('Fecha de comprobación')
                             ->default(now()->toDateString())
-                            ->native(false)
+                            ->native(true)
                             ->required(),
 
                         Forms\Components\Select::make('petty_cash_fund_id')
@@ -428,7 +433,7 @@ class ExpenseReportResource extends Resource
                                 Forms\Components\DatePicker::make('expense_date')
                                     ->label('Fecha del gasto')
                                     ->default(now()->toDateString())
-                                    ->native(false)
+                                    ->native(true)
                                     ->required(),
 
                                 Forms\Components\TextInput::make('supplier_name')
@@ -887,7 +892,11 @@ class ExpenseReportResource extends Resource
                                                 }
 
                                                 $existing = $query
-                                                    ->with('report:id,number')
+                                                    // GASTOS11S_UUID
+                                                     ->whereHas('report', function ($q) {
+                                                         return $q->where('status', '!=', 'cancelled');
+                                                     })
+                                                     ->with('report:id,number')
                                                     ->first();
 
                                                 if (! $existing) {
@@ -1152,9 +1161,51 @@ class ExpenseReportResource extends Resource
     {
         return $table
             ->columns([
+                // GASTOS10N8B_TABLE_COM
                 Tables\Columns\TextColumn::make('number')
                     ->label('Folio')
-                    ->searchable()
+                    ->formatStateUsing(
+                        fn (?string $state, ExpenseReport $record): string =>
+                            app(\App\Support\Expenses\PettyCashVoucherService::class)->existing('COM', (int) $record->id)
+                            ?: ($state ?: 'Sin folio')
+                    )
+                    ->description(null)
+                    ->searchable(
+                        query: function (
+                            Builder $query,
+                            string $search
+                        ): Builder {
+                            return $query->where(
+                                function (Builder $q) use ($search): void {
+                                    $q->where(
+                                        'expense_reports.number',
+                                        'ilike',
+                                        '%' . $search . '%'
+                                    )->orWhereExists(
+                                        function (
+                                            \Illuminate\Database\Query\Builder $sub
+                                        ) use ($search): void {
+                                            $sub->selectRaw('1')
+                                                ->from('petty_cash_vouchers')
+                                                ->whereColumn(
+                                                    'petty_cash_vouchers.source_id',
+                                                    'expense_reports.id'
+                                                )
+                                                ->where(
+                                                    'petty_cash_vouchers.source_type',
+                                                    'expense_report'
+                                                )
+                                                ->where(
+                                                    'petty_cash_vouchers.folio',
+                                                    'ilike',
+                                                    '%' . $search . '%'
+                                                );
+                                        }
+                                    );
+                                }
+                            );
+                        }
+                    )
                     ->placeholder('Sin folio'),
 
                 Tables\Columns\TextColumn::make('report_date')
@@ -1243,6 +1294,52 @@ class ExpenseReportResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make()
                     ->label('Ver'),
+
+                Tables\Actions\Action::make('cancelDraftDocument')
+                    ->label('Cancelar')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(
+                        fn (\App\Models\ExpenseReport $record): bool =>
+                            \App\Support\Expenses\ExpenseDraftCancellationService::canCancel($record)
+                    )
+                    ->modalHeading('Cancelar comprobación en borrador')
+                    ->modalDescription(
+                        'El documento y su historial se conservarán.'
+                    )
+                    ->form([
+                        \Filament\Forms\Components\Textarea::make('reason')
+                            ->label('Motivo de cancelación')
+                            ->required()
+                            ->maxLength(1000)
+                            ->rows(3),
+                    ])
+                    ->modalSubmitActionLabel('Confirmar cancelación')
+                    ->action(function (
+                        \App\Models\ExpenseReport $record,
+                        array $data
+                    ): void {
+                        try {
+                            app(
+                                \App\Support\Expenses\ExpenseDraftCancellationService::class
+                            )->cancel(
+                                $record,
+                                (string) ($data['reason'] ?? '')
+                            );
+
+                            \Filament\Notifications\Notification::make()
+                                ->success()
+                                ->title('Comprobación cancelada')
+                                ->send();
+                        } catch (\Throwable $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('No se pudo cancelar')
+                                ->body($e->getMessage())
+                                ->persistent()
+                                ->send();
+                        }
+                    }),
 
                 Tables\Actions\EditAction::make()
                     ->visible(

@@ -110,6 +110,101 @@
         </div>
         @endif
 
+        {{-- BEXIA_V5836_POS_REFUND_FIX2B8P9C --}}
+        @if($canViewSessionRefunds ?? false)
+        <div style="border:1px solid #e5e7eb;border-radius:16px;background:#fff;overflow:hidden;">
+            <div style="padding:14px 16px;border-bottom:1px solid #e5e7eb;background:#f8fafc;">
+                <div style="font-weight:950;color:#111827;">
+                    Devoluciones realizadas en esta sesión
+                </div>
+                <div style="font-size:13px;color:#64748b;margin-top:3px;">
+                    Se incluyen las devoluciones registradas durante esta sesión,
+                    aunque correspondan a ventas de días anteriores.
+                    La confirmación bancaria conserva su propia fecha.
+                </div>
+            </div>
+
+            @if(empty($sessionRefundLedger['refunds']))
+                <div style="padding:20px;color:#64748b;">
+                    Esta sesión no tiene devoluciones registradas.
+                </div>
+            @else
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                        <thead>
+                            <tr style="background:#f8fafc;">
+                                <th style="text-align:left;padding:10px;">Fecha devolución</th>
+                                <th style="text-align:left;padding:10px;">Devolución</th>
+                                <th style="text-align:left;padding:10px;">Ticket original</th>
+                                <th style="text-align:left;padding:10px;">Usuario</th>
+                                <th style="text-align:left;padding:10px;">Métodos y estados</th>
+                                <th style="text-align:right;padding:10px;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($sessionRefundLedger['refunds'] as $refund)
+                            <tr>
+                                <td style="padding:10px;border-top:1px solid #e5e7eb;white-space:nowrap;">
+                                    {{ $refund['created_at'] }}
+                                </td>
+                                <td style="padding:10px;border-top:1px solid #e5e7eb;">
+                                    <strong>{{ $refund['number'] }}</strong>
+                                    <div style="font-size:11px;color:#64748b;">
+                                        {{ $refund['type'] }} / {{ $refund['status'] }}
+                                    </div>
+                                </td>
+                                <td style="padding:10px;border-top:1px solid #e5e7eb;">
+                                    <a href="{{ \App\Filament\Resources\PosTicketResource::getUrl('view', ['record' => $refund['ticket_id']]) }}"
+                                       style="color:#2563eb;text-decoration:underline;">
+                                        {{ $refund['ticket_number'] ?: ('#' . $refund['ticket_id']) }}
+                                    </a>
+                                </td>
+                                <td style="padding:10px;border-top:1px solid #e5e7eb;">
+                                    {{ $refund['user'] }}
+                                </td>
+                                <td style="padding:10px;border-top:1px solid #e5e7eb;">
+                                    @forelse($refund['methods'] as $payment)
+                                        <div style="margin-bottom:6px;">
+                                            <strong>{{ $payment['method'] }}</strong>:
+                                            ${{ number_format($payment['amount'], 2) }}
+                                            <span style="color:{{ $payment['status'] === 'pending' ? '#b45309' : '#15803d' }};">
+                                                {{ $payment['status'] === 'pending' ? 'Pendiente' : 'Reembolsado' }}
+                                            </span>
+                                            @if($payment['confirmed_at'] !== '')
+                                                <div style="font-size:11px;color:#64748b;">
+                                                    Confirmación externa: {{ $payment['confirmed_at'] }}
+                                                    · Usuario #{{ $payment['confirmed_by'] ?? 'N/D' }}
+                                                </div>
+                                            @endif
+                                        </div>
+                                    @empty
+                                        <span style="color:#b45309;">
+                                            Sin detalle de métodos disponible
+                                        </span>
+                                    @endforelse
+                                </td>
+                                <td style="padding:10px;border-top:1px solid #e5e7eb;text-align:right;font-weight:800;">
+                                    ${{ number_format($refund['amount'], 2) }}
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                        <tfoot>
+                            <tr style="background:#f8fafc;">
+                                <td colspan="5" style="padding:12px;font-weight:900;">
+                                    Total de devoluciones de la sesión
+                                </td>
+                                <td style="padding:12px;text-align:right;font-weight:900;">
+                                    ${{ number_format($sessionRefundLedger['total'], 2) }}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            @endif
+        </div>
+        @endif
+
         @if($canViewPriceListChanges ?? false)
         <div style="border:1px solid #e5e7eb; border-radius:16px; background:#fff; overflow:hidden;">
             <div style="padding:14px 16px; border-bottom:1px solid #e5e7eb; background:#f8fafc;">

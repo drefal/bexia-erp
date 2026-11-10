@@ -259,4 +259,11 @@ class Company extends Model implements HasAvatar
     }
 
 
+
+
+    public function payrollGroups()
+    {
+        return $this->hasMany(\App\Models\PayrollGroup::class);
+    }
+
 }

@@ -15,6 +15,7 @@ class PettyCashFund extends Model
         'funding_treasury_account_id',
         'number',
         'name',
+        'location',
         'authorized_amount',
         'operational_balance',
         'currency_code',

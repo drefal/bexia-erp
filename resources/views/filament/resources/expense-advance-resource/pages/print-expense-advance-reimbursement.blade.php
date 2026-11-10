@@ -25,7 +25,7 @@
     <meta charset="utf-8">
 
     <title>
-        Vale reembolso {{ $advance->number }}
+        Vale de Caja - Reembolso {{ $voucherFolio ?: $advance->number }}
     </title>
 
     <style>
@@ -117,6 +117,52 @@
                 width: 72mm;
             }
         }
+
+        /* GASTOS10N6B: encabezado uniforme de vales */
+        .bexia-document-title {
+            margin-top: 4mm;
+            padding: 2.5mm 0;
+            border-top: 1.5px solid #111;
+            border-bottom: 1.5px solid #111;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .bexia-voucher-number {
+            margin-top: 2mm;
+            font-size: 12px;
+            font-weight: 900;
+            text-align: center;
+            overflow-wrap: anywhere;
+        }
+
+        .bexia-fund-name {
+            margin-top: 2mm;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
+        .bexia-fund-location {
+            margin-top: 1mm;
+            text-align: center;
+            font-size: 10px;
+            overflow-wrap: anywhere;
+        }
+
+        .bexia-original-reference {
+            margin-top: 1mm;
+            text-align: center;
+            font-size: 9px;
+            font-weight: 400;
+            overflow-wrap: anywhere;
+        }
+
+        .bexia-voucher-number {
+            overflow-wrap: anywhere;
+        }
     </style>
 </head>
 <body>
@@ -134,13 +180,23 @@
         {{ $advance->company?->name ?? 'Bexia ERP' }}
     </div>
 
-    <div class="subtitle">
-        VALE DE REEMBOLSO
+    <div class="bexia-fund-name">
+        {{ $advance->pettyCashFund?->name ?? 'Caja sin asignar' }}
     </div>
 
-    <div>
-        {{ $advance->number }}
+    <div class="bexia-fund-location">
+        Ubicación:
+        {{ $advance->pettyCashFund?->location ?: 'No especificada' }}
     </div>
+
+    <div class="subtitle bexia-document-title">
+        VALE DE CAJA - REEMBOLSO
+    </div>
+
+    <div class="bexia-voucher-number">
+        {{ $voucherFolio ?: $advance->number }}
+    </div>
+
 </div>
 
 <div class="line"></div>

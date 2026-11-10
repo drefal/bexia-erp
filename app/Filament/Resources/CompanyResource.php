@@ -393,6 +393,7 @@ public static function canCreate(): bool
                 ->columns(2),
 
 
+
             Section::make('Branding')
                 ->extraAttributes(['class' => 'bexia-company-section bexia-company-branding-section'])
                 ->schema([

@@ -1445,6 +1445,9 @@ try {
     );
 ?>
 
+{{-- BEXIA_V5836_POS_AREAS3I --}}
+@include('pos.partials.session-sales-areas')
+
 <h2>Resumen de ventas y cobros</h2>
 
 {{-- BEXIA_V5836G5H7C3_VISUAL_ADVANCE_REFUNDS --}}
@@ -1581,7 +1584,7 @@ try {
 <!-- V5.49.7K_RESUMEN_LISTAS -->
 <?php if (isset($v5497fPriceListTotals) && $v5497fPriceListTotals->count()): ?>
 
-@if(isset($v5507bRefunds) && $v5507bRefunds->count())
+@if(false && isset($v5507bRefunds) && $v5507bRefunds->count())
     <h2 id="v5507b-refunds-section">Devoluciones de la sesión</h2>
 
     <table style="width:100%; border-collapse:collapse; margin-top:8px;">
@@ -1622,7 +1625,7 @@ try {
 @endif
 
 
-@if(isset($v5507cRefunds) && $v5507cRefunds->count())
+@if(false && isset($v5507cRefunds) && $v5507cRefunds->count())
     <h2 id="v5507c-refunds-section">Devoluciones de la sesión</h2>
 
     <table style="width:100%; border-collapse:collapse; margin-top:8px;">
@@ -1663,7 +1666,7 @@ try {
 @endif
 
 
-<?php if (isset($v5507eRefunds) && $v5507eRefunds->count()): ?>
+<?php if (false && isset($v5507eRefunds) && $v5507eRefunds->count()): ?>
 <h2 id="v5507e-refunds-section">Devoluciones de la sesión</h2>
 
 <table>
@@ -1696,6 +1699,16 @@ try {
     </tr>
 </table>
 <?php endif; ?>
+
+{{-- BEXIA_V5836_POS_REFUND_FIX2B8P9D3 --}}
+@php
+    $refundLedger = \App\Support\PosSessionRefundDetail::build(
+        (int) ($summary['session']['id'] ?? 0)
+    );
+@endphp
+@include('pos.partials.session-refund-detail', [
+    'refundLedger' => $refundLedger,
+])
 
 <h2>Ventas por lista de precios</h2>
     <table>

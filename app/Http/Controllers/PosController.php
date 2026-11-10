@@ -3311,7 +3311,36 @@ abort_if(! $sessionRow, 404);
         }
     }
 
-    $difference = round((float) $request->input('closing_difference', 0), 2);
+
+
+    // BEXIA_RECON5: la diferencia la calcula siempre el servidor.
+    if ((string)($row->status ?? '') !== 'open') {
+        return redirect()->back()->with('error', 'La sesión ya no está abierta.');
+    }
+    $summaryForClose = $this->v5484BuildCloseSessionSummary($session);
+    $actualMethods = \App\Support\PosCloseReconciliation::validateActual(
+        $request->input('close_payment_actual', [])
+    );
+    $cashCountRaw = json_decode((string)$request->input('cash_count','[]'), true);
+    if (!is_array($cashCountRaw) || count($cashCountRaw) < 1 || count($cashCountRaw) > 40) {
+        return redirect()->back()->with('error','El conteo de efectivo no es válido.');
+    }
+    $cashCalculated = 0.0;
+    foreach ($cashCountRaw as $cashRow) {
+        if (!is_array($cashRow) || !isset($cashRow['value'],$cashRow['quantity'])
+            || !is_numeric($cashRow['value']) || !is_numeric($cashRow['quantity'])
+            || (float)$cashRow['value'] <= 0 || (float)$cashRow['value'] > 10000
+            || (float)$cashRow['quantity'] < 0 || (float)$cashRow['quantity'] > 100000
+            || floor((float)$cashRow['quantity']) !== (float)$cashRow['quantity']) {
+            return redirect()->back()->with('error','El conteo de efectivo contiene valores inválidos.');
+        }
+        $cashCalculated += (float)$cashRow['value'] * (float)$cashRow['quantity'];
+    }
+    $cashCalculated = round($cashCalculated,2);
+    $reconciliation = \App\Support\PosCloseReconciliation::calculate(
+        $summaryForClose, $actualMethods, $cashCalculated
+    );
+    $difference = $reconciliation['difference'];
     $note = trim((string) $request->input('closing_note', ''));
 
     if (abs($difference) > 0.009 && $note === '') {
@@ -3327,7 +3356,7 @@ abort_if(! $sessionRow, 404);
             ->with('error', 'Hay diferencia en el corte. La nota de cierre es obligatoria.');
     }
 
-    $closingAmount = $request->input('closing_amount', null);
+    $closingAmount = $cashCalculated;
     $cashCount = $request->input('cash_count', null);
 
     $notes = trim((string) ($row->notes ?? ''));
@@ -3413,6 +3442,8 @@ abort_if(! $sessionRow, 404);
         'closing_note' => $note,
         'closing_difference' => $difference,
         'cash_count' => $cashCount,
+        'close_payment_actual' => $reconciliation['actual'],
+        'close_reconciliation' => $reconciliation,
         'closed_from' => 'pos_close_modal',
     ];
 
@@ -6717,6 +6748,27 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             }
         }
 
+        // BEXIA_V5836_POS_ANT4_PRINT_ADVANCE
+        // Mismo criterio de pagos confirmados usado en el modal PDV.
+        $pendingTicketAdvancePaid = 0.0;
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('pos_order_payments')) {
+            $pendingTicketAdvancePaid = round(
+                (float) \Illuminate\Support\Facades\DB::table('pos_order_payments')
+                    ->where('pos_order_id', (int) $orderRow->id)
+                    ->where('status', 'paid')
+                    ->sum('amount'),
+                2
+            );
+        }
+
+        $pendingTicketAdvancePaid = max(0.0, $pendingTicketAdvancePaid);
+
+        $pendingTicketBalance = round(
+            max(0.0, (float) ($orderRow->total ?? 0) - $pendingTicketAdvancePaid),
+            2
+        );
+
         return view('pos.pending-ticket-print', [
             'order' => $orderRow,
             'lines' => $lines,
@@ -6725,6 +6777,8 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             'logoUrl' => $logoUrl,
             'printedAt' => now(),
             'reprintCount' => $reprintCount ?? 0,
+            'pendingTicketAdvancePaid' => $pendingTicketAdvancePaid,
+            'pendingTicketBalance' => $pendingTicketBalance,
         ]);
     }
     public function printPaidTicket(\Illuminate\Http\Request $request, int $order)
@@ -12522,6 +12576,7 @@ return response()->json([
         abort_unless(auth()->check(), 403);
 
         $summary = $this->v5484BuildCloseSessionSummary($session);
+        $summary['reconciliation'] = \App\Support\PosCloseReconciliation::calculate($summary);
 
         return response()->json([
             'ok' => true,
@@ -12683,6 +12738,7 @@ return response()->json([
             }
 
             $summary['session']['closing_cash_count'] = $clean;
+            $summary['session']['close_payment_actual'] = \App\Support\PosCloseReconciliation::validateActual($request->input('preview_payment_actual', []));
             $summary['session']['closing_note'] = trim(
                 (string) $request->input('preview_closing_note', '')
             );
@@ -13278,6 +13334,66 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             }
         }
 
+        // BEXIA_V5836_POS_REFUND_FIX2B8L
+        // Separar reembolsos externos pendientes sin alterar
+        // el importe de devolucion reconocido sobre las ventas.
+        $pendingRefundsTotal = 0.0;
+
+        if (
+            isset($refundRows)
+            && $refundRows->isNotEmpty()
+            && \Illuminate\Support\Facades\Schema::hasTable(
+                'pos_order_refund_payments'
+            )
+        ) {
+            $refundAmounts = $refundRows->mapWithKeys(
+                fn ($refund) => [
+                    (int) $refund->id => round(
+                        abs((float) ($refund->payment_total ?? 0)),
+                        2
+                    ),
+                ]
+            );
+
+            $pendingRows = \Illuminate\Support\Facades\DB::table(
+                'pos_order_refund_payments'
+            )
+                ->whereIn(
+                    'pos_order_refund_id',
+                    $refundAmounts->keys()->all()
+                )
+                ->where('status', 'pending')
+                ->select('pos_order_refund_id')
+                ->selectRaw('SUM(ABS(amount)) AS pending_amount')
+                ->groupBy('pos_order_refund_id')
+                ->get();
+
+            foreach ($pendingRows as $pendingRow) {
+                $refundId = (int) $pendingRow->pos_order_refund_id;
+                $maximum = (float) (
+                    $refundAmounts->get($refundId) ?? 0
+                );
+
+                $pendingRefundsTotal += min(
+                    $maximum,
+                    round(
+                        abs((float) $pendingRow->pending_amount),
+                        2
+                    )
+                );
+            }
+        }
+
+        $pendingRefundsTotal = min(
+            $refundedTotal,
+            round($pendingRefundsTotal, 2)
+        );
+
+        $completedRefundsTotal = round(
+            $refundedTotal - $pendingRefundsTotal,
+            2
+        );
+
         $netSettledSalesTotal =
             round(
                 $settledSalesTotal
@@ -13288,7 +13404,7 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
         $netCashflowTotal =
             round(
                 $paymentsTotal
-                - $refundedTotal,
+                - $completedRefundsTotal,
                 2
             );
 
@@ -13580,6 +13696,10 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                     $outstandingAdvanceTotal,
                 'refunded_total' =>
                     $refundedTotal,
+                'pending_refunds_total' =>
+                    $pendingRefundsTotal,
+                'completed_refunds_total' =>
+                    $completedRefundsTotal,
                 'advance_refunds_total' =>
                     $advanceRefundsTotal,
                 'sale_refunds_total' =>
@@ -13608,7 +13728,26 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                     'id' => (int) $row->id,
                     'number' => (string) ($row->number ?? ''),
                     'type' => (string) ($row->type ?? ''),
-                    'type_label' => (string) ($row->type ?? '') === 'cash_in' ? 'Entrada' : 'Retiro',
+                    'type_label' => (string) ($row->type ?? '') === 'cash_in'
+                        ? 'Entrada'
+                        : (
+                            (function () use ($row) {
+                                $meta = json_decode(
+                                    (string) ($row->metadata ?? ''),
+                                    true
+                                );
+                                $meta = is_array($meta) ? $meta : [];
+
+                                $isRefund =
+                                    ($meta['source'] ?? '') === 'pos_ticket_multimethod_refund'
+                                    || !empty($meta['pos_order_refund_id'])
+                                    || !empty($meta['refund_payment_ids']);
+
+                                return $isRefund
+                                    ? 'Devolución en efectivo'
+                                    : 'Retiro';
+                            })()
+                        ),
                     'amount' => round((float) ($row->amount ?? 0), 2),
                     'reason' => (string) ($row->reason ?? ''),
                     'performed_by_name' => (string) ($row->performed_by_name ?? ''),
@@ -14019,25 +14158,7 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
         $destinationTreasuryAccountId = null;
 
         try {
-            $movementId = \Illuminate\Support\Facades\DB::transaction(function () use (
-                $sessionRow,
-                $pos,
-                $type,
-                $amount,
-                $cashBreakdown,
-                $reason,
-                $notes,
-                $supervisorEmployeeId,
-                $supervisorName,
-                $number,
-                $user,
-                $bexiaAccess9CashTerminal,
-                $bexiaAccess9SupervisorPin,
-                &$treasuryTransferRequestId,
-                &$treasuryStatus,
-                &$treasuryMessage,
-                &$destinationTreasuryAccountId
-            ) {
+            $movementId = \Illuminate\Support\Facades\DB::transaction(function () use ($sessionRow, $pos, $type, $cashBreakdown, $amount, $reason, $notes, $supervisorEmployeeId, $supervisorName, $number, $user, $bexiaAccess9CashTerminal, $bexiaAccess9SupervisorPin, &$treasuryTransferRequestId, &$treasuryStatus, &$treasuryMessage, &$destinationTreasuryAccountId) {
                 $bexiaAccess9CashShiftId = null;
                 $bexiaAccess9CashEmployeeId = null;
 
@@ -14244,6 +14365,10 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                     'movement_at' => now(),
                     'metadata' => json_encode([
                         'source' => 'pos_close_cash_control',
+                        // BEXIA_V5836_CASH_DENOMS_PROD_METADATA
+                        'cash_denominations' => $type === 'cash_out' ? $cashBreakdown : null,
+                        'cash_denominations_total' => $type === 'cash_out' ? $amount : null,
+                        'cash_denominations_version' => $type === 'cash_out' ? 1 : null,
                         ...($bexiaAccess9CashShiftId !== null ? [
                             'pos_cashier_shift_id' => $bexiaAccess9CashShiftId,
                             'performed_by_employee_id' => $bexiaAccess9CashEmployeeId,
@@ -14978,6 +15103,7 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                 trim((string) $request->input('preview_closing_note', ''));
 
             $summary['session']['closing_cash_count'] = $cleanRows;
+            $summary['session']['close_payment_actual'] = \App\Support\PosCloseReconciliation::validateActual($request->input('preview_payment_actual', []));
             $summary['session']['closing_note'] =
                 $closePayload['closing_note'];
         }

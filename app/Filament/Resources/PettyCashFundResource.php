@@ -133,6 +133,14 @@ class PettyCashFundResource extends Resource
                             'Si se deja vacío al crear, se genera automáticamente.'
                         ),
 
+                    Forms\Components\TextInput::make('location')
+                        ->label('Ubicación')
+                        ->placeholder('Ej. C2 Dirección General')
+                        ->helperText(
+                            'Lugar físico donde se encuentra la caja chica.'
+                        )
+                        ->maxLength(255),
+
                     Forms\Components\TextInput::make('authorized_amount')
                         ->label('Monto autorizado')
                         ->numeric()
@@ -747,6 +755,10 @@ class PettyCashFundResource extends Resource
 
                     Infolists\Components\TextEntry::make('name')
                         ->label('Nombre'),
+
+                    Infolists\Components\TextEntry::make('location')
+                        ->label('Ubicación')
+                        ->placeholder('No especificada'),
 
                     Infolists\Components\TextEntry::make('authorized_amount')
                         ->label('Monto autorizado')

@@ -6,7 +6,22 @@
     $refunds = $papelon['refunds'] ?? [];
     $totals = $papelon['totals'] ?? [];
 
-    $money = fn ($value) => '$' . number_format((float) $value, 2);
+    // BEXIA_RECON9I_REPORT
+    $money = fn ($value) => ((float)$value < 0 ? '-$' : '$')
+        . number_format(abs((float)$value), 2);
+
+    $reportReconciliation = \App\Support\PosCloseReconciliation::calculate(
+        $summary
+    );
+    $reportPaidRefunds = round(array_sum(
+        $reportReconciliation['refunds_paid'] ?? []
+    ), 2);
+    $reportPendingRefunds = round(array_sum(
+        $reportReconciliation['refunds_pending'] ?? []
+    ), 2);
+    $reportNetFlow = (float)(
+        $reportReconciliation['recorded_total'] ?? 0
+    );
     $sessionNumber = (string) ($session->number ?? ('#' . ($session->id ?? '')));
     $openedAt = $session->opened_at ?? $session->created_at ?? null;
     $closedAt = $session->closed_at ?? null;
@@ -115,10 +130,165 @@ td{padding:2px 0;vertical-align:top}
         line-height:1!important;
     }
 
+    /*
+     * BEXIA_RECON9P7I_CONSOLAS_13PX
+     * Configuracion validada visualmente en ticket real.
+     * Exclusiva para impresion termica de 80 mm.
+     */
+    body{
+        width:72mm!important;
+        max-width:100%!important;
+        padding:1mm!important;
+        font-family:Consolas,"Courier New",monospace!important;
+        font-size:13px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+        color:#000!important;
+    }
+
+    .brand{
+        font-size:16px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+    }
+
+    .subtitle{
+        font-size:13px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+    }
+
+    .section-title{
+        font-size:13px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+        padding:4px 2px!important;
+        margin-top:5px!important;
+        background:transparent!important;
+        border:1px solid #000!important;
+    }
+
+    td{
+        font-size:13px!important;
+        font-weight:400!important;
+        padding:2px 1px!important;
+        line-height:1.2!important;
+        overflow-wrap:break-word;
+    }
+
+    td.right,
+    .right{
+        text-align:right!important;
+        white-space:nowrap;
+        font-variant-numeric:tabular-nums;
+    }
+
+    .bold{
+        font-weight:600!important;
+    }
+
+    .total-row td,
+    .net-row td{
+        font-size:14px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+        padding-top:5px!important;
+    }
+
+    .small{
+        font-size:11px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+    }
+
+    .cash-table td{
+        font-size:13px!important;
+        font-weight:400!important;
+        padding:2px 1px!important;
+        line-height:1.2!important;
+    }
+
     .no-print{
         display:none!important;
     }
 }
+
+/*
+ * BEXIA_RECON9P7O_CONSOLAS_SCREEN
+ * Mismo diseño aprobado visualmente en PROD.
+ * Solo pantalla: no modifica el CSS de impresion.
+ */
+@media screen {
+    body {
+        width:72mm!important;
+        max-width:100%!important;
+        padding:1mm!important;
+        font-family:Consolas,"Courier New",monospace!important;
+        font-size:13px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+        color:#000!important;
+    }
+
+    .brand {
+        font-size:16px!important;
+        font-weight:600!important;
+    }
+
+    .subtitle {
+        font-size:13px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+    }
+
+    .section-title {
+        font-size:13px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+        background:transparent!important;
+        padding:4px 2px!important;
+        border:1px solid #000!important;
+    }
+
+    td {
+        font-family:Consolas,"Courier New",monospace!important;
+        font-size:13px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+        padding:2px 1px!important;
+        overflow-wrap:break-word;
+    }
+
+    td.right,
+    .right {
+        text-align:right!important;
+        white-space:nowrap;
+        font-variant-numeric:tabular-nums;
+    }
+
+    .bold {
+        font-weight:600!important;
+    }
+
+    .total-row td,
+    .net-row td {
+        font-size:14px!important;
+        font-weight:600!important;
+        line-height:1.2!important;
+    }
+
+    .small {
+        font-size:11px!important;
+        font-weight:400!important;
+    }
+
+    .cash-table td {
+        font-size:13px!important;
+        font-weight:400!important;
+        line-height:1.2!important;
+    }
+}
+
 </style>
 </head>
 <body>
@@ -180,7 +350,7 @@ td{padding:2px 0;vertical-align:top}
         <td class="right">{{ $money($refunds['total_refunds_total'] ?? 0) }}</td>
     </tr>
     <tr>
-        <td>Devoluciones parciales</td>
+        <td>Devoluciones parciales solicitadas</td>
         <td class="right">{{ $money($refunds['partial_refunds_total'] ?? 0) }}</td>
     </tr>
     {{-- BEXIA_V5836G5H7C4B_ADVANCE_REFUND_VISUAL --}}
@@ -198,7 +368,11 @@ td{padding:2px 0;vertical-align:top}
     @endif
     <tr class="total-row">
         <td>Total devuelto</td>
-        <td class="right">-{{ $money($refunds['refunded_total'] ?? 0) }}</td>
+        <td class="right">-{{ $money($reportPaidRefunds) }}</td>
+    </tr>
+    <tr>
+        <td>Reembolsos pendientes (no descontados)</td>
+        <td class="right">{{ $money($reportPendingRefunds) }}</td>
     </tr>
 </table>
 
@@ -221,24 +395,20 @@ td{padding:2px 0;vertical-align:top}
         <td class="right">-{{ $money($totals['advance_refunds_total'] ?? 0) }}</td>
     </tr>
     <tr>
-        <td>Anticipos pendientes</td>
-        <td class="right">{{ $money($totals['outstanding_advance_total'] ?? 0) }}</td>
-    </tr>
-    <tr>
         <td>Cobrado en sesión</td>
         <td class="right">{{ $money($totals['collected_total'] ?? $totals['payments_total'] ?? 0) }}</td>
     </tr>
     <tr>
         <td>Flujo neto cobrado</td>
-        <td class="right">{{ $money($totals['net_cashflow_total'] ?? 0) }}</td>
+        <td class="right">{{ $money($reportNetFlow) }}</td>
     </tr>
     <tr>
         <td>Devoluciones de venta</td>
-        <td class="right">-{{ $money($totals['sale_refunds_total'] ?? 0) }}</td>
+        <td class="right">-{{ $money($reportPaidRefunds) }}</td>
     </tr>
     <tr class="net-row">
-        <td>VENTA NETA LIQUIDADA</td>
-        <td class="right">{{ $money($totals['net_settled_sales_total'] ?? $totals['net_total'] ?? 0) }}</td>
+        <td>FLUJO NETO DE LA SESION</td>
+        <td class="right">{{ $money($reportNetFlow) }}</td>
     </tr>
 </table>
 

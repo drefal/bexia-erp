@@ -42,6 +42,20 @@ class CreateExpenseAdvance extends CreateRecord
                     ExpenseAdvanceService::class
                 )->assignNumber($record);
 
+                // GASTOS10N10B_CREATE_ANT
+                // Folio definitivo desde la creacion.
+                // Forma parte de la misma transaccion que
+                // registra y envia el anticipo.
+                app(
+                    \App\Support\Expenses\PettyCashVoucherService::class
+                )->issue(
+                    (int) $record->company_id,
+                    (int) $record->petty_cash_fund_id,
+                    \App\Support\Expenses\PettyCashVoucherService::TYPE_ADVANCE,
+                    (int) $record->id,
+                    $record->created_at
+                );
+
                 /*
                  * Crear = formalizar y enviar.
                  * Si falla aprobación, toda la creación

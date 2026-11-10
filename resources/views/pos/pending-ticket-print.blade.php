@@ -175,7 +175,10 @@
         <div class="copy-label">NO ES COMPROBANTE DE PAGO</div>
     </div>
 
-    <div class="pending-box">NO PAGADO</div>
+    {{-- BEXIA_V5836_POS_ANT4_PRINT_ADVANCE --}}
+    <div class="pending-box">
+        {{ ($pendingTicketAdvancePaid ?? 0) > 0.009 ? 'PAGO PARCIAL' : 'NO PAGADO' }}
+    </div>
 <div class="warning-box">NO ENTREGAR MERCANCÍA SIN COBRO</div>
 
     <div class="line"></div>
@@ -285,8 +288,18 @@
         @endif
         {{-- V5.44.2 discount print end --}}
         <tr>
-            <td class="total">TOTAL ADEUDADO</td>
-            <td class="right total">${{ number_format((float) ($order->total ?? 0), 2) }}</td>
+            <td>Total del ticket</td>
+            <td class="right">${{ number_format((float) ($order->total ?? 0), 2) }}</td>
+        </tr>
+        @if(($pendingTicketAdvancePaid ?? 0) > 0.009)
+            <tr>
+                <td>Anticipos recibidos</td>
+                <td class="right">-${{ number_format((float) $pendingTicketAdvancePaid, 2) }}</td>
+            </tr>
+        @endif
+        <tr>
+            <td class="total">SALDO PENDIENTE</td>
+            <td class="right total">${{ number_format((float) ($pendingTicketBalance ?? 0), 2) }}</td>
         </tr>
     </table>
 
