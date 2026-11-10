@@ -4802,7 +4802,16 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
 
         // BEXIA_ACCESS9_PROMOTE26_STORE_ORDER
         // Identidad individual del cajero en Papelon.
-        $access9Pilot = $this->bexiaAccess9EnabledForIds($companyId, $posPointId);
+        // Renta: ticket pendiente externo, sin suplantar identidad de cajero.
+        // No se activa con parametros HTTP: exige tipo de Request interno.
+        $rentalInternal = $request instanceof
+            \App\Support\ComputerRental\ComputerRentalInternalPosRequest;
+        $access9Pilot = $this->bexiaAccess9EnabledForIds($companyId, $posPointId)
+            && ! $rentalInternal;
+        if ($rentalInternal) {
+            // El cajero real quedara registrado al COBRAR, no al enviar renta.
+            $employeeId = null;
+        }
         $access9Terminal = (string) $request->input(
             'cashier_terminal_id', ''
         );
@@ -5078,6 +5087,21 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             $creationHash,
             $creationShiftId
         ) {
+            if ($request instanceof \App\Support\ComputerRental\ComputerRentalInternalPosRequest) {
+                $rentalLockedSession = DB::table('pos_sessions')
+                    ->where('id', $session)
+                    ->where('company_id', $companyId)
+                    ->where('pos_point_id', $posPointId)
+                    ->lockForUpdate()
+                    ->first();
+                abort_unless(
+                    $rentalLockedSession
+                    && (string) $rentalLockedSession->status === 'open',
+                    409,
+                    'La caja seleccionada se cerro durante el envio de renta.'
+                );
+            }
+
             // BEXIA_ACCESS9_PROMOTE26_STORE_ORDER_TRANSACTION
             // Mismo orden de bloqueos que pagos y cierre:
             // sesion fisica y despues turno individual.
@@ -5218,7 +5242,8 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             $orderNote = trim((string) $request->input('order_note', ''));
 
             $noteMetadata = [
-                'source' => 'pos_frontend',
+                'source' => $request instanceof \App\Support\ComputerRental\ComputerRentalInternalPosRequest
+                    ? 'computer_rental' : 'pos_frontend',
                 // BEXIA_ACCESS9_PROMOTE29_ORDER_METADATA
                 'creation_payload_hash' =>
                     $creationUuid !== '' ? $creationHash : null,

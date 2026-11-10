@@ -57,9 +57,11 @@ class ComputerRentalControl extends Page
 
     /** CIBER3G1_FINALIZE_TO_POS */
     public ?int $finishSessionId = null;
+    public ?int $finishPosPointId = null;
 
     /** CIBER3H3B_RESEND_UI */
     public ?int $resendTicketSessionId = null;
+    public ?int $resendPosPointId = null;
 
     /** CIBER3F_EDIT_RATE */
     public ?int $editingRateId = null;
@@ -807,6 +809,41 @@ class ComputerRentalControl extends Page
             ->get();
     }
 
+    /** Cajas operativas de la empresa: exactamente una sesion fisica abierta. */
+    public function getRentalOpenPosPointsProperty()
+    {
+        $companyId = $this->companyId();
+        if ($companyId <= 0) {
+            return collect();
+        }
+
+        $counts = \Illuminate\Support\Facades\DB::table('pos_sessions')
+            ->select('pos_point_id')
+            ->selectRaw('COUNT(*) AS open_count')
+            ->where('company_id', $companyId)
+            ->where('status', 'open')
+            ->groupBy('pos_point_id');
+
+        return PosPoint::query()
+            ->joinSub($counts, 'active_sessions', function ($join) {
+                $join->on('pos_points.id', '=', 'active_sessions.pos_point_id');
+            })
+            ->where('pos_points.company_id', $companyId)
+            ->where('pos_points.status', 'active')
+            ->where('active_sessions.open_count', 1)
+            ->orderBy('pos_points.name')
+            ->get(['pos_points.id', 'pos_points.name']);
+    }
+
+    protected function defaultRentalPosPoint(?int $preferred): ?int
+    {
+        $available = $this->rentalOpenPosPoints;
+        if ($preferred && $available->contains('id', $preferred)) {
+            return $preferred;
+        }
+        return $available->count() === 1 ? (int) $available->first()->id : null;
+    }
+
     public function getServiceProductsProperty()
     {
         $companyId = $this->companyId();
@@ -1060,13 +1097,16 @@ class ComputerRentalControl extends Page
                 )
                 ->findOrFail($sessionId);
 
-        $this->resendTicketSessionId =
-            (int) $session->id;
+        $this->resendTicketSessionId = (int) $session->id;
+        $this->resendPosPointId = $this->defaultRentalPosPoint(
+            $session->pos_point_id ? (int) $session->pos_point_id : null
+        );
     }
 
     public function cancelResendCancelledTicket(): void
     {
         $this->resendTicketSessionId = null;
+        $this->resendPosPointId = null;
     }
 
     public function getResendingTicketSessionProperty():
@@ -1122,7 +1162,8 @@ class ComputerRentalControl extends Page
                 )
                     ->resendCancelledTicket(
                         $session,
-                        auth()->id()
+                        auth()->id(),
+                        $this->resendPosPointId
                     );
 
         } catch (ValidationException $e) {
@@ -1164,6 +1205,7 @@ class ComputerRentalControl extends Page
         }
 
         $this->resendTicketSessionId = null;
+        $this->resendPosPointId = null;
 
         Notification::make()
             ->success()
@@ -1195,13 +1237,16 @@ class ComputerRentalControl extends Page
             ->where('status', 'active')
             ->findOrFail($sessionId);
 
-        $this->finishSessionId =
-            (int) $session->id;
+        $this->finishSessionId = (int) $session->id;
+        $this->finishPosPointId = $this->defaultRentalPosPoint(
+            $session->pos_point_id ? (int) $session->pos_point_id : null
+        );
     }
 
     public function cancelFinishRental(): void
     {
         $this->finishSessionId = null;
+        $this->finishPosPointId = null;
     }
 
     public function getFinishingSessionProperty(): ?ComputerRentalSession
@@ -1232,7 +1277,8 @@ class ComputerRentalControl extends Page
                 ComputerRentalToPosService::class
             )->finalizeAndSend(
                 $session,
-                auth()->id()
+                auth()->id(),
+                $this->finishPosPointId
             );
         } catch (ValidationException $e) {
 
@@ -1273,6 +1319,7 @@ class ComputerRentalControl extends Page
         }
 
         $this->finishSessionId = null;
+        $this->finishPosPointId = null;
 
         Notification::make()
             ->success()
