@@ -601,15 +601,16 @@ body[data-v5836-product-name-size="17"] .product {
         )
             <div id="bexia-access9-shift-controls"
                  style="display:flex;align-items:center;gap:8px;">
-                <form method="POST"
+                <form id="bexia-access9-shift-close-form"
+                      method="POST"
                       action="{{ route('pos.cashier-shift.close', ['session' => $session->id]) }}"
-                      onsubmit="return confirm('¿Finalizar tu turno individual? La caja física permanecerá abierta. Guarda primero los tickets pendientes.');"
                       style="margin:0;">
                     @csrf
                     <input type="hidden"
                            name="cashier_terminal_id"
                            value="{{ $bexiaAccess8Terminal }}">
-                    <button type="submit"
+                    <button id="bexia-access9-shift-close-open"
+                            type="button"
                             style="border:1px solid #2563eb;
                             background:#eff6ff;color:#1d4ed8;
                             border-radius:10px;padding:8px 11px;
@@ -621,6 +622,133 @@ body[data-v5836-product-name-size="17"] .product {
             </div>
         @endif
     </div>
+
+    {{-- ACCESS9 FIX256: confirmacion visual, sin alert/confirm nativos. --}}
+    @if(
+        in_array(
+            (int) ($pos->company_id ?? 0)
+                . ':' . (int) ($pos->id ?? 0),
+            (array) config('bexia_access9.enabled_pos', []),
+            true
+        )
+        && ! empty($bexiaAccess8Terminal)
+    )
+        <style>
+            #bexia-access9-close-dialog {
+                position:fixed;
+                inset:0;
+                margin:auto;
+                width:min(440px, calc(100vw - 32px));
+                max-height:calc(100vh - 32px);
+                overflow:auto;
+                padding:0;
+                border:0;
+                border-radius:20px;
+                background:#fff;
+                color:#0f172a;
+                box-shadow:0 24px 70px rgba(15,23,42,.28);
+                font-family:Inter,ui-sans-serif,system-ui,sans-serif;
+            }
+            #bexia-access9-close-dialog::backdrop {
+                background:rgba(15,23,42,.60);
+            }
+            .bexia-access9-close-action {
+                border-radius:11px;
+                padding:12px 16px;
+                font-weight:850;
+                cursor:pointer;
+                font-family:inherit;
+            }
+        </style>
+
+        <dialog id="bexia-access9-close-dialog"
+                aria-labelledby="bexia-access9-close-title"
+                aria-describedby="bexia-access9-close-description">
+            <div style="padding:22px 24px 16px;
+                        border-bottom:1px solid #e2e8f0;">
+                <h2 id="bexia-access9-close-title"
+                    style="font-size:20px;font-weight:900;
+                           margin:0;">
+                    Finalizar mi turno
+                </h2>
+            </div>
+            <div style="padding:20px 24px;">
+                <p id="bexia-access9-close-description"
+                   style="margin:0 0 12px;line-height:1.5;
+                          font-size:14px;">
+                    ¿Deseas finalizar el turno de
+                    <strong>{{ $cashier->name ?? 'este empleado' }}</strong>?
+                </p>
+                <p style="margin:0;line-height:1.5;
+                          font-size:13px;color:#475569;">
+                    La caja física permanecerá abierta.
+                    Guarda cualquier venta o ticket pendiente
+                    antes de continuar.
+                </p>
+            </div>
+            <div style="display:flex;justify-content:flex-end;
+                        gap:10px;padding:16px 24px 22px;">
+                <button id="bexia-access9-close-cancel"
+                        type="button"
+                        class="bexia-access9-close-action"
+                        style="background:#fff;color:#334155;
+                               border:1px solid #cbd5e1;">
+                    Cancelar
+                </button>
+                <button id="bexia-access9-close-confirm"
+                        type="button"
+                        class="bexia-access9-close-action"
+                        style="background:#2563eb;color:#fff;
+                               border:1px solid #2563eb;">
+                    Confirmar cierre de turno
+                </button>
+            </div>
+        </dialog>
+
+        <script>
+        (function () {
+            const form = document.getElementById(
+                'bexia-access9-shift-close-form'
+            );
+            const openButton = document.getElementById(
+                'bexia-access9-shift-close-open'
+            );
+            const dialog = document.getElementById(
+                'bexia-access9-close-dialog'
+            );
+            const cancelButton = document.getElementById(
+                'bexia-access9-close-cancel'
+            );
+            const confirmButton = document.getElementById(
+                'bexia-access9-close-confirm'
+            );
+
+            if (!form || !openButton || !dialog
+                || !cancelButton || !confirmButton) {
+                return;
+            }
+
+            openButton.addEventListener('click', function () {
+                if (!dialog.open) {
+                    dialog.showModal();
+                }
+            });
+
+            cancelButton.addEventListener('click', function () {
+                dialog.close();
+            });
+
+            confirmButton.addEventListener('click', function () {
+                if (confirmButton.disabled) {
+                    return;
+                }
+                confirmButton.disabled = true;
+                confirmButton.textContent = 'Finalizando...';
+                form.submit();
+            });
+        })();
+        </script>
+    @endif
 
     @if(($canSwitchCashier ?? false) && count($switchableStaff ?? []) > 1)
         <div
