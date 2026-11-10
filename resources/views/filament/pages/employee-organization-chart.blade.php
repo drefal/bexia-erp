@@ -1153,76 +1153,90 @@
                 grid-template-columns: minmax(0, 1fr);
             }
         }
-        /* ORG02 FIX10 - Separacion estructural */
+
+        /* ORG02 FIX11B - Rama completa en tres columnas */
 
         /*
-         * La vista general representa un solo nivel:
-         * direccion y sus reportes directos.
-         *
-         * Los subordinados de segundo nivel NO deben
-         * aumentar la altura de las columnas.
+         * El nodo del responsable participa en la
+         * cuadricula general sin encerrar a su equipo
+         * dentro de una sola columna.
          */
-        .orgx-canvas:not(.orgx-filtering)
-        .org-node-root > .org-children
-        > .org-node > .org-children {
-            display: none !important;
-        }
-
-        /*
-         * Las columnas mantienen el mismo ancho.
-         * Cada elemento de la cuadricula representa
-         * exclusivamente un colaborador directo.
-         */
-        .orgx-canvas:not(.orgx-filtering)
+        .orgx-canvas
         .org-node-root > .org-children {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            align-items: stretch;
-            gap: 14px 16px;
+            grid-auto-flow: row dense;
+            align-items: start;
         }
 
-        /*
-         * Los encabezados ocupan toda la fila,
-         * sin desplazar las tarjetas.
-         */
-        .orgx-canvas:not(.orgx-filtering)
-        .org-node-root > .org-children > .org-team-label {
-            grid-column: 1 / -1;
-        }
-
-        /*
-         * Los responsables que tienen equipo
-         * mantienen su enlace para navegar
-         * a la vista enfocada.
-         */
-        .orgx-canvas:not(.orgx-filtering)
+        .orgx-canvas
         .org-node-root > .org-children > .org-node {
+            display: contents;
+        }
+
+        .orgx-canvas
+        .org-node-root > .org-children
+        > .org-node > .org-card {
             width: 100%;
             min-width: 0;
-            align-items: stretch;
         }
 
         /*
-         * Mientras se busca, se conserva el
-         * comportamiento original que permite
-         * mostrar coincidencias en niveles inferiores.
+         * Cada equipo expandido ocupa el ancho
+         * de las tres columnas.
          */
-        .orgx-canvas.orgx-filtering
+        .orgx-canvas
         .org-node-root > .org-children
         > .org-node > .org-children {
-            display: flex;
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            align-items: start;
+            width: 100%;
+            max-width: none;
+            gap: 12px 14px;
+            margin-top: 0;
+        }
+
+        .orgx-canvas
+        .org-node-root > .org-children
+        > .org-node > .org-children > .org-team-label {
+            grid-column: 1 / -1;
+            width: 100%;
+        }
+
+        .orgx-canvas
+        .org-node-root > .org-children
+        > .org-node > .org-children > .org-node {
+            min-width: 0;
+            width: 100%;
+            margin: 0;
+        }
+
+        .orgx-canvas
+        .org-node-root > .org-children
+        > .org-node > .org-children
+        > .org-node > .org-card {
+            width: 100%;
+            min-width: 0;
         }
 
         @media (max-width: 1100px) {
-            .orgx-canvas:not(.orgx-filtering)
-            .org-node-root > .org-children {
+            .orgx-canvas
+            .org-node-root > .org-children,
+            .orgx-canvas
+            .org-node-root > .org-children
+            > .org-node > .org-children {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
         @media (max-width: 700px) {
-            .orgx-canvas:not(.orgx-filtering)
-            .org-node-root > .org-children {
+            .orgx-canvas
+            .org-node-root > .org-children,
+            .orgx-canvas
+            .org-node-root > .org-children
+            > .org-node > .org-children {
                 grid-template-columns: minmax(0, 1fr);
             }
         }
@@ -1685,7 +1699,7 @@ document.addEventListener('DOMContentLoaded', function () {
             </template>
         </section>
 
-        <section class="orgx-canvas" x-show="focusId === null" x-bind:class="{ 'orgx-filtering': filtering() }">
+        <section class="orgx-canvas" x-show="focusId === null">
 
             @if (count($roots))
                 <ul class="org-roots">
