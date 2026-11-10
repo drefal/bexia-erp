@@ -329,6 +329,68 @@ abort_if(! $sessionRow, 404);
      * Cambia el empleado operativo de una sesión abierta sin cerrar la caja,
      * alterar el fondo inicial, movimientos ni tickets ya creados.
      */
+    /**
+     * ACCESS9 SWITCH257.
+     * Libera la terminal sin cerrar turno ni caja fisica.
+     */
+    public function bexiaAccess9Handoff(
+        \Illuminate\Http\Request $request,
+        int $session
+    ) {
+        abort_unless(auth()->check(), 403);
+
+        $sessionRow = DB::table('pos_sessions')
+            ->where('id', $session)
+            ->first();
+
+        abort_unless(
+            $sessionRow && $sessionRow->status === 'open',
+            404,
+            'La sesion fisica no esta abierta.'
+        );
+
+        $pos = $this->posPoint(
+            (int) $sessionRow->pos_point_id
+        );
+
+        $this->authorizePos($pos);
+
+        abort_unless(
+            (int) $pos->company_id
+                === (int) $sessionRow->company_id
+            && $this->bexiaAccess7IsPilot($pos),
+            403,
+            'Operacion exclusiva de ACCESS9.'
+        );
+
+        $payload = $request->validate([
+            'cashier_terminal_id' => [
+                'required', 'string', 'uuid'
+            ],
+        ]);
+
+        $terminal = (string) $payload['cashier_terminal_id'];
+
+        // Valida NIP/terminal y turno abierto existentes.
+        $this->bexiaAccess8CashierForTerminal(
+            $pos, $sessionRow, $terminal
+        );
+
+        // Revoca solo la autorizacion de la pantalla.
+        // NO actualiza pos_cashier_shifts ni pos_sessions.
+        $request->session()->forget(
+            'bexia_access8_terminal.' . $terminal
+        );
+
+        return redirect()->route(
+            'pos.open',
+            ['posPoint' => (int) $pos->id]
+        )->with(
+            'success',
+            'Selecciona un cajero e introduce su NIP.'
+        );
+    }
+
     public function switchCashier(
         \Illuminate\Http\Request $request,
         int $session

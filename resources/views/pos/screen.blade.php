@@ -576,6 +576,24 @@ body[data-v5836-product-name-size="17"] .product {
             <div class="label">Empleado</div>
             <div class="value v582p3-a34c2-employee-value">
                 <span>{{ $cashier->name ?? 'Cajero' }}</span>
+                {{-- ACCESS9 SWITCH257 --}}
+                @if(
+                    in_array(
+                        (string) ($pos->company_id ?? 0)
+                            . ':' . (string) ($pos->id ?? 0),
+                        (array) config('bexia_access9.enabled_pos', []),
+                        true
+                    )
+                    && ! empty($bexiaAccess8Terminal)
+                )
+                    <button
+                        id="bexia-access9-switch-open"
+                        class="v582p3-a34c2-switch-button"
+                        type="button"
+                        title="Cambiar cajero sin finalizar turno"
+                        aria-label="Cambiar cajero sin finalizar turno"
+                    >⇄</button>
+                @endif
                 @if(($canSwitchCashier ?? false) && count($switchableStaff ?? []) > 1)
                     <button
                         id="v582p3-a34c2-switch-button"
@@ -745,6 +763,180 @@ body[data-v5836-product-name-size="17"] .product {
                 confirmButton.disabled = true;
                 confirmButton.textContent = 'Finalizando...';
                 form.submit();
+            });
+        })();
+        </script>
+    @endif
+
+    {{-- ACCESS9 SWITCH257: cambiar cajero sin cerrar turno. --}}
+    @if(
+        in_array(
+            (string) ($pos->company_id ?? 0)
+                . ':' . (string) ($pos->id ?? 0),
+            (array) config('bexia_access9.enabled_pos', []),
+            true
+        )
+        && ! empty($bexiaAccess8Terminal)
+    )
+        <style>
+            #bexia-access9-switch-dialog {
+                position:fixed;
+                inset:0;
+                margin:auto;
+                padding:0;
+                border:0;
+                border-radius:20px;
+                width:min(460px,calc(100vw - 32px));
+                max-height:calc(100vh - 32px);
+                overflow:auto;
+                background:#fff;
+                color:#0f172a;
+                box-shadow:0 24px 70px rgba(15,23,42,.28);
+                font-family:Inter,ui-sans-serif,system-ui,sans-serif;
+            }
+            #bexia-access9-switch-dialog::backdrop {
+                background:rgba(15,23,42,.60);
+            }
+            .bexia-access9-switch-action {
+                border-radius:11px;
+                padding:12px 16px;
+                font-size:13px;
+                font-weight:850;
+                cursor:pointer;
+                font-family:inherit;
+            }
+        </style>
+
+        <dialog id="bexia-access9-switch-dialog"
+                aria-labelledby="bexia-access9-switch-title"
+                aria-describedby="bexia-access9-switch-description">
+
+            <div style="padding:22px 24px 16px;
+                        border-bottom:1px solid #e2e8f0;">
+                <h2 id="bexia-access9-switch-title"
+                    style="font-size:20px;font-weight:900;margin:0;">
+                    Cambiar cajero
+                </h2>
+            </div>
+
+            <div style="padding:20px 24px;">
+                <p id="bexia-access9-switch-description"
+                   style="font-size:14px;line-height:1.5;
+                          margin:0 0 12px;">
+                    ¿Deseas cambiar de cajero?
+                </p>
+
+                <div style="border-radius:12px;
+                            background:#eff6ff;
+                            color:#1e40af;
+                            padding:12px;
+                            font-size:13px;
+                            line-height:1.5;">
+                    El turno de
+                    <strong>{{ $cashier->name ?? 'este empleado' }}</strong>
+                    permanecerá abierto.
+                    La caja física y su fondo inicial no cambiarán.
+                    El siguiente empleado deberá identificarse con su NIP.
+                </div>
+
+                <p id="bexia-access9-switch-error"
+                   role="alert"
+                   hidden
+                   style="font-size:13px;font-weight:800;
+                          color:#b91c1c;margin:12px 0 0;">
+                    Guarda o vacía el carrito antes de cambiar de cajero.
+                </p>
+            </div>
+
+            <div style="display:flex;gap:10px;
+                        justify-content:flex-end;
+                        padding:0 24px 22px;">
+
+                <button id="bexia-access9-switch-cancel"
+                        type="button"
+                        class="bexia-access9-switch-action"
+                        style="background:#fff;color:#334155;
+                               border:1px solid #cbd5e1;">
+                    Cancelar
+                </button>
+
+                <form id="bexia-access9-switch-form"
+                      method="POST"
+                      action="{{ route('pos.cashier-shift.handoff', ['session' => $session->id]) }}"
+                      style="margin:0;">
+                    @csrf
+                    <input type="hidden"
+                           name="cashier_terminal_id"
+                           value="{{ $bexiaAccess8Terminal }}">
+                    <button id="bexia-access9-switch-confirm"
+                            type="submit"
+                            class="bexia-access9-switch-action"
+                            style="background:#2563eb;color:#fff;
+                                   border:1px solid #2563eb;">
+                        Cambiar cajero
+                    </button>
+                </form>
+            </div>
+        </dialog>
+
+        <script>
+        (function () {
+            const openButton = document.getElementById(
+                'bexia-access9-switch-open'
+            );
+            const dialog = document.getElementById(
+                'bexia-access9-switch-dialog'
+            );
+            const form = document.getElementById(
+                'bexia-access9-switch-form'
+            );
+            const cancelButton = document.getElementById(
+                'bexia-access9-switch-cancel'
+            );
+            const confirmButton = document.getElementById(
+                'bexia-access9-switch-confirm'
+            );
+            const error = document.getElementById(
+                'bexia-access9-switch-error'
+            );
+
+            if (!openButton || !dialog || !form ||
+                !cancelButton || !confirmButton || !error) {
+                return;
+            }
+
+            function cartHasItems() {
+                return document.querySelector(
+                    '#v5339-cart-items .v5339-cart-line'
+                ) !== null;
+            }
+
+            function checkCart() {
+                const blocked = cartHasItems();
+                error.hidden = !blocked;
+                confirmButton.disabled = blocked;
+                confirmButton.style.opacity = blocked ? '.45' : '1';
+                return !blocked;
+            }
+
+            openButton.addEventListener('click', function () {
+                checkCart();
+                if (!dialog.open) dialog.showModal();
+            });
+
+            cancelButton.addEventListener('click', function () {
+                dialog.close();
+            });
+
+            form.addEventListener('submit', function (event) {
+                if (!checkCart() ||
+                    confirmButton.dataset.submitted === '1') {
+                    event.preventDefault();
+                    return;
+                }
+
+                confirmButton.dataset.submitted = '1';
+                confirmButton.textContent = 'Cambiando...';
             });
         })();
         </script>
