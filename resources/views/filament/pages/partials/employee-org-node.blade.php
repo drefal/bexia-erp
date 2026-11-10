@@ -62,7 +62,16 @@
                 </div>
             </div>
         </div>
-    </article>
+        @if (count($nodeChildren))
+        <button type="button"
+            class="orgx-focus-open"
+            style="margin:5px 0 12px"
+            x-on:click.stop="focusTeam({{ $employeeId }})">
+            Ver equipo en 3 columnas
+        </button>
+    @endif
+
+</article>
 
     @if (count($nodeChildren))
         <ul class="org-children"
