@@ -588,6 +588,44 @@ body[data-v5836-product-name-size="17"] .product {
             </div>
             <div style="margin-top:3px;"><span class="role-pill">{{ $effectiveRoleLabel }}</span></div>
         </div>
+
+        {{-- ACCESS9 FIX254D: turno individual. --}}
+        @if(
+            in_array(
+                (int) ($pos->company_id ?? 0)
+                    . ':' . (int) ($pos->id ?? 0),
+                (array) config('bexia_access9.enabled_pos', []),
+                true
+            )
+            && ! empty($bexiaAccess8Terminal)
+        )
+            <div id="bexia-access9-shift-controls"
+                 style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:12px;font-weight:900;
+                       color:#166534;background:#f0fdf4;
+                       border:1px solid #bbf7d0;
+                       border-radius:10px;padding:8px;">
+                    Turno individual activo
+                </span>
+                <form method="POST"
+                      action="{{ route('pos.cashier-shift.close', ['session' => $session->id]) }}"
+                      onsubmit="return confirm('¿Finalizar tu turno individual? La caja física permanecerá abierta. Guarda primero los tickets pendientes.');"
+                      style="margin:0;">
+                    @csrf
+                    <input type="hidden"
+                           name="cashier_terminal_id"
+                           value="{{ $bexiaAccess8Terminal }}">
+                    <button type="submit"
+                            style="border:1px solid #2563eb;
+                            background:#eff6ff;color:#1d4ed8;
+                            border-radius:10px;padding:8px 11px;
+                            font-size:12px;font-weight:900;
+                            cursor:pointer;">
+                        Finalizar mi turno
+                    </button>
+                </form>
+            </div>
+        @endif
     </div>
 
     @if(($canSwitchCashier ?? false) && count($switchableStaff ?? []) > 1)
