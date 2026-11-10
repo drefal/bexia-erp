@@ -2637,6 +2637,8 @@ abort_if(! $sessionRow, 404);
         return $parts ? implode(' - ', $parts) : ('#' . $id);
     }
 
+    // FIX246P: los permisos genericos no dan acceso global al PDV.
+    // Solo administradores reales pueden omitir el filtro de asignacion.
     protected function v5327bCanManageAllPos(): bool
     {
         $user = auth()->user();
@@ -2645,72 +2647,13 @@ abort_if(! $sessionRow, 404);
             return false;
         }
 
-        foreach (['isSystemAdmin', 'isGroupAdmin', 'isCompanyAdmin', 'isAdmin'] as $method) {
+        foreach ([
+            'isSystemAdmin',
+            'isGroupAdmin',
+            'isCompanyAdmin',
+        ] as $method) {
             if (method_exists($user, $method) && $user->{$method}()) {
                 return true;
-            }
-        }
-
-        foreach (['role', 'type', 'role_name'] as $attribute) {
-            $value = strtolower((string) ($user->{$attribute} ?? ''));
-
-            if (in_array($value, [
-                'super_admin',
-                'system_admin',
-                'admin',
-                'administrator',
-                'company_admin',
-                'group_admin',
-                'admin_empresa',
-                'admin_grupo',
-                'super administrador',
-                'administrador',
-            ], true)) {
-                return true;
-            }
-        }
-
-        try {
-            if (method_exists($user, 'roles')) {
-                $roles = $user->roles()->pluck('name')->map(fn ($name) => strtolower((string) $name))->all();
-
-                foreach ($roles as $role) {
-                    if (in_array($role, [
-                        'super_admin',
-                        'system_admin',
-                        'admin',
-                        'administrator',
-                        'company_admin',
-                        'group_admin',
-                        'admin_empresa',
-                        'admin_grupo',
-                        'super administrador',
-                        'administrador',
-                    ], true)) {
-                        return true;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            //
-        }
-
-        if (method_exists($user, 'can')) {
-            foreach ([
-                'company.update',
-                'pos.manage',
-                'pos.view_all',
-                'pos_points.view_all',
-                'punto_de_venta.manage',
-                'punto_de_venta.view_all',
-            ] as $permission) {
-                try {
-                    if ($user->can($permission)) {
-                        return true;
-                    }
-                } catch (\Throwable $e) {
-                    //
-                }
             }
         }
 
@@ -2769,6 +2712,33 @@ abort_if(! $sessionRow, 404);
             }
 
             $ids = $ids->merge($legacyQuery->pluck('pos_point_id'));
+        }
+
+        // FIX246P: reconocer la asignacion directa usuario-PDV.
+        if (
+            \Illuminate\Support\Facades\Schema::hasTable('pos_point_user')
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'pos_point_user', 'user_id'
+            )
+            && \Illuminate\Support\Facades\Schema::hasColumn(
+                'pos_point_user', 'pos_point_id'
+            )
+        ) {
+            $direct = \Illuminate\Support\Facades\DB::table(
+                'pos_point_user'
+            )->where('user_id', $user->id);
+
+            if (
+                \Illuminate\Support\Facades\Schema::hasColumn(
+                    'pos_point_user', 'is_active'
+                )
+            ) {
+                $direct->where('is_active', true);
+            }
+
+            $ids = $ids->merge(
+                $direct->pluck('pos_point_id')
+            );
         }
 
         return $ids

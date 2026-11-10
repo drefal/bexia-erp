@@ -278,9 +278,12 @@
     $user = auth()->user();
     $userId = (int) ($user?->id ?? 0);
 
+    // FIX246P: roles administrativos reales.
+    // La consulta posterior conserva el filtro de empresa.
     $isAdmin = $user && (
         (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin())
         || (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin())
+        || (method_exists($user, 'isCompanyAdmin') && $user->isCompanyAdmin())
     );
 
     $posPoints = collect();
