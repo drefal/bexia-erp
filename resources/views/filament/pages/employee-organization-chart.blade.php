@@ -607,6 +607,112 @@
             .org-card { width: 100%; }
         }
 
+
+        /* ORG02 FIX5 - Tres columnas */
+        .orgx-canvas {
+            overflow-x: auto;
+            padding: 20px 18px;
+        }
+
+        .org-roots {
+            width: 100%;
+            align-items: stretch;
+        }
+
+        .org-node-root {
+            width: 100%;
+            align-items: center;
+        }
+
+        .org-node-root > .org-card {
+            width: min(100%, 510px);
+            margin-inline: auto;
+        }
+
+        /* Los reportes directos de la direccion
+           se acomodan en tres columnas. */
+        .org-node-root > .org-children {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            align-items: start;
+            gap: 16px 18px;
+            width: 100%;
+            max-width: none;
+            margin-top: 0;
+            padding: 24px 12px 12px;
+            background: rgba(239, 246, 255, .28);
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+        }
+
+        /* Conexion vertical desde la direccion. */
+        .org-node-root > .org-children::before {
+            left: 50%;
+            height: 24px;
+            top: -1px;
+        }
+
+        .org-node-root > .org-children > .org-node {
+            width: 100%;
+            min-width: 0;
+            align-items: stretch;
+        }
+
+        .org-node-root > .org-children > .org-node::before {
+            display: none;
+        }
+
+        .org-node-root > .org-children > .org-node > .org-card {
+            width: 100%;
+            min-width: 0;
+            margin: 0;
+        }
+
+        /* Cada responsable conserva a su equipo
+           debajo de su propia tarjeta. */
+        .org-node-root > .org-children
+        > .org-node > .org-children {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: none;
+            gap: 9px;
+            padding: 20px 7px 8px;
+            margin-top: 4px;
+        }
+
+        .org-node-root > .org-children
+        > .org-node > .org-children .org-card {
+            width: 100%;
+            min-width: 0;
+        }
+
+        /* Segundo nivel: mantener conexiones
+           entre cada responsable y su equipo. */
+        .org-node-root > .org-children
+        > .org-node > .org-children::before {
+            display: block;
+            height: 20px;
+        }
+
+        @media (max-width: 1100px) {
+            .org-node-root > .org-children {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 700px) {
+            .orgx-canvas {
+                padding: 12px 8px;
+            }
+
+            .org-node-root > .org-children {
+                grid-template-columns: minmax(0, 1fr);
+                padding: 20px 8px 8px;
+                gap: 12px;
+            }
+        }
+
     </style>
 
     <div
