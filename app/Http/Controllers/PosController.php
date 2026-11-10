@@ -18,9 +18,11 @@ class PosController extends Controller
 
         $this->authorizePos($pos);
 
+        // INCIDENT239: conservar la seleccion historica en PDV no piloto.
+        // ACCESS9 mantiene su filtro exclusivo cuando esta habilitado.
         $cashiers = $this->bexiaAccess7IsPilot($pos)
             ? $this->bexiaAccess8StaffForPos($pos)
-            : $this->bexiaOwnStaffForPos($pos);
+            : $this->staffForPos($pos);
 
         return view('pos.cashiers', [
             'pos' => $pos,
@@ -44,8 +46,6 @@ class PosController extends Controller
         if ($this->bexiaAccess7IsPilot($pos)) {
             // ACCESS9: NIP valido no sustituye autorizacion de identidad.
             $this->bexiaAccess8ValidateStaff($pos, $cashierRow);
-            $this->bexiaAssertOwnStaff($pos, $cashierRow);
-        } else {
             $this->bexiaAssertOwnStaff($pos, $cashierRow);
         }
 
@@ -77,8 +77,6 @@ return redirect('/pos/sessions/' . $sessionId . '/screen');
         if ($this->bexiaAccess7IsPilot($pos)) {
             // ACCESS9: NIP valido no sustituye autorizacion de identidad.
             $this->bexiaAccess8ValidateStaff($pos, $cashierRow);
-            $this->bexiaAssertOwnStaff($pos, $cashierRow);
-        } else {
             $this->bexiaAssertOwnStaff($pos, $cashierRow);
         }
 
