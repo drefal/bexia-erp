@@ -1061,6 +1061,139 @@
 
     </style>
 
+{{-- ORG02 FIX8 - uniformar tarjetas focus grid --}}
+<style>
+    .orgx-focus-grid{
+        display:grid !important;
+        grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+        gap:16px !important;
+        align-items:stretch !important;
+    }
+
+    .orgx-focus-grid > *{
+        min-width:0 !important;
+        align-self:stretch !important;
+    }
+
+    .orgx-focus-grid .orgx-node-card,
+    .orgx-focus-grid .orgx-person-card,
+    .orgx-focus-grid .orgx-focus-card,
+    .orgx-focus-grid .orgx-team-card,
+    .orgx-focus-grid article,
+    .orgx-focus-grid .rounded-2xl,
+    .orgx-focus-grid .rounded-xl{
+        height:100% !important;
+        min-height:150px !important;
+        display:flex !important;
+        flex-direction:column !important;
+        justify-content:space-between !important;
+        box-sizing:border-box !important;
+    }
+
+    .orgx-focus-grid img{
+        width:40px !important;
+        height:40px !important;
+        min-width:40px !important;
+        min-height:40px !important;
+        object-fit:cover !important;
+        border-radius:9999px !important;
+        flex-shrink:0 !important;
+    }
+
+    .orgx-focus-grid .orgx-node-card a,
+    .orgx-focus-grid .orgx-person-card a,
+    .orgx-focus-grid .orgx-focus-card a,
+    .orgx-focus-grid .orgx-team-card a{
+        word-break:break-word;
+    }
+
+    @media (max-width: 1280px){
+        .orgx-focus-grid{
+            grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+        }
+    }
+
+    @media (max-width: 768px){
+        .orgx-focus-grid{
+            grid-template-columns:1fr !important;
+        }
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const debounce = (fn, wait = 120) => {
+        let t;
+        return (...args) => {
+            clearTimeout(t);
+            t = setTimeout(() => fn(...args), wait);
+        };
+    };
+
+    function getCols(grid) {
+        const value = getComputedStyle(grid).gridTemplateColumns;
+        if (!value) return 3;
+        const cols = value.split(' ').filter(Boolean).length;
+        return cols > 0 ? cols : 3;
+    }
+
+    function normalizeGrid(grid) {
+        const items = Array.from(grid.children).filter(el => {
+            const txt = (el.textContent || '').trim();
+            return txt.length > 0;
+        });
+
+        items.forEach(el => {
+            el.style.height = 'auto';
+            el.style.minHeight = '0';
+        });
+
+        const cols = getCols(grid);
+
+        for (let i = 0; i < items.length; i += cols) {
+            const row = items.slice(i, i + cols);
+            let max = 0;
+
+            row.forEach(el => {
+                const h = el.offsetHeight;
+                if (h > max) max = h;
+            });
+
+            row.forEach(el => {
+                el.style.height = max + 'px';
+            });
+        }
+    }
+
+    function normalizeAll() {
+        document.querySelectorAll('.orgx-focus-grid').forEach(normalizeGrid);
+    }
+
+    const normalizeAllDebounced = debounce(normalizeAll, 150);
+
+    normalizeAll();
+    window.addEventListener('resize', normalizeAllDebounced);
+
+    document.addEventListener('click', function () {
+        setTimeout(normalizeAll, 180);
+        setTimeout(normalizeAll, 400);
+    });
+
+    document.addEventListener('livewire:navigated', function () {
+        setTimeout(normalizeAll, 180);
+        setTimeout(normalizeAll, 400);
+    });
+
+    if (window.Livewire && typeof window.Livewire.hook === 'function') {
+        window.Livewire.hook('message.processed', () => {
+            setTimeout(normalizeAll, 120);
+        });
+    }
+});
+</script>
+
+
+
     <div
         x-data="{
             nodes: @js($chart['nodes']),
