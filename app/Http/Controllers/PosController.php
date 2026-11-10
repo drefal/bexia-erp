@@ -2639,7 +2639,8 @@ abort_if(! $sessionRow, 404);
 
     // FIX246P: los permisos genericos no dan acceso global al PDV.
     // Solo administradores reales pueden omitir el filtro de asignacion.
-    protected function v5327bCanManageAllPos(): bool
+    // FIX249: alcance administrativo de la empresa del PDV.
+    protected function v5327bCanManageAllPos(object $pos): bool
     {
         $user = auth()->user();
 
@@ -2647,17 +2648,36 @@ abort_if(! $sessionRow, 404);
             return false;
         }
 
-        foreach ([
-            'isSystemAdmin',
-            'isGroupAdmin',
-            'isCompanyAdmin',
-        ] as $method) {
-            if (method_exists($user, $method) && $user->{$method}()) {
-                return true;
-            }
+        $companyId = (int) ($pos->company_id ?? 0);
+
+        if ($companyId <= 0) {
+            return false;
         }
 
-        return false;
+        if (method_exists($user, 'isSystemAdmin')
+            && $user->isSystemAdmin()) {
+            return true;
+        }
+
+        $groupId = (int) \Illuminate\Support\Facades\DB::table('companies')
+            ->where('id', $companyId)
+            ->value('company_group_id');
+
+        if ($groupId > 0
+            && method_exists($user, 'isGroupAdmin')
+            && $user->isGroupAdmin($groupId)) {
+            return true;
+        }
+
+        return \Illuminate\Support\Facades\DB::table(
+            'model_has_roles as mr'
+        )
+            ->join('roles as r', 'r.id', '=', 'mr.role_id')
+            ->where('mr.model_id', $user->id)
+            ->where('mr.model_type', 'App\\Models\\User')
+            ->where('mr.company_id', $companyId)
+            ->where('r.name', 'Admin Empresa')
+            ->exists();
     }
 
     protected function v5327bAssignedPosPointIdsForCurrentUser(): array
@@ -2751,7 +2771,7 @@ abort_if(! $sessionRow, 404);
 
     protected function v5327bAbortIfCannotAccessPos(object $pos): void
     {
-        if ($this->v5327bCanManageAllPos()) {
+        if ($this->v5327bCanManageAllPos($pos)) {
             return;
         }
 

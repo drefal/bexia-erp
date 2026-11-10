@@ -278,13 +278,33 @@
     $user = auth()->user();
     $userId = (int) ($user?->id ?? 0);
 
-    // FIX246P: roles administrativos reales.
-    // La consulta posterior conserva el filtro de empresa.
-    $isAdmin = $user && (
-        (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin())
-        || (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin())
-        || (method_exists($user, 'isCompanyAdmin') && $user->isCompanyAdmin())
-    );
+    // FIX249: administracion limitada a la empresa del tenant.
+    $isAdmin = false;
+
+    if ($user && $companyId > 0) {
+        $isAdmin = method_exists($user, 'isSystemAdmin')
+            && $user->isSystemAdmin();
+
+        if (! $isAdmin) {
+            $groupId = (int) DB::table('companies')
+                ->where('id', $companyId)
+                ->value('company_group_id');
+
+            if ($groupId > 0 && method_exists($user, 'isGroupAdmin')) {
+                $isAdmin = (bool) $user->isGroupAdmin($groupId);
+            }
+        }
+
+        if (! $isAdmin) {
+            $isAdmin = DB::table('model_has_roles as mr')
+                ->join('roles as r', 'r.id', '=', 'mr.role_id')
+                ->where('mr.model_id', $userId)
+                ->where('mr.model_type', 'App\\Models\\User')
+                ->where('mr.company_id', $companyId)
+                ->where('r.name', 'Admin Empresa')
+                ->exists();
+        }
+    }
 
     $posPoints = collect();
 
