@@ -601,12 +601,6 @@ body[data-v5836-product-name-size="17"] .product {
         )
             <div id="bexia-access9-shift-controls"
                  style="display:flex;align-items:center;gap:8px;">
-                <span style="font-size:12px;font-weight:900;
-                       color:#166534;background:#f0fdf4;
-                       border:1px solid #bbf7d0;
-                       border-radius:10px;padding:8px;">
-                    Turno individual activo
-                </span>
                 <form method="POST"
                       action="{{ route('pos.cashier-shift.close', ['session' => $session->id]) }}"
                       onsubmit="return confirm('¿Finalizar tu turno individual? La caja física permanecerá abierta. Guarda primero los tickets pendientes.');"
