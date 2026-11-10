@@ -20637,16 +20637,38 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             'bexia_access8_terminal.' . $terminal
         );
 
+        // ACCESS9 FIX263:
+        // Permitir que el usuario que cerro este turno vea
+        // su reporte durante 30 minutos, sin concederle
+        // permisos administrativos generales.
+        $request->session()->put(
+            'bexia_access9_closed_report.' . $closed,
+            [
+                'user_id' => (int) auth()->id(),
+                'company_id' => $companyId,
+                'pos_point_id' => $posPointId,
+                'expires_at' => time() + 1800,
+            ]
+        );
+
+        $reportUrl = route(
+            'pos.cashier-shifts.report',
+            [
+                'shift' => $closed,
+                'format' => '80mm',
+            ]
+        );
+
         if ($request->expectsJson()) {
             return response()->json([
                 'ok' => true,
                 'shift_id' => $closed,
                 'physical_session_open' => true,
-                'redirect' => '/pos/' . $posPointId . '/open',
+                'redirect' => $reportUrl,
             ]);
         }
 
-        return redirect('/pos/' . $posPointId . '/open')
+        return redirect($reportUrl)
             ->with('success', 'Tu turno ha terminado.');
     }
 
@@ -20655,12 +20677,6 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
         int $shift
     ) {
         abort_unless(auth()->check(), 403);
-
-        // BEXIA_POS_ACCESS9_FIX4A_ADMIN
-        abort_unless(
-            auth()->user()?->can('pos.sessions.download_report') ?? false,
-            403
-        );
 
         $format = (string) $request->query('format', '80mm');
         abort_unless(in_array($format, ['80mm', 'carta'], true), 422);
@@ -20685,6 +20701,38 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
         );
 
         $this->authorizePos($pos);
+
+        // ACCESS9 FIX263:
+        // El acceso temporal autoriza exclusivamente
+        // el turno recien cerrado en esta sesion web.
+        $grant = $request->session()->get(
+            'bexia_access9_closed_report.' . $shift
+        );
+
+        $canAdminReport = (bool) (
+            auth()->user()?->can(
+                'pos.sessions.download_report'
+            ) ?? false
+        );
+
+        $canRecentReport =
+            is_array($grant)
+            && (int) ($grant['user_id'] ?? 0)
+                === (int) auth()->id()
+            && (int) ($grant['company_id'] ?? 0)
+                === $companyId
+            && (int) ($grant['pos_point_id'] ?? 0)
+                === $posPointId
+            && (int) ($grant['expires_at'] ?? 0)
+                >= time()
+            && (string) $access9RequestedShift->status
+                === 'closed';
+
+        abort_unless(
+            $canAdminReport || $canRecentReport,
+            403,
+            'No tienes permiso para consultar este corte.'
+        );
 
         $row = DB::table('pos_cashier_shifts')
             ->where('id', $shift)

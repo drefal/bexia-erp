@@ -270,6 +270,9 @@ h1 { font-size: 15px; }
 </head>
 <body>
 <div class="actions">
+    <a href="{{ route('pos.open', ['posPoint' => $shift->pos_point_id]) }}">
+        Volver al PDV
+    </a>
     <a href="{{ route('pos.cashier-shifts.report', ['shift' => $shift->id, 'format' => '80mm']) }}">
         Ticket 80 mm
     </a>
@@ -320,7 +323,7 @@ h1 { font-size: 15px; }
     <div class="access9-official-brand">BEXIA ERP</div>
     <h1>CORTE INDIVIDUAL DE CAJERO</h1>
 </div>
-    <div class="subtitle">Papelón Florales Secundario</div>
+    <div class="subtitle">{{ $access9LogoPoint->name ?? 'Punto de venta' }}</div>
 
     <table class="meta">
         <tr><td>Turno</td><td>#{{ $shift->id }}</td></tr>
