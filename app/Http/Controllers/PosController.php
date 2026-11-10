@@ -44,9 +44,14 @@ class PosController extends Controller
 
         abort_if(! $cashierRow, 404);
         if ($this->bexiaAccess7IsPilot($pos)) {
-            // ACCESS9: NIP valido no sustituye autorizacion de identidad.
+            // ACCESS9 FIX261: la cuenta Bexia autorizada al PDV
+            // puede operar con empleados asignados, aunque estos
+            // no tengan una cuenta individual de usuario.
+            //
+            // La identidad operativa se valida mediante el NIP
+            // personal en loginCashier. Se mantienen la empresa,
+            // la asignacion activa y los permisos del empleado.
             $this->bexiaAccess8ValidateStaff($pos, $cashierRow);
-            $this->bexiaAssertOwnStaff($pos, $cashierRow);
         }
 
         if ($this->bexiaAccess7IsPilot($pos) || $this->staffHasPin($cashierRow)) {
@@ -75,9 +80,14 @@ return redirect('/pos/sessions/' . $sessionId . '/screen');
 
         abort_if(! $cashierRow, 404);
         if ($this->bexiaAccess7IsPilot($pos)) {
-            // ACCESS9: NIP valido no sustituye autorizacion de identidad.
+            // ACCESS9 FIX261: la cuenta Bexia autorizada al PDV
+            // puede operar con empleados asignados, aunque estos
+            // no tengan una cuenta individual de usuario.
+            //
+            // La identidad operativa se valida mediante el NIP
+            // personal en loginCashier. Se mantienen la empresa,
+            // la asignacion activa y los permisos del empleado.
             $this->bexiaAccess8ValidateStaff($pos, $cashierRow);
-            $this->bexiaAssertOwnStaff($pos, $cashierRow);
         }
 
         $pin = trim((string) $request->input('pin'));
