@@ -18,7 +18,9 @@ class PosController extends Controller
 
         $this->authorizePos($pos);
 
-        $cashiers = $this->staffForPos($pos);
+        $cashiers = $this->bexiaAccess7IsPilot($pos)
+            ? $this->bexiaAccess8StaffForPos($pos)
+            : $this->bexiaOwnStaffForPos($pos);
 
         return view('pos.cashiers', [
             'pos' => $pos,
@@ -39,8 +41,15 @@ class PosController extends Controller
         $cashierRow = $this->resolveStaff($pos, $cashier);
 
         abort_if(! $cashierRow, 404);
+        if ($this->bexiaAccess7IsPilot($pos)) {
+            // ACCESS9: NIP valido no sustituye autorizacion de identidad.
+            $this->bexiaAccess8ValidateStaff($pos, $cashierRow);
+            $this->bexiaAssertOwnStaff($pos, $cashierRow);
+        } else {
+            $this->bexiaAssertOwnStaff($pos, $cashierRow);
+        }
 
-        if ($this->staffHasPin($cashierRow)) {
+        if ($this->bexiaAccess7IsPilot($pos) || $this->staffHasPin($cashierRow)) {
             return view('pos.pin', [
                 'pos' => $pos,
                 'cashier' => $cashierRow,
@@ -48,7 +57,7 @@ class PosController extends Controller
             ]);
         }
 
-        $sessionId = $this->openSession($pos, $cashierRow, $this->v5487OpeningCashFromRequest($request, $cashierRow));
+        $sessionId = $this->openSession($pos, $cashierRow, /* BEXIA_POS_ACCESS7_FIX2C_OPENING */ $this->bexiaAccess7IsPilot($pos) ? $this->v5487dOpeningCashFromRequest($request) : $this->v5487OpeningCashFromRequest($request, $cashierRow));
 
                 $this->v5487dApplyOpeningCashToSession((int) $sessionId, $request, $cashierRow);
 return redirect('/pos/sessions/' . $sessionId . '/screen');
@@ -65,8 +74,22 @@ return redirect('/pos/sessions/' . $sessionId . '/screen');
         $cashierRow = $this->resolveStaff($pos, $cashier);
 
         abort_if(! $cashierRow, 404);
+        if ($this->bexiaAccess7IsPilot($pos)) {
+            // ACCESS9: NIP valido no sustituye autorizacion de identidad.
+            $this->bexiaAccess8ValidateStaff($pos, $cashierRow);
+            $this->bexiaAssertOwnStaff($pos, $cashierRow);
+        } else {
+            $this->bexiaAssertOwnStaff($pos, $cashierRow);
+        }
 
         $pin = trim((string) $request->input('pin'));
+        if ($this->bexiaAccess7IsPilot($pos)) {
+            $key = 'bexia_access8_pin:' . (int) auth()->id() . ':'
+                . (int) $pos->id . ':' . (int) ($cashierRow->employee_id ?? 0);
+            if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($key, 5)) {
+                abort(429, 'Demasiados intentos de NIP. Intenta nuevamente mas tarde.');
+            }
+        }
 
         $hash = $this->staffPinHash($cashierRow);
         $plain = $this->staffPlainPin($cashierRow);
@@ -74,16 +97,102 @@ return redirect('/pos/sessions/' . $sessionId . '/screen');
         $validPin = ($hash && Hash::check($pin, (string) $hash))
             || ($plain && hash_equals((string) $plain, (string) $pin));
 
+        if ($this->bexiaAccess7IsPilot($pos) && ! $validPin) {
+            \Illuminate\Support\Facades\RateLimiter::hit($key, 300);
+        }
+        if ($this->bexiaAccess7IsPilot($pos) && $validPin) {
+            \Illuminate\Support\Facades\RateLimiter::clear($key);
+        }
         if (! $validPin) {
+            // BEXIA_ACCESS9_STAGE142_INVALID_PIN
+            if (
+                $this->bexiaAccess7IsPilot($pos)
+                && $request->header('X-Bexia-Access9-Preflight') === '1'
+            ) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Clave incorrecta.',
+                ], 422);
+            }
+
             return redirect()
                 ->back()
                 ->with('error', 'Clave incorrecta.');
         }
 
-        $sessionId = $this->openSession($pos, $cashierRow, $this->v5487OpeningCashFromRequest($request, $cashierRow));
+        // BEXIA_ACCESS9_STAGE142_PREFLIGHT
+        // Validacion previa: no abre sesiones ni turnos.
+        if ($this->bexiaAccess7IsPilot($pos)) {
+            if ($request->header('X-Bexia-Access9-Preflight') === '1') {
+                $openSessions = DB::table('pos_sessions')
+                    ->where('company_id', (int) $pos->company_id)
+                    ->where('pos_point_id', (int) $pos->id)
+                    ->where('status', 'open')
+                    ->limit(2)
+                    ->count();
+
+                if ($openSessions > 1) {
+                    return response()->json([
+                        'ok' => false,
+                        'message' => 'Existen varias sesiones abiertas. Se requiere conciliacion.',
+                    ], 409);
+                }
+
+                return response()->json([
+                    'ok' => true,
+                    'needs_opening_cash' => $openSessions === 0,
+                ]);
+            }
+
+            // El navegador no puede omitir el fondo inicial
+            // cuando realmente es necesario abrir caja.
+            $physicalSessionOpen = DB::table('pos_sessions')
+                ->where('company_id', (int) $pos->company_id)
+                ->where('pos_point_id', (int) $pos->id)
+                ->where('status', 'open')
+                ->exists();
+
+            if (! $physicalSessionOpen) {
+                $openingAmount = $request->input('opening_amount');
+                $openingCount = $request->input('opening_cash_count');
+
+                $decodedCount = is_string($openingCount)
+                    ? json_decode($openingCount, true)
+                    : $openingCount;
+
+                if (
+                    ! $request->exists('opening_amount')
+                    || ! is_numeric($openingAmount)
+                    || (float) $openingAmount < 0
+                    || ! is_array($decodedCount)
+                ) {
+                    return redirect()
+                        ->back()
+                        ->with(
+                            'error',
+                            'Debes capturar el fondo inicial antes de abrir la caja.'
+                        );
+                }
+            }
+        }
+
+        $sessionId = $this->openSession($pos, $cashierRow, /* BEXIA_POS_ACCESS7_FIX2C_OPENING */ $this->bexiaAccess7IsPilot($pos) ? $this->v5487dOpeningCashFromRequest($request) : $this->v5487OpeningCashFromRequest($request, $cashierRow));
 
                 $this->v5487dApplyOpeningCashToSession((int) $sessionId, $request, $cashierRow);
-return redirect('/pos/sessions/' . $sessionId . '/screen');
+if ($this->bexiaAccess7IsPilot($pos)) {
+            $terminal = (string) \Illuminate\Support\Str::uuid();
+            $bexiaAccess9ShiftId = $this->bexiaAccess9StartShift($pos, (int) $sessionId, $cashierRow, $terminal);
+            $request->session()->put('bexia_access8_terminal.' . $terminal, [
+                'user_id' => (int) auth()->id(),
+                'employee_id' => (int) $cashierRow->employee_id,
+                'pos_point_id' => (int) $pos->id,
+                'pos_session_id' => (int) $sessionId,
+                'issued_at' => time(),
+                'shift_id' => $bexiaAccess9ShiftId,
+            ]);
+            return redirect('/pos/sessions/' . $sessionId . '/screen?terminal=' . $terminal);
+        }
+        return redirect('/pos/sessions/' . $sessionId . '/screen');
     }
 
     public function screen(int $session)
@@ -99,7 +208,41 @@ abort_if(! $sessionRow, 404);
         $this->authorizePos($pos);
 
         $cashier = $this->sessionStaff($sessionRow);
-        $staffPermissions = $this->staffPermissionsForSession($pos, $sessionRow, $cashier);
+
+        // BEXIA_ACCESS9_STAGE147_FIX1_TERMINAL
+        $bexiaAccess8Terminal = '';
+        $permissionSession = $sessionRow;
+
+        if ($this->bexiaAccess7IsPilot($pos)) {
+            $bexiaAccess8Terminal =
+                (string) request()->query('terminal', '');
+
+            if ($bexiaAccess8Terminal === '') {
+                return redirect('/pos/' . (int) $pos->id . '/open')
+                    ->with(
+                        'error',
+                        'Selecciona tu nombre e introduce tu NIP.'
+                    );
+            }
+
+            $cashier = $this->bexiaAccess8CashierForTerminal(
+                $pos,
+                $sessionRow,
+                $bexiaAccess8Terminal
+            );
+
+            $permissionSession = clone $sessionRow;
+            $permissionSession->employee_id =
+                (int) $cashier->employee_id;
+            $permissionSession->staff_role =
+                $cashier->role ?? 'mixed';
+        }
+
+        $staffPermissions = $this->staffPermissionsForSession(
+            $pos,
+            $permissionSession,
+            $cashier
+        );
 
         $warehouseName = $this->labelFromTable('warehouses', $pos->warehouse_id ?? null);
         $locationId = $this->configuredStockLocationId($pos);
@@ -127,15 +270,30 @@ abort_if(! $sessionRow, 404);
 
         return view('pos.screen', [
             'session' => $sessionRow,
+            'bexiaAccess8Terminal' => $bexiaAccess8Terminal,
             'pos' => $pos,
             'cashier' => $cashier,
             // BEXIA_V582_P3_XLSM_A34C2_SWITCH_VIEW_DATA
-            'switchableStaff' => $this->staffForPos($pos),
-            'currentStaffKey' => ! empty($sessionRow->employee_id)
-                ? ('emp_' . (int) $sessionRow->employee_id)
-                : ('cashier_' . (int) ($sessionRow->pos_cashier_id ?? 0)),
+            'switchableStaff' => $this->bexiaAccess7IsPilot($pos)
+                ? $this->bexiaOwnStaffForPos($pos)
+                : $this->staffForPos($pos),
+            // BEXIA_ACCESS9_STAGE147_FIX1_CURRENT_STAFF
+            'currentStaffKey' => (
+                $this->bexiaAccess7IsPilot($pos)
+                ? (
+                    ! empty($cashier->employee_id)
+                        ? ('emp_' . (int) $cashier->employee_id)
+                        : ('cashier_' . (int) ($sessionRow->pos_cashier_id ?? 0))
+                )
+                : (
+                    ! empty($sessionRow->employee_id)
+                        ? ('emp_' . (int) $sessionRow->employee_id)
+                        : ('cashier_' . (int) ($sessionRow->pos_cashier_id ?? 0))
+                )
+            ),
             'canSwitchCashier' =>
-                (bool) ($pos->multiple_cashiers_per_session ?? false)
+                ! $this->bexiaAccess7IsPilot($pos)
+                && (bool) ($pos->multiple_cashiers_per_session ?? false)
                 && (int) ($sessionRow->company_id ?? 0)
                     === (int) ($pos->company_id ?? 0),
             'staffPermissions' => $staffPermissions,
@@ -186,6 +344,25 @@ abort_if(! $sessionRow, 404);
 
         $pos = $this->posPoint((int) $sessionRow->pos_point_id);
         $this->authorizePos($pos);
+
+        // BEXIA_ACCESS9_STAGE164_SWITCH_GUARD
+        // En ACCESS9 la sesion fisica es compartida.
+        // Cada cajero debe autenticarse con su NIP y
+        // operar en su turno individual, sin modificar
+        // employee_id de pos_sessions.
+        if (
+            $this->bexiaAccess9EnabledForIds(
+                (int) ($sessionRow->company_id ?? 0),
+                (int) ($sessionRow->pos_point_id ?? 0)
+            )
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' =>
+                    'Este PDV utiliza turnos individuales. '
+                    . 'Identificate con tu NIP desde la entrada del PDV.',
+            ], 403);
+        }
 
         if ((string) ($sessionRow->status ?? '') !== 'open') {
             return response()->json([
@@ -1152,6 +1329,13 @@ abort_if(! $sessionRow, 404);
 
     protected function openSession(object $pos, object $cashier, array $openingCash = []): int
     {
+        // BEXIA_ACCESS9_STAGE138_SHARED_SESSION
+        if ($this->bexiaAccess7IsPilot($pos)) {
+            return $this->bexiaAccess7OpenSharedSession(
+                $pos, $cashier, $openingCash
+            );
+        }
+
         $employeeId = ! empty($cashier->employee_id)
             ? (int) $cashier->employee_id
             : null;
@@ -2998,10 +3182,146 @@ abort_if(! $sessionRow, 404);
         abort(404);
     }
 
+    // BEXIA_ACCESS9_STAGE175_JSON_CLOSE
+    // BEXIA_ACCESS9_STAGE179_JSON_ALL_AJAX
+    $access9JsonClose = $request->expectsJson();
+
+    $access9PilotClose = $this->bexiaAccess9EnabledForIds(
+        (int) ($row->company_id ?? 0),
+        (int) ($row->pos_point_id ?? 0)
+    );
+
+    // BEXIA_ACCESS9_STAGE182_REQUIRE_COUNT
+    // El piloto solo permite el cierre fisico mediante el
+    // formulario moderno con desglose efectivo comprobable.
+    // Este control se ejecuta antes de cualquier cierre.
+    if ($access9PilotClose) {
+        if (! $request->expectsJson()) {
+            return redirect()->back()->with(
+                'error',
+                'Para cerrar esta caja utiliza el corte completo '
+                . 'con conteo de efectivo y confirmacion final.'
+            );
+        }
+
+        if (
+            ! $request->exists('closing_amount')
+            || ! $request->exists('closing_difference')
+            || ! $request->exists('cash_count')
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' =>
+                    'Faltan los datos del conteo de caja. '
+                    . 'Abre el corte completo y vuelve a capturarlos.',
+            ], 422);
+        }
+
+        $access9AmountRaw = $request->input('closing_amount');
+        $access9DifferenceRaw = $request->input('closing_difference');
+        $access9CountRaw = $request->input('cash_count');
+
+        if (
+            ! is_numeric($access9AmountRaw)
+            || ! is_numeric($access9DifferenceRaw)
+            || ! is_string($access9CountRaw)
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'El conteo o la diferencia tienen un formato invalido.',
+            ], 422);
+        }
+
+        $access9CountRows = json_decode(
+            $access9CountRaw,
+            true
+        );
+
+        if (! is_array($access9CountRows) || ! array_is_list($access9CountRows)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'El desglose de denominaciones no es valido.',
+            ], 422);
+        }
+
+        $access9CountedCents = 0;
+
+        foreach ($access9CountRows as $access9CountRow) {
+            if (
+                ! is_array($access9CountRow)
+                || ! isset(
+                    $access9CountRow['value'],
+                    $access9CountRow['quantity'],
+                    $access9CountRow['total']
+                )
+                || ! is_numeric($access9CountRow['value'])
+                || ! is_numeric($access9CountRow['quantity'])
+                || ! is_numeric($access9CountRow['total'])
+            ) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Hay una denominacion de efectivo invalida.',
+                ], 422);
+            }
+
+            $access9Value = (float) $access9CountRow['value'];
+            $access9Quantity = (float) $access9CountRow['quantity'];
+            $access9RowTotal = (float) $access9CountRow['total'];
+
+            if (
+                ! is_finite($access9Value)
+                || ! is_finite($access9Quantity)
+                || ! is_finite($access9RowTotal)
+                || $access9Value <= 0
+                || $access9Quantity < 0
+                || floor($access9Quantity) !== $access9Quantity
+                || abs(
+                    $access9RowTotal
+                    - ($access9Value * $access9Quantity)
+                ) > 0.009
+            ) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'Las cantidades del efectivo no cuadran.',
+                ], 422);
+            }
+
+            $access9CountedCents += (int) round(
+                $access9Value * $access9Quantity * 100
+            );
+        }
+
+        $access9DeclaredAmount = (float) $access9AmountRaw;
+        $access9DeclaredDifference = (float) $access9DifferenceRaw;
+
+        if (
+            ! is_finite($access9DeclaredAmount)
+            || ! is_finite($access9DeclaredDifference)
+            || $access9DeclaredAmount < 0
+            || $access9CountedCents !== (int) round(
+                $access9DeclaredAmount * 100
+            )
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' =>
+                    'El efectivo declarado no coincide con el desglose. '
+                    . 'Revisa el conteo antes de cerrar.',
+            ], 422);
+        }
+    }
+
     $difference = round((float) $request->input('closing_difference', 0), 2);
     $note = trim((string) $request->input('closing_note', ''));
 
     if (abs($difference) > 0.009 && $note === '') {
+        if ($access9JsonClose) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Hay diferencia en el corte. La nota de cierre es obligatoria.',
+            ], 422);
+        }
+
         return redirect()
             ->back()
             ->with('error', 'Hay diferencia en el corte. La nota de cierre es obligatoria.');
@@ -3073,6 +3393,13 @@ abort_if(! $sessionRow, 404);
             ];
         } else {
             // No generar un cierre con fotografia parcial.
+            if ($access9JsonClose) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => 'No fue posible generar el resumen Papelón del cierre.',
+                ], 409);
+            }
+
             return redirect()->back()->with(
                 'error',
                 'No fue posible generar el resumen Papelón del cierre.'
@@ -3106,9 +3433,232 @@ abort_if(! $sessionRow, 404);
         $updates['closing_amount'] = round((float) $closingAmount, 2);
     }
 
-    DB::table('pos_sessions')
-        ->where('id', $session)
-        ->update($updates);
+    // BEXIA_ACCESS9_STAGE173_PHYSICAL_AND_LAST_SHIFT
+    if (
+        $this->bexiaAccess9EnabledForIds(
+            (int) ($row->company_id ?? 0),
+            (int) ($row->pos_point_id ?? 0)
+        )
+    ) {
+        $access9Terminal = trim(
+            (string) $request->input('cashier_terminal_id', '')
+        );
+
+        $access9CloseResult = DB::transaction(
+            function () use (
+                $request,
+                $session,
+                $row,
+                $updates,
+                $access9Terminal,
+                $papelonCloseSnapshot,
+                $closePosPoint
+            ): string {
+                // Primero bloquear la sesion fisica, como hacen
+                // los cobros y los cierres individuales.
+                $locked = DB::table('pos_sessions')
+                    ->where('id', $session)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (
+                    ! $locked
+                    || (string) ($locked->status ?? '') !== 'open'
+                ) {
+                    return 'session_not_open';
+                }
+
+                if (
+                    (int) ($locked->company_id ?? 0)
+                        !== (int) ($row->company_id ?? 0)
+                    || (int) ($locked->pos_point_id ?? 0)
+                        !== (int) ($row->pos_point_id ?? 0)
+                ) {
+                    return 'session_changed';
+                }
+
+                abort_unless(
+                    \Illuminate\Support\Facades\Schema::hasTable(
+                        'pos_cashier_shifts'
+                    ),
+                    409,
+                    'No esta disponible el registro de turnos.'
+                );
+
+                $pos = $this->posPoint(
+                    (int) $locked->pos_point_id
+                );
+
+                $staff = $this->bexiaAccess8CashierForTerminal(
+                    $pos,
+                    $locked,
+                    $access9Terminal
+                );
+
+                $activeShift = $this->bexiaAccess9AssertShift(
+                    $locked,
+                    $staff,
+                    $access9Terminal,
+                    true
+                );
+
+                // Debe haber exactamente un turno abierto,
+                // y debe ser el del cajero que esta cerrando.
+                $openShifts = DB::table('pos_cashier_shifts')
+                    ->where('company_id', (int) $locked->company_id)
+                    ->where('pos_point_id', (int) $locked->pos_point_id)
+                    ->where('pos_session_id', $session)
+                    ->where('status', 'open')
+                    ->get(['id']);
+
+                if (
+                    $openShifts->count() !== 1
+                    || (int) $openShifts->first()->id
+                        !== (int) $activeShift->id
+                ) {
+                    return 'other_open_shifts';
+                }
+
+                // BEXIA_ACCESS9_STAGE176_SNAPSHOT_RECHECK
+                // Confirmar dentro de la transaccion que
+                // el corte mostrado no quedo desactualizado.
+                // No alterar la fotografia original ni
+                // aceptar cambios economicos silenciosamente.
+                if ($papelonCloseSnapshot !== null) {
+                    $access9FreshSummary =
+                        \App\Support\PosPapelonCloseSummary::build(
+                            (int) $session,
+                            (string) (
+                                $closePosPoint->sales_breakdown_mode
+                                ?? 'default'
+                            ) === 'areas'
+                        );
+
+                    if (
+                        !is_array($access9FreshSummary)
+                        || empty($access9FreshSummary['ok'])
+                    ) {
+                        return 'summary_unavailable';
+                    }
+
+                    $access9OriginalEconomicData = [
+                        'refunds' =>
+                            $papelonCloseSnapshot['refunds'] ?? [],
+                        'totals' =>
+                            $papelonCloseSnapshot['totals'] ?? [],
+                        'sections' =>
+                            $papelonCloseSnapshot['sections'] ?? [],
+                        'method_totals' =>
+                            $papelonCloseSnapshot['method_totals'] ?? [],
+                        'products_by_section' =>
+                            $papelonCloseSnapshot[
+                                'products_by_section'
+                            ] ?? [],
+                    ];
+
+                    $access9FreshEconomicData = [
+                        'refunds' =>
+                            $access9FreshSummary['refunds'] ?? [],
+                        'totals' =>
+                            $access9FreshSummary['totals'] ?? [],
+                        'sections' =>
+                            $access9FreshSummary['sections'] ?? [],
+                        'method_totals' =>
+                            $access9FreshSummary['method_totals'] ?? [],
+                        'products_by_section' =>
+                            $access9FreshSummary[
+                                'products_by_section'
+                            ] ?? [],
+                    ];
+
+                    if (
+                        json_encode(
+                            $access9OriginalEconomicData,
+                            JSON_UNESCAPED_UNICODE
+                            | JSON_UNESCAPED_SLASHES
+                            | JSON_THROW_ON_ERROR
+                        ) !== json_encode(
+                            $access9FreshEconomicData,
+                            JSON_UNESCAPED_UNICODE
+                            | JSON_UNESCAPED_SLASHES
+                            | JSON_THROW_ON_ERROR
+                        )
+                    ) {
+                        return 'summary_changed';
+                    }
+                }
+
+                // Reutilizar la conciliacion original.
+                // Laravel mantiene esta transaccion anidada
+                // dentro de la transaccion fisica.
+                $closedShiftId = $this->bexiaAccess9CloseShift(
+                    $request,
+                    $session,
+                    true
+                );
+
+                abort_unless(
+                    (int) $closedShiftId
+                        === (int) $activeShift->id,
+                    409,
+                    'El cierre individual no coincide.'
+                );
+
+                $updated = DB::table('pos_sessions')
+                    ->where('id', $session)
+                    ->where('status', 'open')
+                    ->update($updates);
+
+                abort_unless(
+                    $updated === 1,
+                    409,
+                    'No se pudo cerrar la sesion fisica.'
+                );
+
+                return 'closed';
+            }
+        );
+
+        if ($access9CloseResult !== 'closed') {
+            // BEXIA_ACCESS9_STAGE176_SNAPSHOT_ERROR
+            $access9CloseError = match ($access9CloseResult) {
+                'other_open_shifts' =>
+                    'Todavia existen otros turnos abiertos. '
+                    . 'Solicita a esos cajeros cerrar primero.',
+                'summary_changed' =>
+                    'Se registraron cambios en ventas, devoluciones '
+                    . 'o movimientos durante la preparacion del corte. '
+                    . 'Actualiza el resumen y vuelve a contar.',
+                'summary_unavailable' =>
+                    'No se pudo verificar nuevamente el resumen '
+                    . 'economico. La caja permanece abierta.',
+                default =>
+                    'La sesion fisica ya no esta disponible '
+                    . 'para realizar el cierre.',
+            };
+
+            if ($access9JsonClose) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => $access9CloseError,
+                ], 409);
+            }
+
+            return redirect()->back()
+                ->with('error', $access9CloseError);
+        }
+
+        // BEXIA_ACCESS9_STAGE173_FORGET_AFTER_COMMIT
+        // Invalidar la identidad solo despues del COMMIT conjunto.
+        $request->session()->forget(
+            'bexia_access8_terminal.' . $access9Terminal
+        );
+    } else {
+        // Comportamiento original para POS sin ACCESS9.
+        DB::table('pos_sessions')
+            ->where('id', $session)
+            ->update($updates);
+    }
 
             $this->v5515aWritePosAuditLog('pos.session.close.success', [
             'pos_session_id' => $session,
@@ -3185,7 +3735,21 @@ abort_if(! $sessionRow, 404);
         }
     }
 
-return redirect($this->v5485hPosEmployeeSelectorUrl($row))
+// BEXIA_ACCESS9_STAGE175_CONFIRMED_CLOSE
+    if ($access9JsonClose) {
+        return response()->json([
+            'ok' => true,
+            'session_id' => (int) $session,
+            'physical_session_closed' => true,
+            // BEXIA_ACCESS9_STAGE179_SHIFT_FLAG
+            'access9_pilot' => $access9PilotClose,
+            'last_cashier_shift_closed' => $access9PilotClose,
+            'redirect' => $this->v5485hPosEmployeeSelectorUrl($row),
+            'message' => 'Sesion fisica y ultimo turno cerrados correctamente.',
+        ]);
+    }
+
+    return redirect($this->v5485hPosEmployeeSelectorUrl($row))
         ->with('success', 'Sesión cerrada correctamente.');
 }
 
@@ -4097,6 +4661,21 @@ return redirect($this->v5485hPosEmployeeSelectorUrl($row))
             return $this->v5504aPendingTicketForbiddenJson('No tienes permiso para crear tickets pendientes.');
         }
 
+        // BEXIA_ACCESS9_PROMOTE28_CREATION_UUID
+        $creationUuid = trim((string) $request->input(
+            'creation_request_uuid', ''
+        ));
+
+        if (
+            $creationUuid !== ''
+            && ! \Illuminate\Support\Str::isUuid($creationUuid)
+        ) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Identificador de operacion invalido.',
+            ], 422);
+        }
+
         $sessionRow = DB::table('pos_sessions')->where('id', $session)->first();
 
         abort_if(! $sessionRow, 404, 'Sesión PDV no encontrada.');
@@ -4128,6 +4707,46 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
         if (Schema::hasColumn('pos_sessions', 'employee_id') && ! empty($sessionRow->employee_id)) {
             $employeeId = (int) $sessionRow->employee_id;
         }
+
+        // BEXIA_ACCESS9_PROMOTE26_STORE_ORDER
+        // Identidad individual del cajero en Papelon.
+        $access9Pilot = $this->bexiaAccess9EnabledForIds($companyId, $posPointId);
+        $access9Terminal = (string) $request->input(
+            'cashier_terminal_id', ''
+        );
+
+        if ($access9Pilot) {
+            $access9Staff = $this->bexiaAccess8CashierForTerminal(
+                $pos, $sessionRow, $access9Terminal
+            );
+
+            $employeeId = (int) $access9Staff->employee_id;
+        }
+
+        $creationShiftId = null;
+
+        if ($access9Pilot) {
+            $creationShift = $this->bexiaAccess9AssertShift(
+                $sessionRow, $access9Staff, $access9Terminal
+            );
+            $creationShiftId = (int) $creationShift->id;
+        }
+
+        $creationHash = hash('sha256', json_encode([
+            'session_id' => $session,
+            'company_id' => $companyId,
+            'pos_point_id' => $posPointId,
+            'employee_id' => $access9Pilot ? $employeeId : null,
+            'cashier_shift_id' => $creationShiftId,
+            'items' => $request->input('items'),
+            'discount' => $request->input('discount'),
+            'order_note' => $request->input('order_note'),
+            'total' => $request->input('total'),
+            'customer_id' => $request->input('customer_id'),
+            'price_list_id' => $request->input('price_list_id'),
+        ], JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+            | JSON_THROW_ON_ERROR));
 
         $customerId = $request->input('customer_id');
 
@@ -4359,8 +4978,112 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
             $total,
             $normalizedItems,
             $request,
-            $v5496aPriceList
+            $v5496aPriceList,
+            $access9Pilot,
+            $access9Terminal,
+            $pos,
+            $creationUuid,
+            $creationHash,
+            $creationShiftId
         ) {
+            // BEXIA_ACCESS9_PROMOTE26_STORE_ORDER_TRANSACTION
+            // Mismo orden de bloqueos que pagos y cierre:
+            // sesion fisica y despues turno individual.
+            if ($access9Pilot) {
+                $access9LockedSession = DB::table('pos_sessions')
+                    ->where('id', $session)
+                    ->where('company_id', (int) $pos->company_id)
+                    ->where('pos_point_id', (int) $pos->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                abort_unless(
+                    $access9LockedSession
+                    && (string) $access9LockedSession->status === 'open',
+                    409,
+                    'La sesion fisica ya no esta abierta.'
+                );
+
+                $access9LockedStaff =
+                    $this->bexiaAccess8CashierForTerminal(
+                        $pos,
+                        $access9LockedSession,
+                        $access9Terminal
+                    );
+
+                $access9LockedShift =
+                    $this->bexiaAccess9AssertShift(
+                        $access9LockedSession,
+                        $access9LockedStaff,
+                        $access9Terminal,
+                        true
+                    );
+
+                abort_unless(
+                    (int) $access9LockedShift->id
+                        === (int) $creationShiftId,
+                    403,
+                    'El turno cambio durante la operacion.'
+                );
+
+                abort_unless(
+                    (int) $access9LockedStaff->employee_id
+                        === (int) $employeeId,
+                    403,
+                    'La identidad del cajero cambio.'
+                );
+            }
+
+            // BEXIA_ACCESS9_PROMOTE28_CREATION_UUID_REPLAY
+            // Se consulta despues del bloqueo de sesion y turno.
+            if ($creationUuid !== '') {
+                $previous = DB::table('pos_orders')
+                    ->where('creation_request_uuid', $creationUuid)
+                    ->first();
+
+                if ($previous) {
+                    $previousMeta = json_decode(
+                        (string) ($previous->metadata ?? ''),
+                        true
+                    );
+
+                    abort_unless(
+                        (int) $previous->pos_session_id === $session
+                        && (int) ($previous->company_id ?? 0)
+                            === $companyId
+                        && (int) ($previous->pos_point_id ?? 0)
+                            === $posPointId
+                        && is_array($previousMeta)
+                        && hash_equals(
+                            (string) (
+                                $previousMeta['creation_payload_hash']
+                                ?? ''
+                            ),
+                            $creationHash
+                        )
+                        && (
+                            ! $access9Pilot
+                            || (
+                                (int) ($previous->employee_id ?? 0)
+                                    === (int) $employeeId
+                                && (int) (
+                                    $previousMeta[
+                                        'creation_cashier_shift_id'
+                                    ] ?? 0
+                                ) === (int) $creationShiftId
+                            )
+                        ),
+                        409,
+                        'Este identificador pertenece a otra operacion.'
+                    );
+
+                    $orderId = (int) $previous->id;
+                    $number = (string) $previous->number;
+                    $finalTotal = (float) $previous->total;
+                    return;
+                }
+            }
+
             $posRow = DB::table('pos_points')->where('id', $posPointId)->first();
 
             $rawPrefix = '';
@@ -4404,6 +5127,11 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
 
             $noteMetadata = [
                 'source' => 'pos_frontend',
+                // BEXIA_ACCESS9_PROMOTE29_ORDER_METADATA
+                'creation_payload_hash' =>
+                    $creationUuid !== '' ? $creationHash : null,
+                'creation_cashier_shift_id' =>
+                    $access9Pilot ? $creationShiftId : null,
                 'payment_label' => $request->input('payment_label'),
                 'price_list_id' => $v5496aPriceList['id'] ?? null,
                 'price_list_name' => $v5496aPriceList['name'] ?? null,
@@ -4504,6 +5232,8 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 'pos_point_id' => $posPointId ?: null,
                 'pos_session_id' => $session,
                 'employee_id' => $employeeId,
+                'creation_request_uuid' =>
+                    $creationUuid !== '' ? $creationUuid : null,
                 'customer_id' => $customerId,
                 'price_list_id' => \Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'price_list_id') ? ($v5496aPriceList['id'] ?? null) : null,
                 'price_list_name' => \Illuminate\Support\Facades\Schema::hasColumn('pos_orders', 'price_list_name') ? ($v5496aPriceList['name'] ?? null) : null,
@@ -4632,6 +5362,15 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                     'message' => 'No se encontró el ticket pendiente.',
                 ];
             }
+
+            // BEXIA_ACCESS9_STAGE169_UPDATE_PENDING
+            // La orden ya se encuentra bloqueada.
+            // Validar el turno antes de cualquier mutacion.
+            $this->bexiaAccess9AuthorizePendingMutation(
+                $request,
+                $orderRow,
+                'pos_session_id'
+            );
 
             if ((string) ($orderRow->status ?? '') !== 'pending_payment') {
                 return [
@@ -6706,6 +7445,15 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
                 ];
             }
 
+            // BEXIA_ACCESS9_STAGE169_CANCEL_PENDING
+            // La orden ya se encuentra bloqueada.
+            // Validar el turno antes de cualquier mutacion.
+            $this->bexiaAccess9AuthorizePendingMutation(
+                $request,
+                $orderRow,
+                'cancelling_session_id'
+            );
+
             if ((string) ($orderRow->status ?? '') !== 'pending_payment') {
                 return [
                     'ok' => false,
@@ -7170,6 +7918,34 @@ return response()->json([
             ];
         }
 
+        // BEXIA_ACCESS9_FIX7C_REFUND_SHIFT
+        $access9RefundShiftId = null;
+        $access9RefundEmployeeId = null;
+
+        if ($this->bexiaAccess9EnabledForIds($companyId, $posPointId)) {
+            $access9Terminal = (string)
+                $request->input('cashier_terminal_id', '');
+
+            $access9Pos = $this->posPoint($posPointId);
+
+            $access9Staff = $this->bexiaAccess8CashierForTerminal(
+                $access9Pos,
+                $cancellingSession,
+                $access9Terminal
+            );
+
+            $access9Shift = $this->bexiaAccess9AssertShift(
+                $cancellingSession,
+                $access9Staff,
+                $access9Terminal,
+                true
+            );
+
+            $access9RefundShiftId = (int) $access9Shift->id;
+            $access9RefundEmployeeId =
+                (int) $access9Staff->employee_id;
+        }
+
         $now = now();
 
         /*
@@ -7219,6 +7995,14 @@ return response()->json([
         $refundMetadata = [
             'source' =>
                 'pos_pending_advance_cancel',
+                ...($access9RefundShiftId !== null ? [
+                    'pos_cashier_shift_id' =>
+                        $access9RefundShiftId,
+                    'performed_by_employee_id' =>
+                        $access9RefundEmployeeId,
+                    'cashier_identity_source' =>
+                        'access9_terminal_nip',
+                ] : []),
             'inventory_return_status' =>
                 'not_applicable_no_stock_output',
             'original_order_number' =>
@@ -7460,6 +8244,14 @@ return response()->json([
             $refundPaymentMetadata = [
                 'source' =>
                     'pending_advance_cancel',
+                ...($access9RefundShiftId !== null ? [
+                    'pos_cashier_shift_id' =>
+                        $access9RefundShiftId,
+                    'performed_by_employee_id' =>
+                        $access9RefundEmployeeId,
+                    'cashier_identity_source' =>
+                        'access9_terminal_nip',
+                ] : []),
                 'source_payment_id' =>
                     (int) $payment->id,
                 'source_payment_status' =>
@@ -7688,6 +8480,14 @@ return response()->json([
                         json_encode([
                             'source' =>
                                 'pos_advance_refund',
+                ...($access9RefundShiftId !== null ? [
+                    'pos_cashier_shift_id' =>
+                        $access9RefundShiftId,
+                    'performed_by_employee_id' =>
+                        $access9RefundEmployeeId,
+                    'cashier_identity_source' =>
+                        'access9_terminal_nip',
+                ] : []),
                             'pos_order_id' =>
                                 $orderId,
                             'pos_order_number' =>
@@ -7980,6 +8780,22 @@ return response()->json([
             }
         }
 
+        // DOUBLEPAY_FIX2E: ID de evento compartido por pagos mixtos.
+        $paymentUuid = trim((string) $request->input('payment_request_uuid', ''));
+        if ($paymentUuid !== '' && ! \Illuminate\Support\Str::isUuid($paymentUuid)) {
+            return response()->json(['ok' => false, 'message' => 'Identificador de pago invalido.'], 422);
+        }
+        $payHash = hash('sha256', json_encode([
+            'order_id' => $order,
+            'payments' => $request->input('payments'),
+            'payment_form_id' => $request->input('payment_form_id'),
+            'amount' => $request->input('amount'),
+            'discount' => $request->input('discount'),
+            'items' => $request->input('items'),
+            'total' => $request->input('total'),
+            'paying_session_id' => $request->input('paying_session_id'),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
         $payments = $request->input('payments', []);
 
         if (! is_array($payments) || count($payments) === 0) {
@@ -7997,7 +8813,9 @@ return response()->json([
              * para resolver paying_session_id. El Request debe
              * capturarse explicitamente en el closure.
              */
-            $result = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $payments, $request) {
+            $result = \Illuminate\Support\Facades\DB::transaction(function () use ($order, $payments, $request, $paymentUuid, $payHash) {
+                // BEXIA_POS53C2J6_ATOMIC_ROLLBACK
+                $pos53InnerResult = (function () use ($order, $payments, $request, $paymentUuid, $payHash) {
             $orderRow = \Illuminate\Support\Facades\DB::table('pos_orders')
                 ->where('id', $order)
                 ->lockForUpdate()
@@ -8011,12 +8829,158 @@ return response()->json([
                 ];
             }
 
+            // El bloqueo de la orden serializa todos los pagos sobre el mismo ticket.
+            // Consultar el evento ANTES de comprobar el estado paid.
+            if ($paymentUuid !== '') {
+                $prior = \Illuminate\Support\Facades\DB::table('pos_payment_requests')
+                    ->where('request_uuid', $paymentUuid)->first();
+                if ($prior) {
+                    if ((int) $prior->pos_order_id !== (int) $order
+                        || ! hash_equals((string) $prior->payload_hash, $payHash)
+                        || (int) ($prior->user_id ?? 0) !== (int) auth()->id()) {
+                        abort(
+                            409,
+                            'El identificador pertenece a otra operacion.'
+                        );
+                    }
+                    $priorResponse = json_decode((string) ($prior->response_payload ?? ''), true);
+                    if ((string) $prior->status !== 'completed' || ! is_array($priorResponse)) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'payment_request_uuid' => ['El cobro esta procesandose; consulte el ticket antes de reintentar.'],
+                        ]);
+                    }
+                    // ACCESS9 STAGE6:
+                    // Un UUID existente solo puede reproducirse
+                    // desde el mismo turno y cajero original.
+                    if (
+                        $this->bexiaAccess9EnabledForIds(
+                            (int) ($orderRow->company_id ?? 0),
+                            (int) ($orderRow->pos_point_id ?? 0)
+                        )
+                    ) {
+                        $replaySessionId = (int)
+                            $request->input('paying_session_id', 0);
+
+                        abort_unless(
+                            $replaySessionId > 0
+                            && $replaySessionId
+                                === (int) ($prior->pos_session_id ?? 0),
+                            403,
+                            'La sesión original del cobro no coincide.'
+                        );
+
+                        $replaySession =
+                            \Illuminate\Support\Facades\DB::table(
+                                'pos_sessions'
+                            )
+                            ->where('id', $replaySessionId)
+                            ->where(
+                                'company_id',
+                                (int) $orderRow->company_id
+                            )
+                            ->where(
+                                'pos_point_id',
+                                (int) $orderRow->pos_point_id
+                            )
+                            ->where('status', 'open')
+                            ->first();
+
+                        abort_unless(
+                            $replaySession !== null,
+                            403,
+                            'La sesión de cobro no está abierta.'
+                        );
+
+                        $replayTerminal = trim(
+                            (string) $request->input(
+                                'cashier_terminal_id', ''
+                            )
+                        );
+
+                        $replayCashier =
+                            $this->bexiaAccess8CashierForTerminal(
+                                $this->posPoint(
+                                    (int) $orderRow->pos_point_id
+                                ),
+                                $replaySession,
+                                $replayTerminal
+                            );
+
+                        $replayShift =
+                            $this->bexiaAccess9AssertShift(
+                                $replaySession,
+                                $replayCashier,
+                                $replayTerminal
+                            );
+
+                        $replayPayments =
+                            \Illuminate\Support\Facades\DB::table(
+                                'pos_order_payments'
+                            )
+                            ->where('pos_order_id', (int) $order)
+                            ->where(
+                                'payment_request_uuid',
+                                $paymentUuid
+                            )
+                            ->where('status', 'paid')
+                            ->get();
+
+                        abort_unless(
+                            $replayPayments->isNotEmpty(),
+                            409,
+                            'No existen pagos asociados al cobro.'
+                        );
+
+                        foreach ($replayPayments as $replayPayment) {
+                            $replayMeta = json_decode(
+                                (string) (
+                                    $replayPayment->metadata ?? ''
+                                ),
+                                true
+                            );
+
+                            abort_unless(
+                                is_array($replayMeta)
+                                && (int) (
+                                    $replayMeta['pos_cashier_shift_id']
+                                    ?? 0
+                                ) === (int) $replayShift->id
+                                && (int) (
+                                    $replayMeta['paid_by_employee_id']
+                                    ?? 0
+                                ) === (int) (
+                                    $replayCashier->employee_id ?? 0
+                                ),
+                                403,
+                                'El cobro pertenece a otro cajero o turno.'
+                            );
+                        }
+                    }
+
+                    return ['ok' => true, '_replay_payload' => $priorResponse];
+                }
+            }
+
             if ((string) $orderRow->status !== 'pending_payment') {
                 return [
                     'ok' => false,
                     'status' => 422,
                     'message' => 'Este ticket ya no está pendiente de cobro.',
                 ];
+            }
+
+            if ($paymentUuid !== '') {
+                \Illuminate\Support\Facades\DB::table('pos_payment_requests')->insert([
+                    'request_uuid' => $paymentUuid,
+                    'pos_order_id' => $order,
+                    'company_id' => $orderRow->company_id,
+                    'pos_session_id' => $request->input('paying_session_id') ?: null,
+                    'user_id' => auth()->id(),
+                    'payload_hash' => $payHash,
+                    'status' => 'processing',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
             }
 
             /*
@@ -8416,6 +9380,23 @@ return response()->json([
             $bexiaPaymentIdentitySource = 'unidentified';
 
             if (
+                $this->bexiaAccess9EnabledForIds(
+                            (int) ($orderRow->company_id ?? 0),
+                            (int) ($orderRow->pos_point_id ?? 0)
+                        )
+                && (
+                    (int) ($requestedPayingSessionId ?? 0) <= 0
+                    || (int) ($payingSessionId ?? 0) <= 0
+                )
+            ) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'paying_session_id' => [
+                        'Es obligatorio identificar la sesion compartida de cobro.',
+                    ],
+                ]);
+            }
+
+            if (
                 $payingSessionId
                 && \Illuminate\Support\Facades\Schema::hasTable(
                     'pos_sessions'
@@ -8459,6 +9440,24 @@ return response()->json([
                     );
 
                     if (
+                        $this->bexiaAccess9EnabledForIds(
+                            (int) ($orderRow->company_id ?? 0),
+                            (int) ($orderRow->pos_point_id ?? 0)
+                        )
+                    ) {
+                        $bexiaTerminal = (string) $request->input('cashier_terminal_id', '');
+                        $bexiaCashier = $this->bexiaAccess8CashierForTerminal(
+                            $this->posPoint((int) $orderRow->pos_point_id),
+                            $bexiaLockedPayingSession,
+                            $bexiaTerminal
+                        );
+                        /* BEXIA_POS_ACCESS9_FIX3B_SHIFT_PAYMENT */
+                        $bexiaAccess9PaymentShift = $this->bexiaAccess9AssertShift($bexiaLockedPayingSession, $bexiaCashier, $bexiaTerminal, true);
+                        $bexiaAccess9PaymentShiftId = (int) $bexiaAccess9PaymentShift->id;
+                        $bexiaActiveEmployeeId = (int) $bexiaCashier->employee_id;
+                    }
+
+                    if (
                         $bexiaActiveEmployeeId > 0
                         && \Illuminate\Support\Facades\Schema::hasTable(
                             'employees'
@@ -8488,15 +9487,41 @@ return response()->json([
                                 );
 
                             $bexiaPaymentIdentitySource =
-                                'paying_session_employee_snapshot';
+                                (
+                                    $this->bexiaAccess9EnabledForIds(
+                            (int) ($orderRow->company_id ?? 0),
+                            (int) ($orderRow->pos_point_id ?? 0)
+                        )
+                                )
+                                    ? 'pin_authenticated_terminal_assignment'
+                                    : 'paying_session_employee_snapshot';
                         }
                     }
                 }
             }
 
+            /*
+             * ACCESS9 FIX3B:
+             * No registrar cobros del PDV piloto si no
+             * se identifico un turno activo validado.
+             */
+            if (
+                $this->bexiaAccess9EnabledForIds(
+                            (int) ($orderRow->company_id ?? 0),
+                            (int) ($orderRow->pos_point_id ?? 0)
+                        )
+            ) {
+                abort_unless(
+                    (int) ($bexiaAccess9PaymentShiftId ?? 0) > 0,
+                    403,
+                    'Identificate con tu NIP e inicia tu turno.'
+                );
+            }
+
             foreach ($normalized as $paymentIndex => $payment) {
                 $paymentId = \Illuminate\Support\Facades\DB::table('pos_order_payments')->insertGetId([
                     'pos_order_id' => $orderRow->id,
+                    'payment_request_uuid' => $paymentUuid !== '' ? $paymentUuid : null,
                     'payment_form_id' => $payment['payment_form_id'],
                     'payment_label' => $payment['payment_label'],
                     'amount' => $payment['amount'],
@@ -8520,6 +9545,17 @@ return response()->json([
                             $cumulativePaid,
                         'balance_after_batch' =>
                             $remainingAfter,
+                        ...(
+                            $this->bexiaAccess9EnabledForIds(
+                            (int) ($orderRow->company_id ?? 0),
+                            (int) ($orderRow->pos_point_id ?? 0)
+                        )
+                                ? [
+                                    'pos_cashier_shift_id' =>
+                                        (int) $bexiaAccess9PaymentShiftId,
+                                ]
+                                : []
+                        ),
                         'paid_by_user_id' => auth()->id(),
                         'paid_by_employee_id' =>
                             $bexiaPaymentEmployeeId,
@@ -8710,7 +9746,67 @@ return response()->json([
                 'fully_paid' => $fullyPaid,
                 'is_partial' => ! $fullyPaid,
             ];
-        });
+                })();
+
+                /*
+                 * BEXIA_POS53C2J6_ATOMIC_ROLLBACK
+                 *
+                 * La transaccion no puede terminar normalmente
+                 * si su resultado indica error.
+                 *
+                 * Una excepcion revierte lineas, reservas, total,
+                 * pagos y movimientos de Tesoreria transaccionales.
+                 */
+                if (! ($pos53InnerResult['ok'] ?? false)) {
+                    throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                        response()->json(
+                            [
+                                'ok' => false,
+                                'message' => $pos53InnerResult['message']
+                                    ?? 'No se pudo registrar el cobro.',
+                            ],
+                            $pos53InnerResult['status'] ?? 500
+                        )
+                    );
+                }
+
+                // BEXIA_ACCESS9_STAGE157_KEEP_DEVELOP_INVENTORY
+                // La contabilizacion de inventario sigue en DEVELOP.
+
+                if ($paymentUuid !== '' && empty($pos53InnerResult['_replay_payload'])) {
+                    $orderSnapshot = $pos53InnerResult['order'];
+                    $eventResponse = [
+                        'ok' => true,
+                        'message' => ($pos53InnerResult['fully_paid'] ?? false)
+                            ? 'Cobro liquidado correctamente.' : 'Anticipo registrado correctamente.',
+                        'order_id' => (int) $orderSnapshot->id,
+                        'number' => (string) $orderSnapshot->number,
+                        'status' => (string) $orderSnapshot->status,
+                        'paid_at' => (string) $orderSnapshot->paid_at,
+                        'total' => $pos53InnerResult['total'],
+                        'paid_before' => $pos53InnerResult['paid_before'],
+                        'paid_total' => $pos53InnerResult['paid_total'],
+                        'balance' => $pos53InnerResult['balance'],
+                        'fully_paid' => $pos53InnerResult['fully_paid'],
+                        'is_partial' => $pos53InnerResult['is_partial'],
+                        'payments' => $pos53InnerResult['payments'],
+                        'print_url' => ($pos53InnerResult['fully_paid'] ?? false)
+                            ? route('pos.orders.receipt.print', ['order' => $orderSnapshot->id]) : null,
+                    ];
+                    \Illuminate\Support\Facades\DB::table('pos_payment_requests')
+                        ->where('request_uuid', $paymentUuid)->update([
+                            'status' => 'completed',
+                            'response_payload' => json_encode($eventResponse, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                            'completed_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                }
+                return $pos53InnerResult;
+            });
+
+        if (isset($result['_replay_payload'])) {
+            return response()->json($result['_replay_payload']);
+        }
 
         if (! ($result['ok'] ?? false)) {
             return response()->json([
@@ -11857,6 +12953,13 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
 
         $user = auth()->user();
 
+        // BEXIA_ACCESS9_FIX6C_CASH_SHIFT
+        $bexiaAccess9CashTerminal = (string) $request->input('cashier_terminal_id', '');
+        // BEXIA_ACCESS9_FIX8M_SUPERVISOR_PIN
+        $bexiaAccess9SupervisorPin =
+            (string) $request->input('supervisor_pin', '');
+
+
         $treasuryTransferRequestId = null;
         $treasuryStatus = 'not_linked';
         $treasuryMessage = null;
@@ -11868,17 +12971,211 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                 $pos,
                 $type,
                 $amount,
+                $cashBreakdown,
                 $reason,
                 $notes,
                 $supervisorEmployeeId,
                 $supervisorName,
                 $number,
                 $user,
+                $bexiaAccess9CashTerminal,
+                $bexiaAccess9SupervisorPin,
                 &$treasuryTransferRequestId,
                 &$treasuryStatus,
                 &$treasuryMessage,
                 &$destinationTreasuryAccountId
             ) {
+                $bexiaAccess9CashShiftId = null;
+                $bexiaAccess9CashEmployeeId = null;
+
+                if (
+                    $this->bexiaAccess9EnabledForIds(
+                        (int) ($sessionRow->company_id ?? 0),
+                        (int) ($sessionRow->pos_point_id ?? 0)
+                    )
+                ) {
+                    $lockedSession = \Illuminate\Support\Facades\DB::table(
+                        'pos_sessions'
+                    )
+                        ->where('id', (int) $sessionRow->id)
+                        ->where('company_id', (int) $sessionRow->company_id)
+                        ->where('pos_point_id', (int) $sessionRow->pos_point_id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    abort_unless(
+                        $lockedSession
+                        && (string) $lockedSession->status === 'open',
+                        409,
+                        'La sesion fisica ya se cerro.'
+                    );
+
+                    $activeCashier = $this->bexiaAccess8CashierForTerminal(
+                        $pos,
+                        $lockedSession,
+                        $bexiaAccess9CashTerminal
+                    );
+
+                    $activeShift = $this->bexiaAccess9AssertShift(
+                        $lockedSession,
+                        $activeCashier,
+                        $bexiaAccess9CashTerminal,
+                        true
+                    );
+
+                    $bexiaAccess9CashShiftId = (int) $activeShift->id;
+                    $bexiaAccess9CashEmployeeId =
+                        (int) $activeCashier->employee_id;
+                }
+
+                // BEXIA_ACCESS9_FIX8F_SUPERVISOR
+                // Solo piloto Papelón: retiro con supervisor
+                // distinto y verificado en la base de datos.
+                if (
+                    $this->bexiaAccess9EnabledForIds(
+                        (int) ($sessionRow->company_id ?? 0),
+                        (int) ($sessionRow->pos_point_id ?? 0)
+                    )
+                    && $type === 'cash_out'
+                ) {
+                    abort_unless(
+                        $bexiaAccess9CashEmployeeId !== null
+                        && $supervisorEmployeeId !== null
+                        && $supervisorEmployeeId > 0,
+                        422,
+                        'Selecciona un supervisor válido.'
+                    );
+
+                    abort_unless(
+                        $supervisorEmployeeId
+                            !== $bexiaAccess9CashEmployeeId,
+                        422,
+                        'El cajero no puede supervisar su propio retiro.'
+                    );
+
+                    $verifiedSupervisorQuery =
+                        \Illuminate\Support\Facades\DB::table(
+                            'employees as e'
+                        )
+                        ->join(
+                            'pos_point_employee as pe',
+                            'pe.employee_id',
+                            '=',
+                            'e.id'
+                        )
+                        ->where('e.id', $supervisorEmployeeId)
+                        ->where('e.company_id', (int) $sessionRow->company_id)
+                        ->where('pe.company_id', (int) $sessionRow->company_id)
+                        ->where('pe.pos_point_id', (int) $sessionRow->pos_point_id)
+                        ->where('pe.is_active', true)
+                        ->where(
+                            'pe.can_authorize_cash_withdrawal',
+                            true
+                        );
+
+                    if (
+                        \Illuminate\Support\Facades\Schema::hasColumn(
+                            'employees',
+                            'is_active'
+                        )
+                    ) {
+                        $verifiedSupervisorQuery
+                            ->where('e.is_active', true);
+                    }
+
+                    if (
+                        \Illuminate\Support\Facades\Schema::hasColumn(
+                            'employees',
+                            'pos_active'
+                        )
+                    ) {
+                        $verifiedSupervisorQuery
+                            ->where(function ($query) {
+                                $query->whereNull('e.pos_active')
+                                    ->orWhere('e.pos_active', true);
+                            });
+                    }
+
+                    $verifiedSupervisor = $verifiedSupervisorQuery
+                        ->first(['e.id', 'e.name']);
+
+                    abort_unless(
+                        $verifiedSupervisor !== null
+                        && trim(
+                            (string) $verifiedSupervisor->name
+                        ) !== '',
+                        422,
+                        'El empleado seleccionado no tiene permiso para autorizar retiros en este PDV.'
+                    );
+
+                    // Sustituir el nombre enviado por el navegador.
+                    $supervisorName = trim(
+                        (string) $verifiedSupervisor->name
+                    );
+
+                    // Permiso y NIP separados de la identidad
+                    // operativa del cajero. No guardar el NIP.
+                    abort_unless(
+                        strlen($bexiaAccess9SupervisorPin) >= 1
+                        && strlen($bexiaAccess9SupervisorPin) <= 32,
+                        422,
+                        'El supervisor debe introducir su NIP.'
+                    );
+
+                    $access9RateKey =
+                        'access9:supervisor:withdrawal:'
+                        . (int) $pos->id . ':'
+                        . (int) $supervisorEmployeeId . ':'
+                        . hash(
+                            'sha256',
+                            (string) request()->ip()
+                        );
+
+                    $access9Limiter =
+                        \Illuminate\Support\Facades\RateLimiter::class;
+
+                    abort_if(
+                        $access9Limiter::tooManyAttempts(
+                            $access9RateKey,
+                            5
+                        ),
+                        429,
+                        'Demasiados intentos de NIP. '
+                        . 'Intenta nuevamente mas tarde.'
+                    );
+
+                    $access9SupervisorHash =
+                        \Illuminate\Support\Facades\DB::table(
+                            'employees'
+                        )
+                        ->where('id', $supervisorEmployeeId)
+                        ->where('company_id', (int) $sessionRow->company_id)
+                        ->value('pos_pin_hash');
+
+                    $access9PinValid =
+                        is_string($access9SupervisorHash)
+                        && $access9SupervisorHash !== ''
+                        && \Illuminate\Support\Facades\Hash::check(
+                            $bexiaAccess9SupervisorPin,
+                            $access9SupervisorHash
+                        );
+
+                    if (! $access9PinValid) {
+                        $access9Limiter::hit(
+                            $access9RateKey,
+                            300
+                        );
+
+                        abort(
+                            422,
+                            'NIP incorrecto o no configurado '
+                            . 'para el supervisor.'
+                        );
+                    }
+
+                    $access9Limiter::clear($access9RateKey);
+                }
+
                 $movementId = \Illuminate\Support\Facades\DB::table('pos_cash_movements')->insertGetId([
                     'company_id' => $sessionRow->company_id ?? null,
                     'pos_point_id' => $sessionRow->pos_point_id ?? null,
@@ -11894,7 +13191,26 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                     'movement_at' => now(),
                     'metadata' => json_encode([
                         'source' => 'pos_close_cash_control',
+                        ...($bexiaAccess9CashShiftId !== null ? [
+                            'pos_cashier_shift_id' => $bexiaAccess9CashShiftId,
+                            'performed_by_employee_id' => $bexiaAccess9CashEmployeeId,
+                            'cashier_identity_source' => 'access9_terminal_nip',
+                        ] : []),
                         'supervisor_employee_id' => $supervisorEmployeeId,
+                        ...(
+                            $type === 'cash_out'
+                            && $this->bexiaAccess9EnabledForIds(
+                        (int) ($sessionRow->company_id ?? 0),
+                        (int) ($sessionRow->pos_point_id ?? 0)
+                    )
+                            ? [
+                                'supervisor_authorization_source' =>
+                                    'access9_pin_verified',
+                                'supervisor_authorized_at' =>
+                                    now()->toDateTimeString(),
+                            ]
+                            : []
+                        ),
                         'requires_cashier_signature' => true,
                         'requires_supervisor_signature' => true,
                         'print_copies' => 2,
@@ -11974,6 +13290,50 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             });
         } catch (\Throwable $e) {
             report($e);
+
+            // BEXIA_ACCESS9_FIX8R_SAFE_ERROR
+            // Solo mensajes expresamente permitidos.
+            // Nunca exponer SQL, trazas o excepciones internas.
+            $access9Pilot =
+                $this->bexiaAccess9EnabledForIds(
+                        (int) ($sessionRow->company_id ?? 0),
+                        (int) ($sessionRow->pos_point_id ?? 0)
+                    );
+
+            if ($access9Pilot && $type === 'cash_out') {
+                $safeMessages = [
+                    'Selecciona un supervisor válido.',
+                    'El cajero no puede supervisar su propio retiro.',
+                    'El empleado seleccionado no tiene permiso para autorizar retiros en este PDV.',
+                    'El supervisor debe introducir su NIP.',
+                    'Demasiados intentos de NIP. Intenta nuevamente mas tarde.',
+                    'NIP incorrecto o no configurado para el supervisor.',
+                    'La sesion fisica ya se cerro.',
+                    'Tu turno termino o la terminal cambio. Identificate nuevamente con tu NIP.',
+                    'Sesion de cajero vencida. Inicia con tu NIP.',
+                ];
+
+                $status = $e instanceof
+                    \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface
+                        ? $e->getStatusCode()
+                        : 422;
+
+                $safeMessage = in_array(
+                    $e->getMessage(),
+                    $safeMessages,
+                    true
+                )
+                    ? $e->getMessage()
+                    : 'No se pudo completar el retiro. '
+                        . 'Consulta al administrador.';
+
+                return response()->json([
+                    'ok' => false,
+                    'message' => $safeMessage,
+                ], in_array($status, [403, 409, 422, 429], true)
+                    ? $status
+                    : 422);
+            }
 
             return response()->json([
                 'ok' => false,
@@ -17560,6 +18920,1116 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
             'product_variant_id' => $variantId ?: null,
             'serials' => $serials->values(),
         ]);
+    }
+
+
+
+    // BEXIA_ACCESS9_STAGE135_METHODS
+
+    protected function bexiaAccess9StartShift(
+        object $pos,
+        int $sessionId,
+        object $staff,
+        string $terminal
+    ): int {
+        abort_unless(
+            $this->bexiaAccess7IsPilot($pos)
+            && (int) ($staff->employee_id ?? 0) > 0,
+            403
+        );
+
+        return DB::transaction(function () use (
+            $sessionId, $staff, $terminal, $pos
+        ): int {
+            $session = DB::table('pos_sessions')
+                ->where('id', $sessionId)
+                ->where('company_id', (int) $pos->company_id)
+                ->where('pos_point_id', (int) $pos->id)
+                ->lockForUpdate()
+                ->first();
+
+            abort_unless(
+                $session && $session->status === 'open',
+                409,
+                'La caja ya no esta abierta.'
+            );
+
+            $employeeId = (int) $staff->employee_id;
+
+            $existing = DB::table('pos_cashier_shifts')
+                ->where('pos_session_id', $sessionId)
+                ->where('employee_id', $employeeId)
+                ->where('status', 'open')
+                ->lockForUpdate()
+                ->first();
+
+            $hash = hash('sha256', $terminal);
+
+            if ($existing) {
+                // Una nueva autenticacion con NIP reasigna
+                // el turno a la nueva terminal.
+                DB::table('pos_cashier_shifts')
+                    ->where('id', $existing->id)
+                    ->update([
+                        'terminal_hash' => $hash,
+                        'updated_at' => now(),
+                    ]);
+
+                return (int) $existing->id;
+            }
+
+            return (int) DB::table('pos_cashier_shifts')
+                ->insertGetId([
+                    'company_id' => (int) $pos->company_id,
+                    'pos_point_id' => (int) $pos->id,
+                    'pos_session_id' => $sessionId,
+                    'employee_id' => $employeeId,
+                    'shift_uuid' =>
+                        (string) \Illuminate\Support\Str::uuid(),
+                    'terminal_hash' => $hash,
+                    'opened_by_user_id' => auth()->id(),
+                    'status' => 'open',
+                    'opened_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+        });
+    }
+
+    protected function bexiaAccess9AssertShift(
+        object $session,
+        object $staff,
+        string $terminal,
+        bool $lock = false
+    ): object {
+        $query = DB::table('pos_cashier_shifts')
+            ->where('company_id', (int) $session->company_id)
+            ->where('pos_point_id', (int) $session->pos_point_id)
+            ->where('pos_session_id', (int) $session->id)
+            ->where('employee_id', (int) $staff->employee_id)
+            ->where('terminal_hash', hash('sha256', $terminal))
+            ->where('status', 'open');
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $shift = $query->first();
+
+        abort_unless(
+            $shift,
+            403,
+            'Tu turno termino o la terminal cambio. '
+            . 'Identificate nuevamente con tu NIP.'
+        );
+
+        return $shift;
+    }
+
+    public function bexiaAccess9CloseShift(
+        \Illuminate\Http\Request $request,
+        int $session,
+        bool $access9InternalPhysicalClose = false
+    ) {
+        abort_unless(auth()->check(), 403);
+
+        $terminal = (string) $request->input(
+            'cashier_terminal_id', ''
+        );
+
+        $row = DB::table('pos_sessions')
+            ->where('id', $session)
+            ->first();
+
+        abort_unless($row && $row->status === 'open', 404);
+
+        $companyId = (int) $row->company_id;
+        $posPointId = (int) $row->pos_point_id;
+
+        abort_unless($companyId > 0 && $posPointId > 0, 404);
+
+        $pos = $this->posPoint($posPointId);
+
+        abort_unless(
+            (int) $pos->company_id === $companyId
+            && (int) $pos->id === $posPointId,
+            404
+        );
+
+        $this->authorizePos($pos);
+
+        $staff = $this->bexiaAccess8CashierForTerminal(
+            $pos, $row, $terminal
+        );
+
+        $closed = DB::transaction(function () use (
+            $session, $terminal, $staff, $companyId, $posPointId
+        ): int {
+            // Mismo orden de bloqueos que los cobros:
+            // sesion fisica primero, turno despues.
+            $sessionRow = DB::table('pos_sessions')
+                ->where('id', $session)
+                ->where('company_id', $companyId)
+                ->where('pos_point_id', $posPointId)
+                ->lockForUpdate()
+                ->first();
+
+            abort_unless(
+                $sessionRow
+                && $sessionRow->status === 'open',
+                409,
+                'La sesion fisica ya se cerro.'
+            );
+
+            $shift = $this->bexiaAccess9AssertShift(
+                $sessionRow,
+                $staff,
+                $terminal,
+                true
+            );
+
+            $closedAt = now();
+
+            $payments = DB::table('pos_order_payments as p')
+                ->join(
+                    'pos_orders as o',
+                    'o.id',
+                    '=',
+                    'p.pos_order_id'
+                )
+                ->where('o.company_id', $companyId)
+                ->where('o.pos_point_id', $posPointId)
+                ->where('p.pos_session_id', $session)
+                ->where('p.status', 'paid')
+                ->where('p.created_at', '>=', $shift->opened_at)
+                ->where('p.created_at', '<=', $closedAt)
+                ->get([
+                    'p.id',
+                    'p.amount',
+                    'p.metadata',
+                ]);
+
+            $totals = [
+                'payment_count' => 0,
+                'cash' => 0,
+                'transfer' => 0,
+                'credit_card' => 0,
+                'debit_card' => 0,
+                'other' => 0,
+            ];
+
+            foreach ($payments as $payment) {
+                $meta = json_decode(
+                    (string) $payment->metadata,
+                    true
+                );
+
+                if (!is_array($meta)) {
+                    continue;
+                }
+
+                // BEXIA_ACCESS9_PROMOTE20_SHIFT_PAYMENT_ISOLATION
+                // El identificador de turno define la atribucion.
+                // La identidad del empleado se valida ademas.
+                if (
+                    (int) ($meta['pos_cashier_shift_id'] ?? 0)
+                        !== (int) $shift->id
+                    || (int) ($meta['paid_by_employee_id'] ?? 0)
+                        !== (int) $staff->employee_id
+                ) {
+                    continue;
+                }
+
+                $code = (string) (
+                    $meta['payment_form_code'] ?? ''
+                );
+
+                $category = match ($code) {
+                    '01' => 'cash',
+                    '03' => 'transfer',
+                    '04' => 'credit_card',
+                    '28' => 'debit_card',
+                    default => 'other',
+                };
+
+                $totals[$category] += (float) $payment->amount;
+                $totals['payment_count']++;
+            }
+
+            foreach (
+                ['cash', 'transfer', 'credit_card',
+                 'debit_card', 'other'] as $category
+            ) {
+                $totals[$category] = round(
+                    $totals[$category], 2
+                );
+            }
+
+
+            /*
+             * ACCESS9 PROMOTE94
+             * Conciliacion individual en centavos.
+             *
+             * La caja fisica sigue siendo compartida.
+             * Los retiros pendientes no se contabilizan
+             * anticipadamente en Tesoreria.
+             */
+            $access9Cash = [
+                'cash_in' => 0,
+                'cash_out' => 0,
+                'refund_out' => 0,
+                'ordinary_out' => 0,
+                'pending_treasury_out' => 0,
+                'movement_count' => 0,
+            ];
+
+            $access9Movements = DB::table('pos_cash_movements')
+                ->where('company_id', $companyId)
+                ->where('pos_point_id', $posPointId)
+                ->where('pos_session_id', $session)
+                ->where('created_at', '>=', $shift->opened_at)
+                ->where('created_at', '<=', $closedAt)
+                ->get();
+
+            foreach ($access9Movements as $access9Movement) {
+                $access9Meta = json_decode(
+                    (string) $access9Movement->metadata,
+                    true
+                );
+
+                if (! is_array($access9Meta)) {
+                    continue;
+                }
+
+                if (
+                    (int) (
+                        $access9Meta['pos_cashier_shift_id'] ?? 0
+                    ) !== (int) $shift->id
+                ) {
+                    continue;
+                }
+
+                abort_unless(
+                    (int) (
+                        $access9Meta['performed_by_employee_id'] ?? 0
+                    ) === (int) $staff->employee_id
+                    && (
+                        $access9Meta['cashier_identity_source'] ?? ''
+                    ) === 'access9_terminal_nip',
+                    409,
+                    'Movimiento con identidad de cajero inconsistente.'
+                );
+
+                $access9Cents = (int) round(
+                    (float) $access9Movement->amount * 100
+                );
+
+                abort_unless(
+                    $access9Cents > 0,
+                    409,
+                    'Movimiento de caja con importe invalido.'
+                );
+
+                $access9Type = (string) $access9Movement->type;
+                $access9Source = (string) (
+                    $access9Meta['source'] ?? ''
+                );
+
+                abort_unless(
+                    in_array(
+                        $access9Type,
+                        ['cash_in', 'cash_out'],
+                        true
+                    ),
+                    409,
+                    'Movimiento de caja con tipo desconocido.'
+                );
+
+                if (
+                    $access9Type === 'cash_out'
+                    && $access9Source === 'pos_advance_refund'
+                ) {
+                    $access9RefundId = (int) (
+                        $access9Meta['pos_order_refund_id'] ?? 0
+                    );
+
+                    abort_unless(
+                        $access9RefundId > 0,
+                        409,
+                        'Devolucion sin documento asociado.'
+                    );
+
+                    $access9Refund = DB::table('pos_order_refunds')
+                        ->where('id', $access9RefundId)
+                        ->where('company_id', $companyId)
+                        ->where('pos_point_id', $posPointId)
+                        ->where('type', 'advance_cancel')
+                        ->where('status', 'done')
+                        ->first();
+
+                    abort_unless(
+                        $access9Refund !== null,
+                        409,
+                        'Documento de devolucion no valido.'
+                    );
+
+                    $access9RefundMeta = json_decode(
+                        (string) $access9Refund->metadata,
+                        true
+                    );
+
+                    abort_unless(
+                        is_array($access9RefundMeta)
+                        && (int) (
+                            $access9RefundMeta['pos_cashier_shift_id']
+                            ?? 0
+                        ) === (int) $shift->id
+                        && (int) (
+                            $access9RefundMeta['performed_by_employee_id']
+                            ?? 0
+                        ) === (int) $staff->employee_id,
+                        409,
+                        'Identidad de devolucion inconsistente.'
+                    );
+
+                    $access9Cash['refund_out'] += $access9Cents;
+                }
+
+                if ($access9Type === 'cash_in') {
+                    $access9Cash['cash_in'] += $access9Cents;
+                } else {
+                    $access9Cash['cash_out'] += $access9Cents;
+
+                    if (
+                        (string) (
+                            $access9Movement->treasury_status ?? ''
+                        ) !== 'posted'
+                    ) {
+                        $access9Cash['pending_treasury_out'] +=
+                            $access9Cents;
+                    }
+                }
+
+                $access9Cash['movement_count']++;
+            }
+
+            $access9Cash['ordinary_out'] =
+                $access9Cash['cash_out']
+                - $access9Cash['refund_out'];
+
+            abort_unless(
+                $access9Cash['ordinary_out'] >= 0,
+                409,
+                'Desglose de salidas inconsistente.'
+            );
+
+            $access9CashInCents = (int) round(
+                $totals['cash'] * 100
+            );
+
+            $access9NetCents =
+                $access9CashInCents
+                + $access9Cash['cash_in']
+                - $access9Cash['cash_out'];
+
+            $access9SummaryMovements = [
+                'cash_in' => $access9Cash['cash_in'] / 100,
+                'cash_out' => $access9Cash['cash_out'] / 100,
+                'refund_out' => $access9Cash['refund_out'] / 100,
+                'ordinary_out' => $access9Cash['ordinary_out'] / 100,
+                'pending_treasury_out' =>
+                    $access9Cash['pending_treasury_out'] / 100,
+                'movement_count' =>
+                    $access9Cash['movement_count'],
+            ];
+
+            $summary = [
+                'version' => 'access9_fix2_reconciled',
+                'employee_id' => (int) $staff->employee_id,
+                'pos_session_id' => $session,
+                'shift_opened_at' => $shift->opened_at,
+                'shift_closed_at' =>
+                    $closedAt->toDateTimeString(),
+                'payments' => $totals,
+                'physical_cash_reconciliation' =>
+                    'not_applicable_shared_drawer',
+                'refunds_and_cash_movements' =>
+                    'reconciled',
+                'cash_movements' => $access9SummaryMovements,
+                'cash_flow' => [
+                    'collected_cash' => $access9CashInCents / 100,
+                    'additional_cash_in' =>
+                        $access9Cash['cash_in'] / 100,
+                    'cash_out' =>
+                        $access9Cash['cash_out'] / 100,
+                    'net' => $access9NetCents / 100,
+                ],
+            ];
+
+            $updated = DB::table('pos_cashier_shifts')
+                ->where('id', $shift->id)
+                ->where('status', 'open')
+                ->update([
+                    'status' => 'closed',
+                    'closed_at' => $closedAt,
+                    'closed_by_user_id' => auth()->id(),
+                    'close_summary' => json_encode(
+                        $summary,
+                        JSON_UNESCAPED_UNICODE |
+                        JSON_UNESCAPED_SLASHES |
+                        JSON_THROW_ON_ERROR
+                    ),
+                    'updated_at' => $closedAt,
+                ]);
+
+            abort_unless($updated === 1, 409);
+
+            return (int) $shift->id;
+        });
+
+        // BEXIA_ACCESS9_STAGE173_INTERNAL_SHIFT_CLOSE
+        // Cuando forma parte del cierre fisico, la transaccion
+        // exterior decide el COMMIT y libera la terminal despues.
+        if ($access9InternalPhysicalClose) {
+            return $closed;
+        }
+
+        $request->session()->forget(
+            'bexia_access8_terminal.' . $terminal
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'shift_id' => $closed,
+                'physical_session_open' => true,
+                'redirect' => '/pos/10/open',
+            ]);
+        }
+
+        return redirect('/pos/10/open')
+            ->with('success', 'Tu turno ha terminado.');
+    }
+
+    public function bexiaAccess9ShiftReport(
+        \Illuminate\Http\Request $request,
+        int $shift
+    ) {
+        abort_unless(auth()->check(), 403);
+
+        // BEXIA_POS_ACCESS9_FIX4A_ADMIN
+        abort_unless(
+            auth()->user()?->can('pos.sessions.download_report') ?? false,
+            403
+        );
+
+        $format = (string) $request->query('format', '80mm');
+        abort_unless(in_array($format, ['80mm', 'carta'], true), 422);
+
+        $access9RequestedShift = DB::table('pos_cashier_shifts')
+            ->where('id', $shift)
+            ->first();
+
+        abort_unless($access9RequestedShift, 404);
+
+        $companyId = (int) $access9RequestedShift->company_id;
+        $posPointId = (int) $access9RequestedShift->pos_point_id;
+
+        abort_unless($companyId > 0 && $posPointId > 0, 404);
+
+        $pos = $this->posPoint($posPointId);
+
+        abort_unless(
+            (int) $pos->company_id === $companyId
+            && (int) $pos->id === $posPointId,
+            404
+        );
+
+        $this->authorizePos($pos);
+
+        $row = DB::table('pos_cashier_shifts')
+            ->where('id', $shift)
+            ->where('company_id', $companyId)
+            ->where('pos_point_id', $posPointId)
+            ->first();
+
+        abort_unless($row, 404);
+
+        $session = DB::table('pos_sessions')
+            ->where('id', (int) $row->pos_session_id)
+            ->where('company_id', $companyId)
+            ->where('pos_point_id', $posPointId)
+            ->first();
+
+        abort_unless($session, 404);
+
+        $employeeName = (string) (
+            DB::table('employees')
+                ->where('id', (int) $row->employee_id)
+                ->where('company_id', $companyId)
+                ->value('name') ?? ''
+        );
+
+        abort_unless($employeeName !== '', 409);
+
+        $all = DB::table('pos_order_payments as p')
+            ->join('pos_orders as o', 'o.id', '=', 'p.pos_order_id')
+            ->where('p.pos_session_id', (int) $row->pos_session_id)
+            ->where('o.company_id', $companyId)
+            ->where('o.pos_point_id', $posPointId)
+            ->where('p.status', 'paid')
+            ->orderBy('p.id')
+            ->limit(10001)
+            ->get([
+                'p.id',
+                'p.pos_order_id',
+                'p.amount',
+                'p.payment_label',
+                'p.created_at',
+                'p.metadata',
+            ]);
+
+        abort_if(
+            $all->count() > 10000,
+            409,
+            'Hay demasiados pagos para verificar este reporte.'
+        );
+
+        $payments = [];
+        $methods = [];
+        $totalCents = 0;
+
+        foreach ($all as $payment) {
+            $meta = json_decode(
+                (string) $payment->metadata,
+                true
+            );
+
+            if (!is_array($meta)) {
+                continue;
+            }
+
+            if (
+                (int) ($meta['pos_cashier_shift_id'] ?? 0)
+                    !== (int) $row->id
+            ) {
+                continue;
+            }
+
+            abort_unless(
+                (int) ($meta['paid_by_employee_id'] ?? 0)
+                    === (int) $row->employee_id
+                && (string) $payment->created_at
+                    >= (string) $row->opened_at
+                && (
+                    $row->closed_at === null
+                    || (string) $payment->created_at
+                        <= (string) $row->closed_at
+                ),
+                409,
+                'Inconsistencia en la atribucion del turno.'
+            );
+
+            $cents = (int) round(
+                (float) $payment->amount * 100
+            );
+
+            $label = trim((string) $payment->payment_label);
+            if ($label === '') {
+                $label = 'Sin clasificar';
+            }
+
+            $methods[$label] = ($methods[$label] ?? 0) + $cents;
+            $totalCents += $cents;
+
+            $payments[] = [
+                'id' => (int) $payment->id,
+                'order_id' => (int) $payment->pos_order_id,
+                'label' => $label,
+                'kind' => (string) (
+                    $meta['payment_kind'] ?? 'Sin tipo'
+                ),
+                'cents' => $cents,
+            ];
+        }
+
+        /* BEXIA_ACCESS9_FIX6H_MOVEMENTS */
+        $access9CashRows = DB::table('pos_cash_movements')
+            ->where('company_id', $companyId)
+            ->where('pos_point_id', $posPointId)
+            ->where('pos_session_id', (int) $row->pos_session_id)
+            ->orderBy('id')
+            ->limit(10001)
+            ->get([
+                'id',
+                'number',
+                'type',
+                'amount',
+                'reason',
+                'movement_at',
+                'created_at',
+                'metadata',
+            ]);
+
+        abort_if(
+            $access9CashRows->count() > 10000,
+            409,
+            'Demasiados movimientos para verificar el corte.'
+        );
+
+        $access9CashMovements = [];
+        $access9CashInCents = 0;
+        $access9CashOutCents = 0;
+        // BEXIA_ACCESS9_FIX7G_REFUND_BREAKDOWN
+        $access9RefundOutCents = 0;
+
+        foreach ($access9CashRows as $movement) {
+            $movementMetadata = json_decode(
+                (string) $movement->metadata,
+                true
+            );
+
+            if (!is_array($movementMetadata)) {
+                continue;
+            }
+
+            if (
+                (int) (
+                    $movementMetadata['pos_cashier_shift_id']
+                    ?? 0
+                ) !== (int) $row->id
+            ) {
+                continue;
+            }
+
+            $movementEmployeeId = (int) (
+                $movementMetadata['performed_by_employee_id']
+                ?? 0
+            );
+
+            $movementTime = (string) (
+                $movement->movement_at
+                ?? $movement->created_at
+            );
+
+            abort_unless(
+                $movementEmployeeId === (int) $row->employee_id
+                && (string) (
+                    $movementMetadata['cashier_identity_source']
+                    ?? ''
+                ) === 'access9_terminal_nip'
+                && $movementTime >= (string) $row->opened_at
+                && (
+                    $row->closed_at === null
+                    || $movementTime <= (string) $row->closed_at
+                ),
+                409,
+                'Inconsistencia en movimiento de caja del turno.'
+            );
+
+            $movementType = (string) $movement->type;
+
+            abort_unless(
+                in_array(
+                    $movementType,
+                    ['cash_in', 'cash_out'],
+                    true
+                ),
+                409,
+                'Tipo de movimiento de caja inesperado.'
+            );
+
+            $movementCents = (int) round(
+                (float) $movement->amount * 100
+            );
+
+            abort_unless(
+                $movementCents > 0,
+                409,
+                'Importe de movimiento de caja invalido.'
+            );
+
+            $access9MovementSource = (string) (
+                $movementMetadata['source'] ?? ''
+            );
+
+            $access9IsAdvanceRefund =
+                $movementType === 'cash_out'
+                && $access9MovementSource === 'pos_advance_refund';
+
+            $access9RefundNumber = null;
+
+            if ($access9IsAdvanceRefund) {
+                $access9RefundId = (int) (
+                    $movementMetadata['pos_order_refund_id'] ?? 0
+                );
+
+                abort_unless(
+                    $access9RefundId > 0,
+                    409,
+                    'Salida de devolucion sin documento asociado.'
+                );
+
+                $access9RefundRow = DB::table('pos_order_refunds')
+                    ->where('id', $access9RefundId)
+                    ->where('company_id', $companyId)
+                    ->where('pos_point_id', $posPointId)
+                    ->where(
+                        'pos_session_id',
+                        (int) $row->pos_session_id
+                    )
+                    ->where('type', 'advance_cancel')
+                    ->where('status', 'done')
+                    ->first(['number', 'metadata']);
+
+                abort_unless(
+                    $access9RefundRow !== null,
+                    409,
+                    'Documento de devolucion no encontrado.'
+                );
+
+                $access9RefundMeta = json_decode(
+                    (string) $access9RefundRow->metadata,
+                    true
+                );
+
+                abort_unless(
+                    is_array($access9RefundMeta)
+                    && (int) (
+                        $access9RefundMeta['pos_cashier_shift_id'] ?? 0
+                    ) === (int) $row->id
+                    && (int) (
+                        $access9RefundMeta['performed_by_employee_id'] ?? 0
+                    ) === (int) $row->employee_id,
+                    409,
+                    'La salida y su devolucion pertenecen a turnos distintos.'
+                );
+
+                $access9RefundNumber =
+                    (string) $access9RefundRow->number;
+            }
+
+            if ($movementType === 'cash_in') {
+                $access9CashInCents += $movementCents;
+            } else {
+                $access9CashOutCents += $movementCents;
+
+                if ($access9IsAdvanceRefund) {
+                    $access9RefundOutCents += $movementCents;
+                }
+            }
+
+            $access9CashMovements[] = [
+                'id' => (int) $movement->id,
+                'number' => (string) $movement->number,
+                'type' => $movementType,
+                'reason' => trim((string) $movement->reason),
+                'cents' => $movementCents,
+                'source' => $access9MovementSource,
+                'is_advance_refund' => $access9IsAdvanceRefund,
+                'refund_number' => $access9RefundNumber,
+            ];
+        }
+
+        $access9OrdinaryOutCents =
+            $access9CashOutCents - $access9RefundOutCents;
+
+        abort_unless(
+            $access9OrdinaryOutCents >= 0,
+            409,
+            'Desglose inconsistente de salidas de efectivo.'
+        );
+
+        return view('pos.cashier-shift-report', [
+            'shift' => $row,
+            'employeeName' => $employeeName,
+            'format' => $format,
+            'methods' => $methods,
+            'payments' => $payments,
+            'totalCents' => $totalCents,
+            'access9CashMovements' => $access9CashMovements,
+            'access9CashInCents' => $access9CashInCents,
+            'access9CashOutCents' => $access9CashOutCents,
+            'access9RefundOutCents' => $access9RefundOutCents,
+            'access9OrdinaryOutCents' => $access9OrdinaryOutCents,
+        ]);
+    }
+
+    protected function bexiaAccess8StaffForPos(object $pos)
+    {
+        return $this->staffForPos($pos)->filter(function ($staff) use ($pos) {
+            if ((int) ($staff->employee_id ?? 0) < 1) return false;
+            return DB::table('pos_point_employee as pe')
+                ->join('employees as e', 'e.id', '=', 'pe.employee_id')
+                ->where('pe.company_id', (int) $pos->company_id)
+                ->where('pe.pos_point_id', (int) $pos->id)
+                ->where('pe.employee_id', (int) $staff->employee_id)
+                ->where('pe.is_active', true)
+                ->where('e.company_id', (int) $pos->company_id)
+                ->where(function ($q) {
+                    $q->whereNull('e.pos_active')->orWhere('e.pos_active', true);
+                })->exists();
+        })->values();
+    }
+
+    protected function bexiaAccess8ValidateStaff(object $pos, object $staff): void
+    {
+        abort_unless(
+            (int) ($staff->employee_id ?? 0) > 0 &&
+            $this->bexiaAccess8StaffForPos($pos)->contains(
+                fn ($allowed) => (int) $allowed->employee_id === (int) $staff->employee_id
+            ), 403, 'Empleado no autorizado en este PDV.'
+        );
+    }
+
+    protected function bexiaAccess8CashierForTerminal(
+        object $pos, object $sessionRow, string $terminal
+    ): object {
+        abort_unless(
+            preg_match('/^[0-9a-f-]{36}$/i', $terminal) === 1,
+            403, 'Selecciona un cajero y autentica su NIP.'
+        );
+        $context = request()->session()->get('bexia_access8_terminal.' . $terminal);
+        abort_unless(
+            is_array($context) &&
+            (int) ($context['user_id'] ?? 0) === (int) auth()->id() &&
+            (int) ($context['pos_point_id'] ?? 0) === (int) $pos->id &&
+            (int) ($context['pos_session_id'] ?? 0) === (int) $sessionRow->id &&
+            (int) ($context['issued_at'] ?? 0) >= time() - 14400 &&
+            (string) ($sessionRow->status ?? '') === 'open' &&
+            (int) ($sessionRow->pos_point_id ?? 0) === (int) $pos->id &&
+            (int) ($sessionRow->company_id ?? 0) === (int) $pos->company_id,
+            403, 'Sesion de cajero vencida. Inicia con tu NIP.'
+        );
+        $employeeId = (int) ($context['employee_id'] ?? 0);
+        $matches = $this->bexiaAccess8StaffForPos($pos)
+            ->filter(fn ($row) => (int) ($row->employee_id ?? 0) === $employeeId)
+            ->values();
+        abort_unless($matches->count() === 1, 403, 'Asignacion de cajero invalida.');
+        $staff = $matches->first();
+        abort_unless((bool) ($staff->can_charge ?? false), 403, 'Sin permiso de cobro.');
+        $this->bexiaAccess9AssertShift($sessionRow, $staff, $terminal);
+        return $staff;
+    }
+
+
+    // BEXIA_ACCESS9_STAGE169_PENDING_SHIFT_GUARD
+    // Autorizar operaciones de apartados en el turno
+    // individual, sin reemplazar la sesion fisica.
+    protected function bexiaAccess9AuthorizePendingMutation(
+        \Illuminate\Http\Request $request,
+        object $orderRow,
+        string $sessionField
+    ): void {
+        $companyId = (int) ($orderRow->company_id ?? 0);
+        $posPointId = (int) ($orderRow->pos_point_id ?? 0);
+
+        if (! $this->bexiaAccess9EnabledForIds(
+            $companyId,
+            $posPointId
+        )) {
+            return;
+        }
+
+        $sessionId = (int) $request->input(
+            $sessionField,
+            0
+        );
+
+        abort_unless(
+            $sessionId > 0,
+            403,
+            'Identifica la sesion fisica abierta del PDV.'
+        );
+
+        $sessionRow = \Illuminate\Support\Facades\DB::table(
+            'pos_sessions'
+        )
+            ->where('id', $sessionId)
+            ->lockForUpdate()
+            ->first();
+
+        abort_unless(
+            $sessionRow
+            && (string) ($sessionRow->status ?? '') === 'open'
+            && (int) ($sessionRow->company_id ?? 0) === $companyId
+            && (int) ($sessionRow->pos_point_id ?? 0) === $posPointId,
+            403,
+            'La sesion de caja no corresponde al ticket.'
+        );
+
+        $terminal = trim(
+            (string) $request->input(
+                'cashier_terminal_id',
+                ''
+            )
+        );
+
+        $pos = $this->posPoint($posPointId);
+
+        $cashier = $this->bexiaAccess8CashierForTerminal(
+            $pos,
+            $sessionRow,
+            $terminal
+        );
+
+        $this->bexiaAccess9AssertShift(
+            $sessionRow,
+            $cashier,
+            $terminal,
+            true
+        );
+    }
+
+    protected function bexiaAccess9EnabledForIds(
+        int $companyId,
+        int $posPointId
+    ): bool {
+        if ($companyId <= 0 || $posPointId <= 0) {
+            return false;
+        }
+
+        return in_array(
+            $companyId . ':' . $posPointId,
+            (array) config('bexia_access9.enabled_pos', []),
+            true
+        );
+    }
+
+    protected function bexiaAccess7IsPilot(object $pos): bool
+    {
+        return $this->bexiaAccess9EnabledForIds(
+            (int) ($pos->company_id ?? 0),
+            (int) ($pos->id ?? 0)
+        );
+    }
+
+    protected function bexiaAccess7OwnCashier(object $pos): object
+    {
+        $staff = $this->bexiaOwnStaffForPos($pos)
+            ->filter(fn ($row): bool =>
+                (int) ($row->employee_id ?? 0) > 0
+                && (bool) ($row->can_charge ?? false)
+            )
+            ->values();
+
+        abort_unless(
+            $staff->count() === 1,
+            403,
+            'El usuario requiere una asignacion unica y activa para cobrar.'
+        );
+
+        return $staff->first();
+    }
+
+    protected function bexiaAccess7OpenSharedSession(
+        object $pos,
+        object $cashier,
+        array $openingCash
+    ): int {
+        $this->bexiaAccess8ValidateStaff($pos, $cashier);
+
+        $id = DB::transaction(function () use (
+            $pos, $cashier, $openingCash
+        ): int {
+            // Serializar las aperturas concurrentes sobre el PDV.
+            DB::table('pos_points')
+                ->where('id', (int) $pos->id)
+                ->lockForUpdate()
+                ->first();
+
+            $open = DB::table('pos_sessions')
+                ->where('company_id', (int) $pos->company_id)
+                ->where('pos_point_id', (int) $pos->id)
+                ->where('status', 'open')
+                ->orderByDesc('id')
+                ->get(['id']);
+
+            if ($open->count() > 1) {
+                throw new \RuntimeException(
+                    'Existen varias sesiones abiertas para este PDV. '
+                    . 'Se requiere conciliacion antes de continuar.'
+                );
+            }
+
+            if ($open->count() === 1) {
+                return (int) $open->first()->id;
+            }
+
+            $amount = round(
+                (float) ($openingCash['amount'] ?? 0), 2
+            );
+            $count = $openingCash['cash_count'] ?? [];
+
+            $notes = '[APERTURA PDV] ' . json_encode([
+                'opened_by_user_id' => auth()->id(),
+                'employee_id' => (int) $cashier->employee_id,
+                'opening_amount' => $amount,
+                'cash_count' => $count,
+                'opened_from' => 'access7_shared_pos',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            $now = now();
+
+            return (int) DB::table('pos_sessions')
+                ->insertGetId([
+                    'company_id' => (int) $pos->company_id,
+                    'pos_point_id' => (int) $pos->id,
+                    'pos_cashier_id' => 0,
+                    'opened_by_user_id' => auth()->id(),
+                    'number' => $this->nextSessionNumber((int) $pos->company_id),
+                    'status' => 'open',
+                    'opened_at' => $now,
+                    'opening_amount' => $amount,
+                    'closing_amount' => 0,
+                    'employee_id' => (int) $cashier->employee_id,
+                    'staff_role' => $cashier->role ?? 'mixed',
+                    'notes' => $notes,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+        });
+
+        // Impide recalcular el fondo cuando otro empleado entra.
+        request()->attributes->set(
+            'bexia_access7_shared_session', true
+        );
+
+        return $id;
+    }
+
+    protected function bexiaOwnStaffForPos(object $pos)
+    {
+        $userId = (int) auth()->id();
+
+        if ($userId <= 0) {
+            return collect();
+        }
+
+        return $this->staffForPos($pos)
+            ->filter(
+                fn ($staff): bool =>
+                    (int) ($staff->user_id ?? 0) === $userId
+            )
+            ->values();
+    }
+
+
+    protected function bexiaAssertOwnStaff(object $pos, object $staff): void
+    {
+        $userId = (int) auth()->id();
+
+        abort_unless(
+            $userId > 0
+            && (int) ($staff->user_id ?? 0) === $userId
+            && $this->bexiaOwnStaffForPos($pos)
+                ->contains(
+                    fn ($allowed): bool =>
+                        $this->staffKey($allowed) === $this->staffKey($staff)
+                ),
+            403,
+            'Este cajero no corresponde al usuario autenticado.'
+        );
     }
 
 

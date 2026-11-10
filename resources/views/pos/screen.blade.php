@@ -1,3 +1,8 @@
+<script id="BEXIA_POS_ACCESS8_TERMINAL_JS">
+function bexiaAccess8TerminalId() {
+    return @json($bexiaAccess8Terminal ?? '');
+}
+</script>
 <!doctype html>
 <html lang="es">
 <head>
@@ -2475,6 +2480,15 @@ document.addEventListener('DOMContentLoaded', function () {
             token.type = 'hidden';
             token.name = '_token';
             token.value = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+            // BEXIA_ACCESS9_STAGE173_LEGACY_CLOSE_TERMINAL
+            const access9CloseTerminalField =
+                document.createElement('input');
+            access9CloseTerminalField.type = 'hidden';
+            access9CloseTerminalField.name = 'cashier_terminal_id';
+            access9CloseTerminalField.value =
+                String(bexiaAccess8TerminalId() || '');
+            form.appendChild(access9CloseTerminalField);
 
             const btn = document.createElement('button');
             btn.type = 'submit';
@@ -5498,20 +5512,31 @@ document.addEventListener('DOMContentLoaded', function () {
                     || 0
                 ) > 0.009;
 
+            // BEXIA_ACCESS9_STAGE170_CANCEL_PENDING
+            const access9CancelPayload = {
+                reason: reason,
+                refund_advances:
+                    v5836g5h7b1HasAdvances,
+                cancelling_session_id:
+                    Number(
+                        sessionId()
+                        || 0
+                    ),
+            };
+
+            const access9CancelTerminal =
+                String(bexiaAccess8TerminalId() || '');
+
+            if (access9CancelTerminal) {
+                access9CancelPayload.cashier_terminal_id =
+                    access9CancelTerminal;
+            }
+
             await v5505aPostJson(
                 '/pos/orders/'
                     + selectedOrder.id
                     + '/cancel-pending',
-                {
-                    reason: reason,
-                    refund_advances:
-                        v5836g5h7b1HasAdvances,
-                    cancelling_session_id:
-                        Number(
-                            sessionId()
-                            || 0
-                        ),
-                }
+                access9CancelPayload
             );
 
             /*
@@ -6091,35 +6116,68 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
                     try {
+                        // BEXIA_ACCESS9_STAGE159_ADVANCE_PAYMENT
+                        // El anticipo conserva su importe y metodo originales.
+                        const access9AdvancePayload = {
+                            /*
+                             * BEXIA_V5836G5H4B_ADVANCE_PAYING_SESSION
+                             */
+                            paying_session_id:
+                                sessionId(),
+                            payments: [
+                                {
+                                    payment_form_id:
+                                        select.value,
+                                    payment_label:
+                                        option
+                                            ? (
+                                                option.dataset.label
+                                                || option.textContent
+                                                || 'Pago'
+                                            )
+                                            : 'Pago',
+                                    amount:
+                                        amount
+                                }
+                            ]
+                        };
+
+                        const access9AdvanceTerminal = String(
+                            bexiaAccess8TerminalId() || ''
+                        );
+
+                        if (access9AdvanceTerminal) {
+                            access9AdvancePayload.cashier_terminal_id =
+                                access9AdvanceTerminal;
+
+                            window.bexiaAccess9PreparePayment(
+                                access9AdvancePayload,
+                                orderId
+                            );
+                        }
+
                         const data =
                             await v5505aPostJson(
                                 '/pos/orders/'
                                 + orderId
                                 + '/pay',
-                                {
-                                    /*
-                                     * BEXIA_V5836G5H4B_ADVANCE_PAYING_SESSION
-                                     */
-                                    paying_session_id:
-                                        sessionId(),
-                                    payments: [
-                                        {
-                                            payment_form_id:
-                                                select.value,
-                                            payment_label:
-                                                option
-                                                    ? (
-                                                        option.dataset.label
-                                                        || option.textContent
-                                                        || 'Pago'
-                                                    )
-                                                    : 'Pago',
-                                            amount:
-                                                amount
-                                        }
-                                    ]
-                                }
+                                access9AdvancePayload
                             );
+
+                        if (data && data.ok === false) {
+                            throw new Error(
+                                data.message || 'No se confirmo el anticipo.'
+                            );
+                        }
+
+                        // Conservar el UUID ante error de red o HTTP.
+                        // Liberarlo solamente tras respuesta satisfactoria.
+                        if (access9AdvanceTerminal) {
+                            window.bexiaAccess9CompletePayment(
+                                access9AdvancePayload,
+                                orderId
+                            );
+                        }
 
                         v5836g5h3CloseAdvanceModal();
 
@@ -7176,6 +7234,29 @@ async function createPendingTicket() {
                 ? '/pos/orders/' + loadedPendingOrder.id + '/pending-update'
                 : '/pos/sessions/' + id + '/orders';
 
+            // BEXIA_ACCESS9_STAGE150_PENDING_UUID
+            // La actualizacion de pendientes mantiene su flujo.
+            const access9PendingTerminal =
+                String(bexiaAccess8TerminalId() || '');
+            const access9NewPending = !isUpdatingPending;
+
+            // BEXIA_ACCESS9_STAGE170_UPDATE_MAIN
+            if (isUpdatingPending && access9PendingTerminal) {
+                payload.cashier_terminal_id = access9PendingTerminal;
+                payload.pos_session_id = Number(id);
+            }
+
+            if (access9NewPending && access9PendingTerminal) {
+                payload.cashier_terminal_id =
+                    access9PendingTerminal;
+
+                window.bexiaAccess9PrepareCreation(
+                    payload,
+                    id,
+                    'pending-ticket'
+                );
+            }
+
             const data = await jsonFetch(pendingEndpoint, {
                 method: 'POST',
                 headers: {
@@ -7186,6 +7267,20 @@ async function createPendingTicket() {
             });
 
             const orderId = data.order_id || data.id || (data.order && data.order.id) || null;
+
+            // Solo liberar el UUID si hay un ticket confirmado.
+            if (
+                access9NewPending
+                && access9PendingTerminal
+                && orderId
+            ) {
+                window.bexiaAccess9CompleteCreation(
+                    payload,
+                    id,
+                    'pending-ticket'
+                );
+            }
+
             const number = data.number || (data.order && data.order.number) || 'folio generado';
             const printUrl = data.print_url || (orderId ? '/pos/orders/' + orderId + '/pending-ticket/print?initial=1' : '');
 
@@ -7500,13 +7595,8 @@ async function createPendingTicket() {
                 confirmBtn.textContent = 'Registrando cobro...';
 
                 try {
-                    const data = await jsonFetch('/pos/orders/' + pendingOrder.id + '/pay', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrf,
-                        },
-                        body: JSON.stringify({
+                    // BEXIA_ACCESS9_STAGE165_LEGACY_PENDING_PAYMENT
+                    const access9LegacyPendingPayload = {
                             payments: payments,
 
                             /*
@@ -7537,8 +7627,43 @@ async function createPendingTicket() {
 
                             /* BEXIA_V5836G5H4B_LEGACY_PAYING_SESSION */
                             paying_session_id: sessionId(),
-                        }),
+                        };
+
+                    const access9LegacyPendingTerminal =
+                        String(bexiaAccess8TerminalId() || '');
+
+                    if (access9LegacyPendingTerminal) {
+                        access9LegacyPendingPayload.cashier_terminal_id =
+                            access9LegacyPendingTerminal;
+                        window.bexiaAccess9PreparePayment(
+                            access9LegacyPendingPayload,
+                            pendingOrder.id
+                        );
+                    }
+
+                    const data = await jsonFetch('/pos/orders/' + pendingOrder.id + '/pay', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                        },
+                        body: JSON.stringify(access9LegacyPendingPayload),
                     });
+
+                    if (!data || data.ok === false) {
+                        throw new Error(
+                            (data && data.message)
+                            || 'El servidor no confirmo el cobro.'
+                        );
+                    }
+
+                    // Solo liberar UUID tras confirmar el pago.
+                    if (access9LegacyPendingTerminal) {
+                        window.bexiaAccess9CompletePayment(
+                            access9LegacyPendingPayload,
+                            pendingOrder.id
+                        );
+                    }
 
                     /* BEXIA_V582P6Q_V5349_PAY_TRY_FIXED_1 */
                     if (api && typeof api.getItems === 'function') {
@@ -8000,6 +8125,22 @@ async function createPendingTicket() {
                     discount: typeof api.getDiscount === 'function' ? (api.getDiscount() || null) : null,
                 };
 
+                // BEXIA_ACCESS9_STAGE166_ALT_DIRECT_CREATION
+                // No alterar cliente, precios, productos ni descuentos.
+                const access9AltDirectTerminal =
+                    String(bexiaAccess8TerminalId() || '');
+
+                if (access9AltDirectTerminal) {
+                    payload.cashier_terminal_id =
+                        access9AltDirectTerminal;
+
+                    window.bexiaAccess9PrepareCreation(
+                        payload,
+                        sid,
+                        'alt-direct-before-pay'
+                    );
+                }
+
                 const data = await jsonFetch('/pos/sessions/' + sid + '/orders', {
                     method: 'POST',
                     headers: {
@@ -8008,6 +8149,13 @@ async function createPendingTicket() {
                     },
                     body: JSON.stringify(payload),
                 });
+
+                if (!data || data.ok === false) {
+                    throw new Error(
+                        (data && data.message)
+                        || 'No se confirmo la creacion del ticket.'
+                    );
+                }
 
                 const orderData = data.order || {};
 
@@ -8031,6 +8179,16 @@ async function createPendingTicket() {
 
                 if (!createdOrder.id) {
                     throw new Error('Se creó el ticket, pero no se recibió el ID de la orden.');
+                }
+
+                // Confirmar solamente cuando exista el ID real.
+                // El error de red mantiene el UUID para reintento.
+                if (access9AltDirectTerminal) {
+                    window.bexiaAccess9CompleteCreation(
+                        payload,
+                        sid,
+                        'alt-direct-before-pay'
+                    );
                 }
 
                 window.BEXIA_POS_LOADED_PENDING_ORDER = createdOrder;
@@ -8203,18 +8361,50 @@ async function createPendingTicket() {
             }
 
             try {
+                // BEXIA_ACCESS9_STAGE161_DIRECT_PAYMENT
+                // Conservar exactamente los metodos e importes de DEVELOP.
+                const access9DirectPaymentPayload = {
+                    payments: payments,
+                    /* BEXIA_V5836G5H4B_LEGACY_PAYING_SESSION */
+                    paying_session_id: sessionId(),
+                };
+
+                const access9DirectPaymentTerminal =
+                    String(bexiaAccess8TerminalId() || '');
+
+                if (access9DirectPaymentTerminal) {
+                    access9DirectPaymentPayload.cashier_terminal_id =
+                        access9DirectPaymentTerminal;
+
+                    window.bexiaAccess9PreparePayment(
+                        access9DirectPaymentPayload,
+                        order.id
+                    );
+                }
+
                 const data = await jsonFetch('/pos/orders/' + order.id + '/pay', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': csrfToken(),
                     },
-                    body: JSON.stringify({
-                        payments: payments,
-                        /* BEXIA_V5836G5H4B_LEGACY_PAYING_SESSION */
-                        paying_session_id: sessionId(),
-                    }),
+                    body: JSON.stringify(access9DirectPaymentPayload),
                 });
+
+                if (!data || data.ok === false) {
+                    throw new Error(
+                        (data && data.message)
+                        || 'El servidor no confirmo el cobro.'
+                    );
+                }
+
+                // Mantener UUID si falla la red o no se confirma el cobro.
+                if (access9DirectPaymentTerminal) {
+                    window.bexiaAccess9CompletePayment(
+                        access9DirectPaymentPayload,
+                        order.id
+                    );
+                }
 
                 /* BEXIA_V582P6Q_V5349_PAY_TRY_FIXED_2 */
                 if (window.BEXIA_POS_CART_API && typeof window.BEXIA_POS_CART_API.getItems === 'function') {
@@ -9709,7 +9899,27 @@ async function createPendingTicket() {
                 ? '/pos/orders/' + encodeURIComponent(loadedPendingOrder.id) + '/pending-update'
                 : '/pos/sessions/' + encodeURIComponent(sid) + '/orders';
 
-            var response = await fetch(pendingEndpoint, {
+                        // BEXIA_ACCESS9_STAGE167_ALT_PENDING_1
+            // Mantener intacto el payload economico.
+            var access9AltPendingCreating1 = !isUpdatingPending;
+            var access9AltPendingTerminal1 = String(bexiaAccess8TerminalId() || '');
+
+            // BEXIA_ACCESS9_STAGE170_UPDATE_ALT_1
+            if (isUpdatingPending && access9AltPendingTerminal1) {
+                payload.cashier_terminal_id = access9AltPendingTerminal1;
+                payload.pos_session_id = Number(sid);
+            }
+
+            if (access9AltPendingCreating1 && access9AltPendingTerminal1) {
+                payload.cashier_terminal_id = access9AltPendingTerminal1;
+                window.bexiaAccess9PrepareCreation(
+                    payload,
+                    sid,
+                    'alt-pending-1'
+                );
+            }
+
+var response = await fetch(pendingEndpoint, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -9730,6 +9940,22 @@ async function createPendingTicket() {
             }
 
             var orderId = data.order_id || data.id || (data.order && data.order.id) || null;
+
+            // Solo confirmar una creacion con ID real.
+            if (access9AltPendingCreating1) {
+                if (!orderId) {
+                    throw new Error(
+                        'El servidor no devolvio el ID del ticket creado.'
+                    );
+                }
+                if (access9AltPendingTerminal1) {
+                    window.bexiaAccess9CompleteCreation(
+                        payload,
+                        sid,
+                        'alt-pending-1'
+                    );
+                }
+            }
             var number = data.number || (data.order && data.order.number) || 'folio generado';
             var printUrl = data.print_url || (orderId ? '/pos/orders/' + orderId + '/pending-ticket/print?initial=1' : '');
 
@@ -10928,20 +11154,52 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // BEXIA_V5829C_PAYLOAD_CURRENT_CART_ITEMS
             // El pago del ticket pendiente envia sus lineas actuales, total y descuento.
+            // BEXIA_ACCESS9_STAGE158_PENDING_PAYMENT
+            // Mantener intactos los datos economicos de DEVELOP.
+            const access9PendingPaymentPayload = {
+                payments: payments,
+                discount: currentDiscount,
+                items: currentItems,
+                total: total,
+                paying_session_id: sessionId(),
+            };
+
+            const access9PendingPaymentTerminal =
+                String(bexiaAccess8TerminalId() || '');
+
+            if (access9PendingPaymentTerminal) {
+                access9PendingPaymentPayload.cashier_terminal_id =
+                    access9PendingPaymentTerminal;
+
+                window.bexiaAccess9PreparePayment(
+                    access9PendingPaymentPayload,
+                    order.id
+                );
+            }
+
             const data = await getJson('/pos/orders/' + order.id + '/pay', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': csrfToken(),
                 },
-                body: JSON.stringify({
-                    payments: payments,
-                    discount: currentDiscount,
-                    items: currentItems,
-                    total: total,
-                    paying_session_id: sessionId(),
-                }),
+                body: JSON.stringify(access9PendingPaymentPayload),
             });
+
+            // No liberar UUID al recibir un error o una respuesta
+            // que no confirme el cobro.
+            if (data && data.ok === false) {
+                throw new Error(
+                    data.message || 'No se confirmo el cobro.'
+                );
+            }
+
+            if (access9PendingPaymentTerminal) {
+                window.bexiaAccess9CompletePayment(
+                    access9PendingPaymentPayload,
+                    order.id
+                );
+            }
 
             if (typeof window.BEXIA_POS_REFRESH_STOCK_TEXT_ONLY === 'function') {
                 await window.BEXIA_POS_REFRESH_STOCK_TEXT_ONLY(paidItems);
@@ -11074,12 +11332,33 @@ document.addEventListener('DOMContentLoaded', function () {
             throw new Error('El carrito no tiene productos o total válido.');
         }
 
-        const data = await postJson('/pos/sessions/' + sid + '/orders', {
+        // BEXIA_ACCESS9_STAGE160_DIRECT_CREATION
+        // Conservar el payload economico de DEVELOP.
+        const access9DirectPayload = {
             items: items,
             discount: discount,
             order_note: note,
             total: total,
-        });
+        };
+
+        const access9DirectTerminal =
+            String(bexiaAccess8TerminalId() || '');
+
+        if (access9DirectTerminal) {
+            access9DirectPayload.cashier_terminal_id =
+                access9DirectTerminal;
+
+            window.bexiaAccess9PrepareCreation(
+                access9DirectPayload,
+                sid,
+                'before-pay'
+            );
+        }
+
+        const data = await postJson(
+            '/pos/sessions/' + sid + '/orders',
+            access9DirectPayload
+        );
 
         const order = {
             id: data.id || data.order_id || (data.order && data.order.id) || null,
@@ -11091,6 +11370,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (!order.id) {
             throw new Error('Se creó el ticket, pero no se recibió el ID para cobrarlo.');
+        }
+
+        // Liberar UUID solamente con ticket confirmado.
+        // Ante error de red, conservarlo para reintento.
+        if (access9DirectTerminal) {
+            window.bexiaAccess9CompleteCreation(
+                access9DirectPayload,
+                sid,
+                'before-pay'
+            );
         }
 
         window.BEXIA_POS_LOADED_PENDING_ORDER = order;
@@ -11991,6 +12280,14 @@ document.addEventListener('DOMContentLoaded', function () {
             notes: document.getElementById('v5485-cash-movement-notes').value || '',
         };
 
+        // BEXIA_ACCESS9_STAGE170_CASH_MOVEMENT
+        const access9CashTerminal =
+            String(bexiaAccess8TerminalId() || '');
+
+        if (access9CashTerminal) {
+            payload.cashier_terminal_id = access9CashTerminal;
+        }
+
         try {
             const response = await fetch('/pos/sessions/' + sid + '/cash-movements', {
                 method: 'POST',
@@ -12555,6 +12852,13 @@ document.addEventListener('DOMContentLoaded', function () {
         const data = new FormData(form);
 
         data.set('_token', csrfToken());
+
+        // BEXIA_ACCESS9_STAGE173_MODERN_CLOSE_TERMINAL
+        data.set(
+            'cashier_terminal_id',
+            String(bexiaAccess8TerminalId() || '')
+        );
+
         data.set('closing_amount', payload.counted.toFixed(2));
         data.set('closing_difference', payload.difference.toFixed(2));
         data.set('closing_note', note);
@@ -12568,7 +12872,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    // BEXIA_ACCESS9_STAGE175_MODERN_JSON
+                    'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
                     'X-CSRF-TOKEN': csrfToken(),
                 },
@@ -12580,8 +12885,47 @@ document.addEventListener('DOMContentLoaded', function () {
                 throw new Error('La sesión de seguridad expiró. Recarga el PDV con Ctrl+F5 e intenta cerrar nuevamente.');
             }
 
+            // BEXIA_ACCESS9_STAGE175_VERIFY_CLOSE
+            const access9CloseType =
+                String(response.headers.get('content-type') || '');
+            const access9CloseIsJson =
+                access9CloseType.includes('application/json');
+
+            const access9CloseAnswer = access9CloseIsJson
+                ? await response.json().catch(function () {
+                    return {};
+                })
+                : null;
+
             if (!response.ok) {
-                throw new Error('No se pudo cerrar la sesión. Código HTTP: ' + response.status);
+                throw new Error(
+                    (access9CloseAnswer && access9CloseAnswer.message)
+                    || 'No se pudo cerrar la sesión. Código HTTP: '
+                       + response.status
+                );
+            }
+
+            // BEXIA_ACCESS9_STAGE179_STRICT_CONFIRMATION
+            // Una redireccion HTML nunca confirma un cierre AJAX.
+            if (
+                !access9CloseIsJson
+                || !access9CloseAnswer
+                || access9CloseAnswer.ok !== true
+                || access9CloseAnswer.physical_session_closed !== true
+                || (
+                    access9CloseAnswer.access9_pilot === true
+                    && access9CloseAnswer.last_cashier_shift_closed !== true
+                )
+                || (
+                    access9CloseAnswer.access9_pilot !== true
+                    && access9CloseAnswer.access9_pilot !== false
+                )
+            ) {
+                throw new Error(
+                    (access9CloseAnswer && access9CloseAnswer.message)
+                    || 'El servidor no confirmo el cierre de caja. '
+                       + 'La pantalla permanece abierta.'
+                );
             }
 
             // BEXIA_V582P3_A35G_CLOSE_PDV_WINDOW_AFTER_SESSION_CLOSE
@@ -12590,12 +12934,44 @@ document.addEventListener('DOMContentLoaded', function () {
             // El PDV puede abrirse con target="_blank" o mediante Filament.
             // En esos casos la pestaña puede ser cerrable aunque window.opener
             // sea null. Por eso el cierre ya no depende del opener.
-            const closeFallbackUrl = (
-                response.redirected
-                && response.url
-            )
-                ? response.url
-                : '/admin/{{ filament()->getTenant()?->getKey() ?? 3 }}/point-of-sale';
+            // BEXIA_ACCESS9_STAGE185_SAFE_CLOSE_RETURN
+            // El cierre AJAX ya fue confirmado con JSON.
+            // Utilizar su destino, nunca un redirect HTTP
+            // de una peticion previa.
+            const closeDefaultUrl =
+                '/admin/{{ filament()->getTenant()?->getKey() ?? 3 }}/point-of-sale';
+
+            let closeFallbackUrl = closeDefaultUrl;
+
+            if (
+                access9CloseAnswer
+                && typeof access9CloseAnswer.redirect === 'string'
+            ) {
+                try {
+                    const closeReturnUrl = new URL(
+                        access9CloseAnswer.redirect,
+                        window.location.origin
+                    );
+
+                    if (
+                        closeReturnUrl.origin === window.location.origin
+                        && (
+                            closeReturnUrl.protocol === 'https:'
+                            || closeReturnUrl.protocol === 'http:'
+                        )
+                    ) {
+                        closeFallbackUrl =
+                            closeReturnUrl.pathname
+                            + closeReturnUrl.search
+                            + closeReturnUrl.hash;
+                    }
+                } catch (closeReturnError) {
+                    console.warn(
+                        'Destino del cierre invalido.',
+                        closeReturnError
+                    );
+                }
+            }
 
             try {
                 if (window.opener && !window.opener.closed) {
@@ -13918,7 +14294,27 @@ document.addEventListener('DOMContentLoaded', function () {
                 ? '/pos/orders/' + encodeURIComponent(loadedPendingOrder.id) + '/pending-update'
                 : '/pos/sessions/' + encodeURIComponent(sid) + '/orders';
 
-            var response = await fetch(pendingEndpoint, {
+                        // BEXIA_ACCESS9_STAGE167_ALT_PENDING_2
+            // Mantener intacto el payload economico.
+            var access9AltPendingCreating2 = !isUpdatingPending;
+            var access9AltPendingTerminal2 = String(bexiaAccess8TerminalId() || '');
+
+            // BEXIA_ACCESS9_STAGE170_UPDATE_ALT_2
+            if (isUpdatingPending && access9AltPendingTerminal2) {
+                payload.cashier_terminal_id = access9AltPendingTerminal2;
+                payload.pos_session_id = Number(sid);
+            }
+
+            if (access9AltPendingCreating2 && access9AltPendingTerminal2) {
+                payload.cashier_terminal_id = access9AltPendingTerminal2;
+                window.bexiaAccess9PrepareCreation(
+                    payload,
+                    sid,
+                    'alt-pending-2'
+                );
+            }
+
+var response = await fetch(pendingEndpoint, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -13939,6 +14335,22 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var orderId = data.order_id || data.id || (data.order && data.order.id) || null;
+
+            // Solo confirmar una creacion con ID real.
+            if (access9AltPendingCreating2) {
+                if (!orderId) {
+                    throw new Error(
+                        'El servidor no devolvio el ID del ticket creado.'
+                    );
+                }
+                if (access9AltPendingTerminal2) {
+                    window.bexiaAccess9CompleteCreation(
+                        payload,
+                        sid,
+                        'alt-pending-2'
+                    );
+                }
+            }
             var number = data.number || (data.order && data.order.number) || 'folio generado';
             var printUrl = data.print_url || (orderId ? '/pos/orders/' + orderId + '/pending-ticket/print?initial=1' : '');
 
@@ -19696,4 +20108,241 @@ document.addEventListener('DOMContentLoaded', function () {
 /*
  * BEXIA_V5_83_5K5C_PDV_PAYMENT_DECIMAL_DOT_END
  */
+</script>
+
+<script id="bexia-access9-promote31-creation-uuid">
+// BEXIA_ACCESS9_PROMOTE31_CREATION_UUID
+(function () {
+    'use strict';
+
+    function storageKey(payload, sessionId, purpose) {
+        var terminal = String(
+            payload.cashier_terminal_id || ''
+        );
+
+        return 'bexia_access9_creation_v1:'
+            + String(sessionId)
+            + ':'
+            + terminal
+            + ':'
+            + String(purpose || 'order');
+    }
+
+    function newUuid() {
+        if (
+            window.crypto
+            && typeof window.crypto.randomUUID === 'function'
+        ) {
+            return window.crypto.randomUUID();
+        }
+
+        if (
+            window.crypto
+            && typeof window.crypto.getRandomValues === 'function'
+        ) {
+            var bytes = new Uint8Array(16);
+            window.crypto.getRandomValues(bytes);
+            bytes[6] = (bytes[6] & 15) | 64;
+            bytes[8] = (bytes[8] & 63) | 128;
+
+            var hex = Array.from(bytes, function (x) {
+                return x.toString(16).padStart(2, '0');
+            }).join('');
+
+            return hex.substring(0, 8) + '-'
+                + hex.substring(8, 12) + '-'
+                + hex.substring(12, 16) + '-'
+                + hex.substring(16, 20) + '-'
+                + hex.substring(20);
+        }
+
+        throw new Error(
+            'El navegador no permite generar un identificador seguro.'
+        );
+    }
+
+    window.bexiaAccess9PrepareCreation = function (
+        payload, sessionId, purpose
+    ) {
+        if (!payload || typeof payload !== 'object') {
+            throw new Error('Datos de ticket invalidos.');
+        }
+
+        var key = storageKey(payload, sessionId, purpose);
+        var fingerprint = JSON.stringify(payload);
+        var saved = null;
+
+        try {
+            saved = JSON.parse(
+                sessionStorage.getItem(key) || 'null'
+            );
+        } catch (_) {
+            saved = null;
+        }
+
+        var uuid = saved
+            && saved.fingerprint === fingerprint
+            && typeof saved.uuid === 'string'
+                ? saved.uuid
+                : newUuid();
+
+        try {
+            sessionStorage.setItem(
+                key,
+                JSON.stringify({
+                    uuid: uuid,
+                    fingerprint: fingerprint
+                })
+            );
+        } catch (_) {
+            throw new Error(
+                'No se pudo guardar el identificador del ticket.'
+            );
+        }
+
+        payload.creation_request_uuid = uuid;
+        return payload;
+    };
+
+    window.bexiaAccess9CompleteCreation = function (
+        payload, sessionId, purpose
+    ) {
+        if (!payload || !payload.creation_request_uuid) {
+            return;
+        }
+
+        var key = storageKey(payload, sessionId, purpose);
+
+        try {
+            var saved = JSON.parse(
+                sessionStorage.getItem(key) || 'null'
+            );
+
+            if (
+                saved
+                && saved.uuid === payload.creation_request_uuid
+            ) {
+                sessionStorage.removeItem(key);
+            }
+        } catch (_) {
+            // El servidor ya confirmo la creacion.
+            // Una falla local no debe anularla.
+        }
+    };
+})();
+</script>
+
+<script id="bexia-access9-promote33-payment-uuid">
+// BEXIA_ACCESS9_PROMOTE33_PAYMENT_UUID
+(function () {
+    'use strict';
+
+    function key(orderId, payload) {
+        return 'bexia_access9_payment_v1:'
+            + String(orderId)
+            + ':'
+            + String(payload.cashier_terminal_id || '');
+    }
+
+    function uuid() {
+        if (
+            window.crypto &&
+            typeof window.crypto.randomUUID === 'function'
+        ) {
+            return window.crypto.randomUUID();
+        }
+
+        if (
+            window.crypto &&
+            typeof window.crypto.getRandomValues === 'function'
+        ) {
+            var b = new Uint8Array(16);
+            window.crypto.getRandomValues(b);
+            b[6] = (b[6] & 15) | 64;
+            b[8] = (b[8] & 63) | 128;
+
+            var h = Array.from(b, function (n) {
+                return n.toString(16).padStart(2, '0');
+            }).join('');
+
+            return h.slice(0, 8) + '-'
+                + h.slice(8, 12) + '-'
+                + h.slice(12, 16) + '-'
+                + h.slice(16, 20) + '-'
+                + h.slice(20);
+        }
+
+        throw new Error(
+            'No se pudo generar un identificador seguro de cobro.'
+        );
+    }
+
+    window.bexiaAccess9PreparePayment = function (
+        payload, orderId
+    ) {
+        if (!payload || !orderId) {
+            throw new Error('Solicitud de cobro incompleta.');
+        }
+
+        var storage = key(orderId, payload);
+        var fingerprint = JSON.stringify(payload);
+        var prior = null;
+
+        try {
+            prior = JSON.parse(
+                sessionStorage.getItem(storage) || 'null'
+            );
+        } catch (_) {
+            prior = null;
+        }
+
+        var requestUuid = (
+            prior &&
+            prior.fingerprint === fingerprint &&
+            typeof prior.uuid === 'string'
+        ) ? prior.uuid : uuid();
+
+        try {
+            sessionStorage.setItem(
+                storage,
+                JSON.stringify({
+                    uuid: requestUuid,
+                    fingerprint: fingerprint
+                })
+            );
+        } catch (_) {
+            throw new Error(
+                'No se pudo conservar el identificador de cobro.'
+            );
+        }
+
+        payload.payment_request_uuid = requestUuid;
+        return payload;
+    };
+
+    window.bexiaAccess9CompletePayment = function (
+        payload, orderId
+    ) {
+        if (!payload || !payload.payment_request_uuid) {
+            return;
+        }
+
+        var storage = key(orderId, payload);
+
+        try {
+            var prior = JSON.parse(
+                sessionStorage.getItem(storage) || 'null'
+            );
+
+            if (
+                prior &&
+                prior.uuid === payload.payment_request_uuid
+            ) {
+                sessionStorage.removeItem(storage);
+            }
+        } catch (_) {
+            // El servidor ya confirmo el cobro.
+        }
+    };
+})();
 </script>

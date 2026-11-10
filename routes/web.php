@@ -317,6 +317,18 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('/pos/{posPoint}/cashiers/{cashier}/login', [\App\Http\Controllers\PosController::class, 'loginCashier'])
         ->name('pos.cashiers.login');
 
+
+    // BEXIA_ACCESS9_STAGE133
+    Route::post(
+        '/pos/sessions/{session}/cashier-shift/close',
+        [\App\Http\Controllers\PosController::class, 'bexiaAccess9CloseShift']
+    )->name('pos.cashier-shift.close');
+
+    Route::get(
+        '/pos/cashier-shifts/{shift}/report',
+        [\App\Http\Controllers\PosController::class, 'bexiaAccess9ShiftReport']
+    )->name('pos.cashier-shifts.report');
+
     Route::get('/pos/sessions/{session}/screen', [\App\Http\Controllers\PosController::class, 'screen'])
         ->name('pos.sessions.screen');
 

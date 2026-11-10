@@ -139,6 +139,20 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->searchable()
                     ->weight('bold'),
 
+                // BEXIA_POS_ACCESS9_FIX4A_ADMIN
+                Tables\Columns\TextColumn::make('bexia_pos_name')
+                    ->label('PDV')
+                    ->getStateUsing(function ($record): string {
+                        return (string) (
+                            DB::table('pos_points')
+                                ->where('id', (int) $record->pos_point_id)
+                                ->where('company_id', (int) $record->company_id)
+                                ->value('name')
+                            ?: 'PDV #' . (int) $record->pos_point_id
+                        );
+                    })
+                    ->wrap(),
+
                 Tables\Columns\TextColumn::make('status')
                     ->extraHeaderAttributes([
                         'class' => 'bexia-pssn-header bexia-pssn-col-status',
@@ -221,6 +235,32 @@ protected static function bexiaBaseShouldRegisterNavigation(): bool
                     ->icon('heroicon-o-eye')
                     ->color('info')
                     ->visible(fn (): bool => auth()->user()?->can('pos.sessions.view_detail') ?? false),
+
+                Tables\Actions\Action::make('access9_view_shifts')
+                    ->label('Ver cortes')
+                    ->icon('heroicon-o-document-text')
+                    ->color('info')
+                    ->visible(function ($record): bool {
+                        if (
+                            !(auth()->user()?->can('pos.sessions.view_detail') ?? false)
+                            || !(auth()->user()?->can('pos.sessions.download_report') ?? false)
+                            || !Schema::hasTable('pos_cashier_shifts')
+                        ) {
+                            return false;
+                        }
+
+                        return DB::table('pos_cashier_shifts')
+                            ->where('company_id', (int) $record->company_id)
+                            ->where('pos_point_id', (int) $record->pos_point_id)
+                            ->where('pos_session_id', (int) $record->id)
+                            ->exists();
+                    })
+                    ->url(fn ($record): string =>
+                        static::getUrl(
+                            'view',
+                            ['record' => $record->getKey()]
+                        ) . '#bexia-access9-shifts'
+                    ),
 
                 Tables\Actions\Action::make('open_pos')
                     ->label('Abrir PDV')

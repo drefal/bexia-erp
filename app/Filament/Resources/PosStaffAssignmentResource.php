@@ -155,6 +155,18 @@ public static function getEloquentQuery(): Builder
                         ->label('Puede abrir cajón')
                         ->default(false),
 
+                    // BEXIA_ACCESS9_FIX8L2_PERMISSION
+                    Forms\Components\Toggle::make(
+                        'can_authorize_cash_withdrawal'
+                    )
+                        ->label('Puede autorizar retiros de efectivo')
+                        ->helperText(
+                            'Autoriza retiros mediante su NIP personal. '
+                            . 'No sustituye la aprobación de Tesorería.'
+                        )
+                        ->default(false),
+
+
                     Forms\Components\TextInput::make('max_discount_percent')
                         ->extraAttributes(['class' => 'bexia-psa-field bexia-psa-field-max-discount bexia-psa-numeric-field'])
                         ->label('Descuento máximo %')
