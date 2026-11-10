@@ -713,6 +713,95 @@
             }
         }
 
+
+        /* ORG02 FIX6 - Equipos */
+        .org-children {
+            position: relative;
+        }
+
+        .org-team-label {
+            list-style: none;
+            width: 100%;
+            min-width: 0;
+            padding: 7px 10px;
+            margin: 0 0 5px;
+            border-radius: 8px;
+            border: 1px solid #bfd6f8;
+            background: #eaf3ff;
+            color: #1e40af;
+            font-size: .73rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 5px;
+        }
+
+        .org-team-label-name {
+            font-weight: 800;
+        }
+
+        .org-team-label-count {
+            font-size: .68rem;
+            color: #475569;
+        }
+
+        /* El encabezado de direccion ocupa las tres
+           columnas sin desplazar a los colaboradores. */
+        .org-node-root > .org-children > .org-team-label {
+            grid-column: 1 / -1;
+            text-align: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        /* Cada responsable tiene su propio bloque
+           de subordinados, separado de sus hermanos. */
+        .org-node:not(.org-node-root) > .org-children {
+            border: 1px solid #bed4f1;
+            border-left: 3px solid #3b82f6;
+            background: #f0f6ff;
+            border-radius: 12px;
+            padding: 21px 9px 10px;
+            margin-top: 10px;
+        }
+
+        .org-node:not(.org-node-root)
+        > .org-children > .org-team-label {
+            margin-bottom: 5px;
+            background: #dbeafe;
+            border-color: #bfdbfe;
+        }
+
+        /* En una rama expandida, las tarjetas hermanas
+           mantienen separacion visual. */
+        .org-node:not(.org-node-root)
+        > .org-children > .org-node {
+            width: 100%;
+            margin: 0;
+        }
+
+        .org-node:not(.org-node-root)
+        > .org-children > .org-node > .org-card {
+            background: #fff;
+            width: 100%;
+        }
+
+        .dark .org-team-label {
+            background: #172554;
+            border-color: #1e40af;
+            color: #dbeafe;
+        }
+
+        .dark .org-team-label-count {
+            color: #bfdbfe;
+        }
+
+        .dark .org-node:not(.org-node-root) > .org-children {
+            background: #111e35;
+            border-color: #1e40af;
+        }
+
     </style>
 
     <div
