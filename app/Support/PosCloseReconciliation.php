@@ -210,7 +210,7 @@ final class PosCloseReconciliation
         $counted = round((float)($cashCounted ?? ($summary['session']['closing_amount'] ?? 0)),2);
         $recorded = round(array_sum($netByMethod),2);
         // Formula solicitada: contado + retiros - entradas + no efectivo real.
-        $reconciled = round($counted + $cashOut - $cashIn + array_sum($declared),2);
+        $reconciled = round($counted + $cashOut - $cashIn - $opening + array_sum($declared),2);
         return [
             'registered'=>$netByMethod,
             'gross_registered'=>$byMethod,
