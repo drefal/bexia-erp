@@ -1857,6 +1857,22 @@
                         </div>
 
 
+                        <div class="mt-4">
+                            <label class="block text-sm font-semibold mb-1">Caja donde se cobrara</label>
+                            <select wire:model="resendPosPointId"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                <option value="">Selecciona una caja abierta</option>
+                                @foreach($this->rentalOpenPosPoints as $rentalPos)
+                                    <option value="{{ $rentalPos->id }}">{{ $rentalPos->name }}</option>
+                                @endforeach
+                            </select>
+                            @if($this->rentalOpenPosPoints->isEmpty())
+                                <p class="mt-2 text-sm text-red-600">No hay cajas con una sola sesion abierta. No se enviara el ticket.</p>
+                            @else
+                                <p class="mt-2 text-xs text-gray-500">Solo cajas activas con una sesion fisica abierta. El cobro exigira NIP y turno.</p>
+                            @endif
+                        </div>
+
                         <div
                             class="mt-6 flex justify-end gap-3 border-t pt-4 dark:border-gray-700"
                         >
@@ -2085,6 +2101,22 @@
                             los consumos de esta cuenta.
                         </div>
 
+
+                        <div class="mt-4">
+                            <label class="block text-sm font-semibold mb-1">Caja donde se cobrara</label>
+                            <select wire:model="finishPosPointId"
+                                class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                <option value="">Selecciona una caja abierta</option>
+                                @foreach($this->rentalOpenPosPoints as $rentalPos)
+                                    <option value="{{ $rentalPos->id }}">{{ $rentalPos->name }}</option>
+                                @endforeach
+                            </select>
+                            @if($this->rentalOpenPosPoints->isEmpty())
+                                <p class="mt-2 text-sm text-red-600">No hay cajas con una sola sesion abierta. No se enviara el ticket.</p>
+                            @else
+                                <p class="mt-2 text-xs text-gray-500">Solo cajas activas con una sesion fisica abierta. El cobro exigira NIP y turno.</p>
+                            @endif
+                        </div>
 
                         <div
                             class="mt-6 flex justify-end gap-3 border-t pt-4 dark:border-gray-700"

@@ -7,6 +7,7 @@ use App\Models\ComputerRentalSession;
 use App\Models\ComputerRentalSessionLine;
 use App\Models\Product;
 use Illuminate\Http\Request;
+use App\Support\ComputerRental\ComputerRentalInternalPosRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -24,9 +25,10 @@ class ComputerRentalToPosService
      */
     public function finalizeAndSend(
         ComputerRentalSession $session,
-        ?int $userId = null
+        ?int $userId = null,
+        ?int $selectedPosPointId = null
     ): array {
-        return DB::transaction(function () use ($session, $userId): array {
+        return DB::transaction(function () use ($session, $userId, $selectedPosPointId): array {
 
             /*
              * Bloqueo principal.
@@ -51,11 +53,9 @@ class ComputerRentalToPosService
 
             $this->assertUserCanCreatePendingTicket();
 
-            if (empty($locked->pos_point_id)) {
-                throw ValidationException::withMessages([
-                    'pos' => 'La PC no tiene Punto de Venta asignado.',
-                ]);
-            }
+            $selectedPosPointId = $this->validateSelectedPosPoint(
+                (int) $locked->company_id, $selectedPosPointId
+            );
 
             /*
              * Exigimos exactamente una sesión abierta para evitar
@@ -63,7 +63,7 @@ class ComputerRentalToPosService
              */
             $openPosSessions = DB::table('pos_sessions')
                 ->where('company_id', (int) $locked->company_id)
-                ->where('pos_point_id', (int) $locked->pos_point_id)
+                ->where('pos_point_id', $selectedPosPointId)
                 ->where('status', 'open')
                 ->orderByDesc('id')
                 ->get();
@@ -294,7 +294,7 @@ class ComputerRentalToPosService
             /*
              * Crear request interno exactamente para storeOrder().
              */
-            $request = Request::create(
+            $request = ComputerRentalInternalPosRequest::create(
                 '/computer-rental/internal/finalize-to-pos',
                 'POST',
                 [
@@ -559,12 +559,14 @@ class ComputerRentalToPosService
      */
     public function resendCancelledTicket(
         ComputerRentalSession $session,
-        ?int $userId = null
+        ?int $userId = null,
+        ?int $selectedPosPointId = null
     ): array {
         return DB::transaction(
             function () use (
                 $session,
-                $userId
+                $userId,
+                $selectedPosPointId
             ): array {
 
                 /*
@@ -635,12 +637,9 @@ class ComputerRentalToPosService
 
                 $this->assertUserCanCreatePendingTicket();
 
-                if (empty($locked->pos_point_id)) {
-                    throw ValidationException::withMessages([
-                        'pos' =>
-                            'La PC no tiene Punto de Venta asignado.',
-                    ]);
-                }
+                $selectedPosPointId = $this->validateSelectedPosPoint(
+                    (int) $locked->company_id, $selectedPosPointId
+                );
 
                 /*
                  * Igual que el flujo original: exactamente una
@@ -654,7 +653,7 @@ class ComputerRentalToPosService
                         )
                         ->where(
                             'pos_point_id',
-                            (int) $locked->pos_point_id
+                            $selectedPosPointId
                         )
                         ->where('status', 'open')
                         ->orderByDesc('id')
@@ -921,7 +920,7 @@ class ComputerRentalToPosService
                         4
                     );
 
-                $request = Request::create(
+                $request = ComputerRentalInternalPosRequest::create(
                     '/computer-rental/internal/resend-to-pos',
                     'POST',
                     [
@@ -1374,6 +1373,27 @@ class ComputerRentalToPosService
         );
     }
 
+
+    /** El valor llega del modal pero siempre se valida de nuevo en el servidor. */
+    protected function validateSelectedPosPoint(int $companyId, ?int $posPointId): int
+    {
+        if (! $posPointId || $posPointId <= 0) {
+            throw ValidationException::withMessages([
+                'pos' => 'Selecciona una caja con sesion abierta para cobrar la renta.',
+            ]);
+        }
+        $valid = DB::table('pos_points')
+            ->where('id', $posPointId)
+            ->where('company_id', $companyId)
+            ->where('status', 'active')
+            ->exists();
+        if (! $valid) {
+            throw ValidationException::withMessages([
+                'pos' => 'La caja seleccionada no esta activa o no pertenece a esta empresa.',
+            ]);
+        }
+        return $posPointId;
+    }
 
     protected function assertUserCanCreatePendingTicket(): void
     {
