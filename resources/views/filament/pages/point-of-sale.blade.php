@@ -278,10 +278,9 @@
     $user = auth()->user();
     $userId = (int) ($user?->id ?? 0);
 
-    $isAdmin = $user && (
-        (method_exists($user, 'isSystemAdmin') && $user->isSystemAdmin())
-        || (method_exists($user, 'isGroupAdmin') && $user->isGroupAdmin())
-    );
+    // FIX241B: reutilizar la validacion administrativa existente.
+    // No modificar asignaciones ni permisos.
+    $isAdmin = (bool) $v5327bCanManageAllPos;
 
     $posPoints = collect();
 
