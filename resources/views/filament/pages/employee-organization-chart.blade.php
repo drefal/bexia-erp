@@ -802,6 +802,263 @@
             border-color: #1e40af;
         }
 
+
+        /* ORG02 FIX7 - Vista enfocada de tres columnas */
+        .orgx-focus {
+            border: 1px solid #dbe4f0;
+            border-radius: 16px;
+            background: #f8fbff;
+            padding: 18px;
+        }
+
+        .orgx-focus-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+
+        .orgx-focus-heading {
+            margin: 0 auto;
+            max-width: 520px;
+            padding: 16px;
+            border: 2px solid #2563eb;
+            border-radius: 14px;
+            background: #eff6ff;
+            text-align: center;
+        }
+
+        .orgx-focus-eyebrow {
+            color: #1d4ed8;
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .orgx-focus-name {
+            color: #0f172a;
+            font-size: 1.18rem;
+            font-weight: 800;
+            margin-top: 4px;
+        }
+
+        .orgx-focus-position {
+            color: #475569;
+            font-size: .82rem;
+            margin-top: 4px;
+        }
+
+        .orgx-focus-count {
+            color: #1d4ed8;
+            font-size: .8rem;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+
+        .orgx-focus-line {
+            border-left: 2px solid #93b4dd;
+            height: 23px;
+            width: 0;
+            margin: 0 auto;
+        }
+
+        .orgx-focus-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            align-items: start;
+        }
+
+        .orgx-focus-card {
+            min-width: 0;
+            border: 1px solid #bfdbfe;
+            border-top: 3px solid #2563eb;
+            border-radius: 12px;
+            background: #fff;
+            padding: 12px;
+            box-shadow: 0 3px 10px rgba(15,23,42,.06);
+        }
+
+        .orgx-focus-person {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .orgx-focus-avatar {
+            position: relative;
+            width: 40px;
+            height: 40px;
+            flex: 0 0 40px;
+            border-radius: 50%;
+            background: #2563eb;
+            overflow: hidden;
+        }
+
+        .orgx-focus-avatar img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .orgx-focus-initials {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 800;
+            font-size: .8rem;
+        }
+
+        .orgx-focus-person-info {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .orgx-focus-person-info strong {
+            display: block;
+            color: #0f172a;
+            font-size: .83rem;
+        }
+
+        .orgx-focus-person-info div,
+        .orgx-focus-person-info small {
+            display: block;
+            color: #64748b;
+            font-size: .74rem;
+            margin-top: 2px;
+        }
+
+        .orgx-focus-direct {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 11px;
+            padding-top: 9px;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+            font-size: .72rem;
+        }
+
+        .orgx-focus-direct strong {
+            color: #1d4ed8;
+        }
+
+        .orgx-focus-subteam {
+            margin-top: 12px;
+            padding: 10px;
+            border: 1px solid #bfdbfe;
+            border-left: 3px solid #2563eb;
+            border-radius: 10px;
+            background: #eff6ff;
+        }
+
+        .orgx-focus-subhead {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 5px;
+            color: #1e40af;
+            font-size: .74rem;
+        }
+
+        .orgx-focus-subhead span {
+            color: #475569;
+        }
+
+        .orgx-focus-sublist {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-top: 10px;
+        }
+
+        .orgx-focus-subperson {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: #fff;
+            border: 1px solid #dbeafe;
+            border-radius: 7px;
+            padding: 7px 8px;
+            color: #334155;
+            font-size: .72rem;
+            overflow-wrap: anywhere;
+        }
+
+        .orgx-focus-subdot {
+            width: 6px;
+            height: 6px;
+            flex: 0 0 6px;
+            border-radius: 50%;
+            background: #2563eb;
+        }
+
+        .orgx-focus-open,
+        .orgx-focus-deeper {
+            color: #1d4ed8;
+            font-size: .72rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .orgx-focus-open {
+            margin-top: 10px;
+        }
+
+        .orgx-focus-note {
+            color: #64748b;
+            text-align: center;
+            font-size: .75rem;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 1100px) {
+            .orgx-focus-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 700px) {
+            .orgx-focus-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .orgx-focus {
+                padding: 10px;
+            }
+        }
+
+        .dark .orgx-focus {
+            background: #0b1220;
+            border-color: #374151;
+        }
+
+        .dark .orgx-focus-heading,
+        .dark .orgx-focus-subteam {
+            background: #172554;
+            border-color: #2563eb;
+        }
+
+        .dark .orgx-focus-card,
+        .dark .orgx-focus-subperson {
+            background: #111827;
+            border-color: #374151;
+        }
+
+        .dark .orgx-focus-name,
+        .dark .orgx-focus-person-info strong {
+            color: #f8fafc;
+        }
+
+        .dark .orgx-focus-subperson {
+            color: #e2e8f0;
+        }
+
     </style>
 
     <div
@@ -810,6 +1067,57 @@
             area: '',
             query: '',
             collapsed: @js($initialCollapsed),
+
+            // ORG02 FIX7 - Vista enfocada
+            focusId: null,
+
+            focusTeam(id) {
+                this.focusId = Number(id);
+                this.$nextTick(() => {
+                    this.$refs.orgFocus?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                });
+            },
+
+            focusRow() {
+                return this.nodes.find(
+                    row => Number(row.id) === this.focusId
+                ) || null;
+            },
+
+            focusChildren(id) {
+                return this.nodes.filter(
+                    row => Number(row.manager_id) === Number(id)
+                );
+            },
+
+            focusBack() {
+                const row = this.focusRow();
+                const parentId = row?.manager_id;
+
+                if (parentId && this.nodes.some(
+                    other => Number(other.id) === Number(parentId)
+                )) {
+                    this.focusId = Number(parentId);
+                } else {
+                    this.focusId = null;
+                }
+            },
+
+            focusHome() {
+                this.focusId = null;
+            },
+
+            focusInitials(name) {
+                return String(name || '')
+                    .trim()
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map(part => part.charAt(0).toUpperCase())
+                    .join('') || 'NA';
+            },
 
             normalize(value) {
                 return String(value || '')
@@ -957,7 +1265,128 @@
             </div>
         </section>
 
-        <section class="orgx-canvas">
+
+        <!-- ORG02 FIX7: equipo a todo el ancho -->
+        <section
+            class="orgx-focus"
+            x-ref="orgFocus"
+            x-show="focusId !== null"
+            x-cloak
+        >
+            <div class="orgx-focus-actions">
+                <button type="button" class="orgx-btn"
+                    x-on:click="focusBack()">
+                    Subir un nivel
+                </button>
+                <button type="button" class="orgx-btn"
+                    x-on:click="focusHome()">
+                    Volver al organigrama general
+                </button>
+            </div>
+
+            <template x-if="focusRow()">
+                <div>
+                    <div class="orgx-focus-heading">
+                        <div class="orgx-focus-eyebrow">
+                            Vista jerárquica del equipo
+                        </div>
+                        <div class="orgx-focus-name"
+                            x-text="focusRow().name"></div>
+                        <div class="orgx-focus-position"
+                            x-text="(focusRow().position || '') + ' · ' +
+                                (focusRow().department || '')"></div>
+                        <div class="orgx-focus-count"
+                            x-text="focusChildren(focusId).length +
+                                ' colaboradores directos'"></div>
+                    </div>
+
+                    <div class="orgx-focus-line"></div>
+
+                    <div class="orgx-focus-grid">
+                        <template
+                            x-for="person in focusChildren(focusId)"
+                            x-bind:key="person.id"
+                        >
+                            <article class="orgx-focus-card">
+                                <div class="orgx-focus-person">
+                                    <div class="orgx-focus-avatar">
+                                        <template x-if="person.avatar_url">
+                                            <img
+                                                x-bind:src="person.avatar_url"
+                                                alt=""
+                                                loading="lazy"
+                                                x-on:error="$el.style.display='none'"
+                                            />
+                                        </template>
+                                        <span x-text="focusInitials(person.name)"
+                                            class="orgx-focus-initials"></span>
+                                    </div>
+                                    <div class="orgx-focus-person-info">
+                                        <strong x-text="person.name"></strong>
+                                        <div x-text="person.position"></div>
+                                        <small x-text="person.department"></small>
+                                    </div>
+                                </div>
+
+                                <div class="orgx-focus-direct">
+                                    <span>Reporta directamente a</span>
+                                    <strong x-text="focusRow().name"></strong>
+                                </div>
+
+                                <template
+                                    x-if="focusChildren(person.id).length > 0"
+                                >
+                                    <div class="orgx-focus-subteam">
+                                        <div class="orgx-focus-subhead">
+                                            <strong
+                                                x-text="'Equipo de ' + person.name"
+                                            ></strong>
+                                            <span
+                                                x-text="focusChildren(person.id).length +
+                                                    ' colaboradores'"
+                                            ></span>
+                                        </div>
+                                        <div class="orgx-focus-sublist">
+                                            <template
+                                                x-for="sub in focusChildren(person.id)"
+                                                x-bind:key="sub.id"
+                                            >
+                                                <div class="orgx-focus-subperson">
+                                                    <span class="orgx-focus-subdot"></span>
+                                                    <span x-text="sub.name"></span>
+                                                    <button
+                                                        type="button"
+                                                        x-show="focusChildren(sub.id).length > 0"
+                                                        x-on:click="focusTeam(sub.id)"
+                                                        class="orgx-focus-deeper"
+                                                    >
+                                                        Ver equipo
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <button type="button"
+                                            class="orgx-focus-open"
+                                            x-on:click="focusTeam(person.id)">
+                                            Ver equipo en tres columnas
+                                        </button>
+                                    </div>
+                                </template>
+                            </article>
+                        </template>
+                    </div>
+
+                    <p class="orgx-focus-note">
+                        Cada columna representa un colaborador directo.
+                        Los equipos internos permanecen dentro de la
+                        tarjeta de su responsable.
+                    </p>
+                </div>
+            </template>
+        </section>
+
+        <section class="orgx-canvas" x-show="focusId === null">
+
             @if (count($roots))
                 <ul class="org-roots">
                     @foreach ($roots as $rootId)
