@@ -61,6 +61,38 @@
         || (bool) ($cashier->can_collect_payment ?? false)
         || (bool) ($cashier->can_close_session ?? false);
 
+    // BEXIA_ACCESS9_STAGE143_PILOT_SCOPE
+    $v5487bAccess9PilotEnabled = in_array(
+        (int) ($pos->company_id ?? 0)
+            . ':' . (int) ($pos->id ?? 0),
+        (array) config('bexia_access9.enabled_pos', []),
+        true
+    );
+
+    /*
+     * BEXIA_ACCESS9_FIX10C_OPEN_SESSION
+     * El fondo inicial es de la caja fisica, no del turno.
+     * Piloto exclusivo empresa 3 / PDV 10.
+     */
+    if (
+        in_array(
+            (int) ($pos->company_id ?? 0) . ':' . (int) ($pos->id ?? 0),
+            (array) config('bexia_access9.enabled_pos', []),
+            true
+        )
+    ) {
+        $v5487bPhysicalSessionIsOpen = \Illuminate\Support\Facades\DB::table('pos_sessions')
+            ->where('company_id', (int) $pos->company_id)
+            ->where('pos_point_id', (int) $pos->id)
+            ->where('status', 'open')
+            ->exists();
+
+        if ($v5487bPhysicalSessionIsOpen) {
+            $v5487bNeedsOpeningCash = false;
+        }
+    }
+
+
     $v5487bDenominations = collect();
 
     if (\Illuminate\Support\Facades\Schema::hasTable('cash_denominations')) {
@@ -301,6 +333,7 @@
 <script id="v5487-opening-cash-script">
 document.addEventListener('DOMContentLoaded', function () {
     const needsOpeningCash = @json($v5487bNeedsOpeningCash);
+    const access9Pilot = @json($v5487bAccess9PilotEnabled);
 
     if (!needsOpeningCash || window.BEXIA_POS_OPENING_CASH_V5487B_READY) {
         return;
@@ -411,7 +444,110 @@ document.addEventListener('DOMContentLoaded', function () {
             event.stopImmediatePropagation();
         }
 
-        openModal(form);
+        // BEXIA_ACCESS9_STAGE143_LEGACY
+        // Las cajas fuera del piloto conservan su
+        // captura tradicional de fondo inicial.
+        if (!access9Pilot) {
+            openModal(form);
+            return;
+        }
+
+        // BEXIA_ACCESS9_STAGE142_BROWSER_PREFLIGHT
+        // El NIP se valida en Laravel antes de mostrar el fondo.
+        if (form.dataset.bexiaAccess9Checking === '1') {
+            return;
+        }
+
+        form.dataset.bexiaAccess9Checking = '1';
+
+        const submitButton = form.querySelector(
+            'button[type="submit"]'
+        );
+
+        if (submitButton) submitButton.disabled = true;
+
+        (async function () {
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    credentials: 'same-origin',
+                    redirect: 'follow',
+                    cache: 'no-store',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Bexia-Access9-Preflight': '1',
+                    },
+                });
+
+                const type = response.headers.get(
+                    'content-type'
+                ) || '';
+
+                const data = type.includes('application/json')
+                    ? await response.json()
+                    : null;
+
+                if (!response.ok || !data || data.ok !== true) {
+                    const message = response.status === 429
+                        ? 'Demasiados intentos de NIP. Intenta mas tarde.'
+                        : (
+                            data && data.message
+                                ? data.message
+                                : 'No fue posible validar el NIP.'
+                        );
+
+                    let error = document.getElementById(
+                        'bexia-access9-pin-preflight-error'
+                    );
+
+                    if (!error) {
+                        error = document.createElement('div');
+                        error.id =
+                            'bexia-access9-pin-preflight-error';
+                        error.className = 'error';
+                        form.parentNode.insertBefore(error, form);
+                    }
+
+                    error.textContent = message;
+                    return;
+                }
+
+                const oldError = document.getElementById(
+                    'bexia-access9-pin-preflight-error'
+                );
+
+                if (oldError) oldError.remove();
+
+                if (data.needs_opening_cash === true) {
+                    openModal(form);
+                } else {
+                    // Segunda validacion obligatoria en loginCashier.
+                    confirmed = true;
+                    form.submit();
+                }
+            } catch (error) {
+                let box = document.getElementById(
+                    'bexia-access9-pin-preflight-error'
+                );
+
+                if (!box) {
+                    box = document.createElement('div');
+                    box.id = 'bexia-access9-pin-preflight-error';
+                    box.className = 'error';
+                    form.parentNode.insertBefore(box, form);
+                }
+
+                box.textContent =
+                    'No fue posible conectar con el servidor.';
+            } finally {
+                form.dataset.bexiaAccess9Checking = '0';
+
+                if (submitButton && !confirmed) {
+                    submitButton.disabled = false;
+                }
+            }
+        })();
     }, true);
 
     cancelButton?.addEventListener('click', function () {

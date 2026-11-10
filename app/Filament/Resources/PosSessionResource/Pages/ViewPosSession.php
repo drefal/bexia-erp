@@ -138,6 +138,136 @@ class ViewPosSession extends ViewRecord
         return 'Sesión PDV ' . ($this->record->number ?? ('#' . $this->record->id));
     }
 
+    /* BEXIA_POS_ACCESS9_FIX4A_ADMIN */
+    protected function bexiaAccess9ShiftRows()
+    {
+        $user = auth()->user();
+
+        if (
+            !($user?->can('pos.sessions.download_report') ?? false)
+            || !($user?->can('pos.sessions.view_detail') ?? false)
+            || !Schema::hasTable('pos_cashier_shifts')
+        ) {
+            return collect();
+        }
+
+        $companyId = (int) $this->record->company_id;
+        $pointId = (int) $this->record->pos_point_id;
+        $sessionId = (int) $this->record->id;
+
+        $shifts = DB::table('pos_cashier_shifts as s')
+            ->leftJoin('employees as e', function ($join) use ($companyId) {
+                $join->on('e.id', '=', 's.employee_id')
+                    ->where('e.company_id', '=', $companyId);
+            })
+            ->where('s.company_id', $companyId)
+            ->where('s.pos_point_id', $pointId)
+            ->where('s.pos_session_id', $sessionId)
+            ->orderBy('s.id')
+            ->get([
+                's.id',
+                's.employee_id',
+                'e.name as employee_name',
+                's.status',
+                's.opened_at',
+                's.closed_at',
+            ]);
+
+        if ($shifts->isEmpty()) {
+            return collect();
+        }
+
+        // Reporte exacto por ID de turno, limitado
+        // a 10 000 pagos por sesion. Fallar cerrado
+        // ante una sesion demasiado grande.
+        $payments = DB::table('pos_order_payments as p')
+            ->join('pos_orders as o', 'o.id', '=', 'p.pos_order_id')
+            ->where('p.pos_session_id', $sessionId)
+            ->where('p.status', 'paid')
+            ->where('o.company_id', $companyId)
+            ->where('o.pos_point_id', $pointId)
+            ->limit(10001)
+            ->get([
+                'p.id',
+                'p.pos_order_id',
+                'p.amount',
+                'p.created_at',
+                'p.metadata',
+            ]);
+
+        if ($payments->count() > 10000) {
+            return collect();
+        }
+
+        $counts = [];
+        $totals = [];
+        $tickets = [];
+
+        $indexed = $shifts->keyBy('id');
+
+        foreach ($payments as $payment) {
+            $meta = json_decode(
+                (string) $payment->metadata,
+                true
+            );
+
+            if (!is_array($meta)) {
+                continue;
+            }
+
+            $shiftId = (int) (
+                $meta['pos_cashier_shift_id'] ?? 0
+            );
+
+            $shift = $indexed->get($shiftId);
+
+            if (!$shift) {
+                continue;
+            }
+
+            // No atribuir importes inconsistentes.
+            if (
+                (int) ($meta['paid_by_employee_id'] ?? 0)
+                    !== (int) $shift->employee_id
+                || (string) $payment->created_at
+                    < (string) $shift->opened_at
+                || (
+                    $shift->closed_at !== null
+                    && (string) $payment->created_at
+                        > (string) $shift->closed_at
+                )
+            ) {
+                continue;
+            }
+
+            $counts[$shiftId] = ($counts[$shiftId] ?? 0) + 1;
+            $totals[$shiftId] = ($totals[$shiftId] ?? 0)
+                + (int) round((float) $payment->amount * 100);
+
+            $tickets[$shiftId][(int) $payment->pos_order_id] = true;
+        }
+
+        return $shifts->map(function ($shift) use (
+            $counts, $totals, $tickets
+        ) {
+            $id = (int) $shift->id;
+
+            return [
+                'id' => $id,
+                'employee' => (string) (
+                    $shift->employee_name
+                    ?: 'Empleado #' . $shift->employee_id
+                ),
+                'status' => (string) $shift->status,
+                'opened_at' => (string) $shift->opened_at,
+                'closed_at' => $shift->closed_at,
+                'payment_count' => (int) ($counts[$id] ?? 0),
+                'ticket_count' => count($tickets[$id] ?? []),
+                'total' => (int) ($totals[$id] ?? 0) / 100,
+            ];
+        });
+    }
+
     protected function getViewData(): array
     {
         return [
@@ -149,6 +279,12 @@ class ViewPosSession extends ViewRecord
             'sessionTickets' => (auth()->user()?->can('pos.menu.view') ?? false)
                 ? $this->v5836Pos53c1SessionTickets()
                 : collect(),
+            // BEXIA_POS_ACCESS9_FIX4A_ADMIN
+            'access9ShiftRows' => $this->bexiaAccess9ShiftRows(),
+            'canViewAccess9Shifts' =>
+                (auth()->user()?->can('pos.sessions.download_report') ?? false)
+                && (auth()->user()?->can('pos.sessions.view_detail') ?? false),
+
             'canViewPriceListChanges' => auth()->user()?->can('pos.sessions.view_price_list_changes') ?? false,
             'canDownloadReport' => auth()->user()?->can('pos.sessions.download_report') ?? false,
             'canPrintCloseTicket' => auth()->user()?->can('pos.sessions.print_close_ticket') ?? false,
