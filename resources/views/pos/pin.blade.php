@@ -335,7 +335,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const needsOpeningCash = @json($v5487bNeedsOpeningCash);
     const access9Pilot = @json($v5487bAccess9PilotEnabled);
 
-    if (!needsOpeningCash || window.BEXIA_POS_OPENING_CASH_V5487B_READY) {
+    if (window.BEXIA_POS_OPENING_CASH_V5487B_READY) {
         return;
     }
 
@@ -444,14 +444,9 @@ document.addEventListener('DOMContentLoaded', function () {
             event.stopImmediatePropagation();
         }
 
-        // BEXIA_ACCESS9_STAGE143_LEGACY
-        // Las cajas fuera del piloto conservan su
-        // captura tradicional de fondo inicial.
-        if (!access9Pilot) {
-            openModal(form);
-            return;
-        }
-
+        // FIX250: primero validar NIP y sesion fisica abierta.
+        // Aplica a todos los PDV; ACCESS9 conserva sus
+        // comprobaciones de identidad y turno.
         // BEXIA_ACCESS9_STAGE142_BROWSER_PREFLIGHT
         // El NIP se valida en Laravel antes de mostrar el fondo.
         if (form.dataset.bexiaAccess9Checking === '1') {
