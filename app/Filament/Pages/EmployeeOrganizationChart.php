@@ -172,10 +172,134 @@ class EmployeeOrganizationChart extends Page
         ];
     }
 
-    public function downloadPdf()
+    public function downloadPdf(array $state = [])
     {
         $payload = $this->chartPayload();
-        $rows = $payload['nodes'];
+        $allRows = $payload['nodes'];
+
+        // ORG03 FIX1: estado enviado por la vista Alpine actual.
+        // Se valida contra los empleados del tenant; nunca se confian
+        // nombres, jefaturas ni datos de empleados enviados por JS.
+        $byId = [];
+        foreach ($allRows as $person) {
+            $byId[(int) $person['id']] = $person;
+        }
+
+        $collapsed = [];
+        foreach (array_slice(
+            is_array($state['collapsed'] ?? null)
+                ? $state['collapsed'] : [],
+            0,
+            10000
+        ) as $value) {
+            if ((is_int($value) || ctype_digit((string) $value))
+                && isset($byId[(int) $value])) {
+                $collapsed[(int) $value] = true;
+            }
+        }
+
+        $focusId = filter_var(
+            $state['focusId'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $focusId = $focusId && isset($byId[$focusId])
+            ? (int) $focusId : null;
+
+        $area = is_string($state['area'] ?? null)
+            ? mb_substr($state['area'], 0, 200) : '';
+        $query = is_string($state['query'] ?? null)
+            ? trim(mb_substr($state['query'], 0, 200)) : '';
+
+        $focusMode = $focusId !== null;
+        $selected = [];
+
+        if ($focusMode) {
+            // La vista enfocada presenta al responsable,
+            // colaboradores directos y subequipos inmediatos.
+            $selected[$focusId] = true;
+            foreach ($allRows as $person) {
+                $ancestors = array_map(
+                    'intval', $person['ancestors'] ?? []
+                );
+                if (in_array($focusId, $ancestors, true)
+                    && count($ancestors)
+                        <= count($byId[$focusId]['ancestors'] ?? []) + 2) {
+                    $selected[(int) $person['id']] = true;
+                }
+            }
+        } else {
+            $filtering = $area !== '' || $query !== '';
+            $matching = [];
+
+            $normalize = static function (string $value): string {
+                return strtolower(
+                    \Illuminate\Support\Str::ascii($value)
+                );
+            };
+
+            if ($filtering) {
+                foreach ($allRows as $person) {
+                    $haystack = $normalize(
+                        ($person['name'] ?? '') . ' ' .
+                        ($person['position'] ?? '') . ' ' .
+                        ($person['department'] ?? '') . ' ' .
+                        ($person['manager_name'] ?? '')
+                    );
+
+                    $matchesArea = $area === ''
+                        || ($person['department'] ?? '') === $area;
+                    $matchesQuery = $query === ''
+                        || str_contains(
+                            $haystack, $normalize($query)
+                        );
+
+                    if ($matchesArea && $matchesQuery) {
+                        $matching[(int) $person['id']] = true;
+                    }
+                }
+            }
+
+            $filterVisible = [];
+            if ($filtering) {
+                foreach ($allRows as $person) {
+                    $id = (int) $person['id'];
+                    if (! isset($matching[$id])) {
+                        continue;
+                    }
+                    $filterVisible[$id] = true;
+                    foreach ($person['ancestors'] ?? [] as $ancestor) {
+                        $filterVisible[(int) $ancestor] = true;
+                    }
+                }
+            }
+
+            foreach ($allRows as $person) {
+                $id = (int) $person['id'];
+
+                if ($filtering && ! isset($filterVisible[$id])) {
+                    continue;
+                }
+
+                $hidden = false;
+                foreach ($person['ancestors'] ?? [] as $ancestor) {
+                    if (isset($collapsed[(int) $ancestor])) {
+                        $hidden = true;
+                        break;
+                    }
+                }
+
+                if (! $hidden) {
+                    $selected[$id] = true;
+                }
+            }
+        }
+
+        $rows = array_values(array_filter(
+            $allRows,
+            static fn (array $person): bool =>
+                isset($selected[(int) $person['id']])
+        ));
 
         // Insertar imagenes locales validas como data URI para
         // que Dompdf no dependa de peticiones HTTP externas.
@@ -217,10 +341,60 @@ class EmployeeOrganizationChart extends Page
         }
         unset($row);
 
+        // Construir grupos jerarquicos para PDF en tres columnas.
+        $visibleById = [];
+        $visibleChildren = [];
+        foreach ($rows as $person) {
+            $visibleById[(int) $person['id']] = $person;
+        }
+
+        foreach ($rows as $person) {
+            $parent = (int) ($person['manager_id'] ?? 0);
+            if (isset($visibleById[$parent])) {
+                $visibleChildren[$parent][] = $person;
+            }
+        }
+
+        $sections = [];
+        foreach ($rows as $person) {
+            $id = (int) $person['id'];
+            $direct = $visibleChildren[$id] ?? [];
+
+            if ($focusMode && $id !== $focusId) {
+                continue;
+            }
+
+            $parentVisible = isset(
+                $visibleById[(int) ($person['manager_id'] ?? 0)]
+            );
+
+            if (! $focusMode && $parentVisible && empty($direct)) {
+                continue;
+            }
+
+            $subteams = [];
+            if ($focusMode) {
+                foreach ($direct as $child) {
+                    $childId = (int) $child['id'];
+                    $subteams[$childId] =
+                        $visibleChildren[$childId] ?? [];
+                }
+            }
+
+            $sections[] = [
+                'manager' => $person,
+                'children' => $direct,
+                'subteams' => $subteams,
+                'depth' => (int) ($person['depth'] ?? 0),
+            ];
+        }
+
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
             'filament.pages.employee-organization-pdf',
             [
                 'rows' => $rows,
+                'sections' => $sections,
+                'focusMode' => $focusMode,
                 'total' => count($rows),
                 'generatedAt' => now()->format('d/m/Y H:i'),
             ]

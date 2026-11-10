@@ -1556,7 +1556,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     class="orgx-search"
                 />
 
-                <button type="button" class="orgx-btn orgx-btn-primary" wire:click="downloadPdf" wire:loading.attr="disabled" wire:target="downloadPdf">
+                <button type="button" class="orgx-btn orgx-btn-primary" x-on:click="$wire.downloadPdf({ collapsed: [...collapsed], focusId: focusId, area: area, query: query })" wire:loading.attr="disabled" wire:target="downloadPdf">
                     Descargar PDF
                 </button>
 
