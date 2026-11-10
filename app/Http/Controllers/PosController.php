@@ -20642,11 +20642,11 @@ public function refreshSessionProducts(\Illuminate\Http\Request $request, int $s
                 'ok' => true,
                 'shift_id' => $closed,
                 'physical_session_open' => true,
-                'redirect' => '/pos/10/open',
+                'redirect' => '/pos/' . $posPointId . '/open',
             ]);
         }
 
-        return redirect('/pos/10/open')
+        return redirect('/pos/' . $posPointId . '/open')
             ->with('success', 'Tu turno ha terminado.');
     }
 
