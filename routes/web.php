@@ -318,6 +318,12 @@ Route::middleware(['web', 'auth'])->group(function () {
         ->name('pos.cashiers.login');
 
 
+    // ACCESS9 SWITCH257: liberar terminal sin cerrar turno.
+    Route::post(
+        '/pos/sessions/{session}/cashier-shift/handoff',
+        [\App\Http\Controllers\PosController::class, 'bexiaAccess9Handoff']
+    )->name('pos.cashier-shift.handoff');
+
     // BEXIA_ACCESS9_STAGE133
     Route::post(
         '/pos/sessions/{session}/cashier-shift/close',
