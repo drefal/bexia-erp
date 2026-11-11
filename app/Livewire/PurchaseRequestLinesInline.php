@@ -54,6 +54,10 @@ class PurchaseRequestLinesInline extends Component
     {
         $productId = $productId ? (int) $productId : null;
 
+        if ($productId) {
+            $this->assertPurchaseProductCompany($productId);
+        }
+
         $this->product_id = $productId;
         $this->product_variant_id = null;
         $this->variantSearch = '';
@@ -84,6 +88,10 @@ class PurchaseRequestLinesInline extends Component
     {
         $variantId = $variantId ? (int) $variantId : null;
 
+        if ($variantId) {
+            $this->assertPurchaseProductCompany($variantId, true);
+        }
+
         $this->product_variant_id = $variantId;
 
         if (! $variantId) {
@@ -112,6 +120,15 @@ class PurchaseRequestLinesInline extends Component
             'unit_cost_without_tax' => ['required', 'numeric', 'min:0'],
             'tax_rate' => ['required', 'numeric', 'min:0'],
         ]);
+
+        $this->assertPurchaseProductCompany((int) $this->product_id);
+
+        if ($this->product_variant_id) {
+            $this->assertPurchaseProductCompany(
+                (int) $this->product_variant_id,
+                true
+            );
+        }
 
         $data = $this->normalizedLineData();
 
@@ -416,6 +433,48 @@ class PurchaseRequestLinesInline extends Component
     }
 
 
+    /*
+     * BEXIA_PURCHASE_SCOPE_FIX16
+     * Inventarios independientes por empresa.
+     */
+    protected function purchaseRequestCompanyId(): int
+    {
+        $companyId = (int) DB::table('purchase_requests')
+            ->where('id', $this->purchaseRequestId)
+            ->value('company_id');
+
+        if ($companyId <= 0) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'product_id' => 'No se pudo identificar la empresa de la solicitud.',
+            ]);
+        }
+
+        return $companyId;
+    }
+
+    protected function assertPurchaseProductCompany(
+        int $productId,
+        bool $variant = false
+    ): void {
+        $query = DB::table('products')
+            ->where('id', $productId)
+            ->where('company_id', $this->purchaseRequestCompanyId())
+            ->where('is_active', true);
+
+        if ($variant) {
+            $query->where('parent_product_id', (int) $this->product_id);
+        } else {
+            $query->whereNull('parent_product_id');
+        }
+
+        if (! $query->exists()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                $variant ? 'product_variant_id' : 'product_id' =>
+                    'Selecciona un producto que pertenezca a la empresa de esta solicitud.',
+            ]);
+        }
+    }
+
     protected function productSearchOptions(string $search = '', ?int $selectedId = null): array
     {
         if (! Schema::hasTable('products')) {
@@ -428,7 +487,8 @@ class PurchaseRequestLinesInline extends Component
             return [];
         }
 
-        $query = DB::table('products');
+        $query = DB::table('products')
+            ->where('company_id', $this->purchaseRequestCompanyId());
 
         if (Schema::hasColumn('products', 'parent_product_id')) {
             $query->whereNull('parent_product_id');
@@ -459,7 +519,14 @@ class PurchaseRequestLinesInline extends Component
             ])
             ->all();
 
-        if ($selectedId && ! isset($options[$selectedId])) {
+        if (
+            $selectedId
+            && ! isset($options[$selectedId])
+            && DB::table('products')
+                ->where('id', $selectedId)
+                ->where('company_id', $this->purchaseRequestCompanyId())
+                ->exists()
+        ) {
             $options[$selectedId] = $this->productLabel($selectedId);
         }
 
@@ -473,6 +540,7 @@ class PurchaseRequestLinesInline extends Component
         }
 
         $query = DB::table('products')
+            ->where('company_id', $this->purchaseRequestCompanyId())
             ->where('parent_product_id', $productId);
 
         if (Schema::hasColumn('products', 'is_active')) {
@@ -502,7 +570,15 @@ class PurchaseRequestLinesInline extends Component
             ])
             ->all();
 
-        if ($selectedId && ! isset($options[$selectedId])) {
+        if (
+            $selectedId
+            && ! isset($options[$selectedId])
+            && DB::table('products')
+                ->where('id', $selectedId)
+                ->where('company_id', $this->purchaseRequestCompanyId())
+                ->where('parent_product_id', $productId)
+                ->exists()
+        ) {
             $options[$selectedId] = $this->productLabel($selectedId, true);
         }
 

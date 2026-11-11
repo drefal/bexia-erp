@@ -199,8 +199,48 @@ class PurchaseOrderLinesInline extends Component
             ->all();
     }
 
+
+    /**
+     * BEXIA_PURCHASE_SCOPE_FIX25
+     * Cada orden utiliza exclusivamente productos de su empresa.
+     * No se remapean productos por SKU ni se modifican existencias.
+     */
+    protected function purchaseProductBelongsToOrder(
+        int $productId,
+        ?int $parentProductId = null
+    ): bool {
+        $companyId = (int) DB::table('purchase_orders')
+            ->where('id', $this->purchaseOrderId)
+            ->value('company_id');
+
+        if ($companyId <= 0 || $productId <= 0) {
+            return false;
+        }
+
+        $query = DB::table('products')
+            ->where('id', $productId)
+            ->where('company_id', $companyId)
+            ->where('is_active', true);
+
+        if ($parentProductId === null) {
+            $query->whereNull('parent_product_id');
+        } else {
+            $query->where('parent_product_id', $parentProductId);
+        }
+
+        return $query->exists();
+    }
+
     public function selectProduct(int $productId): void
     {
+        if (! $this->purchaseProductBelongsToOrder($productId)) {
+            Notification::make()
+                ->title('El producto no pertenece a la empresa de esta orden')
+                ->danger()
+                ->send();
+            return;
+        }
+
         $product = $this->findProduct($productId);
 
         if (! $product) {
@@ -276,6 +316,28 @@ class PurchaseOrderLinesInline extends Component
                 ->danger()
                 ->send();
 
+            return;
+        }
+
+        if (! $this->purchaseProductBelongsToOrder((int) $this->selectedProductId)) {
+            Notification::make()
+                ->title('No se puede agregar un producto de otra empresa')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        if (
+            $this->selectedVariantId
+            && ! $this->purchaseProductBelongsToOrder(
+                (int) $this->selectedVariantId,
+                (int) $this->selectedProductId
+            )
+        ) {
+            Notification::make()
+                ->title('La variante no pertenece al producto y empresa de esta orden')
+                ->danger()
+                ->send();
             return;
         }
 
