@@ -42,10 +42,11 @@ class PosController extends Controller
 
         abort_if(! $cashierRow, 404);
         if ($this->bexiaAccess7IsPilot($pos)) {
-            // ACCESS9: NIP valido no sustituye autorizacion de identidad.
+            // ACCESS9 FIX261: el NIP identifica al cajero asignado.
+            // No exige una cuenta individual de usuario Bexia.
             $this->bexiaAccess8ValidateStaff($pos, $cashierRow);
-            $this->bexiaAssertOwnStaff($pos, $cashierRow);
         } else {
+            // Conservar autorizacion previa fuera de ACCESS9.
             $this->bexiaAssertOwnStaff($pos, $cashierRow);
         }
 
@@ -75,10 +76,11 @@ return redirect('/pos/sessions/' . $sessionId . '/screen');
 
         abort_if(! $cashierRow, 404);
         if ($this->bexiaAccess7IsPilot($pos)) {
-            // ACCESS9: NIP valido no sustituye autorizacion de identidad.
+            // ACCESS9 FIX261: el NIP identifica al cajero asignado.
+            // No exige una cuenta individual de usuario Bexia.
             $this->bexiaAccess8ValidateStaff($pos, $cashierRow);
-            $this->bexiaAssertOwnStaff($pos, $cashierRow);
         } else {
+            // Conservar autorizacion previa fuera de ACCESS9.
             $this->bexiaAssertOwnStaff($pos, $cashierRow);
         }
 
