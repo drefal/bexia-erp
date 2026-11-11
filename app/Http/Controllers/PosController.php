@@ -106,8 +106,7 @@ return redirect('/pos/sessions/' . $sessionId . '/screen');
         if (! $validPin) {
             // BEXIA_ACCESS9_STAGE142_INVALID_PIN
             if (
-                $this->bexiaAccess7IsPilot($pos)
-                && $request->header('X-Bexia-Access9-Preflight') === '1'
+                $request->header('X-Bexia-Access9-Preflight') === '1'
             ) {
                 return response()->json([
                     'ok' => false,
@@ -120,30 +119,32 @@ return redirect('/pos/sessions/' . $sessionId . '/screen');
                 ->with('error', 'Clave incorrecta.');
         }
 
-        // BEXIA_ACCESS9_STAGE142_PREFLIGHT
-        // Validacion previa: no abre sesiones ni turnos.
-        if ($this->bexiaAccess7IsPilot($pos)) {
-            if ($request->header('X-Bexia-Access9-Preflight') === '1') {
-                $openSessions = DB::table('pos_sessions')
-                    ->where('company_id', (int) $pos->company_id)
-                    ->where('pos_point_id', (int) $pos->id)
-                    ->where('status', 'open')
-                    ->limit(2)
-                    ->count();
+        // FIX250: validar NIP y estado de caja antes de mostrar
+        // el fondo inicial, tanto en PDV piloto como no piloto.
+        // Esta consulta no crea ni modifica sesiones.
+        if ($request->header('X-Bexia-Access9-Preflight') === '1') {
+            $openSessions = DB::table('pos_sessions')
+                ->where('company_id', (int) $pos->company_id)
+                ->where('pos_point_id', (int) $pos->id)
+                ->where('status', 'open')
+                ->limit(2)
+                ->count();
 
-                if ($openSessions > 1) {
-                    return response()->json([
-                        'ok' => false,
-                        'message' => 'Existen varias sesiones abiertas. Se requiere conciliacion.',
-                    ], 409);
-                }
-
+            if ($openSessions > 1) {
                 return response()->json([
-                    'ok' => true,
-                    'needs_opening_cash' => $openSessions === 0,
-                ]);
+                    'ok' => false,
+                    'message' => 'Existen varias sesiones abiertas. Se requiere conciliacion.',
+                ], 409);
             }
 
+            return response()->json([
+                'ok' => true,
+                'needs_opening_cash' => $openSessions === 0,
+            ]);
+        }
+
+        // Conservar la validacion obligatoria del piloto.
+        if ($this->bexiaAccess7IsPilot($pos)) {
             // El navegador no puede omitir el fondo inicial
             // cuando realmente es necesario abrir caja.
             $physicalSessionOpen = DB::table('pos_sessions')
