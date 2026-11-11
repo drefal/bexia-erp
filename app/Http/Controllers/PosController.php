@@ -3376,7 +3376,34 @@ abort_if(! $sessionRow, 404);
         }
     }
 
-    $difference = round((float) $request->input('closing_difference', 0), 2);
+    // BEXIA_RECON5: la diferencia la calcula siempre el servidor.
+    if ((string)($row->status ?? '') !== 'open') {
+        return redirect()->back()->with('error', 'La sesión ya no está abierta.');
+    }
+    $summaryForClose = $this->v5484BuildCloseSessionSummary($session);
+    $actualMethods = \App\Support\PosCloseReconciliation::validateActual(
+        $request->input('close_payment_actual', [])
+    );
+    $cashCountRaw = json_decode((string)$request->input('cash_count','[]'), true);
+    if (!is_array($cashCountRaw) || count($cashCountRaw) < 1 || count($cashCountRaw) > 40) {
+        return redirect()->back()->with('error','El conteo de efectivo no es válido.');
+    }
+    $cashCalculated = 0.0;
+    foreach ($cashCountRaw as $cashRow) {
+        if (!is_array($cashRow) || !isset($cashRow['value'],$cashRow['quantity'])
+            || !is_numeric($cashRow['value']) || !is_numeric($cashRow['quantity'])
+            || (float)$cashRow['value'] <= 0 || (float)$cashRow['value'] > 10000
+            || (float)$cashRow['quantity'] < 0 || (float)$cashRow['quantity'] > 100000
+            || floor((float)$cashRow['quantity']) !== (float)$cashRow['quantity']) {
+            return redirect()->back()->with('error','El conteo de efectivo contiene valores inválidos.');
+        }
+        $cashCalculated += (float)$cashRow['value'] * (float)$cashRow['quantity'];
+    }
+    $cashCalculated = round($cashCalculated,2);
+    $reconciliation = \App\Support\PosCloseReconciliation::calculate(
+        $summaryForClose, $actualMethods, $cashCalculated
+    );
+    $difference = $reconciliation['difference'];
     $note = trim((string) $request->input('closing_note', ''));
 
     if (abs($difference) > 0.009 && $note === '') {
@@ -3392,7 +3419,7 @@ abort_if(! $sessionRow, 404);
             ->with('error', 'Hay diferencia en el corte. La nota de cierre es obligatoria.');
     }
 
-    $closingAmount = $request->input('closing_amount', null);
+    $closingAmount = $cashCalculated;
     $cashCount = $request->input('cash_count', null);
 
     $notes = trim((string) ($row->notes ?? ''));
@@ -3478,6 +3505,8 @@ abort_if(! $sessionRow, 404);
         'closing_note' => $note,
         'closing_difference' => $difference,
         'cash_count' => $cashCount,
+        'close_payment_actual' => $reconciliation['actual'],
+        'close_reconciliation' => $reconciliation,
         'closed_from' => 'pos_close_modal',
     ];
 
