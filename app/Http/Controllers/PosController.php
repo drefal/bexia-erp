@@ -14173,6 +14173,13 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             ], 422);
         }
 
+        // BEXIA_WITHDRAW_AUTH1_POS_SETTING
+        // La autorizacion depende del PDV, no de la empresa.
+        // Un campo ausente mantiene la politica restrictiva.
+        $bexiaWithdrawalSupervisorRequired =
+            $type !== 'cash_out'
+            || (bool) ($pos->require_cash_withdrawal_supervisor ?? true);
+
         $reason = trim((string) $request->input('reason', ''));
         $notes = trim((string) $request->input('notes', ''));
 
@@ -14205,11 +14212,16 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
             ], 422);
         }
 
-        if ($supervisorName === '') {
+        if ($bexiaWithdrawalSupervisorRequired && $supervisorName === '') {
             return response()->json([
                 'ok' => false,
                 'message' => 'Indica el nombre del supervisor.',
             ], 422);
+        }
+
+        if (! $bexiaWithdrawalSupervisorRequired) {
+            $supervisorEmployeeId = null;
+            $supervisorName = '';
         }
 
         $prefix = $type === 'cash_in' ? 'ENT' : 'RET';
@@ -14244,7 +14256,7 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
         $destinationTreasuryAccountId = null;
 
         try {
-            $movementId = \Illuminate\Support\Facades\DB::transaction(function () use ($sessionRow, $pos, $type, $cashBreakdown, $amount, $reason, $notes, $supervisorEmployeeId, $supervisorName, $number, $user, $bexiaAccess9CashTerminal, $bexiaAccess9SupervisorPin, &$treasuryTransferRequestId, &$treasuryStatus, &$treasuryMessage, &$destinationTreasuryAccountId) {
+            $movementId = \Illuminate\Support\Facades\DB::transaction(function () use ($sessionRow, $pos, $type, $cashBreakdown, $amount, $reason, $notes, $supervisorEmployeeId, $supervisorName, $number, $user, $bexiaAccess9CashTerminal, $bexiaAccess9SupervisorPin, $bexiaWithdrawalSupervisorRequired, &$treasuryTransferRequestId, &$treasuryStatus, &$treasuryMessage, &$destinationTreasuryAccountId) {
                 $bexiaAccess9CashShiftId = null;
                 $bexiaAccess9CashEmployeeId = null;
 
@@ -14297,6 +14309,7 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                         (int) ($sessionRow->pos_point_id ?? 0)
                     )
                     && $type === 'cash_out'
+                    && $bexiaWithdrawalSupervisorRequired
                 ) {
                     abort_unless(
                         $bexiaAccess9CashEmployeeId !== null
@@ -14463,6 +14476,16 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                         'supervisor_employee_id' => $supervisorEmployeeId,
                         ...(
                             $type === 'cash_out'
+                            && ! $bexiaWithdrawalSupervisorRequired
+                            ? [
+                                'supervisor_authorization_source' =>
+                                    'pos_setting_not_required',
+                            ]
+                            : []
+                        ),
+                        ...(
+                            $type === 'cash_out'
+                            && $bexiaWithdrawalSupervisorRequired
                             && $this->bexiaAccess9EnabledForIds(
                         (int) ($sessionRow->company_id ?? 0),
                         (int) ($sessionRow->pos_point_id ?? 0)
@@ -14476,7 +14499,7 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
                             : []
                         ),
                         'requires_cashier_signature' => true,
-                        'requires_supervisor_signature' => true,
+                        'requires_supervisor_signature' => $bexiaWithdrawalSupervisorRequired,
                         'print_copies' => 2,
                         // BEXIA_V5836_CASH_DENOMS_FIX1_METADATA
                         'cash_denominations' => $type === 'cash_out'

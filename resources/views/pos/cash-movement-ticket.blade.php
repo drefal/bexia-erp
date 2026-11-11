@@ -89,9 +89,19 @@
                     true
                 );
                 $v5836Meta = is_array($v5836Meta) ? $v5836Meta : [];
+                $v5836WithoutSupervisor =
+                    ($v5836Meta['supervisor_authorization_source'] ?? '')
+                    === 'pos_setting_not_required';
                 $v5836Rows = $v5836Meta['cash_denominations'] ?? [];
                 $v5836Rows = is_array($v5836Rows) ? $v5836Rows : [];
             @endphp
+
+            @if(($v5836WithoutSupervisor ?? false))
+                <div class="small">
+                    Retiro registrado sin supervisor:
+                    autorizado por configuracion del PDV.
+                </div>
+            @endif
 
             @if((string) $movement->type === 'cash_out')
                 <div style="margin-top:10px;font-weight:900">

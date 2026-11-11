@@ -11,6 +11,7 @@ class PosPoint extends Model
     protected $guarded = [];
 
     protected $casts = [
+        'require_cash_withdrawal_supervisor' => 'boolean',
         'payment_method_ids' => 'array',
         // BEXIA_V5836_PDV1_CLOSE_SETTINGS
         'session_close_email_recipients' => 'array',
