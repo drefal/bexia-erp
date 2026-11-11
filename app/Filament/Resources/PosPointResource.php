@@ -168,6 +168,15 @@ Forms\Components\TextInput::make('name')
                                             ->helperText('Permite cambiar entre cajeros autorizados durante la sesión.')
                                             ->default(true),
 
+                                        Forms\Components\Toggle::make('require_cash_withdrawal_supervisor')
+                                            ->label('Requerir supervisor para retiros de efectivo')
+                                            ->helperText(
+                                                'Si se desactiva, el cajero puede registrar retiros sin '
+                                                . 'autorizacion de un segundo empleado. '
+                                                . 'La aprobacion de Tesoreria no cambia.'
+                                            )
+                                            ->default(true),
+
                                         Forms\Components\Placeholder::make('cashiers_help')
                                             ->extraAttributes(['class' => 'bexia-pos-point-cashiers-help-field'])
                                             ->label('Cajeros permitidos')

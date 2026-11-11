@@ -11885,7 +11885,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <input id="v5485-cash-movement-reason" class="v5485-input" type="text" placeholder="Ej. Cambio para caja / Retiro supervisor">
             </div>
 
-            <div>
+            <div id="bexia-withdraw-supervisor-field">
                 <label class="v5485-label">Supervisor</label>
                 <select id="v5485-cash-movement-supervisor-employee" class="v5485-input">
                     <option value="">Cargando empleados...</option>
@@ -12177,11 +12177,25 @@ document.addEventListener('DOMContentLoaded', function () {
         return {valid: valid, amount: cents / 100, rows: breakdown};
     }
 
+    const bexiaWithdrawSupervisorRequired =
+        @json((bool) ($pos->require_cash_withdrawal_supervisor ?? true));
+
     function v5836ToggleWithdraw() {
         const type = document.getElementById(
             'v5485-cash-movement-type'
         )?.value;
         const active = type === 'cash_out';
+
+        const supervisorField = document.getElementById(
+            'bexia-withdraw-supervisor-field'
+        );
+        const needsSupervisor =
+            !active || bexiaWithdrawSupervisorRequired;
+
+        if (supervisorField) {
+            supervisorField.style.display =
+                needsSupervisor ? '' : 'none';
+        }
 
         const box = document.getElementById(
             'v5836-withdrawal-denominations'
@@ -12223,7 +12237,9 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('v5485-cash-movement-notes').value = '';
         v5836ToggleWithdraw();
 
-        loadCashEmployees();
+        if (type !== 'cash_out' || bexiaWithdrawSupervisorRequired) {
+            loadCashEmployees();
+        }
 
         title.textContent = 'Movimiento de efectivo';
 
