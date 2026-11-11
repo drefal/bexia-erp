@@ -37,6 +37,10 @@ class PurchaseReceiptInventoryPoster
                 throw new RuntimeException('No existe la tabla stock_quants.');
             }
 
+            // BEXIA_PURCHASE_SCOPE_FIX21
+            // Validar antes de crear o actualizar movimientos.
+            $this->assertUnpostedReceiptProductsCompany($receipt);
+
             $movementId = (int) ($receipt->stock_movement_id ?? 0);
 
             if ($movementId <= 0) {
@@ -60,6 +64,88 @@ class PurchaseReceiptInventoryPoster
 
             return $movementId;
         });
+    }
+
+    protected function assertUnpostedReceiptProductsCompany(object $receipt): void
+    {
+        $companyId = (int) ($receipt->company_id ?? 0);
+
+        if ($companyId <= 0) {
+            throw new RuntimeException(
+                'La recepcion no tiene una empresa valida.'
+            );
+        }
+
+        $lines = DB::table('purchase_receipt_lines')
+            ->where('purchase_receipt_id', (int) $receipt->id)
+            ->get([
+                'id',
+                'product_id',
+                'product_variant_id',
+                'received_base_quantity',
+                'received_quantity',
+                'stock_quant_posted_at',
+            ]);
+
+        foreach ($lines as $line) {
+            $quantity = (float) (
+                $line->received_base_quantity
+                ?? $line->received_quantity
+                ?? 0
+            );
+
+            if ($quantity <= 0 || ! empty($line->stock_quant_posted_at)) {
+                continue;
+            }
+
+            $productId = (int) ($line->product_id ?? 0);
+
+            $product = $productId > 0
+                ? DB::table('products')->where('id', $productId)->first([
+                    'id', 'company_id', 'parent_product_id',
+                ])
+                : null;
+
+            if (
+                ! $product
+                || (int) ($product->company_id ?? 0) !== $companyId
+                || ! empty($product->parent_product_id)
+            ) {
+                throw new RuntimeException(
+                    'Recepcion bloqueada: linea '
+                    . (int) $line->id
+                    . ', producto '
+                    . $productId
+                    . ' no corresponde al catalogo de la empresa '
+                    . $companyId
+                    . '. Corrige la orden antes de recibir.'
+                );
+            }
+
+            $variantId = (int) ($line->product_variant_id ?? 0);
+
+            if ($variantId > 0) {
+                $variant = DB::table('products')
+                    ->where('id', $variantId)
+                    ->first([
+                        'id', 'company_id', 'parent_product_id',
+                    ]);
+
+                if (
+                    ! $variant
+                    || (int) ($variant->company_id ?? 0) !== $companyId
+                    || (int) ($variant->parent_product_id ?? 0) !== $productId
+                ) {
+                    throw new RuntimeException(
+                        'Recepcion bloqueada: la variante '
+                        . $variantId
+                        . ' de la linea '
+                        . (int) $line->id
+                        . ' no pertenece al producto y empresa de la recepcion.'
+                    );
+                }
+            }
+        }
     }
 
     protected function syncMovementLinesAndQuants(object $receipt, int $movementId): void

@@ -21,6 +21,14 @@ class DuplicatePurchaseOrderController extends Controller
 
             abort_if(! $source, 404);
 
+            // BEXIA_PURCHASE_SCOPE_FIX27
+            \App\Support\Security\PurchaseProductCompanyGuard::assertDocumentLines(
+                'purchase_order_lines',
+                'purchase_order_id',
+                (int) $source->id,
+                (int) $source->company_id
+            );
+
             $newNumber = $this->nextPurchaseOrderNumber((int) ($source->company_id ?? 0));
 
             $orderColumns = Schema::getColumnListing('purchase_orders');

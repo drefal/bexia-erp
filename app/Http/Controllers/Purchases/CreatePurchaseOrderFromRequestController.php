@@ -39,6 +39,14 @@ class CreatePurchaseOrderFromRequestController extends Controller
                 ->where('id', $purchaseRequest->getKey())
                 ->first();
 
+            // BEXIA_PURCHASE_SCOPE_FIX27
+            \App\Support\Security\PurchaseProductCompanyGuard::assertDocumentLines(
+                'purchase_request_lines',
+                'purchase_request_id',
+                (int) $requestRow->id,
+                (int) $requestRow->company_id
+            );
+
             $number = $this->nextPurchaseOrderNumber();
 
             $orderData = [
