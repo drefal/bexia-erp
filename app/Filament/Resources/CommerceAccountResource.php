@@ -91,11 +91,23 @@ class CommerceAccountResource extends Resource
 
     public static function shouldRegisterNavigation(): bool
     {
-        return static::canManageCompany();
+        return static::canViewAny();
     }
 
     public static function canViewAny(): bool
     {
+        // Filament puede evaluar el acceso antes de IdentifyTenant.
+        // Solo el Super Administrador autenticado puede superar
+        // esa comprobacion inicial sin tenant.
+        // Ninguna consulta o escritura se habilita sin empresa.
+        if (static::currentCompanyId() === null) {
+            $user = auth()->user();
+
+            return $user !== null
+                && method_exists($user, 'isSystemAdmin')
+                && $user->isSystemAdmin();
+        }
+
         return static::canManageCompany();
     }
 
