@@ -8,6 +8,54 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CommerceConnectorVersion extends Model
 {
+    protected static function booted(): void
+    {
+        static::updating(function (self $version): void {
+            $originalStatus = (string) $version->getOriginal('status');
+            $newStatus = (string) $version->status;
+
+            $originallyEnabled = (bool) $version->getOriginal('is_enabled');
+
+            if ($originallyEnabled) {
+                throw new \DomainException(
+                    'Un conector habilitado no puede modificarse desde este modelo.'
+                );
+            }
+
+            if (! in_array(
+                $originalStatus,
+                ['ready', 'suspended', 'deprecated'],
+                true
+            )) {
+                return;
+            }
+
+            if (! in_array(
+                $newStatus,
+                ['ready', 'suspended', 'deprecated'],
+                true
+            )) {
+                throw new \DomainException(
+                    'No se puede regresar una version publicada a borrador o pruebas.'
+                );
+            }
+
+            foreach (array_keys($version->getDirty()) as $field) {
+                if (! in_array($field, ['status', 'updated_at'], true)) {
+                    throw new \DomainException(
+                        'La configuracion de una version publicada es inmutable.'
+                    );
+                }
+            }
+        });
+
+        static::deleting(function (): void {
+            throw new \DomainException(
+                'Las versiones de conectores deben conservar su historial.'
+            );
+        });
+    }
+
     protected $fillable = [
         'commerce_channel_id',
         'version',
