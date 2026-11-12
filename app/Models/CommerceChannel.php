@@ -12,11 +12,17 @@ class CommerceChannel extends Model
         'name',
         'is_active',
         'capabilities',
+        'description',
+        'logo_path',
+        'documentation_url',
+        'supported_countries',
+        'lifecycle_status',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'capabilities' => 'array',
+        'supported_countries' => 'array',
     ];
 
     public function accounts(): HasMany
