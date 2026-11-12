@@ -67,7 +67,13 @@ class CommerceConnectorVersionResource extends Resource
 
     public static function canEdit(Model $record): bool
     {
-        return static::platformAdmin();
+        return static::platformAdmin()
+            && ! (bool) $record->is_enabled
+            && in_array(
+                (string) $record->status,
+                ['draft', 'testing'],
+                true
+            );
     }
 
     public static function canDelete(Model $record): bool
@@ -237,6 +243,61 @@ class CommerceConnectorVersionResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('change_status')
+                    ->label('Cambiar estado')
+                    ->icon('heroicon-o-arrow-path')
+                    ->visible(
+                        fn (CommerceConnectorVersion $record): bool =>
+                            static::platformAdmin()
+                            && ! (bool) $record->is_enabled
+                            && in_array(
+                                (string) $record->status,
+                                ['ready', 'suspended', 'deprecated'],
+                                true
+                            )
+                    )
+                    ->form([
+                        Forms\Components\Select::make('status')
+                            ->label('Nuevo estado tecnico')
+                            ->options([
+                                'ready' => 'Preparado',
+                                'suspended' => 'Suspendido',
+                                'deprecated' => 'Obsoleto',
+                            ])
+                            ->required(),
+                    ])
+                    ->action(
+                        function (
+                            CommerceConnectorVersion $record,
+                            array $data
+                        ): void {
+                            $record->refresh();
+
+                            $next = (string) ($data['status'] ?? '');
+
+                            if (
+                                ! static::platformAdmin()
+                                || (bool) $record->is_enabled
+                                || ! in_array(
+                                    (string) $record->status,
+                                    ['ready', 'suspended', 'deprecated'],
+                                    true
+                                )
+                                || ! in_array(
+                                    $next,
+                                    ['ready', 'suspended', 'deprecated'],
+                                    true
+                                )
+                            ) {
+                                throw new \DomainException(
+                                    'Transicion no permitida.'
+                                );
+                            }
+
+                            $record->status = $next;
+                            $record->save();
+                        }
+                    ),
             ])
             ->bulkActions([])
             ->defaultSort('id', 'desc');
