@@ -696,8 +696,8 @@
                 );
 
                 addSignature(
-                    'Vo.Bo. / Firma',
-                    'Corroboró el conteo'
+                    'Recibe/Entrega / Firma',
+                    ''
                 );
 
                 ticket.appendChild(
