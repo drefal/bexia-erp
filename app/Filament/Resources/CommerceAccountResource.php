@@ -4,7 +4,12 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\CommerceAccountResource\Pages;
 use App\Models\CommerceAccount;
+use App\Models\CommerceAuthField;
 use App\Models\CommerceChannel;
+use App\Models\CommerceConnectorVersion;
+use App\Services\Commerce\AccountCredentialService;
+use Filament\Forms\Get;
+use Filament\Notifications\Notification;
 use App\Models\Company;
 use Filament\Facades\Filament;
 use Filament\Forms;
@@ -252,6 +257,116 @@ class CommerceAccountResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+
+                Tables\Actions\Action::make('configureCredential')
+                    ->label('Configurar credencial')
+                    ->icon('heroicon-o-key')
+                    ->visible(
+                        fn (CommerceAccount $record): bool =>
+                            static::canEdit($record)
+                    )
+                    ->modalHeading('Configurar credencial')
+                    ->modalDescription(
+                        'La clave se almacenará cifrada. '
+                        . 'No se mostrará nuevamente. '
+                        . 'Guardar no activa la conexión.'
+                    )
+                    ->modalSubmitActionLabel('Guardar credencial')
+                    ->form(
+                        fn (CommerceAccount $record): array => [
+                            Forms\Components\Select::make(
+                                'connector_version_id'
+                            )
+                                ->label('Versión del conector')
+                                ->options(
+                                    fn (): array =>
+                                        CommerceConnectorVersion::query()
+                                            ->where(
+                                                'commerce_channel_id',
+                                                $record->commerce_channel_id
+                                            )
+                                            ->where('status', 'ready')
+                                            ->where('is_enabled', false)
+                                            ->orderBy('version')
+                                            ->pluck('version', 'id')
+                                            ->all()
+                                )
+                                ->required()
+                                ->live(),
+
+                            Forms\Components\Select::make(
+                                'field_key'
+                            )
+                                ->label('Campo de autenticación')
+                                ->options(
+                                    fn (Get $get): array =>
+                                        CommerceAuthField::query()
+                                            ->where(
+                                                'commerce_connector_version_id',
+                                                (int) $get(
+                                                    'connector_version_id'
+                                                )
+                                            )
+                                            ->where(
+                                                'credential_owner',
+                                                'account'
+                                            )
+                                            ->where('is_secret', true)
+                                            ->where('is_active', true)
+                                            ->orderBy('sort_order')
+                                            ->pluck('label', 'field_key')
+                                            ->all()
+                                )
+                                ->required(),
+
+                            Forms\Components\TextInput::make(
+                                'secret'
+                            )
+                                ->label('Nueva credencial')
+                                ->password()
+                                ->required()
+                                ->maxLength(4096)
+                                ->autocomplete('new-password')
+                                ->helperText(
+                                    'Introduce una nueva clave. '
+                                    . 'Por seguridad, el valor existente '
+                                    . 'nunca se recupera en este formulario.'
+                                ),
+                        ]
+                    )
+                    ->action(
+                        function (
+                            CommerceAccount $record,
+                            array $data
+                        ): void {
+                            if (! static::canEdit($record)) {
+                                abort(403);
+                            }
+
+                            app(AccountCredentialService::class)
+                                ->replace(
+                                    (int) $record->getKey(),
+                                    (int) (
+                                        $data['connector_version_id'] ?? 0
+                                    ),
+                                    (string) (
+                                        $data['field_key'] ?? ''
+                                    ),
+                                    (string) (
+                                        $data['secret'] ?? ''
+                                    )
+                                );
+
+                            Notification::make()
+                                ->title('Credencial guardada')
+                                ->body(
+                                    'Se almacenó cifrada. '
+                                    . 'La conexión continúa desactivada.'
+                                )
+                                ->success()
+                                ->send();
+                        }
+                    ),
             ])
             ->bulkActions([])
             ->defaultSort('id', 'desc');
