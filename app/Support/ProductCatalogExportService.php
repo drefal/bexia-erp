@@ -16,6 +16,39 @@ class ProductCatalogExportService
         $headers = static::headers();
         $rows = static::productRows($companyId);
 
+        // Columnas informativas exclusivamente para la descarga.
+        // No se agregan a la plantilla de importacion ni al PDF.
+        if ($companyId !== null) {
+            $breakdown = static::locationStockBreakdown($companyId);
+            $extraHeaders = [];
+
+            foreach ($breakdown['locations'] as $locationId => $name) {
+                $extraHeaders[] = 'ubicacion_' . $locationId . '_' . trim((string) $name) . '_solo_lectura';
+            }
+
+            $position = array_search('stock_actual_solo_lectura', $headers, true);
+
+            if ($position === false) {
+                throw new \RuntimeException('No se encontro la columna de stock total.');
+            }
+
+            array_splice($headers, $position, 0, $extraHeaders);
+
+            foreach ($rows as &$row) {
+                $productId = (int) ($row['id_solo_lectura'] ?? 0);
+
+                foreach ($breakdown['locations'] as $locationId => $name) {
+                    $key = 'ubicacion_' . $locationId . '_' . trim((string) $name) . '_solo_lectura';
+
+                    $row[$key] = static::decimal(
+                        $breakdown['products'][$productId][$locationId] ?? 0
+                    );
+                }
+            }
+
+            unset($row);
+        }
+
         return static::downloadXlsx(
             'productos_' . static::safeSlug(static::companyLabel($companyId)) . '_' . now()->format('Ymd_His') . '.xlsx',
             'Productos',
@@ -336,6 +369,91 @@ class ProductCatalogExportService
         return $stockByProduct;
     }
 
+
+    /**
+     * Existencias disponibles desglosadas por ubicacion.
+     *
+     * Respeta la misma logica del total del catalogo:
+     * quantity - reserved_quantity.
+     *
+     * El agrupamiento por producto y variante replica stockByProduct().
+     * No modifica existencias, reservas ni movimientos.
+     */
+    protected static function locationStockBreakdown(int $companyId): array
+    {
+        $result = [
+            'locations' => [],
+            'products' => [],
+        ];
+
+        if (! Schema::hasTable('stock_quants')
+            || ! Schema::hasTable('stock_locations')) {
+            return $result;
+        }
+
+        $query = DB::table('stock_quants as q')
+            ->leftJoin('stock_locations as l', function ($join): void {
+                $join->on('l.id', '=', 'q.location_id')
+                    ->on('l.company_id', '=', 'q.company_id');
+            })
+            ->where('q.company_id', $companyId)
+            ->select([
+                'q.product_id',
+                'q.product_variant_id',
+                'q.location_id',
+                'l.name as location_name',
+            ])
+            ->selectRaw(
+                'SUM(q.quantity - COALESCE(q.reserved_quantity, 0)) as qty'
+            )
+            ->groupBy(
+                'q.product_id',
+                'q.product_variant_id',
+                'q.location_id',
+                'l.name'
+            );
+
+        $records = $query->get();
+        $locations = [];
+
+        foreach ($records as $record) {
+            $quantity = (float) ($record->qty ?? 0);
+
+            if (abs($quantity) < 0.0000001) {
+                continue;
+            }
+
+            $locationId = (int) ($record->location_id ?? 0);
+
+            $locationName = trim((string) ($record->location_name ?? ''));
+
+            if ($locationName === '') {
+                $locationName = $locationId > 0
+                    ? 'Ubicacion #' . $locationId
+                    : 'Sin ubicacion';
+            }
+
+            $locations[$locationId] = $locationName;
+
+            $productId = (int) ($record->product_id ?? 0);
+            $variantId = (int) ($record->product_variant_id ?? 0);
+
+            $ids = array_unique(array_filter([$productId, $variantId]));
+
+            foreach ($ids as $id) {
+                $result['products'][$id][$locationId] =
+                    ($result['products'][$id][$locationId] ?? 0.0) + $quantity;
+            }
+        }
+
+        // El orden es determinista y no depende del orden de los quants.
+        ksort($locations, SORT_NUMERIC);
+
+        $result['locations'] = $locations;
+
+        return $result;
+    }
+
     protected static function downloadXlsx(string $filename, string $sheetName, array $headers, array $rows): StreamedResponse
     {
         if (! class_exists(\ZipArchive::class)) {
@@ -601,6 +719,10 @@ class ProductCatalogExportService
     {
         if ($value === '' || $value === null) {
             return false;
+        }
+
+        if (preg_match('/^ubicacion_[0-9]+_.+_solo_lectura$/u', $header)) {
+            return is_numeric((string) $value);
         }
 
         return in_array($header, [
