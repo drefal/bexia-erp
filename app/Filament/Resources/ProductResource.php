@@ -2367,6 +2367,30 @@ Forms\Components\Section::make('Auditoría de precios y costos')
                                     ])
                                     ->columns(12),
 
+Forms\Components\Section::make('Configuración de Globos Personalizados')
+    ->description('Solo los productos de la categoría Globos Personalizados pueden utilizarse en este módulo.')
+    ->visible(
+        fn (?\App\Models\Product $record): bool =>
+            ! request()->filled('parent_product_id')
+            && ! (bool) ($record?->is_variant ?? false)
+    )
+    ->schema([
+        Forms\Components\Toggle::make('available_in_custom_balloons')
+            ->label('Disponible en Globos Personalizados')
+            ->default(false)
+            ->helperText('El producto aparecerá en el configurador si pertenece a la categoría Globos Personalizados.')
+            ->live(),
+        Forms\Components\Toggle::make('requires_balloon_design')
+            ->label('Requiere seleccionar diseño')
+            ->default(false)
+            ->helperText('Habilita la biblioteca de modelos para este producto.')
+            ->visible(fn (Forms\Get $get): bool =>
+                (bool) $get('available_in_custom_balloons')
+            ),
+    ])
+    ->columns(2)
+    ->columnSpanFull(),
+
 Forms\Components\Section::make('Atributos de catálogo')
                                     ->description('Selecciona únicamente valores existentes en el catálogo de atributos. Si necesitas uno nuevo, agrégalo primero en Productos > Atributos de producto; la ficha no permite captura libre.')
                                     // BEXIA_V5_83_P12C4D_PRODUCT_ATTRIBUTE_CATALOG_UI
