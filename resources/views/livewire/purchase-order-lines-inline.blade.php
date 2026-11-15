@@ -950,6 +950,14 @@
                                 <div class="po-cell-sub">
                                     {{ number_format((float) $line['base_quantity'], 2) }} base
                                 </div>
+                                <div class="po-cell-sub">
+                                    Recibido:
+                                    {{ number_format((float) ($line['received_quantity'] ?? 0), 2) }}
+                                </div>
+                                <div class="po-cell-sub">
+                                    Pendiente:
+                                    {{ number_format((float) ($line['pending_quantity'] ?? 0), 2) }}
+                                </div>
                             </td>
 
                             <td class="right">

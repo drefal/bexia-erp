@@ -114,6 +114,13 @@ class PurchaseOrderLinesInline extends Component
                 'purchase_unit_label' => (string) ($line->purchase_unit_label ?? ''),
                 'purchase_unit_factor' => (string) ($line->purchase_unit_factor ?? '1'),
                 'ordered_quantity' => (string) ($line->ordered_quantity ?? '0'),
+                'received_quantity' => (string) ($line->received_quantity ?? '0'),
+                'pending_quantity' => (string) max(
+                    (float) ($line->ordered_quantity ?? 0)
+                    - (float) ($line->received_quantity ?? 0),
+                    0
+                ),
+                'receipt_status' => (string) ($line->receipt_status ?? ''),
                 'base_quantity' => (string) ($line->base_quantity ?? '0'),
                 'unit_cost_without_tax' => (string) ($line->unit_cost_without_tax ?? '0'),
                 'tax_rate' => $this->normalizeTaxRate($line->tax_rate ?? 0),
