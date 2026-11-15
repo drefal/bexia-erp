@@ -27,6 +27,24 @@
             ->map(fn ($id) => (int) $id)
             ->all();
 
+        /*
+         * BEXIA_PURCHASE_RECEIPT_MOVEMENT_VIEW_FIX2
+         *
+         * Las recepciones de compra contabilizadas no utilizan
+         * stock_movement_receipt_lines, que corresponde a traslados.
+         * Validar primero la recepcion y su contabilizacion.
+         */
+        $isPostedPurchaseReceipt =
+            str_starts_with((string) ($record->origin_document ?? ''), 'purchase_receipt:')
+            && \Illuminate\Support\Facades\DB::table('purchase_receipts')
+                ->where('stock_movement_id', (int) $record->id)
+                ->where('company_id', (int) $record->company_id)
+                ->where('status', 'received')
+                ->whereNotNull('inventory_posted_at')
+                ->whereNotNull('stock_quant_posted_at')
+                ->exists()
+            && (string) $record->status === 'done';
+
         $receivedTotals = $lineIds === []
             ? collect()
             : \App\Models\StockMovementReceiptLine::query()
@@ -42,7 +60,7 @@
                 <tr>
                     <th class="px-4 py-3 text-left font-medium">Producto</th>
                     <th class="px-4 py-3 text-left font-medium">SKU</th>
-                    <th class="px-4 py-3 text-right font-medium">Enviado</th>
+                    <th class="px-4 py-3 text-right font-medium">{{ $isPostedPurchaseReceipt ? 'Ingresado' : 'Enviado' }}</th>
                     <th class="px-4 py-3 text-right font-medium">Recibido</th>
                     <th class="px-4 py-3 text-right font-medium">Pendiente</th>
                 </tr>
@@ -55,9 +73,11 @@
 
                         $sent = (float) $line->done_quantity;
 
-                        $received = (float) (
-                            $receivedTotals[(int) $line->id] ?? 0
-                        );
+                        $received = $isPostedPurchaseReceipt
+                            ? $sent
+                            : (float) (
+                                $receivedTotals[(int) $line->id] ?? 0
+                            );
 
                         $pending = max(0, $sent - $received);
                     @endphp
