@@ -13,10 +13,10 @@ use Illuminate\Validation\ValidationException;
 class CustomBalloonCatalogPreview extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-swatch';
-    protected static ?string $navigationLabel = 'Globos - Prueba catálogo';
+    protected static ?string $navigationLabel = 'Nuevo pedido de Globos';
     protected static ?string $navigationGroup = 'Globos personalizados';
-    protected static ?string $title = 'Nuevo pedido de Globos - Prototipo';
-    protected static ?string $slug = 'globos-catalogo-prueba';
+    protected static ?string $title = 'Nuevo pedido de Globos Personalizados';
+    protected static ?string $slug = 'globos-nuevo-pedido';
     protected static string $view =
         'filament.pages.custom-balloon-catalog-preview';
 
@@ -170,7 +170,6 @@ class CustomBalloonCatalogPreview extends Page
     {
         if (
             ! CustomBalloonsAccess::isPapelon()
-            || mb_strlen(trim($this->search)) < 2
         ) {
             return collect();
         }
@@ -208,10 +207,11 @@ class CustomBalloonCatalogPreview extends Page
                 'image_path',
                 'sale_price',
                 'sale_tax_rate',
-                'product_type'
+                'product_type',
+                'has_variants'
             )
             ->orderBy('name')
-            ->limit(24)
+            ->limit(100)
             ->get();
     }
 

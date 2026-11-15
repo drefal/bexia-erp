@@ -392,51 +392,54 @@
                     1. Seleccionar producto
                 </h2>
 
-                <input
-                    type="search"
-                    wire:model.live.debounce.350ms="search"
-                    placeholder="Buscar globo, foil, sticker, SKU..."
+                <label
+                    for="glb-product-selector"
+                    class="block text-sm font-semibold mb-2"
+                >
+                    Producto del catalogo Globos Personalizados
+                </label>
+
+                <select
+                    id="glb-product-selector"
                     class="glb-input"
-                />
+                    wire:change="selectProduct($event.target.value)"
+                >
+                    <option
+                        value=""
+                        disabled
+                        @selected($productId === null)
+                    >
+                        Selecciona un producto...
+                    </option>
 
-                <p class="glb-muted mt-2">
-                    Catálogo real de Papelón. Escribe al menos
-                    dos caracteres.
-                </p>
-
-                <div class="glb-card-grid mt-4">
                     @foreach ($this->products as $product)
-                        <button
-                            type="button"
-                            wire:click="selectProduct({{ $product->id }})"
-                            class="glb-product {{ $productId === (int) $product->id ? 'active' : '' }}"
+                        <option
+                            value="{{ $product->id }}"
+                            @selected($productId === (int) $product->id)
                         >
-                            @if ($product->image_path)
-                                <img
-                                    src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($product->image_path) }}"
-                                    alt="{{ $product->name }}"
-                                    class="glb-image"
-                                    loading="lazy"
-                                />
+                            {{ $product->name }}
+                            @if ($product->has_variants)
+                                — Elegir variante
                             @else
-                                <div class="glb-placeholder">🎈</div>
+                                — ${{ number_format(
+                                    (float) $product->sale_price *
+                                    (1 + ((float) $product->sale_tax_rate / 100)),
+                                    2
+                                ) }}
                             @endif
-
-                            <div class="p-3">
-                                <div class="text-xs font-semibold">
-                                    {{ $product->name }}
-                                </div>
-                                <div class="glb-muted mt-1">
-                                    Desde catálogo Bexia
-                                </div>
-                            </div>
-                        </button>
+                        </option>
                     @endforeach
-                </div>
+                </select>
 
-                @if (mb_strlen(trim($search)) >= 2 && $this->products->isEmpty())
+                @error('productId')
+                    <p class="mt-2 text-sm text-red-600">
+                        {{ $message }}
+                    </p>
+                @enderror
+
+                @if ($this->products->isEmpty())
                     <p class="glb-muted mt-4">
-                        No encontramos productos con esa búsqueda.
+                        No hay productos disponibles de Globos Personalizados.
                     </p>
                 @endif
             </div>
