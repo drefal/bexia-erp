@@ -308,6 +308,38 @@
                 <div class="mt-1 text-sm text-gray-500">
                     Periodo {{ $this->dateOnly($from) }} - {{ $this->dateOnly($to) }} · {{ $rows->count() }} registros
                 </div>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                    <span class="font-medium text-gray-600 dark:text-gray-300">
+                        Agrupar por:
+                    </span>
+
+                    <button
+                        type="button"
+                        wire:click="setGrouping('day')"
+                        aria-pressed="{{ $group_by === 'day' ? 'true' : 'false' }}"
+                        class="rounded-lg border px-3 py-1.5 font-medium transition"
+                        style="{{ $group_by === 'day'
+                            ? 'background-color: #1d4ed8; border-color: #1d4ed8; color: #ffffff;'
+                            : 'background-color: #ffffff; border-color: #cbd5e1; color: #111827;'
+                        }}"
+                    >
+                        Por día
+                    </button>
+
+                    <button
+                        type="button"
+                        wire:click="setGrouping('employee')"
+                        aria-pressed="{{ $group_by === 'employee' ? 'true' : 'false' }}"
+                        class="rounded-lg border px-3 py-1.5 font-medium transition"
+                        style="{{ $group_by === 'employee'
+                            ? 'background-color: #1d4ed8; border-color: #1d4ed8; color: #ffffff;'
+                            : 'background-color: #ffffff; border-color: #cbd5e1; color: #111827;'
+                        }}"
+                    >
+                        Por empleado (A-Z)
+                    </button>
+                </div>
             </div>
 
             <div class="overflow-x-auto">
@@ -364,7 +396,25 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                        @php
+                            $previousEmployeeId = null;
+                        @endphp
                         @forelse ($rows as $row)
+                            @if ($group_by === 'employee' && $previousEmployeeId !== (int) $row->employee_id)
+                                <tr class="bg-gray-100/80 dark:bg-gray-800/80">
+                                    <td colspan="22" class="px-4 py-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                        {{ $row->employee_name ?: 'Empleado sin nombre' }}
+                                        @if ($row->employee_number)
+                                            <span class="ml-2 text-xs font-normal text-gray-500">
+                                                {{ $row->employee_number }}
+                                            </span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endif
+                            @php
+                                $previousEmployeeId = (int) $row->employee_id;
+                            @endphp
                             <tr>
                                 @php
                                     $incident =

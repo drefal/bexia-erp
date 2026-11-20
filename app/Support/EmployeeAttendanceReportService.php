@@ -52,6 +52,9 @@ class EmployeeAttendanceReportService
             ),
             'department_id' => filled($filters['department_id'] ?? null) ? (int) $filters['department_id'] : null,
             'status' => filled($filters['status'] ?? null) ? (string) $filters['status'] : null,
+            'group_by' => ($filters['group_by'] ?? 'day') === 'employee'
+                ? 'employee'
+                : 'day',
         ];
     }
 
@@ -91,8 +94,18 @@ class EmployeeAttendanceReportService
             )
             ->when($filters['department_id'], fn ($query, $value) => $query->where('e.hr_department_id', $value))
             ->when($filters['status'], fn ($query, $value) => $query->where('a.status', $value))
-            ->orderBy('a.attendance_date')
-            ->orderBy('e.name')
+            ->when(
+                $filters['group_by'] === 'employee',
+                fn ($query) => $query
+                    ->orderByRaw('LOWER(e.name) ASC')
+                    ->orderBy('a.employee_id')
+                    ->orderBy('a.attendance_date'),
+                fn ($query) => $query
+                    ->orderBy('a.attendance_date')
+                    ->orderByRaw('LOWER(e.name) ASC')
+                    ->orderBy('a.employee_id')
+            )
+            ->orderBy('a.id')
             ->select([
                 'a.id',
                 'a.attendance_date',
