@@ -284,16 +284,11 @@
                                     </div>
 
                                     @if (
-                                        $stats['late_balance_minutes'] > 0
-                                        || $stats['partial_permissions'] > 0
+                                        $stats['partial_permissions'] > 0
                                         || $stats['partial_vacations'] > 0
                                         || $stats['leave_estimated']
                                     )
                                         <div class="employee-summary-note">
-                                            @if ($stats['late_balance_minutes'] > 0)
-                                                Diferencia de retardos no compensada:
-                                                {{ $stats['late_balance_minutes'] }} min.
-                                            @endif
                                             @if ($stats['partial_permissions'] > 0)
                                                 Permisos parciales:
                                                 {{ $stats['partial_permissions'] }}.
