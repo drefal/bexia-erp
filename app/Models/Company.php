@@ -249,4 +249,16 @@ class Company extends Model implements HasAvatar
     }
 
 
+
+    /**
+     * Departamentos de RRHH pertenecientes a esta empresa.
+     */
+    public function hrDepartments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(
+            \App\Models\HrDepartment::class,
+            'company_id'
+        );
+    }
+
 }
