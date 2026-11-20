@@ -2,6 +2,12 @@
     @php
         $summary = $this->summary();
         $rows = $this->rows();
+        $employeeSummaries = $group_by === 'employee'
+            ? \App\Support\EmployeeAttendanceReportService::employeeSummaries(
+                $rows,
+                $this->filters()
+            )
+            : [];
         $employeeSearchOptions =
             $this->employeeSearchOptions();
         $selectedEmployees =
@@ -401,13 +407,57 @@
                         @endphp
                         @forelse ($rows as $row)
                             @if ($group_by === 'employee' && $previousEmployeeId !== (int) $row->employee_id)
-                                <tr class="bg-gray-100/80 dark:bg-gray-800/80">
-                                    <td colspan="22" class="px-4 py-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                <tr style="background-color: #e5e7eb;">
+                                    <td
+                                        colspan="22"
+                                        class="px-4 py-3 text-sm font-semibold"
+                                        style="background-color: #e5e7eb; color: #111827;"
+                                    >
                                         {{ $row->employee_name ?: 'Empleado sin nombre' }}
+
                                         @if ($row->employee_number)
-                                            <span class="ml-2 text-xs font-normal text-gray-500">
+                                            <span class="ml-2 text-xs font-normal" style="color: #4b5563;">
                                                 {{ $row->employee_number }}
                                             </span>
+                                        @endif
+
+                                        @php
+                                            $stats = $employeeSummaries[
+                                                (int) $row->employee_id
+                                            ] ?? null;
+                                        @endphp
+
+                                        @if ($stats)
+                                            <div
+                                                class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal"
+                                                style="color: #374151;"
+                                            >
+                                                <span>Asistencias: <strong>{{ $stats['attendance_days'] }}</strong></span>
+                                                <span>| Faltas: <strong>{{ $stats['absence_days'] }}</strong></span>
+                                                <span>| Retardos: <strong>{{ $stats['late_minutes'] }} min ({{ number_format($stats['late_minutes'] / 60, 2) }} h)</strong></span>
+                                                <span>| Tiempo extra: <strong>{{ $stats['extra_minutes'] }} min ({{ number_format($stats['extra_minutes'] / 60, 2) }} h)</strong></span>
+                                                <span>| Permisos: <strong>{{ number_format($stats['permission_days'], 2) }} dias</strong></span>
+                                                <span>| Vacaciones: <strong>{{ number_format($stats['vacation_days'], 2) }} dias</strong></span>
+                                                <span class="font-semibold" style="color: #111827;">| Tiempo extra a pagar: {{ $stats['payable_minutes'] }} min ({{ number_format($stats['payable_minutes'] / 60, 2) }} h)</span>
+                                            </div>
+
+                                            @if (
+                                                $stats['partial_permissions'] > 0
+                                                || $stats['partial_vacations'] > 0
+                                                || $stats['leave_estimated']
+                                            )
+                                                <div class="mt-1 text-xs font-normal" style="color: #4b5563;">
+                                                    @if ($stats['partial_permissions'] > 0)
+                                                        Permisos parciales: {{ $stats['partial_permissions'] }}.
+                                                    @endif
+                                                    @if ($stats['partial_vacations'] > 0)
+                                                        Vacaciones parciales: {{ $stats['partial_vacations'] }}.
+                                                    @endif
+                                                    @if ($stats['leave_estimated'])
+                                                        Dias estimados por solicitud que cruza el periodo.
+                                                    @endif
+                                                </div>
+                                            @endif
                                         @endif
                                     </td>
                                 </tr>
