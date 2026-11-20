@@ -117,6 +117,12 @@
             text-align: center;
             font-size: 6.5px;
         }
+    tr.group-header td {
+            background: #e5e7eb;
+            color: #111827;
+            font-weight: bold;
+            padding: 5px 4px;
+        }
 </style>
 </head>
 
@@ -129,6 +135,11 @@
         -
         {{ \Carbon\Carbon::parse($filters['to'])->format('d/m/Y') }}
         · Generado: {{ $generatedAt->format('d/m/Y H:i') }}
+    </div>
+
+    <div class="muted">
+        Agrupado por:
+        {{ ($filters['group_by'] ?? 'day') === 'employee' ? 'Por empleado (A-Z)' : 'Por día' }}
     </div>
 
     <table class="summary">
@@ -209,8 +220,38 @@
         </thead>
 
         <tbody>
+            @php
+                $previousGroupKey = null;
+            @endphp
+
             @forelse ($rows as $row)
                 @php
+                    $byEmployee = ($filters['group_by'] ?? 'day') === 'employee';
+
+                    $groupKey = $byEmployee
+                        ? 'employee:' . (int) $row->employee_id
+                        : 'day:' . \App\Support\EmployeeAttendanceReportService::dateOnly($row->attendance_date);
+                @endphp
+
+                @if ($previousGroupKey !== $groupKey)
+                    <tr class="group-header">
+                        <td colspan="21">
+                            @if ($byEmployee)
+                                Empleado: {{ $row->employee_name ?: 'Empleado sin nombre' }}
+
+                                @if ($row->employee_number)
+                                    | No. {{ $row->employee_number }}
+                                @endif
+                            @else
+                                Fecha: {{ \App\Support\EmployeeAttendanceReportService::dateOnly($row->attendance_date) }}
+                            @endif
+                        </td>
+                    </tr>
+                @endif
+
+                @php
+                    $previousGroupKey = $groupKey;
+
                     $incident = $incidentMap[(int) $row->id] ?? [
                         'retardo_label' => '—',
                         'comida_excedida_label' => '—',

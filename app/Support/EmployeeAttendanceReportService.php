@@ -414,12 +414,17 @@ class EmployeeAttendanceReportService
         $summary = $data['summary'];
         $rows = $data['rows'];
         $incidentMap = $data['incidentMap'] ?? [];
+        $groupBy = $data['filters']['group_by'] ?? 'day';
+        $groupLabel = $groupBy === 'employee'
+            ? 'Por empleado (A-Z)'
+            : 'Por día';
 
         $writer = new Writer();
         $writer->openToFile($path);
 
         $writer->addRow(Row::fromValues(['Bexia ERP - Reporte de asistencia']));
         $writer->addRow(Row::fromValues(['Desde', $data['filters']['from'], 'Hasta', $data['filters']['to'], 'Generado', $data['generatedAt']->format('Y-m-d H:i:s')]));
+        $writer->addRow(Row::fromValues(['Agrupado por', $groupLabel]));
         $writer->addRow(Row::fromValues([]));
 
         $writer->addRow(Row::fromValues(['Resumen']));
@@ -469,7 +474,31 @@ class EmployeeAttendanceReportService
             'Notas',
         ]));
 
+        $previousGroupKey = null;
+
         foreach ($rows as $row) {
+            $groupKey = $groupBy === 'employee'
+                ? 'employee:' . (int) $row->employee_id
+                : 'day:' . static::dateOnly($row->attendance_date);
+
+            if ($previousGroupKey !== $groupKey) {
+                if ($groupBy === 'employee') {
+                    $groupHeading = 'Empleado: '
+                        . ($row->employee_name ?: 'Empleado sin nombre');
+
+                    if (filled($row->employee_number)) {
+                        $groupHeading .= ' | No. ' . $row->employee_number;
+                    }
+                } else {
+                    $groupHeading = 'Fecha: '
+                        . static::dateOnly($row->attendance_date);
+                }
+
+                $writer->addRow(Row::fromValues([$groupHeading]));
+            }
+
+            $previousGroupKey = $groupKey;
+
             $incident = $incidentMap[(int) $row->id] ?? [
                 'retardo_label' => '—',
                 'comida_excedida_label' => '—',
