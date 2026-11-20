@@ -383,6 +383,231 @@ class EmployeeAttendanceReportService
         ];
     }
 
+
+    /**
+     * Resumen informativo por empleado para el PDF AGR01.
+     * No modifica incidencias ni calcula importes de nomina.
+     */
+    public static function employeeSummaries(
+        Collection $rows,
+        array $filters
+    ): array {
+        $result = [];
+
+        foreach ($rows->groupBy('employee_id') as $employeeId => $employeeRows) {
+            $employeeId = (int) $employeeId;
+
+            if ($employeeId <= 0) {
+                continue;
+            }
+
+            $attendanceDays = $employeeRows
+                ->filter(fn ($r) => ! empty($r->clock_in_at))
+                ->pluck('attendance_date')
+                ->unique()
+                ->count();
+
+            $absenceDays = $employeeRows
+                ->where('status', 'absence')
+                ->pluck('attendance_date')
+                ->unique()
+                ->count();
+
+            $lateMinutes = (int) $employeeRows->sum(
+                fn ($r) => max(0, (int) ($r->late_minutes ?? 0))
+            );
+
+            $extraMinutes = (int) $employeeRows->sum(
+                fn ($r) => max(0, (int) ($r->overtime_minutes ?? 0))
+            );
+
+            $result[$employeeId] = [
+                'attendance_days' => $attendanceDays,
+                'absence_days' => $absenceDays,
+                'late_minutes' => $lateMinutes,
+                'extra_minutes' => $extraMinutes,
+                'payable_minutes' => max(0, $extraMinutes - $lateMinutes),
+                'late_balance_minutes' => max(0, $lateMinutes - $extraMinutes),
+                'permission_days' => 0.0,
+                'vacation_days' => 0.0,
+                'partial_permissions' => 0,
+                'partial_vacations' => 0,
+                'leave_estimated' => false,
+            ];
+        }
+
+        if (
+            $result === []
+            || (int) ($filters['company_id'] ?? 0) <= 0
+        ) {
+            return $result;
+        }
+
+        $incidents = DB::table('employee_incidents as i')
+            ->join(
+                'hr_incident_types as t',
+                't.id',
+                '=',
+                'i.hr_incident_type_id'
+            )
+            ->where('i.company_id', (int) $filters['company_id'])
+            ->whereIn('i.employee_id', array_keys($result))
+            ->where('i.status', 'approved')
+            ->whereIn('t.code', [
+                'PERMISO_CON_GOCE',
+                'PERMISO_SIN_GOCE',
+                'VACACIONES',
+            ])
+            ->whereDate('i.start_date', '<=', $filters['to'])
+            ->where(function ($query) use ($filters): void {
+                $query
+                    ->whereNull('i.end_date')
+                    ->orWhereDate('i.end_date', '>=', $filters['from']);
+            })
+            ->get([
+                'i.employee_id',
+                'i.start_date',
+                'i.end_date',
+                'i.start_time',
+                'i.end_time',
+                'i.quantity',
+                'i.quantity_unit',
+                't.code',
+            ]);
+
+        foreach ($incidents as $incident) {
+            $employeeId = (int) $incident->employee_id;
+
+            if (! isset($result[$employeeId])) {
+                continue;
+            }
+
+            $leave = static::incidentDaysWithinPeriod(
+                $incident,
+                (string) $filters['from'],
+                (string) $filters['to']
+            );
+
+            $vacation = (string) $incident->code === 'VACACIONES';
+            $daysField = $vacation ? 'vacation_days' : 'permission_days';
+            $partialField = $vacation
+                ? 'partial_vacations'
+                : 'partial_permissions';
+
+            $result[$employeeId][$daysField] += $leave['days'];
+
+            if ($leave['partial']) {
+                $result[$employeeId][$partialField]++;
+            }
+
+            if ($leave['estimated']) {
+                $result[$employeeId]['leave_estimated'] = true;
+            }
+        }
+
+        foreach ($result as &$item) {
+            $item['permission_days'] = round(
+                $item['permission_days'],
+                2
+            );
+
+            $item['vacation_days'] = round(
+                $item['vacation_days'],
+                2
+            );
+        }
+        unset($item);
+
+        return $result;
+    }
+
+    /**
+     * Dias autorizados contenidos en el periodo visible.
+     * Las incidencias por horas/minutos se registran como parciales.
+     * Si una solicitud con cantidad de dias cruza el limite del
+     * reporte, el prorrateo calendario se marca como estimado.
+     */
+    public static function incidentDaysWithinPeriod(
+        object $incident,
+        string $from,
+        string $to
+    ): array {
+        $empty = [
+            'days' => 0.0,
+            'partial' => false,
+            'estimated' => false,
+        ];
+
+        if (empty($incident->start_date)) {
+            return $empty;
+        }
+
+        $start = substr((string) $incident->start_date, 0, 10);
+        $end = substr(
+            (string) ($incident->end_date ?: $incident->start_date),
+            0,
+            10
+        );
+
+        if ($end < $start || $start > $to || $end < $from) {
+            return $empty;
+        }
+
+        $begin = max($start, $from);
+        $finish = min($end, $to);
+
+        $totalCalendarDays = (int) \Carbon\CarbonImmutable::parse($start)
+            ->diffInDays(\Carbon\CarbonImmutable::parse($end)) + 1;
+
+        $visibleCalendarDays = (int) \Carbon\CarbonImmutable::parse($begin)
+            ->diffInDays(\Carbon\CarbonImmutable::parse($finish)) + 1;
+
+        $unit = strtolower(trim(
+            (string) ($incident->quantity_unit ?? '')
+        ));
+
+        $hasDaysQuantity = $unit === 'days'
+            && $incident->quantity !== null
+            && is_numeric($incident->quantity);
+
+        if (
+            ! $hasDaysQuantity
+            && (
+                in_array($unit, ['hours', 'minutes'], true)
+                || ! empty($incident->start_time)
+                || ! empty($incident->end_time)
+            )
+        ) {
+            return [
+                'days' => 0.0,
+                'partial' => true,
+                'estimated' => false,
+            ];
+        }
+
+        if ($hasDaysQuantity) {
+            $days = max(0.0, (float) $incident->quantity);
+
+            $clipped = $begin !== $start || $finish !== $end;
+
+            if ($clipped && $totalCalendarDays > 0) {
+                $days *= $visibleCalendarDays / $totalCalendarDays;
+            }
+
+            return [
+                'days' => round($days, 2),
+                'partial' => false,
+                'estimated' => $clipped,
+            ];
+        }
+
+        return [
+            'days' => (float) $visibleCalendarDays,
+            'partial' => false,
+            'estimated' => false,
+        ];
+    }
+
     public static function data(array $filters): array
     {
         $filters = static::normalizeFilters($filters);
@@ -393,6 +618,9 @@ class EmployeeAttendanceReportService
             'rows' => $rows,
             'incidentMap' => static::incidentSummaryByAttendance($rows),
             'summary' => static::summary($rows),
+            'employeeSummaries' => $filters['group_by'] === 'employee'
+                ? static::employeeSummaries($rows, $filters)
+                : [],
             'statusOptions' => EmployeeAttendance::statusOptions(),
             'generatedAt' => now(),
         ];
