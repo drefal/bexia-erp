@@ -42,6 +42,8 @@ class AttendanceReport extends Page
 
     public ?string $status = null;
 
+    public string $group_by = 'day';
+
     public function mount(): void
     {
         $this->from = now()->startOfMonth()->toDateString();
@@ -82,6 +84,7 @@ class AttendanceReport extends Page
             'only_key_personnel' => $this->only_key_personnel,
             'department_id' => $this->department_id,
             'status' => $this->status,
+            'group_by' => $this->group_by,
         ];
     }
 
@@ -353,6 +356,13 @@ class AttendanceReport extends Page
         return EmployeeAttendance::statusOptions();
     }
 
+    public function setGrouping(string $grouping): void
+    {
+        if (in_array($grouping, ['day', 'employee'], true)) {
+            $this->group_by = $grouping;
+        }
+    }
+
     public function clearFilters(): void
     {
         $this->from = now()->startOfMonth()->toDateString();
@@ -362,6 +372,7 @@ class AttendanceReport extends Page
         $this->only_key_personnel = false;
         $this->department_id = null;
         $this->status = null;
+        $this->group_by = 'day';
     }
 
     public function exportExcel(): BinaryFileResponse
