@@ -123,6 +123,29 @@
             font-weight: bold;
             padding: 5px 4px;
         }
+    .employee-summary {
+            margin-top: 3px;
+            padding-top: 3px;
+            border-top: 1px solid #cbd5e1;
+            font-size: 6.5px;
+            font-weight: normal;
+            line-height: 1.65;
+        }
+
+        .employee-summary span {
+            margin-right: 10px;
+        }
+
+        .employee-summary .payable {
+            font-weight: bold;
+        }
+
+        .employee-summary-note {
+            margin-top: 2px;
+            font-size: 6px;
+            font-weight: normal;
+            color: #374151;
+        }
 </style>
 </head>
 
@@ -241,6 +264,49 @@
 
                                 @if ($row->employee_number)
                                     | No. {{ $row->employee_number }}
+                                @endif
+
+                                @php
+                                    $stats = $employeeSummaries[
+                                        (int) $row->employee_id
+                                    ] ?? null;
+                                @endphp
+
+                                @if ($stats)
+                                    <div class="employee-summary">
+                                        <span>Asistencias: <strong>{{ $stats['attendance_days'] }}</strong></span>
+                                        <span>| Faltas: <strong>{{ $stats['absence_days'] }}</strong></span>
+                                        <span>| Retardos: <strong>{{ $stats['late_minutes'] }} min ({{ number_format($stats['late_minutes'] / 60, 2) }} h)</strong></span>
+                                        <span>| Tiempo extra: <strong>{{ $stats['extra_minutes'] }} min ({{ number_format($stats['extra_minutes'] / 60, 2) }} h)</strong></span>
+                                        <span>| Permisos: <strong>{{ number_format($stats['permission_days'], 2) }} días</strong></span>
+                                        <span>| Vacaciones: <strong>{{ number_format($stats['vacation_days'], 2) }} días</strong></span>
+                                        <span class="payable">| Tiempo extra a pagar: {{ $stats['payable_minutes'] }} min ({{ number_format($stats['payable_minutes'] / 60, 2) }} h)</span>
+                                    </div>
+
+                                    @if (
+                                        $stats['late_balance_minutes'] > 0
+                                        || $stats['partial_permissions'] > 0
+                                        || $stats['partial_vacations'] > 0
+                                        || $stats['leave_estimated']
+                                    )
+                                        <div class="employee-summary-note">
+                                            @if ($stats['late_balance_minutes'] > 0)
+                                                Diferencia de retardos no compensada:
+                                                {{ $stats['late_balance_minutes'] }} min.
+                                            @endif
+                                            @if ($stats['partial_permissions'] > 0)
+                                                Permisos parciales:
+                                                {{ $stats['partial_permissions'] }}.
+                                            @endif
+                                            @if ($stats['partial_vacations'] > 0)
+                                                Vacaciones parciales:
+                                                {{ $stats['partial_vacations'] }}.
+                                            @endif
+                                            @if ($stats['leave_estimated'])
+                                                Días estimados por solicitud que cruza el periodo.
+                                            @endif
+                                        </div>
+                                    @endif
                                 @endif
                             @else
                                 Fecha: {{ \App\Support\EmployeeAttendanceReportService::dateOnly($row->attendance_date) }}
