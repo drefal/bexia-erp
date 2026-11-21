@@ -1,4 +1,4 @@
-FROM php:8.3-fpm
+FROM php:8.5-fpm
 
 ARG TZ=America/Mexico_City
 ENV TZ=${TZ}
@@ -47,3 +47,10 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 # BEXIA_V5523P8_COMPOSER
 # Composer requerido para deploy dentro del contenedor.
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
+# BEXIA PHP85: No mostrar mensajes PHP en respuestas HTTP.
+RUN printf '%s\n' \
+    '[www]' \
+    'php_admin_flag[display_errors] = off' \
+    'php_admin_flag[log_errors] = on' \
+    > /usr/local/etc/php-fpm.d/zzzz-bexia-php85-errors.conf
