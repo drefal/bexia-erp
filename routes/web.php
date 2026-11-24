@@ -596,7 +596,7 @@ Route::post('/pos/sessions/{session}/cash-movements', [\App\Http\Controllers\Pos
 Route::get('/pos/cash-movements/{movement}/print', [\App\Http\Controllers\PosController::class, 'printCashMovement'])->name('pos.cash-movements.print');
 
 Route::post('/pos/sessions/{session}/close', [\App\Http\Controllers\PosController::class, 'closeSession'])->name('pos.sessions.close');
-Route::get('/pos/sessions/{session}/close', [\App\Http\Controllers\PosController::class, 'closeSessionRedirect'])->name('pos.sessions.close.redirect');
+Route::get('/pos/sessions/{session}/close', [\App\Http\Controllers\PosController::class, 'closeSessionRedirect'])->middleware('auth')->name('pos.sessions.close.redirect');
 
 
 

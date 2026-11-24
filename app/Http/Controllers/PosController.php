@@ -7300,7 +7300,7 @@ $companyId = (int) ($sessionRow->company_id ?? $pos->company_id ?? 0);
 
 
 
-    protected function v5394ValidatedCustomerIdFromRequest(\Illuminate\Http\Request $request, object $sessionRow = null): ?int
+    protected function v5394ValidatedCustomerIdFromRequest(\Illuminate\Http\Request $request, ?object $sessionRow = null): ?int
     {
         $customerId = $request->input('customer_id');
 
@@ -14864,11 +14864,31 @@ protected function v5484BuildCloseSessionSummary(int $sessionId): array
 
     public function closeSessionRedirect(\Illuminate\Http\Request $request, int $session)
     {
+        abort_unless(auth()->check(), 403);
+
         $row = \Illuminate\Support\Facades\DB::table('pos_sessions')
             ->where('id', $session)
             ->first();
 
         if ($row) {
+            $pos = $this->posPoint((int) $row->pos_point_id);
+            $this->authorizePos($pos);
+
+            abort_unless(
+                (int) ($row->company_id ?? 0) > 0
+                && (int) ($pos->company_id ?? 0) === (int) $row->company_id,
+                404
+            );
+
+            $company = \App\Models\Company::query()
+                ->find((int) $row->company_id);
+
+            abort_unless($company !== null, 404);
+            abort_unless(
+                auth()->user()?->canAccessTenant($company) === true,
+                403
+            );
+
             return redirect($this->v5485gPosEmployeeSelectorUrl($row))
                 ->with('success', 'Sesión cerrada correctamente.');
         }
