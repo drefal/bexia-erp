@@ -885,19 +885,47 @@ Route::get(
 
         abort_unless($canAccessTenant, 403);
 
-        $path = match ($direction) {
-            'in' => $attendance->clock_in_photo_path,
-            'out' => $attendance->clock_out_photo_path,
-            'meal_out' => \Illuminate\Support\Facades\DB::table('employee_attendance_breaks')
+        // BEXIA_RRHH_ASIS02: evidencia individual de comida.
+        // Se conservan los controles de acceso anteriores.
+        $breakId = request()->query('break_id');
+
+        if ($breakId !== null) {
+            abort_unless(
+                is_string($breakId)
+                && ctype_digit($breakId)
+                && (int) $breakId > 0
+                && in_array($direction, ['meal_out', 'meal_in'], true),
+                404
+            );
+        }
+
+        if (in_array($direction, ['meal_out', 'meal_in'], true)) {
+            $breakQuery = \Illuminate\Support\Facades\DB::table(
+                'employee_attendance_breaks'
+            )
                 ->where('employee_attendance_id', $attendance->id)
-                ->where('break_type', 'meal')
-                ->value('start_photo_path'),
-            'meal_in' => \Illuminate\Support\Facades\DB::table('employee_attendance_breaks')
-                ->where('employee_attendance_id', $attendance->id)
-                ->where('break_type', 'meal')
-                ->value('end_photo_path'),
-            default => null,
-        };
+                ->where('company_id', $tenant)
+                ->where('break_type', 'meal');
+
+            if ($breakId !== null) {
+                $breakQuery->where('id', (int) $breakId);
+            }
+
+            $path = $breakQuery
+                ->orderBy('started_at')
+                ->orderBy('id')
+                ->value(
+                    $direction === 'meal_out'
+                        ? 'start_photo_path'
+                        : 'end_photo_path'
+                );
+        } else {
+            $path = match ($direction) {
+                'in' => $attendance->clock_in_photo_path,
+                'out' => $attendance->clock_out_photo_path,
+                default => null,
+            };
+        }
 
         abort_unless(filled($path), 404);
 
@@ -905,13 +933,29 @@ Route::get(
 
         abort_unless($disk->exists($path), 404);
 
-        return response()->file(
-            $disk->path($path),
-            [
-                'Cache-Control' => 'private, no-store, max-age=0',
-                'Pragma' => 'no-cache',
-            ]
+        // BEXIA_RRHH_ASIS02: proteger cache despues de construir respuesta.
+        $response = response()->file(
+            $disk->path($path)
         );
+
+        $response->setPrivate();
+
+        $response->headers->set(
+            'Cache-Control',
+            'private, no-store, no-cache, max-age=0, must-revalidate'
+        );
+
+        $response->headers->set(
+            'Pragma',
+            'no-cache'
+        );
+
+        $response->headers->set(
+            'Expires',
+            'Thu, 01 Jan 1970 00:00:00 GMT'
+        );
+
+        return $response;
     }
 )
     ->middleware('auth')

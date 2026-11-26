@@ -208,10 +208,15 @@
         </tr>
     </table>
 
+    <div class="muted" style="margin-bottom:5px;">
+        Horarios: real / teórico.
+        Comida: minutos consumidos / permitidos.
+    </div>
+
     <table class="detail">
         <thead>
             <tr>
-                <th colspan="11">Datos de asistencia</th>
+                <th colspan="10">Datos de asistencia</th>
                 <th colspan="6">Incidencias</th>
                 <th colspan="4">Resolución</th>
             </tr>
@@ -222,8 +227,7 @@
                 <th>Puesto</th>
                 <th>Estado</th>
                 <th>Entrada</th>
-                <th>Comida S.</th>
-                <th>Comida R.</th>
+                <th>Comida (min)</th>
                 <th>Salida</th>
                 <th>Horas</th>
                 <th>Extra</th>
@@ -258,7 +262,7 @@
 
                 @if ($previousGroupKey !== $groupKey)
                     <tr class="group-header">
-                        <td colspan="21">
+                        <td colspan="20">
                             @if ($byEmployee)
                                 Empleado: {{ $row->employee_name ?: 'Empleado sin nombre' }}
 
@@ -348,20 +352,33 @@
                         {{ \App\Support\EmployeeAttendanceReportService::statusLabel($row->status) }}
                     </td>
 
-                    <td>
-                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_in_at) ?: '—' }}
+                    {{-- BEXIA_RRHH_ASIS02 --}}
+                    <td class="center">
+                        <strong>{{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_in_at) }}</strong>
+                        <span class="muted"> / {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->expected_start_at) }}</span>
                     </td>
 
-                    <td>
-                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->meal_out_at) ?: '—' }}
+                    <td class="center">
+                        <span style="{{ $row->meal_excess_minutes > 0 ? 'color:#b91c1c;font-weight:bold;' : '' }}">
+                            {{ $row->meal_display }}
+                        </span>
+                        @if ($row->meal_excess_minutes > 0)
+                            <br>
+                            <span style="color:#b91c1c;">
+                                Exc. {{ $row->meal_excess_minutes }} min
+                            </span>
+                        @endif
+                        @if ($row->meal_incomplete_count > 0)
+                            <br>
+                            <span style="color:#b45309;">
+                                Incompleta
+                            </span>
+                        @endif
                     </td>
 
-                    <td>
-                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->meal_in_at) ?: '—' }}
-                    </td>
-
-                    <td>
-                        {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_out_at) ?: '—' }}
+                    <td class="center">
+                        <strong>{{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->clock_out_at) }}</strong>
+                        <span class="muted"> / {{ \App\Support\EmployeeAttendanceReportService::timeOnly($row->expected_end_at) }}</span>
                     </td>
 
                     <td>
@@ -387,7 +404,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="21">
+                    <td colspan="20">
                         No hay registros para los filtros seleccionados.
                     </td>
                 </tr>

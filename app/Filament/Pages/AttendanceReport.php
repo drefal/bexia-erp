@@ -442,18 +442,34 @@ class AttendanceReport extends Page
             tenant: \Filament\Facades\Filament::getTenant(),
         );
     }
-    public function attendancePhotoUrl(int $attendanceId, string $direction): string
+    public function attendancePhotoUrl(
+        int $attendanceId,
+        string $direction,
+        ?int $breakId = null
+    ): string
     {
         abort_unless(
             in_array($direction, ['in', 'meal_out', 'meal_in', 'out'], true),
             404
         );
 
-        return route('rrhh.attendance.photo', [
+        $parameters = [
             'tenant' => $this->companyId(),
             'attendance' => $attendanceId,
             'direction' => $direction,
-        ]);
+        ];
+
+        if ($breakId !== null) {
+            abort_unless(
+                $breakId > 0
+                && in_array($direction, ['meal_out', 'meal_in'], true),
+                404
+            );
+
+            $parameters['break_id'] = $breakId;
+        }
+
+        return route('rrhh.attendance.photo', $parameters);
     }
 
     protected function getHeaderActions(): array

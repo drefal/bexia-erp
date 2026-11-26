@@ -1,7 +1,7 @@
 <x-filament-panels::page>
     @php
-        $summary = $this->summary();
         $rows = $this->rows();
+        $summary = \App\Support\EmployeeAttendanceReportService::summary($rows);
         $employeeSummaries = $group_by === 'employee'
             ? \App\Support\EmployeeAttendanceReportService::employeeSummaries(
                 $rows,
@@ -311,6 +311,10 @@
         <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div class="border-b border-gray-200 px-5 py-4 dark:border-gray-700">
                 <div class="text-lg font-semibold">Detalle de asistencias</div>
+                <div class="mt-1 text-xs text-gray-500">
+                    Horarios: real / teórico.
+                    Comida: minutos consumidos / permitidos.
+                </div>
                 <div class="mt-1 text-sm text-gray-500">
                     Periodo {{ $this->dateOnly($from) }} - {{ $this->dateOnly($to) }} · {{ $rows->count() }} registros
                 </div>
@@ -360,7 +364,7 @@
                     <thead class="bg-gray-50 dark:bg-gray-800">
                         
                         <tr class="border-b border-gray-200 bg-gray-100/80 text-[11px] uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:bg-gray-800/80 dark:text-gray-400">
-                            <th colspan="11" class="px-4 py-2 text-left font-semibold">
+                            <th colspan="10" class="px-4 py-2 text-left font-semibold">
                                 Datos de asistencia
                             </th>
 
@@ -382,10 +386,9 @@
                             <th class="px-4 py-3 text-left font-semibold">Departamento</th>
                             <th class="px-4 py-3 text-left font-semibold">Puesto</th>
                             <th class="px-4 py-3 text-left font-semibold">Estado</th>
-                            <th class="px-4 py-3 text-left font-semibold">Entrada</th>
-                            <th class="px-4 py-3 text-left font-semibold">Salida comida</th>
-                            <th class="px-4 py-3 text-left font-semibold">Regreso comida</th>
-                            <th class="px-4 py-3 text-left font-semibold">Salida</th>
+                            <th class="px-4 py-3 text-left font-semibold whitespace-nowrap">Entrada</th>
+                            <th class="px-4 py-3 text-left font-semibold whitespace-nowrap">Comida (min)</th>
+                            <th class="px-4 py-3 text-left font-semibold whitespace-nowrap">Salida</th>
                             <th class="px-4 py-3 text-right font-semibold">Horas</th>
                             <th class="px-4 py-3 text-right font-semibold">Extra</th>
                             <th class="px-4 py-3 text-right font-semibold">Retardo</th>
@@ -409,7 +412,7 @@
                             @if ($group_by === 'employee' && $previousEmployeeId !== (int) $row->employee_id)
                                 <tr style="background-color: #e5e7eb;">
                                     <td
-                                        colspan="22"
+                                        colspan="21"
                                         class="px-4 py-3 text-sm font-semibold"
                                         style="background-color: #e5e7eb; color: #111827;"
                                     >
@@ -499,19 +502,32 @@
                                 <td class="px-4 py-3">{{ $row->department_name ?: '-' }}</td>
                                 <td class="px-4 py-3">{{ $row->position_name ?: '-' }}</td>
                                 <td class="px-4 py-3">{{ $this->statusLabel($row->status) }}</td>
-                                <td class="px-4 py-3">
-                                    <div>{{ $this->timeOnly($row->clock_in_at) }}</div>
-                                    <div class="text-xs text-gray-500">Esp. {{ $this->timeOnly($row->expected_start_at) }}</div>
+                                {{-- BEXIA_RRHH_ASIS02 --}}
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <span class="font-medium">{{ $this->timeOnly($row->clock_in_at) }}</span>
+                                    <span class="text-gray-500"> / {{ $this->timeOnly($row->expected_start_at) }}</span>
                                 </td>
-                                <td class="px-4 py-3">
-                                    {{ $this->timeOnly($row->meal_out_at) }}
+
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <span class="font-semibold"
+                                        style="{{ $row->meal_excess_minutes > 0 ? 'color:#dc2626;' : '' }}">
+                                        {{ $row->meal_display }}
+                                    </span>
+                                    @if ($row->meal_excess_minutes > 0)
+                                        <div class="text-xs" style="color:#dc2626;">
+                                            Exceso: {{ $row->meal_excess_minutes }} min
+                                        </div>
+                                    @endif
+                                    @if ($row->meal_incomplete_count > 0)
+                                        <div class="text-xs" style="color:#b45309;">
+                                            Comida incompleta
+                                        </div>
+                                    @endif
                                 </td>
-                                <td class="px-4 py-3">
-                                    {{ $this->timeOnly($row->meal_in_at) }}
-                                </td>
-                                <td class="px-4 py-3">
-                                    <div>{{ $this->timeOnly($row->clock_out_at) }}</div>
-                                    <div class="text-xs text-gray-500">Esp. {{ $this->timeOnly($row->expected_end_at) }}</div>
+
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <span class="font-medium">{{ $this->timeOnly($row->clock_out_at) }}</span>
+                                    <span class="text-gray-500"> / {{ $this->timeOnly($row->expected_end_at) }}</span>
                                 </td>
                                 <td class="px-4 py-3 text-right">{{ number_format((float) $row->worked_hours, 2) }}</td>
                                 <td class="px-4 py-3 text-right">{{ (int) $row->overtime_minutes }} min</td>
@@ -619,31 +635,33 @@
                                             </button>
                                         @endif
 
-                                        @if ($row->meal_out_photo_path)
-                                            <button
-                                                type="button"
-                                                class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500"
-                                                x-on:click='openPhoto(
-                                                    @js($this->attendancePhotoUrl((int) $row->id, "meal_out")),
-                                                    @js("Salida a comida · " . ($row->employee_name ?: "Empleado") . " · " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($row->meal_out_at))
-                                                )'
-                                            >
-                                                Salida comida
-                                            </button>
-                                        @endif
+                                        @foreach ($row->meal_sessions as $mealSession)
+                                            @if ($mealSession->start_photo_path)
+                                                <button
+                                                    type="button"
+                                                    class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500"
+                                                    x-on:click='openPhoto(
+                                                        @js($this->attendancePhotoUrl((int) $row->id, "meal_out", (int) $mealSession->id)),
+                                                        @js("Salida comida " . $loop->iteration . " - " . $row->employee_name . " - " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($mealSession->started_at))
+                                                    )'
+                                                >
+                                                    Comida {{ $loop->iteration }} Sal.
+                                                </button>
+                                            @endif
 
-                                        @if ($row->meal_in_photo_path)
-                                            <button
-                                                type="button"
-                                                class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
-                                                x-on:click='openPhoto(
-                                                    @js($this->attendancePhotoUrl((int) $row->id, "meal_in")),
-                                                    @js("Regreso de comida · " . ($row->employee_name ?: "Empleado") . " · " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($row->meal_in_at))
-                                                )'
-                                            >
-                                                Regreso comida
-                                            </button>
-                                        @endif
+                                            @if ($mealSession->end_photo_path)
+                                                <button
+                                                    type="button"
+                                                    class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
+                                                    x-on:click='openPhoto(
+                                                        @js($this->attendancePhotoUrl((int) $row->id, "meal_in", (int) $mealSession->id)),
+                                                        @js("Regreso comida " . $loop->iteration . " - " . $row->employee_name . " - " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($mealSession->ended_at))
+                                                    )'
+                                                >
+                                                    Comida {{ $loop->iteration }} Reg.
+                                                </button>
+                                            @endif
+                                        @endforeach
 
                                         @if ($row->clock_out_photo_path)
                                             <button
@@ -658,7 +676,7 @@
                                             </button>
                                         @endif
 
-                                        @if (! $row->clock_in_photo_path && ! $row->meal_out_photo_path && ! $row->meal_in_photo_path && ! $row->clock_out_photo_path)
+                                        @if (! $row->clock_in_photo_path && ! $row->meal_has_evidence && ! $row->clock_out_photo_path)
                                             <span class="text-xs text-gray-400">—</span>
                                         @endif
                                     </div>
@@ -666,7 +684,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="22" class="px-4 py-8 text-center text-gray-500">
+                                <td colspan="21" class="px-4 py-8 text-center text-gray-500">
                                     No hay asistencias para los filtros seleccionados.
                                 </td>
                             </tr>
