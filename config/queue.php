@@ -30,6 +30,16 @@ return [
 
     'connections' => [
 
+        'reports_database' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'reports',
+            'retry_after' => 420,
+            'after_commit' => false,
+        ],
+
+
         'sync' => [
             'driver' => 'sync',
         ],

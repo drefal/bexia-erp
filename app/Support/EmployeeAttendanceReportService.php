@@ -58,7 +58,10 @@ class EmployeeAttendanceReportService
         ];
     }
 
-    public static function rows(array $filters): Collection
+    public static function rows(
+        array $filters,
+        ?int $maxRows = null
+    ): Collection
     {
         $filters = static::normalizeFilters($filters);
 
@@ -66,11 +69,29 @@ class EmployeeAttendanceReportService
             return collect();
         }
 
+        if ($maxRows !== null && $maxRows < 1) {
+            throw new \InvalidArgumentException(
+                'Invalid attendance report capacity.'
+            );
+        }
+
         $rows = DB::table('employee_attendances as a')
-            ->leftJoin('employees as e', 'e.id', '=', 'a.employee_id')
-            ->leftJoin('hr_departments as d', 'd.id', '=', 'e.hr_department_id')
-            ->leftJoin('hr_job_positions as p', 'p.id', '=', 'e.hr_job_position_id')
-            ->leftJoin('hr_work_schedules as s', 's.id', '=', 'a.hr_work_schedule_id')
+            ->leftJoin('employees as e', function ($join): void {
+                $join->on('e.id', '=', 'a.employee_id')
+                    ->on('e.company_id', '=', 'a.company_id');
+            })
+            ->leftJoin('hr_departments as d', function ($join): void {
+                $join->on('d.id', '=', 'e.hr_department_id')
+                    ->on('d.company_id', '=', 'a.company_id');
+            })
+            ->leftJoin('hr_job_positions as p', function ($join): void {
+                $join->on('p.id', '=', 'e.hr_job_position_id')
+                    ->on('p.company_id', '=', 'a.company_id');
+            })
+            ->leftJoin('hr_work_schedules as s', function ($join): void {
+                $join->on('s.id', '=', 'a.hr_work_schedule_id')
+                    ->on('s.company_id', '=', 'a.company_id');
+            })
             ->where('a.company_id', $filters['company_id'])
             ->whereDate('a.attendance_date', '>=', $filters['from'])
             ->whereDate('a.attendance_date', '<=', $filters['to'])
@@ -102,6 +123,10 @@ class EmployeeAttendanceReportService
                     ->orderBy('a.employee_id')
             )
             ->orderBy('a.id')
+            ->when(
+                $maxRows !== null,
+                fn ($query) => $query->limit($maxRows + 1)
+            )
             ->select([
                 'a.id',
                 'a.attendance_date',
@@ -132,6 +157,15 @@ class EmployeeAttendanceReportService
                 'a.notes',
             ])
             ->get();
+
+        if (
+            $maxRows !== null
+            && $rows->count() > $maxRows
+        ) {
+            throw new \OverflowException(
+                'Attendance report exceeds capacity.'
+            );
+        }
 
         return static::attachMealSummary(
             $rows,
@@ -331,12 +365,46 @@ class EmployeeAttendanceReportService
         $incidents = \Illuminate\Support\Facades\DB::table(
             'employee_incidents as incidents'
         )
+            ->join(
+                'employee_attendances as ia',
+                function ($join): void {
+                    $join->on(
+                        'ia.id',
+                        '=',
+                        'incidents.employee_attendance_id'
+                    )
+                    ->on(
+                        'ia.company_id',
+                        '=',
+                        'incidents.company_id'
+                    )
+                    ->on(
+                        'ia.employee_id',
+                        '=',
+                        'incidents.employee_id'
+                    );
+                }
+            )
             ->leftJoin(
                 'hr_incident_types as types',
-                'types.id',
-                '=',
-                'incidents.hr_incident_type_id'
+                function ($join): void {
+                    $join->on(
+                        'types.id',
+                        '=',
+                        'incidents.hr_incident_type_id'
+                    )
+                    ->on(
+                        'types.company_id',
+                        '=',
+                        'incidents.company_id'
+                    );
+                }
             )
+            ->where(function ($query): void {
+                $query
+                    ->whereNull('incidents.hr_incident_type_id')
+                    ->orWhereNotNull('types.id');
+            })
             ->whereIn(
                 'incidents.employee_attendance_id',
                 $attendanceIds->all()
@@ -582,9 +650,18 @@ class EmployeeAttendanceReportService
         $incidents = DB::table('employee_incidents as i')
             ->join(
                 'hr_incident_types as t',
-                't.id',
-                '=',
-                'i.hr_incident_type_id'
+                function ($join): void {
+                    $join->on(
+                        't.id',
+                        '=',
+                        'i.hr_incident_type_id'
+                    )
+                    ->on(
+                        't.company_id',
+                        '=',
+                        'i.company_id'
+                    );
+                }
             )
             ->where('i.company_id', (int) $filters['company_id'])
             ->whereIn('i.employee_id', array_keys($result))
@@ -744,10 +821,13 @@ class EmployeeAttendanceReportService
         ];
     }
 
-    public static function data(array $filters): array
+    public static function data(
+        array $filters,
+        ?int $maxRows = null
+    ): array
     {
         $filters = static::normalizeFilters($filters);
-        $rows = static::rows($filters);
+        $rows = static::rows($filters, $maxRows);
 
         return [
             'filters' => $filters,

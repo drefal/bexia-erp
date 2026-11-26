@@ -1022,3 +1022,30 @@ Route::get(
     ->whereNumber('tenant')
     ->whereNumber('expenseReport')
     ->name('expenses.reports.ticket');
+
+
+// BEXIA_RRHH_ASIS03_ASYNC_PDF
+Route::middleware(['auth:web', 'throttle:60,1'])
+    ->group(function (): void {
+
+        Route::get(
+            '/admin/{tenant}/rrhh/reportes-asistencia/pdf',
+            [
+                \App\Http\Controllers\Reports\AttendanceReportExportController::class,
+                'index',
+            ]
+        )
+            ->whereNumber('tenant')
+            ->name('rrhh.attendance.exports.index');
+
+        Route::get(
+            '/admin/{tenant}/rrhh/reportes-asistencia/pdf/{report}/descargar',
+            [
+                \App\Http\Controllers\Reports\AttendanceReportExportController::class,
+                'download',
+            ]
+        )
+            ->whereNumber('tenant')
+            ->whereUuid('report')
+            ->name('rrhh.attendance.exports.download');
+    });

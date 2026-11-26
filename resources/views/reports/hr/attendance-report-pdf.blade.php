@@ -117,6 +117,10 @@
             text-align: center;
             font-size: 6.5px;
         }
+    tr.group-header {
+            page-break-after: avoid;
+        }
+
     tr.group-header td {
             background: #e5e7eb;
             color: #111827;
@@ -241,6 +245,12 @@
         </div>
     </div>
     <h1>Bexia ERP - Reporte de asistencia</h1>
+    @if (($pdfBlockIndex ?? 0) > 0)
+        <div class="muted">
+            Continuaci&oacute;n del reporte
+        </div>
+    @endif
+
 
     <div class="muted">
         Periodo:
@@ -255,6 +265,7 @@
         {{ ($filters['group_by'] ?? 'day') === 'employee' ? 'Por empleado (A-Z)' : 'Por día' }}
     </div>
 
+    @if (($pdfBlockIndex ?? 0) === 0)
     <table class="summary">
         <tr>
             <td class="label">Registros</td>
@@ -297,6 +308,7 @@
             <td>{{ $summary['overtime_minutes'] }}</td>
         </tr>
     </table>
+    @endif
 
     <div class="muted" style="margin-bottom:5px;">
         Horarios: real / teórico.
@@ -443,6 +455,14 @@
                                 @endif
                             @else
                                 Fecha: {{ \App\Support\EmployeeAttendanceReportService::dateOnly($row->attendance_date) }}
+                            @endif
+                            @if (
+                                $loop->first
+                                && ($pdfPreviousGroup ?? null) === $groupKey
+                            )
+                                <span class="muted">
+                                    (continuaci&oacute;n)
+                                </span>
                             @endif
                         </td>
                     </tr>
