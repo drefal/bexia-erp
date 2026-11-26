@@ -382,10 +382,10 @@
                         </tr>
 <tr>
                             <th class="px-4 py-3 text-left font-semibold">Fecha</th>
-                            <th class="px-4 py-3 text-left font-semibold">Empleado</th>
+                            <th class="px-4 py-3 text-left font-semibold" style="min-width:190px;">Nombre</th>
                             <th class="px-4 py-3 text-left font-semibold">Departamento</th>
                             <th class="px-4 py-3 text-left font-semibold">Puesto</th>
-                            <th class="px-4 py-3 text-left font-semibold">Estado</th>
+                            <th class="px-2 py-3 text-center font-semibold" style="width:58px; min-width:58px;">Estado</th>
                             <th class="px-4 py-3 text-left font-semibold whitespace-nowrap">Entrada</th>
                             <th class="px-4 py-3 text-left font-semibold whitespace-nowrap">Comida (min)</th>
                             <th class="px-4 py-3 text-left font-semibold whitespace-nowrap">Salida</th>
@@ -501,7 +501,16 @@
                                 </td>
                                 <td class="px-4 py-3">{{ $row->department_name ?: '-' }}</td>
                                 <td class="px-4 py-3">{{ $row->position_name ?: '-' }}</td>
-                                <td class="px-4 py-3">{{ $this->statusLabel($row->status) }}</td>
+                                {{-- BEXIA_RRHH_ASIS03_STATUS --}}
+                                <td class="px-2 py-3 text-center"
+                                    style="width:58px;">
+                                    <img
+                                        src="{{ \App\Support\AttendanceReportStatusPresentation::image($row->status) }}"
+                                        alt="{{ \App\Support\AttendanceReportStatusPresentation::label($row->status) }}"
+                                        title="{{ \App\Support\AttendanceReportStatusPresentation::label($row->status) }}"
+                                        style="display:inline-block;width:22px;height:22px;vertical-align:middle;"
+                                    >
+                                </td>
                                 {{-- BEXIA_RRHH_ASIS02 --}}
                                 <td class="px-4 py-3 whitespace-nowrap">
                                     <span class="font-medium">{{ $this->timeOnly($row->clock_in_at) }}</span>
@@ -691,6 +700,30 @@
                         @endforelse
                     </tbody>
                 </table>
+            </div>
+            {{-- BEXIA_RRHH_ASIS03_LEGEND --}}
+            <div class="border-t border-gray-200 px-5 py-4 dark:border-gray-700">
+                <div class="mb-3 text-sm font-semibold">
+                    Simbolog&iacute;a de estados
+                </div>
+
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+                    @foreach (\App\Support\AttendanceReportStatusPresentation::all() as $statusKey => $statusInfo)
+                        <span class="inline-flex items-center gap-2 text-xs">
+                            <img
+                                src="{{ \App\Support\AttendanceReportStatusPresentation::image($statusKey) }}"
+                                alt=""
+                                style="display:inline-block;width:18px;height:18px;"
+                            >
+                            {{ $statusInfo['label'] }}
+                        </span>
+                    @endforeach
+                </div>
+
+                <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                    Horarios: real / te&oacute;rico.
+                    Comida: minutos consumidos / permitidos.
+                </div>
             </div>
         </div>
 
