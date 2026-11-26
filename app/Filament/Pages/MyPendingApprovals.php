@@ -190,6 +190,9 @@ if (! static::canUseApprovalsPage()) {
             return 0;
         }
 
+        // BEXIA_PERF23: memoization limited to this counter invocation.
+        $approvalMemo = [];
+
         return DB::table('approval_request_steps as steps')
             ->join(
                 'approval_requests as requests',
@@ -210,8 +213,21 @@ if (! static::canUseApprovalsPage()) {
             ])
             ->get()
             ->filter(
-                fn ($row): bool =>
-                    static::userCanActOnApproval($user, $row)
+                function ($row) use ($user, &$approvalMemo): bool {
+                    $key = serialize([
+                        (int) $user->id,
+                        $row->company_id,
+                        $row->approver_user_id,
+                        $row->approver_role_name,
+                    ]);
+
+                    if (! array_key_exists($key, $approvalMemo)) {
+                        $approvalMemo[$key] =
+                            static::userCanActOnApproval($user, $row);
+                    }
+
+                    return $approvalMemo[$key];
+                }
             )
             ->count();
     }
