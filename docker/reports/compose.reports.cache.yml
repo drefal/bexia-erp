@@ -1,0 +1,10 @@
+services:
+  bexia_reports:
+    environment:
+      APP_CONFIG_CACHE: /var/www/reports-config.php
+
+    volumes:
+      - "${BEXIA_REPORTS_CONFIG_FILE:?Set isolated worker config file}:/var/www/reports-config.php:ro"
+
+    stop_signal: SIGTERM
+    stop_grace_period: 390s

@@ -44,6 +44,15 @@ class AttendanceReport extends Page
 
     public string $group_by = 'day';
 
+    #[\Livewire\Attributes\Locked]
+    public ?string $pdfReportId = null;
+
+    #[\Livewire\Attributes\Locked]
+    public string $pdfReportStatus = 'idle';
+
+    #[\Livewire\Attributes\Locked]
+    public int $pdfReportProgress = 0;
+
     public function mount(): void
     {
         $this->from = now()->startOfMonth()->toDateString();
@@ -395,7 +404,89 @@ class AttendanceReport extends Page
             ->deleteFileAfterSend(true);
     }
 
-    public function exportPdf(): StreamedResponse
+    public function exportPdf(): ?StreamedResponse
+    {
+        if (!config('reports.enabled', false)) {
+            return $this->exportPdfLegacy();
+        }
+
+        $userId = (int) (auth()->id() ?? 0);
+        $companyId = $this->companyId();
+
+        if ($this->pdfReportId !== null) {
+
+            $this->refreshPdfStatus();
+
+            if ($this->pdfReportId === null) {
+                return null;
+            }
+
+            if ($this->pdfReportStatus === 'completed') {
+
+                $this->downloadPreparedPdf();
+
+                return null;
+            }
+
+            return null;
+        }
+
+        try {
+
+            $report = app(
+                \App\Support\Reports\AttendanceReportRequestService::class
+            )->request(
+                $userId,
+                $companyId,
+                $this->filters()
+            );
+
+            $this->pdfReportId =
+                (string) $report->getKey();
+
+            $this->pdfReportStatus = 'pending';
+
+            $this->pdfReportProgress = 0;
+
+        } catch (
+            \Illuminate\Validation\ValidationException $exception
+        ) {
+
+            \Filament\Notifications\Notification::make()
+                ->title('No se pudo solicitar el reporte')
+                ->body($exception->validator->errors()->first())
+                ->warning()
+                ->send();
+
+        } catch (
+            \Illuminate\Auth\Access\AuthorizationException $exception
+        ) {
+
+            abort(403);
+
+        } catch (\Throwable $exception) {
+
+            \Illuminate\Support\Facades\Log::warning(
+                'Attendance PDF request failed',
+                ['exception_type' => get_class($exception)]
+            );
+
+            \Filament\Notifications\Notification::make()
+                ->title('Servicio de reportes no disponible')
+                ->body('Intenta nuevamente.')
+                ->danger()
+                ->send();
+        }
+
+        return null;
+    }
+
+    public function companyIdForReports(): int
+    {
+        return $this->companyId();
+    }
+
+    protected function exportPdfLegacy(): StreamedResponse
     {
         if (! app()->bound('dompdf.wrapper')) {
             throw new \RuntimeException('No hay motor PDF instalado (barryvdh/laravel-dompdf).');
@@ -481,12 +572,235 @@ class AttendanceReport extends Page
                 ->color('success')
                 ->action('exportExcel'),
 
-            Action::make('exportPdf')
-                ->label('Exportar PDF')
-                ->icon('heroicon-o-document-arrow-down')
-                ->color('gray')
-                ->action('exportPdf'),
+            $this->pdfHeaderAction(),
         ];
+    }
+
+
+    protected function pdfHeaderAction(): Action
+    {
+        $action = Action::make('exportPdf')
+            ->label('Exportar PDF')
+            ->icon('heroicon-o-document-arrow-down')
+            ->color('gray')
+            ->action('exportPdf');
+
+        if (!config('reports.enabled', false)) {
+            return $action;
+        }
+
+        return $action
+            ->label(fn (): string => match ($this->pdfReportStatus) {
+                'pending' => 'Preparando PDF...',
+                'processing' => 'Generando PDF... '
+                    .$this->pdfReportProgress.'%',
+                'completed' => 'Descargar PDF',
+                'connection_error' => 'Consultar PDF',
+                default => 'Exportar PDF',
+            })
+            ->extraAttributes(fn (): array =>
+                $this->pdfReportId !== null
+                && in_array(
+                    $this->pdfReportStatus,
+                    ['pending', 'processing', 'connection_error'],
+                    true
+                )
+                    ? [
+                        'wire:poll.3s' => 'refreshPdfStatus',
+                        'aria-busy' => 'true',
+                    ]
+                    : []
+            );
+    }
+
+    private function resetPdfStatus(): void
+    {
+        $this->pdfReportId = null;
+        $this->pdfReportStatus = 'idle';
+        $this->pdfReportProgress = 0;
+    }
+
+    private function pdfStatusWarning(string $message): void
+    {
+        \Filament\Notifications\Notification::make()
+            ->title($message)
+            ->warning()
+            ->send();
+    }
+
+    private function findOwnedPdfReport():
+        ?\App\Models\ReportExport
+    {
+        if (
+            !config('reports.enabled', false)
+            || $this->pdfReportId === null
+        ) {
+            return null;
+        }
+
+        $userId = (int) (auth()->id() ?? 0);
+        $companyId = $this->companyId();
+
+        if (!app(
+            \App\Support\Reports\AttendanceReportAuthorization::class
+        )->allows($userId, $companyId)) {
+            return null;
+        }
+
+        return \App\Models\ReportExport::query()
+            ->ownedBy($companyId, $userId)
+            ->where(
+                'report_type',
+                \App\Models\ReportExport::ATTENDANCE_PDF
+            )
+            ->whereKey($this->pdfReportId)
+            ->first();
+    }
+
+    public function refreshPdfStatus(): void
+    {
+        if ($this->pdfReportId === null) {
+            return;
+        }
+
+        try {
+
+            $report = $this->findOwnedPdfReport();
+
+            if (!$report) {
+
+                $this->resetPdfStatus();
+
+                $this->pdfStatusWarning(
+                    'El reporte ya no esta disponible.'
+                );
+
+                return;
+            }
+
+            if ($report->status === 'failed') {
+
+                $message = match ($report->error_code) {
+                    'report_limit' =>
+                        'El reporte supera 6000 registros. Selecciona un periodo menor.',
+                    'authorization_revoked' =>
+                        'Ya no tienes permiso para generar este reporte.',
+                    'generation_timeout', 'worker_interrupted' =>
+                        'La generacion fue interrumpida. Intenta nuevamente.',
+                    default =>
+                        'No se pudo generar el PDF. Intenta nuevamente.',
+                };
+
+                $this->resetPdfStatus();
+
+                $this->pdfStatusWarning($message);
+
+                return;
+            }
+
+            if (
+                $report->status === 'expired'
+                || (
+                    $report->status === 'completed'
+                    && !$report->isDownloadable()
+                )
+            ) {
+
+                $this->resetPdfStatus();
+
+                $this->pdfStatusWarning(
+                    'El documento ya no esta disponible.'
+                );
+
+                return;
+            }
+
+            if (!in_array(
+                $report->status,
+                ['pending', 'processing', 'completed'],
+                true
+            )) {
+
+                $this->resetPdfStatus();
+
+                return;
+            }
+
+            $this->pdfReportStatus =
+                (string) $report->status;
+
+            $this->pdfReportProgress = max(
+                0,
+                min(100, (int) $report->progress)
+            );
+
+        } catch (\Throwable $exception) {
+
+            $this->pdfReportStatus = 'connection_error';
+
+            \Illuminate\Support\Facades\Log::warning(
+                'Attendance PDF status unavailable',
+                ['exception_type' => get_class($exception)]
+            );
+        }
+    }
+
+    private function downloadPreparedPdf(): void
+    {
+        try {
+
+            $report = $this->findOwnedPdfReport();
+
+            if (!$report || !$report->isDownloadable()) {
+
+                $this->resetPdfStatus();
+
+                $this->pdfStatusWarning(
+                    'El documento ya no esta disponible.'
+                );
+
+                return;
+            }
+
+            $url = route(
+                'rrhh.attendance.exports.download',
+                [
+                    'tenant' => $this->companyId(),
+                    'report' => $report->getKey(),
+                ],
+                false
+            );
+
+            $encodedUrl = json_encode(
+                $url,
+                JSON_THROW_ON_ERROR
+                | JSON_HEX_TAG
+                | JSON_HEX_AMP
+                | JSON_HEX_APOS
+                | JSON_HEX_QUOT
+            );
+
+            // Request the normal authenticated HTTP
+            // download instead of transmitting the PDF
+            // as base64 in a Livewire response.
+
+            $this->js(
+                'const link = document.createElement("a");'
+                .'link.href = '.$encodedUrl.';'
+                .'link.download = "";'
+                .'document.body.appendChild(link);'
+                .'link.click();'
+                .'link.remove();'
+            );
+
+            $this->resetPdfStatus();
+
+        } catch (\Throwable $exception) {
+
+            $this->pdfStatusWarning(
+                'No se pudo iniciar la descarga. Intenta nuevamente.'
+            );
+        }
     }
 
     protected function companyId(): int
