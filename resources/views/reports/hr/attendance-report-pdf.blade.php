@@ -6,7 +6,7 @@
 
     <style>
         @page {
-            margin: 22px 20px;
+            margin: 22px 20px 78px 20px;
         }
 
         body {
@@ -146,10 +146,100 @@
             font-weight: normal;
             color: #374151;
         }
+
+        /* BEXIA_RRHH_ASIS03 */
+        .asis03-status-cell {
+            text-align: center;
+            vertical-align: middle !important;
+        }
+
+        .asis03-status-cell img {
+            width: 14px;
+            height: 14px;
+        }
+
+        .asis03-footer {
+            position: fixed;
+            bottom: -52px;
+            left: 0;
+            right: 0;
+            height: 46px;
+            border-top: 1px solid #d1d5db;
+            padding-top: 3px;
+            font-size: 7px;
+            color: #374151;
+        }
+
+        .asis03-legend {
+            border-collapse: collapse;
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        .asis03-legend td {
+            width: 33.333%;
+            padding: 1px 3px;
+            vertical-align: middle;
+            font-size: 7px;
+        }
+
+        .asis03-legend img {
+            width: 10px;
+            height: 10px;
+            vertical-align: middle;
+            margin-right: 3px;
+        }
+
+
+        /* BEXIA_RRHH_ASIS03_FIX04 */
+
+        table.detail thead tr.asis03-sizing th {
+            height: 0 !important;
+            line-height: 0 !important;
+            font-size: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            background: transparent !important;
+        }
+
+        table.detail thead tr.asis03-sizing {
+            height: 0 !important;
+        }
+
+        table.detail td:nth-child(2) {
+            word-wrap: break-word;
+            overflow-wrap: normal;
+        }
+
 </style>
 </head>
 
 <body>
+    {{-- BEXIA_RRHH_ASIS03_LEGEND --}}
+    <div class="asis03-footer">
+        <strong>Simbolog&iacute;a de estados</strong>
+
+        <table class="asis03-legend">
+            @foreach (array_chunk(\App\Support\AttendanceReportStatusPresentation::all(), 3, true) as $legendRow)
+                <tr>
+                    @foreach ($legendRow as $statusKey => $statusInfo)
+                        <td>
+                            <img
+                                src="{{ \App\Support\AttendanceReportStatusPresentation::image($statusKey) }}"
+                                alt=""
+                            >
+                            {{ $statusInfo['label'] }}
+                        </td>
+                    @endforeach
+                </tr>
+            @endforeach
+        </table>
+
+        <div style="font-size:6px;">
+            Horarios: real / te&oacute;rico.
+            Comida: minutos consumidos / permitidos.
+        </div>
+    </div>
     <h1>Bexia ERP - Reporte de asistencia</h1>
 
     <div class="muted">
@@ -214,35 +304,79 @@
     </div>
 
     <table class="detail">
+        <colgroup>
+            <col style="width:5.5%;">
+            <col style="width:12%;">
+            <col style="width:6.5%;">
+            <col style="width:7%;">
+            <col style="width:3.5%;">
+            <col style="width:6.5%;">
+            <col style="width:6%;">
+            <col style="width:6.5%;">
+            <col style="width:4%;">
+            <col style="width:4%;">
+            <col style="width:4.5%;">
+            <col style="width:5%;">
+            <col style="width:4.5%;">
+            <col style="width:3%;">
+            <col style="width:5%;">
+            <col style="width:5%;">
+            <col style="width:3%;">
+            <col style="width:3%;">
+            <col style="width:2.5%;">
+            <col style="width:3%;">
+        </colgroup>
         <thead>
+            <tr class="asis03-sizing">
+                <th style="width:5.5%;"></th>
+                <th style="width:12%;"></th>
+                <th style="width:6.5%;"></th>
+                <th style="width:7%;"></th>
+                <th style="width:3.5%;"></th>
+                <th style="width:6.5%;"></th>
+                <th style="width:6%;"></th>
+                <th style="width:6.5%;"></th>
+                <th style="width:4%;"></th>
+                <th style="width:4%;"></th>
+                <th style="width:4.5%;"></th>
+                <th style="width:5%;"></th>
+                <th style="width:4.5%;"></th>
+                <th style="width:3%;"></th>
+                <th style="width:5%;"></th>
+                <th style="width:5%;"></th>
+                <th style="width:3%;"></th>
+                <th style="width:3%;"></th>
+                <th style="width:2.5%;"></th>
+                <th style="width:3%;"></th>
+            </tr>
             <tr>
                 <th colspan="10">Datos de asistencia</th>
                 <th colspan="6">Incidencias</th>
                 <th colspan="4">Resolución</th>
             </tr>
             <tr>
-                <th>Fecha</th>
-                <th>Empleado</th>
-                <th>Depto.</th>
-                <th>Puesto</th>
-                <th>Estado</th>
-                <th>Entrada</th>
-                <th>Comida (min)</th>
-                <th>Salida</th>
-                <th>Horas</th>
-                <th>Extra</th>
+                <th style="width:5.5%;">Fecha</th>
+                <th style="width:12%;">Nombre</th>
+                <th style="width:6.5%;">Depto.</th>
+                <th style="width:7%;">Puesto</th>
+                <th class="center" style="width:3.5%;">Estado</th>
+                <th style="width:6.5%;">Entrada</th>
+                <th style="width:6%;">Comida (min)</th>
+                <th style="width:6.5%;">Salida</th>
+                <th style="width:4%;">Horas</th>
+                <th style="width:4%;">Extra</th>
 
-                <th>Retardo</th>
-                <th>Comida exc.</th>
-                <th>Salida antes</th>
-                <th>Falta</th>
-                <th>Jornada inc.</th>
-                <th>Marcaje inc.</th>
+                <th style="width:4.5%;">Retardo</th>
+                <th style="width:5%;">Comida exc.</th>
+                <th style="width:4.5%;">Salida antes</th>
+                <th style="width:3%;">Falta</th>
+                <th style="width:5%;">Jornada inc.</th>
+                <th style="width:5%;">Marcaje inc.</th>
 
-                <th>Total</th>
-                <th>Aprob.</th>
-                <th>Rech.</th>
-                <th>Pend.</th>
+                <th style="width:3%;">Total</th>
+                <th style="width:3%;">Aprob.</th>
+                <th style="width:2.5%;">Rech.</th>
+                <th style="width:3%;">Pend.</th>
             </tr>
         </thead>
 
@@ -348,8 +482,12 @@
 
                     <td>{{ $row->position_name ?: '—' }}</td>
 
-                    <td>
-                        {{ \App\Support\EmployeeAttendanceReportService::statusLabel($row->status) }}
+                    {{-- BEXIA_RRHH_ASIS03_STATUS --}}
+                    <td class="asis03-status-cell">
+                        <img
+                            src="{{ \App\Support\AttendanceReportStatusPresentation::image($row->status) }}"
+                            alt="{{ \App\Support\AttendanceReportStatusPresentation::label($row->status) }}"
+                        >
                     </td>
 
                     {{-- BEXIA_RRHH_ASIS02 --}}
