@@ -66,15 +66,11 @@ class EmployeeAttendanceReportService
             return collect();
         }
 
-        return DB::table('employee_attendances as a')
+        $rows = DB::table('employee_attendances as a')
             ->leftJoin('employees as e', 'e.id', '=', 'a.employee_id')
             ->leftJoin('hr_departments as d', 'd.id', '=', 'e.hr_department_id')
             ->leftJoin('hr_job_positions as p', 'p.id', '=', 'e.hr_job_position_id')
             ->leftJoin('hr_work_schedules as s', 's.id', '=', 'a.hr_work_schedule_id')
-            ->leftJoin('employee_attendance_breaks as b', function ($join): void {
-                $join->on('b.employee_attendance_id', '=', 'a.id')
-                    ->where('b.break_type', '=', 'meal');
-            })
             ->where('a.company_id', $filters['company_id'])
             ->whereDate('a.attendance_date', '>=', $filters['from'])
             ->whereDate('a.attendance_date', '<=', $filters['to'])
@@ -122,10 +118,10 @@ class EmployeeAttendanceReportService
                 'a.clock_out_at',
                 'a.clock_in_photo_path',
                 'a.clock_out_photo_path',
-                'b.started_at as meal_out_at',
-                'b.ended_at as meal_in_at',
-                'b.start_photo_path as meal_out_photo_path',
-                'b.end_photo_path as meal_in_photo_path',
+                'a.company_id',
+                'a.break_minutes',
+                'a.break_sessions_allowed',
+                's.schedule_type',
                 'a.expected_hours',
                 'a.worked_hours',
                 'a.worked_minutes',
@@ -136,6 +132,129 @@ class EmployeeAttendanceReportService
                 'a.notes',
             ])
             ->get();
+
+        return static::attachMealSummary(
+            $rows,
+            (int) $filters['company_id']
+        );
+    }
+
+    /**
+     * BEXIA RRHH ASIS02
+     * Una consulta de comidas por conjunto de asistencias.
+     * No modifica marcajes ni incidencias.
+     */
+    protected static function attachMealSummary(
+        Collection $rows,
+        int $companyId
+    ): Collection {
+        if ($rows->isEmpty()) {
+            return $rows;
+        }
+
+        $attendanceIds = $rows->pluck('id')
+            ->unique()
+            ->values()
+            ->all();
+
+        $breaks = DB::table('employee_attendance_breaks')
+            ->where('company_id', $companyId)
+            ->whereIn('employee_attendance_id', $attendanceIds)
+            ->where('break_type', 'meal')
+            ->orderBy('started_at')
+            ->orderBy('id')
+            ->get([
+                'id',
+                'employee_attendance_id',
+                'started_at',
+                'ended_at',
+                'start_photo_path',
+                'end_photo_path',
+            ])
+            ->groupBy('employee_attendance_id');
+
+        return $rows->map(function ($row) use ($breaks) {
+            $sessions = $breaks->get($row->id, collect());
+            $first = $sessions->first();
+            $row->meal_sessions = $sessions->values();
+
+            $row->meal_has_evidence = $sessions->contains(
+                fn ($session) => filled($session->start_photo_path)
+                    || filled($session->end_photo_path)
+            );
+
+            // Conservar compatibilidad con evidencias y exportacion.
+            $row->meal_out_at = $first?->started_at;
+            $row->meal_in_at = $first?->ended_at;
+            $row->meal_out_photo_path = $first?->start_photo_path;
+            $row->meal_in_photo_path = $first?->end_photo_path;
+
+            $meal = static::summarizeMealSessions(
+                $sessions,
+                (int) ($row->break_minutes ?? 0),
+                (string) ($row->schedule_type ?? '')
+            );
+
+            foreach ($meal as $key => $value) {
+                $row->{$key} = $value;
+            }
+
+            return $row;
+        });
+    }
+
+    public static function summarizeMealSessions(
+        iterable $sessions,
+        int $allowedMinutes,
+        string $scheduleType
+    ): array {
+        $used = 0;
+        $count = 0;
+        $incomplete = 0;
+
+        foreach ($sessions as $session) {
+            $count++;
+
+            if (! $session->started_at || ! $session->ended_at) {
+                $incomplete++;
+                continue;
+            }
+
+            try {
+                $start = \Carbon\Carbon::parse($session->started_at);
+                $end = \Carbon\Carbon::parse($session->ended_at);
+
+                if ($end->lessThan($start)) {
+                    $incomplete++;
+                    continue;
+                }
+
+                $used += static::mealMinutes(
+                    $session->started_at,
+                    $session->ended_at
+                );
+            } catch (\Throwable) {
+                $incomplete++;
+            }
+        }
+
+        $allowed = max(0, $allowedMinutes);
+        $flexible = $scheduleType === 'flexible';
+        $hasLimit = ! $flexible && $allowed > 0;
+
+        return [
+            'meal_used_minutes' => $used,
+            'meal_allowed_minutes' => $allowed,
+            'meal_session_count' => $count,
+            'meal_incomplete_count' => $incomplete,
+            'meal_has_limit' => $hasLimit,
+            'meal_excess_minutes' => $hasLimit
+                ? max(0, $used - $allowed)
+                : 0,
+            'meal_display' => $used . ' / '
+                . ($flexible ? 'Libre' : $allowed)
+                . ' min',
+        ];
     }
 
 
@@ -302,7 +421,24 @@ class EmployeeAttendanceReportService
             }
         }
 
+        $attendanceById = $rows->keyBy('id');
+
         foreach ($result as $attendanceId => &$row) {
+            $attendance = $attendanceById->get($attendanceId);
+
+            if ($attendance) {
+                $row['comida_excedida_calculada'] =
+                    (int) ($attendance->meal_excess_minutes ?? 0);
+
+                if ((int) ($attendance->meal_incomplete_count ?? 0) > 0) {
+                    $previous = $row['marcaje_incompleto'];
+
+                    $row['marcaje_incompleto'] =
+                        ($previous === '—' ? '' : $previous . ' / ')
+                        . 'Comida incompleta';
+                }
+            }
+
             if ($row['retardo'] > 0) {
                 $row['retardo_label'] =
                     (int) round($row['retardo'])
@@ -752,7 +888,7 @@ class EmployeeAttendanceReportService
                 static::timeOnly($row->clock_in_at),
                 static::timeOnly($row->meal_out_at),
                 static::timeOnly($row->meal_in_at),
-                static::mealMinutes($row->meal_out_at, $row->meal_in_at),
+                (int) ($row->meal_used_minutes ?? 0),
                 static::timeOnly($row->expected_end_at),
                 static::timeOnly($row->clock_out_at),
                 (float) ($row->expected_hours ?? 0),
