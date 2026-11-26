@@ -103,7 +103,7 @@ class AdminPanelProvider extends PanelProvider
             )
             ->pages([
                 \App\Filament\Pages\SystemOperationLogs::class,
-                Pages\Dashboard::class,
+                \App\Filament\Pages\Dashboard::class,
             ])
             ->discoverResources(
                 in: app_path('Filament/Resources'),
