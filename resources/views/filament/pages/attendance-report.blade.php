@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    {{-- BEXIA_RRHH_ASIS04_NO_EVIDENCE --}}
     @php
         $rows = $this->rows();
         $summary = \App\Support\EmployeeAttendanceReportService::summary($rows);
@@ -19,38 +20,82 @@
 
     <div
         class="space-y-6"
-        x-data="{
-            photoOpen: false,
-            photoUrl: '',
-            photoTitle: '',
-            openPhoto(url, title) {
-                this.photoUrl = url;
-                this.photoTitle = title;
-                this.photoOpen = true;
-            },
-            closePhoto() {
-                this.photoOpen = false;
-                this.photoUrl = '';
-                this.photoTitle = '';
+        x-data="{}"
+        x-on:keydown.window.capture="
+            if ($refs.asis04Loading &&
+                getComputedStyle($refs.asis04Loading).display !== 'none' &&
+                ['Tab', 'Enter', ' '].includes($event.key)) {
+                $event.preventDefault();
+                $event.stopImmediatePropagation();
             }
-        }"
-        x-on:keydown.escape.window="closePhoto()"
+        "
     >
+        {{-- BEXIA_RRHH_ASIS04_LOADING --}}
+        <div
+            x-ref="asis04Loading"
+            wire:loading.flex
+            wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            style="display:none;position:fixed;inset:0;z-index:99999;
+                   align-items:center;justify-content:center;
+                   background:rgba(15,23,42,.38);
+                   cursor:wait;padding:16px;"
+        >
+            <div
+                class="rounded-2xl border border-gray-200 bg-white
+                       shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+                style="width:100%;max-width:400px;padding:30px;
+                       text-align:center;"
+            >
+                <svg
+                    class="animate-spin text-primary-600"
+                    style="width:42px;height:42px;margin:0 auto 16px;"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                >
+                    <circle cx="12" cy="12" r="9"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        opacity=".20"/>
+                    <path d="M12 3a9 9 0 0 1 9 9"
+                        stroke="currentColor"
+                        stroke-width="3"
+                        stroke-linecap="round"/>
+                </svg>
+
+                <div class="text-lg font-semibold text-gray-900 dark:text-white">
+                    Actualizando reporte...
+                </div>
+
+                <div class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    Procesando informacion de asistencias.
+                </div>
+
+                <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Los controles se habilitaran al finalizar.
+                </div>
+            </div>
+        </div>
+        {{-- BEXIA_RRHH_ASIS04_LOADING_END --}}
+
         <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div class="grid gap-4 md:grid-cols-5">
                 <div>
                     <label class="text-sm font-medium text-gray-700 dark:text-gray-200">Desde</label>
-                    <input type="date" wire:model.live="from" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                    <input type="date" wire:model.live="from" wire:loading.attr="disabled" wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
                 </div>
 
                 <div>
                     <label class="text-sm font-medium text-gray-700 dark:text-gray-200">Hasta</label>
-                    <input type="date" wire:model.live="to" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                    <input type="date" wire:model.live="to" wire:loading.attr="disabled" wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
                 </div>
 
                 <div>
                     <label class="text-sm font-medium text-gray-700 dark:text-gray-200">Departamento</label>
-                    <select wire:model.live="department_id" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                    <select wire:model.live="department_id" wire:loading.attr="disabled" wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
                         <option value="">Todos</option>
                         @foreach ($this->departmentOptions() as $id => $name)
                             <option value="{{ $id }}">{{ $name }}</option>
@@ -60,7 +105,7 @@
 
                 <div>
                     <label class="text-sm font-medium text-gray-700 dark:text-gray-200">Estado</label>
-                    <select wire:model.live="status" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                    <select wire:model.live="status" wire:loading.attr="disabled" wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping" class="mt-1 w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800">
                         <option value="">Todos</option>
                         @foreach ($this->statusOptions() as $value => $label)
                             <option value="{{ $value }}">{{ $label }}</option>
@@ -84,6 +129,8 @@
                         <button
                             type="button"
                             x-on:click="keyOnly = ! keyOnly"
+                                        wire:loading.attr="disabled"
+                                        wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping"
                             class="inline-flex items-center gap-3 text-left"
                             x-bind:aria-pressed="keyOnly ? 'true' : 'false'"
                         >
@@ -161,6 +208,19 @@
                             class="w-full rounded-lg border-gray-300 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800"
                         >
 
+
+                        {{-- BEXIA_RRHH_ASIS04_SEARCH --}}
+                        <div
+                            wire:loading.block
+                            wire:target="employee_search"
+                            role="status"
+                            aria-live="polite"
+                            class="mt-2 text-xs text-gray-500 dark:text-gray-400"
+                            style="display:none;"
+                        >
+                            Buscando empleados...
+                        </div>
+
                         @if (
                             mb_strlen(trim($employee_search ?? '')) >= 2
                             && count($employeeSearchOptions) > 0
@@ -173,6 +233,8 @@
                                     <button
                                         type="button"
                                         wire:click="addEmployee({{ (int) $employee['id'] }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping"
                                         class="block w-full border-b border-gray-100 px-4 py-3 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800"
                                     >
                                         <div class="text-sm font-semibold text-gray-900 dark:text-white">
@@ -217,6 +279,8 @@
                                 <button
                                     type="button"
                                     wire:click="removeEmployee({{ (int) $employee['id'] }})"
+                                        wire:loading.attr="disabled"
+                                        wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping"
                                     class="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-950 dark:text-primary-300"
                                     title="Quitar {{ $employee['name'] }}"
                                 >
@@ -255,6 +319,8 @@
                     <button
                         type="button"
                         wire:click="clearFilters"
+                                        wire:loading.attr="disabled"
+                                        wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping"
                         class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                     >
                         Limpiar filtros
@@ -327,6 +393,8 @@
                     <button
                         type="button"
                         wire:click="setGrouping('day')"
+                                        wire:loading.attr="disabled"
+                                        wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping"
                         aria-pressed="{{ $group_by === 'day' ? 'true' : 'false' }}"
                         class="rounded-lg border px-3 py-1.5 font-medium transition"
                         style="{{ $group_by === 'day'
@@ -340,6 +408,8 @@
                     <button
                         type="button"
                         wire:click="setGrouping('employee')"
+                                        wire:loading.attr="disabled"
+                                        wire:target="from,to,department_id,status,only_key_personnel,employee_ids,group_by,addEmployee,removeEmployee,clearFilters,setGrouping"
                         aria-pressed="{{ $group_by === 'employee' ? 'true' : 'false' }}"
                         class="rounded-lg border px-3 py-1.5 font-medium transition"
                         style="{{ $group_by === 'employee'
@@ -376,9 +446,6 @@
                                 Resolución
                             </th>
 
-                            <th colspan="1" class="border-l border-gray-200 px-4 py-2 text-center font-semibold dark:border-gray-700">
-                                Evidencia
-                            </th>
                         </tr>
 <tr>
                             <th class="px-4 py-3 text-left font-semibold">Fecha</th>
@@ -401,7 +468,6 @@
                             <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Aprobadas</th>
                             <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Rechazadas</th>
                             <th class="px-3 py-3 text-center font-semibold whitespace-nowrap">Pendientes</th>
-                            <th class="px-4 py-3 text-center font-semibold">Evidencia</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -412,7 +478,7 @@
                             @if ($group_by === 'employee' && $previousEmployeeId !== (int) $row->employee_id)
                                 <tr style="background-color: #e5e7eb;">
                                     <td
-                                        colspan="21"
+                                        colspan="20"
                                         class="px-4 py-3 text-sm font-semibold"
                                         style="background-color: #e5e7eb; color: #111827;"
                                     >
@@ -629,71 +695,11 @@
                                     </span>
                                 </td>
 
-                                <td class="px-4 py-3 text-center">
-                                    <div class="flex flex-wrap justify-center gap-2">
-                                        @if ($row->clock_in_photo_path)
-                                            <button
-                                                type="button"
-                                                class="rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-500"
-                                                x-on:click='openPhoto(
-                                                    @js($this->attendancePhotoUrl((int) $row->id, "in")),
-                                                    @js("Entrada · " . ($row->employee_name ?: "Empleado") . " · " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($row->clock_in_at))
-                                                )'
-                                            >
-                                                Entrada
-                                            </button>
-                                        @endif
 
-                                        @foreach ($row->meal_sessions as $mealSession)
-                                            @if ($mealSession->start_photo_path)
-                                                <button
-                                                    type="button"
-                                                    class="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500"
-                                                    x-on:click='openPhoto(
-                                                        @js($this->attendancePhotoUrl((int) $row->id, "meal_out", (int) $mealSession->id)),
-                                                        @js("Salida comida " . $loop->iteration . " - " . $row->employee_name . " - " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($mealSession->started_at))
-                                                    )'
-                                                >
-                                                    Comida {{ $loop->iteration }} Sal.
-                                                </button>
-                                            @endif
-
-                                            @if ($mealSession->end_photo_path)
-                                                <button
-                                                    type="button"
-                                                    class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
-                                                    x-on:click='openPhoto(
-                                                        @js($this->attendancePhotoUrl((int) $row->id, "meal_in", (int) $mealSession->id)),
-                                                        @js("Regreso comida " . $loop->iteration . " - " . $row->employee_name . " - " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($mealSession->ended_at))
-                                                    )'
-                                                >
-                                                    Comida {{ $loop->iteration }} Reg.
-                                                </button>
-                                            @endif
-                                        @endforeach
-
-                                        @if ($row->clock_out_photo_path)
-                                            <button
-                                                type="button"
-                                                class="rounded-lg bg-gray-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-600"
-                                                x-on:click='openPhoto(
-                                                    @js($this->attendancePhotoUrl((int) $row->id, "out")),
-                                                    @js("Salida · " . ($row->employee_name ?: "Empleado") . " · " . $this->dateOnly($row->attendance_date) . " " . $this->timeOnly($row->clock_out_at))
-                                                )'
-                                            >
-                                                Salida
-                                            </button>
-                                        @endif
-
-                                        @if (! $row->clock_in_photo_path && ! $row->meal_has_evidence && ! $row->clock_out_photo_path)
-                                            <span class="text-xs text-gray-400">—</span>
-                                        @endif
-                                    </div>
-                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="21" class="px-4 py-8 text-center text-gray-500">
+                                <td colspan="20" class="px-4 py-8 text-center text-gray-500">
                                     No hay asistencias para los filtros seleccionados.
                                 </td>
                             </tr>
@@ -727,37 +733,5 @@
             </div>
         </div>
 
-        <div
-            x-cloak
-            x-show="photoOpen"
-            x-transition.opacity
-            class="fixed inset-0 z-[150] flex items-center justify-center bg-black/70 p-4"
-            x-on:click.self="closePhoto()"
-        >
-            <div class="relative max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
-                <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
-                    <div
-                        class="pr-4 text-sm font-semibold text-gray-950 dark:text-white"
-                        x-text="photoTitle"
-                    ></div>
-
-                    <button
-                        type="button"
-                        class="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                        x-on:click="closePhoto()"
-                    >
-                        Cerrar
-                    </button>
-                </div>
-
-                <div class="flex max-h-[80vh] items-center justify-center overflow-auto bg-gray-100 p-4 dark:bg-black">
-                    <img
-                        x-bind:src="photoUrl"
-                        x-bind:alt="photoTitle"
-                        class="max-h-[75vh] max-w-full rounded-lg object-contain shadow"
-                    >
-                </div>
-            </div>
-        </div>
     </div>
 </x-filament-panels::page>
