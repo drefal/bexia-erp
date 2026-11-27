@@ -57,6 +57,27 @@ class AttendanceKioskClockController extends Controller
             ], 403);
         }
 
+        /*
+         * RRHH-SEG01:
+         * Las terminales de Seguridad son de consulta.
+         * No pueden registrar ni previsualizar asistencia
+         * mediante el servicio del kiosco.
+         */
+        if (
+            data_get(
+                $terminal->settings,
+                'terminal_type',
+                'attendance'
+            ) === 'security'
+        ) {
+            return response()->json([
+                'ok' => false,
+                'code' => 'security_terminal_clock_forbidden',
+                'message' =>
+                    'Esta terminal es exclusiva de Seguridad.',
+            ], 403);
+        }
+
         $action = strtolower(
             trim((string) ($data['action'] ?? 'preview'))
         );
@@ -116,6 +137,24 @@ class AttendanceKioskClockController extends Controller
                 'code' => 'clock_error',
                 'message' => 'No fue posible registrar la asistencia. Intenta nuevamente.',
             ], 500);
+        }
+
+        /*
+         * RRHH-SEG01: notificar solamente entradas
+         * registradas correctamente.
+         */
+        if (($result['direction'] ?? null) === 'clock_in') {
+            try {
+                app(
+                    \App\Support\Attendance\AttendanceRealtimePublisher::class
+                )->publishEntry($terminal);
+            } catch (\Throwable $e) {
+                try {
+                    report($e);
+                } catch (\Throwable) {
+                    // El marcaje ya fue guardado.
+                }
+            }
         }
 
         return response()->json(array_merge([
