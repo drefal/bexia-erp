@@ -738,6 +738,19 @@ Route::get(
 )->middleware('throttle:30,1')
   ->name('attendance.security.entries');
 
+// BEXIA_RRHH_SEG05_PRIVATE_PHOTO
+Route::get(
+    '/asistencia/seguridad/entradas/{attendance}/foto',
+    [
+        \App\Http\Controllers\Attendance\AttendanceSecurityMonitorController::class,
+        'entryPhoto',
+    ]
+)
+    ->whereNumber('attendance')
+    ->middleware('throttle:60,1,seg05-photos:')
+    ->name('attendance.security.entry-photo');
+
+
 Route::post(
     '/asistencia/seguridad/realtime/auth',
     [

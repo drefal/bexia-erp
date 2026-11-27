@@ -175,6 +175,133 @@ input {
     .access-counter strong { font-size: 23px; }
     .entry .tag { max-width: 96px; }
 }
+
+/* BEXIA_RRHH_SEG05_COMPARISON */
+.comparison {
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-left: 6px solid #94a3b8;
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+}
+.comparison[hidden] {
+    display: none !important;
+}
+.comparison.access-authorized {
+    border-left-color: #16a34a;
+    background: #f0fdf4;
+}
+.comparison.access-hold,
+.comparison.access-denied {
+    border-left-color: #dc2626;
+    background: #fef2f2;
+}
+.comparison.access-review {
+    border-left-color: #d97706;
+    background: #fffbeb;
+}
+.comparison-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: 8px;
+}
+.comparison-name {
+    text-align: center;
+    font-size: 26px;
+    font-weight: 800;
+    margin-bottom: 5px;
+}
+.comparison-meta {
+    text-align: center;
+    font-size: 14px;
+    color: #475569;
+}
+.comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 14px;
+    margin: 15px 0;
+}
+.comparison-photo {
+    min-width: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: white;
+    overflow: hidden;
+}
+.comparison-label {
+    background: #334155;
+    color: white;
+    padding: 10px 5px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+}
+.comparison-image {
+    width: 100%;
+    height: clamp(150px, 32vw, 340px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e2e8f0;
+    overflow: hidden;
+    position: relative;
+}
+.comparison-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+.comparison-image img[hidden],
+.comparison-image span[hidden] {
+    display: none !important;
+}
+.comparison-image span {
+    text-align: center;
+    padding: 10px;
+    font-size: 13px;
+    color: #475569;
+}
+.comparison .tag {
+    font-size: 20px;
+    padding: 12px;
+}
+.comparison .access-reason {
+    text-align: center;
+}
+.comparison-select {
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: white;
+    padding: 7px 10px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+}
+.comparison-select:hover {
+    background: #e2e8f0;
+}
+@media(max-width:600px) {
+    .comparison {
+        padding: 12px;
+    }
+    .comparison-grid {
+        gap: 7px;
+    }
+    .comparison-name {
+        font-size: 21px;
+    }
+    .comparison-label {
+        font-size: 11px;
+    }
+    .entry {
+        flex-wrap: wrap;
+    }
+}
+
 </style>
 </head>
 <body>
@@ -210,6 +337,48 @@ input {
                     style="color:#b45309">0</strong>
             <span>Revisar / Sin evaluar</span>
         </div>
+    </section>
+
+
+    <section id="comparison"
+             class="comparison"
+             aria-label="Comparacion fotografica"
+             hidden>
+        <div class="comparison-title" id="comparison-title">
+            ULTIMO REGISTRO DE ENTRADA
+        </div>
+        <div class="comparison-name" id="comparison-name"></div>
+        <div class="comparison-meta" id="comparison-meta"></div>
+        <div class="comparison-grid">
+            <div class="comparison-photo">
+                <div class="comparison-label">
+                    FOTO DE EXPEDIENTE
+                </div>
+                <div class="comparison-image">
+                    <span id="comparison-avatar-message">
+                        Sin fotografia de expediente
+                    </span>
+                    <img id="comparison-avatar"
+                         alt="Fotografia de expediente"
+                         hidden>
+                </div>
+            </div>
+            <div class="comparison-photo">
+                <div class="comparison-label">
+                    FOTO DEL MARCAJE
+                </div>
+                <div class="comparison-image">
+                    <span id="comparison-entry-message">
+                        Sin fotografia de marcaje
+                    </span>
+                    <img id="comparison-entry"
+                         alt="Fotografia del marcaje"
+                         hidden>
+                </div>
+            </div>
+        </div>
+        <div class="tag" id="comparison-tag"></div>
+        <div class="access-reason" id="comparison-reason"></div>
     </section>
 
     <div class="toolbar">
@@ -597,7 +766,309 @@ input {
         ) ? value : 'review';
     }
 
+
+    // BEXIA_RRHH_SEG05_COMPARISON_START
+    const comparisonEl =
+        document.getElementById('comparison');
+
+    let comparisonSelected = null;
+    let comparisonLatest = null;
+    let comparisonKey = null;
+    let comparisonSequence = 0;
+    let comparisonAbort = null;
+    let comparisonObjectUrl = null;
+
+    function clearComparisonPhotos() {
+        comparisonSequence++;
+        comparisonKey = null;
+
+        if (comparisonAbort) {
+            comparisonAbort.abort();
+            comparisonAbort = null;
+        }
+
+        for (const id of [
+            'comparison-avatar',
+            'comparison-entry'
+        ]) {
+            const img = document.getElementById(id);
+
+            img.onload = null;
+            img.onerror = null;
+            img.hidden = true;
+            img.removeAttribute('src');
+        }
+
+        if (comparisonObjectUrl) {
+            URL.revokeObjectURL(comparisonObjectUrl);
+            comparisonObjectUrl = null;
+        }
+    }
+
+    function comparisonImage(
+        id,
+        messageId,
+        url,
+        sequence,
+        missing
+    ) {
+        const previous = document.getElementById(id);
+        const img = previous.cloneNode(false);
+
+        img.removeAttribute('src');
+        previous.replaceWith(img);
+
+        const message = document.getElementById(messageId);
+
+        img.hidden = true;
+        message.hidden = false;
+
+        if (!url) {
+            message.textContent = missing;
+            return;
+        }
+
+        message.textContent = 'Cargando fotografia...';
+
+        img.onload = () => {
+            if (sequence !== comparisonSequence) return;
+
+            img.hidden = false;
+            message.hidden = true;
+        };
+
+        img.onerror = () => {
+            if (sequence !== comparisonSequence) return;
+
+            img.hidden = true;
+            message.hidden = false;
+            message.textContent = missing;
+            comparisonKey = null;
+        };
+
+        img.src = url;
+    }
+
+    async function loadComparisonEntry(row, sequence) {
+        const message = document.getElementById(
+            'comparison-entry-message'
+        );
+
+        message.hidden = false;
+
+        if (!row.has_entry_photo) {
+            message.textContent = 'Sin fotografia de marcaje';
+            return;
+        }
+
+        message.textContent = 'Cargando fotografia...';
+
+        const controller = new AbortController();
+        comparisonAbort = controller;
+
+        const timeout = setTimeout(
+            () => controller.abort(),
+            10000
+        );
+
+        try {
+            const {uuid, token} = credentials();
+
+            if (!uuid || !token) {
+                throw new Error('Missing credentials');
+            }
+
+            const id = String(row.id);
+
+            if (!/^\d+$/.test(id)) {
+                throw new Error('Invalid record');
+            }
+
+            const response = await fetch(
+                '/asistencia/seguridad/entradas/'
+                    + encodeURIComponent(id) + '/foto',
+                {
+                    headers: {
+                        'Accept': 'image/jpeg,image/png,image/webp',
+                        'X-Bexia-Terminal-UUID': uuid,
+                        'Authorization': `Bearer ${token}`
+                    },
+                    cache: 'no-store',
+                    credentials: 'same-origin',
+                    redirect: 'error',
+                    signal: controller.signal
+                }
+            );
+
+            if (sequence !== comparisonSequence) return;
+
+            if ([401, 403].includes(response.status)) {
+                rows = [];
+                terminalDenied = true;
+                stopRealtime();
+                render();
+
+                connectionState(
+                    'Terminal no autorizada',
+                    '#dc2626'
+                );
+
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Photo unavailable');
+            }
+
+            const blob = await response.blob();
+
+            if (sequence !== comparisonSequence) return;
+
+            if (
+                !['image/jpeg','image/png','image/webp']
+                    .includes(blob.type)
+            ) {
+                throw new Error('Invalid photo');
+            }
+
+            comparisonObjectUrl = URL.createObjectURL(blob);
+
+            comparisonImage(
+                'comparison-entry',
+                'comparison-entry-message',
+                comparisonObjectUrl,
+                sequence,
+                'Fotografia de marcaje no disponible'
+            );
+
+        } catch (_) {
+            if (sequence !== comparisonSequence) return;
+
+            message.textContent =
+                'Fotografia de marcaje no disponible';
+
+            comparisonKey = null;
+
+        } finally {
+            clearTimeout(timeout);
+
+            if (comparisonAbort === controller) {
+                comparisonAbort = null;
+            }
+        }
+    }
+
+    function renderComparison() {
+        if (rows.length === 0) {
+            clearComparisonPhotos();
+
+            comparisonKey = null;
+            comparisonLatest = null;
+            comparisonSelected = null;
+            comparisonEl.hidden = true;
+
+            return;
+        }
+
+        const latest = String(rows[0].id);
+
+        if (latest !== comparisonLatest) {
+            comparisonLatest = latest;
+            comparisonSelected = latest;
+        }
+
+        const row = rows.find(
+            item => String(item.id) === comparisonSelected
+        ) || rows[0];
+
+        comparisonSelected = String(row.id);
+
+        const state = accessStatus(row);
+
+        comparisonEl.className =
+            'comparison access-' + state;
+
+        comparisonEl.hidden = false;
+
+        document.getElementById(
+            'comparison-title'
+        ).textContent = comparisonSelected === latest
+            ? 'ULTIMO REGISTRO DE ENTRADA'
+            : 'REGISTRO SELECCIONADO';
+
+        document.getElementById(
+            'comparison-name'
+        ).textContent = row.name || '';
+
+        document.getElementById(
+            'comparison-meta'
+        ).textContent = [
+            row.employee_number,
+            row.department,
+            row.clock_in
+        ].filter(Boolean).join(' · ');
+
+        document.getElementById(
+            'comparison-tag'
+        ).textContent = accessLabels[state];
+
+        document.getElementById(
+            'comparison-reason'
+        ).textContent =
+            row.access_reason || 'Verificar decision de acceso';
+
+        const key = JSON.stringify([
+            row.id,
+            row.photo,
+            row.has_entry_photo
+        ]);
+
+        if (comparisonKey === key) return;
+
+        clearComparisonPhotos();
+
+        comparisonKey = key;
+
+        const sequence = comparisonSequence;
+
+        let avatarUrl = null;
+
+        if (row.photo) {
+            try {
+                const url = new URL(
+                    row.photo,
+                    location.origin
+                );
+
+                if (
+                    url.origin === location.origin
+                    && ['http:', 'https:']
+                        .includes(url.protocol)
+                ) {
+                    avatarUrl = url.href;
+                }
+            } catch (_) {}
+        }
+
+        comparisonImage(
+            'comparison-avatar',
+            'comparison-avatar-message',
+            avatarUrl,
+            sequence,
+            'Sin fotografia de expediente'
+        );
+
+        loadComparisonEntry(row, sequence);
+    }
+
+    window.addEventListener(
+        'pagehide',
+        clearComparisonPhotos
+    );
+    // BEXIA_RRHH_SEG05_COMPARISON_END
+
     function render() {
+        renderComparison();
         entriesEl.replaceChildren();
 
         const counters = {
@@ -742,7 +1213,30 @@ input {
                 accessLabels[state]
             );
 
-            card.append(avatarWrap, info, tag);
+            const compareButton = element(
+                'button',
+                'comparison-select',
+                'Comparar fotos'
+            );
+
+            compareButton.type = 'button';
+
+            compareButton.addEventListener('click', () => {
+                comparisonSelected = String(row.id);
+                renderComparison();
+
+                comparisonEl.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            });
+
+            card.append(
+                avatarWrap,
+                info,
+                tag,
+                compareButton
+            );
             entriesEl.appendChild(card);
         });
     }
