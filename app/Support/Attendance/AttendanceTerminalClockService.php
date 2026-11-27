@@ -70,10 +70,21 @@ class AttendanceTerminalClockService
             ]);
         }
 
+        if (DB::transactionLevel() !== 0) {
+            throw new \RuntimeException(
+                'CLOCK_REQUIRES_OUTERMOST_TRANSACTION'
+            );
+        }
+
         $storedPhotoPath = null;
         $direction = null;
         $attendance = null;
         $clockedAt = null;
+        $transactionBodyCompleted = false;
+
+        $independentRecovery = false;
+
+        $incidentConnectionReady = true;
 
         try {
             DB::transaction(function () use (
@@ -87,7 +98,44 @@ class AttendanceTerminalClockService
                 &$direction,
                 &$attendance,
                 &$clockedAt,
+                &$transactionBodyCompleted,
             ): void {
+
+                // Laravel may retry the entire transaction.
+                // Remove evidence from the previous rolled
+                // back attempt before creating a new file.
+                if ($storedPhotoPath !== null) {
+
+                    $referenceState = $this->photoReferenceState(
+                        $storedPhotoPath
+                    );
+
+                    if ($referenceState !== false) {
+                        throw new \RuntimeException(
+                            'RETRY_PHOTO_STATE_UNCERTAIN'
+                        );
+                    }
+
+                    $disk = Storage::disk('local');
+
+                    if (
+                        $disk->exists($storedPhotoPath)
+                        && !$disk->delete($storedPhotoPath)
+                    ) {
+                        throw new \RuntimeException(
+                            'RETRY_PHOTO_CLEANUP_FAILED'
+                        );
+                    }
+
+                    $storedPhotoPath = null;
+                }
+
+                $transactionBodyCompleted = false;
+
+                $direction = null;
+                $attendance = null;
+                $clockedAt = null;
+
                 // Bloquea al empleado para serializar dos lecturas simultaneas del mismo QR.
                 Employee::query()
                     ->whereKey($employee->getKey())
@@ -299,6 +347,17 @@ class AttendanceTerminalClockService
                     }
 
                     $attendance->save();
+
+                    // RRHH-SEG02:
+                    // Evaluate only the first daily entry.
+                    // Attendance remains independent of
+                    // the access decision.
+                    if ($direction === 'clock_in') {
+                        AttendanceAccessClockIntegration::recordSafely(
+                            $attendance,
+                            $terminal
+                        );
+                    }
                 } elseif ($direction === 'meal_out') {
                     $mealBreak = new EmployeeAttendanceBreak();
 
@@ -360,17 +419,186 @@ class AttendanceTerminalClockService
                         ),
                         'updated_by_user_id' => null,
                     ])->save();
-                }            }, 3);
+                }
+
+                $transactionBodyCompleted = true;
+
+            }, 3);
+
         } catch (\Throwable $e) {
-            if ($storedPhotoPath) {
-                Storage::disk('local')->delete($storedPhotoPath);
+
+            // Laravel can throw after PostgreSQL commits.
+            // Never delete evidence merely because
+            // DB::transaction() returned an exception.
+
+            $recovered = false;
+
+            if ($storedPhotoPath !== null) {
+
+                try {
+
+                    if (
+                        DB::transactionLevel() === 0
+                        && !DB::connection()
+                            ->getPdo()
+                            ->inTransaction()
+                    ) {
+
+                        $referenced = $this->photoReferenceState(
+                            $storedPhotoPath
+                        );
+
+                        if ($referenced === true) {
+
+                            $persisted =
+                                $this->findCommittedAttendance(
+                                    $terminal,
+                                    $employee,
+                                    $attendance,
+                                    $direction,
+                                    $storedPhotoPath
+                                );
+
+                            if (
+                                $persisted
+                                && Storage::disk('local')
+                                    ->exists($storedPhotoPath)
+                            ) {
+
+                                $attendance = $persisted;
+
+                                $recovered = true;
+
+                                $this->warnEvidenceRecovery(
+                                    'committed_registration_recovered',
+                                    $e
+                                );
+                            }
+
+                            // Preserve referenced evidence
+                            // even when recovery cannot return
+                            // a successful response.
+
+                        } elseif (
+                            $referenced === false
+                            && !$transactionBodyCompleted
+                        ) {
+
+                            // The body failed before commit.
+                            // No database record references
+                            // this unique evidence path.
+
+                            $disk = Storage::disk('local');
+
+                            if (
+                                $disk->exists($storedPhotoPath)
+                                && !$disk->delete($storedPhotoPath)
+                            ) {
+
+                                $this->warnEvidenceRecovery(
+                                    'rollback_photo_cleanup_failed',
+                                    $e
+                                );
+                            }
+
+                        } else {
+
+                            // A completed transaction body
+                            // may have an uncertain commit.
+                            // Preserve the file for review.
+
+                            $this->warnEvidenceRecovery(
+                                'uncertain_commit_photo_preserved',
+                                $e
+                            );
+                        }
+
+                    } else {
+
+                        $this->warnEvidenceRecovery(
+                            'transaction_state_uncertain',
+                            $e
+                        );
+                    }
+
+                } catch (\Throwable $recoveryError) {
+
+                    // Do not mask the original error.
+                    // Do not delete evidence when the
+                    // database or storage is unavailable.
+
+                    $this->warnEvidenceRecovery(
+                        'evidence_recovery_failed',
+                        $recoveryError
+                    );
+                }
             }
 
-            throw $e;
+            if (
+                !$recovered
+                && $transactionBodyCompleted
+                && $storedPhotoPath !== null
+                && $attendance?->getKey()
+            ) {
+
+                try {
+
+                    $persisted =
+                        $this->findCommittedAttendanceIndependently(
+                            $terminal,
+                            $employee,
+                            $attendance,
+                            $direction,
+                            $storedPhotoPath
+                        );
+
+                    if (
+                        $persisted
+                        && Storage::disk('local')
+                            ->exists($storedPhotoPath)
+                    ) {
+
+                        $attendance = $persisted;
+
+                        $recovered = true;
+
+                        $independentRecovery = true;
+
+                        $this->warnEvidenceRecovery(
+                            'committed_registration_recovered_independently',
+                            $e
+                        );
+                    }
+
+                } catch (\Throwable $verificationError) {
+
+                    $this->warnEvidenceRecovery(
+                        'independent_commit_verification_failed',
+                        $verificationError
+                    );
+                }
+            }
+
+            if (!$recovered) {
+                throw $e;
+            }
+
+            if ($independentRecovery) {
+
+                // The exact persisted evidence proves
+                // that the original operation committed.
+                // Discard stale transaction bookkeeping.
+
+                $incidentConnectionReady =
+                    $this->restoreConnectionAfterVerifiedCommit(
+                        $attendance->getConnectionName()
+                    );
+            }
         }
 
         if (
-            in_array(
+            $incidentConnectionReady
+            && in_array(
                 $direction,
                 ['clock_in', 'meal_in', 'clock_out'],
                 true
@@ -380,7 +608,10 @@ class AttendanceTerminalClockService
             try {
                 EmployeeAttendanceIncidentSync::syncAll($attendance->fresh(), null, true);
             } catch (\Throwable $e) {
-                report($e);
+                $this->warnEvidenceRecovery(
+                    'incident_sync_failed',
+                    $e
+                );
 
                 try {
                     $attendance->forceFill([
@@ -390,7 +621,10 @@ class AttendanceTerminalClockService
                         ),
                     ])->save();
                 } catch (\Throwable $inner) {
-                    report($inner);
+                    $this->warnEvidenceRecovery(
+                        'incident_note_failed',
+                        $inner
+                    );
                 }
             }
         }
@@ -420,6 +654,375 @@ class AttendanceTerminalClockService
                 'branch_id' => $terminal->branch_id,
             ],
         ];
+    }
+
+    private function photoReferenceState(
+        string $path
+    ): ?bool {
+
+        try {
+
+            $attendanceReference =
+                DB::table('employee_attendances')
+                    ->useWritePdo()
+                    ->where(function ($query) use ($path) {
+
+                        $query
+                            ->where('clock_in_photo_path', $path)
+                            ->orWhere('clock_out_photo_path', $path);
+                    })
+                    ->exists();
+
+            if ($attendanceReference) {
+                return true;
+            }
+
+            return DB::table('employee_attendance_breaks')
+                ->useWritePdo()
+                ->where(function ($query) use ($path) {
+
+                    $query
+                        ->where('start_photo_path', $path)
+                        ->orWhere('end_photo_path', $path);
+                })
+                ->exists();
+
+        } catch (\Throwable $error) {
+
+            $this->warnEvidenceRecovery(
+                'photo_reference_check_failed',
+                $error
+            );
+
+            return null;
+        }
+    }
+
+    private function findCommittedAttendance(
+        AttendanceTerminal $terminal,
+        Employee $employee,
+        ?EmployeeAttendance $attendance,
+        ?string $direction,
+        string $path,
+        ?string $connectionName = null
+    ): ?EmployeeAttendance {
+
+        if (!$attendance?->getKey()) {
+            return null;
+        }
+
+        $model = new EmployeeAttendance();
+
+        if ($connectionName !== null) {
+
+            $model->setConnection($connectionName);
+        }
+
+        $persisted = $model->newQuery()
+            ->useWritePdo()
+            ->whereKey($attendance->getKey())
+            ->where('company_id', $terminal->company_id)
+            ->where('employee_id', $employee->getKey())
+            ->first();
+
+        if (!$persisted) {
+            return null;
+        }
+
+        if (
+            in_array(
+                $direction,
+                ['clock_in', 'clock_out'],
+                true
+            )
+        ) {
+
+            if (
+                $persisted->{$direction . '_photo_path'}
+                    === $path
+                && (int) $persisted->{
+                    $direction . '_attendance_terminal_id'
+                } === (int) $terminal->getKey()
+                && $persisted->{$direction . '_at'}
+                && $persisted->{$direction . '_method'}
+                    === 'terminal_qr'
+            ) {
+                return $persisted;
+            }
+
+            return null;
+        }
+
+        if (
+            in_array(
+                $direction,
+                ['meal_out', 'meal_in'],
+                true
+            )
+        ) {
+
+            $prefix = $direction === 'meal_out'
+                ? 'start'
+                : 'end';
+
+            $break = DB::connection($connectionName)
+                ->table('employee_attendance_breaks')
+                ->useWritePdo()
+                ->where(
+                    'employee_attendance_id',
+                    $persisted->getKey()
+                )
+                ->where(
+                    'company_id',
+                    $terminal->company_id
+                )
+                ->where('break_type', 'meal')
+                ->where($prefix . '_photo_path', $path)
+                ->where(
+                    $prefix . '_attendance_terminal_id',
+                    $terminal->getKey()
+                )
+                ->where($prefix . '_method', 'terminal_qr')
+                ->whereNotNull(
+                    $prefix === 'start'
+                        ? 'started_at'
+                        : 'ended_at'
+                )
+                ->first();
+
+            return $break ? $persisted : null;
+        }
+
+        return null;
+    }
+
+
+    private function findCommittedAttendanceIndependently(
+        AttendanceTerminal $terminal,
+        Employee $employee,
+        EmployeeAttendance $attendance,
+        ?string $direction,
+        string $path
+    ): ?EmployeeAttendance {
+
+        $originalName =
+            $attendance->getConnectionName()
+            ?? DB::getDefaultConnection();
+
+        $originalConfig = config(
+            'database.connections.' . $originalName
+        );
+
+        if (
+            !is_array($originalConfig)
+            || ($originalConfig['driver'] ?? null)
+                !== 'pgsql'
+        ) {
+
+            throw new \RuntimeException(
+                'INVALID_COMMIT_VERIFICATION_DRIVER'
+            );
+        }
+
+        $verificationName =
+            'attendance_commit_verify_'
+            . bin2hex(random_bytes(8));
+
+        $verificationConfig = $originalConfig;
+
+        // Use the configured primary writer.
+        // Do not verify against a read replica.
+
+        if (
+            isset($verificationConfig['write'])
+            && is_array($verificationConfig['write'])
+        ) {
+
+            $verificationConfig = array_replace(
+                $verificationConfig,
+                $verificationConfig['write']
+            );
+        }
+
+        unset(
+            $verificationConfig['read'],
+            $verificationConfig['write']
+        );
+
+        $verificationConfig['options'] =
+            $verificationConfig['options'] ?? [];
+
+        $verificationConfig['options'][
+            \PDO::ATTR_PERSISTENT
+        ] = false;
+
+        config([
+            'database.connections.'
+                . $verificationName =>
+                    $verificationConfig,
+        ]);
+
+        try {
+
+            $connection = DB::connection(
+                $verificationName
+            );
+
+            $connection->statement(
+                "SET statement_timeout = '3000ms'"
+            );
+
+            $connection->statement(
+                "SET lock_timeout = '1000ms'"
+            );
+
+            // This connection must never write
+            // operational attendance records.
+
+            $connection->statement(
+                "SET default_transaction_read_only = on"
+            );
+
+            $identity = $connection->selectOne("
+                SELECT current_setting(
+                    'transaction_read_only'
+                ) AS ro,
+                pg_is_in_recovery() AS replica
+            ", [], false);
+
+            if (
+                $identity->ro !== 'on'
+                || filter_var(
+                    $identity->replica,
+                    FILTER_VALIDATE_BOOLEAN
+                )
+            ) {
+
+                throw new \RuntimeException(
+                    'INVALID_COMMIT_VERIFICATION_TARGET'
+                );
+            }
+
+            $persisted =
+                $this->findCommittedAttendance(
+                    $terminal,
+                    $employee,
+                    $attendance,
+                    $direction,
+                    $path,
+                    $verificationName
+                );
+
+            if ($persisted !== null) {
+
+                // Do not leave the returned model
+                // attached to a temporary connection.
+
+                $persisted->setConnection(
+                    $originalName
+                );
+            }
+
+            return $persisted;
+
+        } finally {
+
+            DB::purge($verificationName);
+
+            $connections = config(
+                'database.connections',
+                []
+            );
+
+            unset(
+                $connections[$verificationName]
+            );
+
+            config([
+                'database.connections' =>
+                    $connections,
+            ]);
+        }
+    }
+
+    private function restoreConnectionAfterVerifiedCommit(
+        ?string $connectionName
+    ): bool {
+
+        $name = $connectionName
+            ?? DB::getDefaultConnection();
+
+        try {
+
+            // Only invoked after an independently
+            // verified successful commit.
+
+            if (app()->bound('db.transactions')) {
+
+                app('db.transactions')->rollback(
+                    $name,
+                    0
+                );
+            }
+
+            DB::purge($name);
+
+            $connection = DB::connection($name);
+
+            $connection->selectOne(
+                'SELECT 1 AS healthy',
+                [],
+                false
+            );
+
+            if (
+                $connection->transactionLevel() !== 0
+                || $connection->getPdo()
+                    ->inTransaction()
+            ) {
+
+                throw new \RuntimeException(
+                    'RESTORED_CONNECTION_NOT_CLEAN'
+                );
+            }
+
+            return true;
+
+        } catch (\Throwable $error) {
+
+            // Attendance is already confirmed.
+            // Failure to restore incident processing
+            // must not report a false registration failure.
+
+            $this->warnEvidenceRecovery(
+                'confirmed_attendance_incident_sync_deferred',
+                $error
+            );
+
+            return false;
+        }
+    }
+
+    private function warnEvidenceRecovery(
+        string $state,
+        \Throwable $error
+    ): void {
+
+        try {
+
+            \Illuminate\Support\Facades\Log::warning(
+                'Attendance evidence recovery',
+                [
+                    'state' => $state,
+                    'exception_type' => get_class($error),
+                ]
+            );
+
+        } catch (\Throwable) {
+
+            // Logging failure must never delete evidence
+            // or mask the original registration error.
+        }
     }
 
     public function preview(

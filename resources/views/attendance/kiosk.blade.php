@@ -326,6 +326,11 @@
     let cameraReady = false;
     let processingScan = false;
     let scanBuffer = '';
+
+    const QR_DUPLICATE_WINDOW_MS = 3000;
+    let lastAcceptedQr = '';
+    let lastAcceptedQrAt = 0;
+
     let scanLastKeyAt = 0;
     let scanCommitTimer = null;
     let overlayTimer = null;
@@ -1081,20 +1086,70 @@
         }
     }
 
+
+    function dispatchScannerQr(raw) {
+
+        if (
+            !terminalReady ||
+            processingScan ||
+            !resultOverlay.hidden ||
+            pendingQr
+        ) {
+            return false;
+        }
+
+        const value = String(raw || '').trim();
+
+        if (value.length < 6 || value.length > 2048) {
+            return false;
+        }
+
+        const match = value.match(
+            /\/asistencia\/empleado\/([^/?#]+)/i
+        );
+
+        let normalized = match ? match[1] : value;
+
+        try {
+            normalized = decodeURIComponent(normalized);
+        } catch (_) {}
+
+        const now = performance.now();
+
+        if (
+            normalized === lastAcceptedQr &&
+            now - lastAcceptedQrAt < QR_DUPLICATE_WINDOW_MS
+        ) {
+            return false;
+        }
+
+        lastAcceptedQr = normalized;
+        lastAcceptedQrAt = now;
+
+        processEmployeeQr(value);
+
+        return true;
+    }
+
     function commitScannerBuffer() {
         clearTimeout(scanCommitTimer);
         scanCommitTimer = null;
         const value = scanBuffer.trim();
         scanBuffer = '';
-        if (value.length >= 6) processEmployeeQr(value);
+        if (value.length >= 6) dispatchScannerQr(value);
     }
 
     document.addEventListener('keydown', event => {
+        if (
+            event.target instanceof HTMLInputElement &&
+            event.target.getAttribute('aria-label') === 'Captura QR'
+        ) return;
+
         if (! terminalReady || processingScan || resultOverlay.hidden === false) return;
         if (event.ctrlKey || event.altKey || event.metaKey) return;
 
         const now = performance.now();
-        if (now - scanLastKeyAt > 220) scanBuffer = '';
+        if (now - scanLastKeyAt > 1500) scanBuffer = '';
         scanLastKeyAt = now;
 
         if (event.key === 'Enter' || event.key === 'Tab') {
@@ -1107,12 +1162,176 @@
             scanBuffer += event.key;
             if (scanBuffer.length > 2048) scanBuffer = scanBuffer.slice(-2048);
             clearTimeout(scanCommitTimer);
-            scanCommitTimer = setTimeout(commitScannerBuffer, 180);
+            scanCommitTimer = setTimeout(commitScannerBuffer, 1200);
             setScannerStatus('ok', 'Lector QR: leyendo');
         }
     }, true);
 
+
+    // Captura alternativa para lectores HID y pruebas.
+    function setupQrCaptureField() {
+
+        const panel = document.createElement('div');
+
+        panel.style.cssText =
+            'position:fixed;top:0;left:0;' +
+            'width:1px;height:1px;overflow:hidden;' +
+            'opacity:0;pointer-events:none;';
+
+        const label = document.createElement('label');
+
+        label.textContent = 'Captura del lector QR';
+        label.style.cssText =
+            'display:block;font-size:12px;' +
+            'margin-bottom:5px;color:#475569;';
+
+        const input = document.createElement('input');
+
+        input.type = 'password';
+        input.autocomplete = 'off';
+        input.setAttribute('inputmode', 'none');
+        input.tabIndex = -1;
+        input.spellcheck = false;
+        input.setAttribute('aria-label', 'Captura QR');
+
+        input.placeholder =
+            'Escanea o pega la credencial QR';
+
+        input.style.cssText =
+            'width:100%;padding:10px;' +
+            'border:1px solid #94a3b8;' +
+            'border-radius:6px;box-sizing:border-box;';
+
+        const status = document.createElement('div');
+
+        status.style.cssText =
+            'font-size:12px;margin-top:5px;' +
+            'color:#64748b;';
+
+        status.textContent = 'Esperando lectura';
+
+        const button = document.createElement('button');
+
+        button.type = 'button';
+        button.textContent = 'Procesar lectura';
+
+        button.style.cssText =
+            'margin-top:6px;padding:6px 12px;' +
+            'background:#1e293b;color:white;' +
+            'border:0;border-radius:6px;';
+
+        let timer = null;
+
+        function submit() {
+
+            clearTimeout(timer);
+
+            if (
+                !terminalReady ||
+                processingScan ||
+                resultOverlay.hidden === false
+            ) {
+                input.value = '';
+                scanBuffer = '';
+
+                clearTimeout(scanCommitTimer);
+
+                status.textContent =
+                    'Terminal ocupada o no disponible';
+                return;
+            }
+
+            const raw = input.value.trim();
+
+            if (raw.length < 6) {
+                return;
+            }
+
+            if (raw.length > 2048) {
+                input.value = '';
+                status.textContent =
+                    'Lectura demasiado larga';
+                return;
+            }
+
+            clearTimeout(scanCommitTimer);
+            scanBuffer = '';
+            input.value = '';
+
+            status.textContent =
+                'Lectura recibida: ' +
+                raw.length +
+                ' caracteres. Procesando...';
+
+            dispatchScannerQr(raw);
+        }
+
+        input.addEventListener('keydown', event => {
+
+            event.stopPropagation();
+
+            if (
+                event.key === 'Enter' ||
+                event.key === 'Tab'
+            ) {
+                event.preventDefault();
+                submit();
+            }
+        });
+
+        input.addEventListener('input', () => {
+
+            clearTimeout(timer);
+
+            if (
+                !terminalReady ||
+                processingScan ||
+                !resultOverlay.hidden ||
+                pendingQr
+            ) {
+                input.value = '';
+                return;
+            }
+
+            status.textContent =
+                'Recibiendo: ' +
+                input.value.length +
+                ' caracteres';
+
+            timer = setTimeout(submit, 1200);
+        });
+
+        button.addEventListener('click', submit);
+
+        panel.append(input);
+
+        document.body.appendChild(panel);
+
+        // No interferir con el teclado durante
+        // la vinculacion o seleccion de acciones.
+
+        setInterval(() => {
+
+            panel.hidden = !terminalReady;
+
+            if (
+                terminalReady &&
+                !processingScan &&
+                resultOverlay.hidden &&
+                (
+                    document.activeElement === document.body ||
+                    document.activeElement === document.documentElement
+                )
+            ) {
+                input.focus({preventScroll:true});
+            }
+
+        }, 1000);
+    }
+
+
     async function boot() {
+        setupQrCaptureField();
         updateClock();
         updateNetwork();
         setInterval(updateClock, 1000);

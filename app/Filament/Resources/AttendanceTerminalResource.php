@@ -257,6 +257,33 @@ class AttendanceTerminalResource extends Resource
                                     trim((string) $state)
                             ),
 
+                        Forms\Components\Select::make('terminal_type')
+                            ->label('Tipo de terminal')
+                            ->options([
+                                'attendance' => 'Asistencia',
+                                'security' => 'Seguridad',
+                            ])
+                            ->required()
+                            ->default('attendance')
+                            ->afterStateHydrated(
+                                function ($component, ?AttendanceTerminal $record): void {
+                                    $type = data_get(
+                                        $record?->settings,
+                                        'terminal_type',
+                                        'attendance'
+                                    );
+
+                                    $component->state(
+                                        in_array($type, ['attendance', 'security'], true)
+                                            ? $type
+                                            : 'attendance'
+                                    );
+                                }
+                            )
+                            ->helperText(
+                                'Seguridad usara un monitor independiente.'
+                            ),
+
                         Forms\Components\Toggle::make('active')
                             ->label('Terminal activa')
                             ->default(true)
@@ -380,6 +407,17 @@ class AttendanceTerminalResource extends Resource
                     ->label('Sucursal')
                     ->searchable()
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('tipo_terminal')
+                    ->label('Tipo')
+                    ->getStateUsing(
+                        fn (AttendanceTerminal $record): string =>
+                            data_get($record->settings, 'terminal_type', 'attendance')
+                                === 'security'
+                                    ? 'Seguridad'
+                                    : 'Asistencia'
+                    )
+                    ->badge(),
 
                 Tables\Columns\TextColumn::make('estado_terminal')
                     ->label('Estado')
@@ -692,6 +730,27 @@ class AttendanceTerminalResource extends Resource
         ] as $protectedField) {
             unset($data[$protectedField]);
         }
+
+        $type = (string) (
+            $data['terminal_type']
+            ?? data_get($record?->settings, 'terminal_type', 'attendance')
+        );
+
+        unset($data['terminal_type']);
+
+        if (! in_array($type, ['attendance', 'security'], true)) {
+            throw ValidationException::withMessages([
+                'terminal_type' => 'Tipo de terminal invalido.',
+            ]);
+        }
+
+        $settings = is_array($record?->settings)
+            ? $record->settings
+            : [];
+
+        $settings['terminal_type'] = $type;
+
+        $data['settings'] = $settings;
 
         return $data;
     }

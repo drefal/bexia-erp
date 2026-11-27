@@ -220,6 +220,13 @@ class AttendanceTerminalPairingService
             'uuid' => (string) $terminal->uuid,
             'code' => (string) $terminal->code,
             'name' => (string) $terminal->name,
+            'terminal_type' => data_get(
+                $terminal->settings,
+                'terminal_type',
+                'attendance'
+            ) === 'security'
+                ? 'security'
+                : 'attendance',
             'active' => (bool) $terminal->active,
             'blocked' => $terminal->isBlocked(),
             'company' => $terminal->company ? [

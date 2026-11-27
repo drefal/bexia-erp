@@ -726,6 +726,56 @@ Route::post('/asistencia/empleado/{token}/registrar', [PublicEmployeeAttendanceC
 // V5.83.4C-ATTENDANCE-KIOSK-PAIRING-START
 // Kiosco publico: la tablet NO usa login de usuario.
 // La vinculacion se autoriza desde RRHH > Terminales de asistencia.
+// RRHH-SEG01 - Monitor de Seguridad
+Route::get(
+    '/asistencia/seguridad',
+    [\App\Http\Controllers\Attendance\AttendanceSecurityMonitorController::class, 'show']
+)->name('attendance.security.show');
+
+Route::get(
+    '/asistencia/seguridad/entradas',
+    [\App\Http\Controllers\Attendance\AttendanceSecurityMonitorController::class, 'entries']
+)->middleware('throttle:30,1')
+  ->name('attendance.security.entries');
+
+Route::post(
+    '/asistencia/seguridad/realtime/auth',
+    [
+        \App\Http\Controllers\Attendance\AttendanceRealtimeAuthController::class,
+        'store',
+    ]
+)->middleware('throttle:20,1')
+  ->name('attendance.security.realtime.auth');
+
+// BEXIA_RRHH_SEG02_USER_REALTIME_START
+
+Route::middleware(['auth:web'])->group(function () {
+
+    Route::post(
+        '/rrhh/accesos/{company}/realtime/auth',
+        [
+            \App\Http\Controllers\Attendance\AttendanceAccessUserRealtimeController::class,
+            'authorizeChannel',
+        ]
+    )
+        ->whereNumber('company')
+        ->middleware('throttle:12,1')
+        ->name('rrhh.access.realtime.auth');
+
+    Route::get(
+        '/rrhh/accesos/{company}/pendientes/count',
+        [
+            \App\Http\Controllers\Attendance\AttendanceAccessUserRealtimeController::class,
+            'pendingCount',
+        ]
+    )
+        ->whereNumber('company')
+        ->middleware('throttle:30,1')
+        ->name('rrhh.access.pending.count');
+});
+
+// BEXIA_RRHH_SEG02_USER_REALTIME_END
+
 Route::get('/asistencia/kiosco', [\App\Http\Controllers\Attendance\AttendanceKioskPairingController::class, 'show'])
     ->middleware('throttle:60,1')
     ->name('attendance.kiosk.show');
