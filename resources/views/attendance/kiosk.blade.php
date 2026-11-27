@@ -327,9 +327,42 @@
     let processingScan = false;
     let scanBuffer = '';
 
+    // BEXIA_RRHH_SEG06_QR_GUARD
     const QR_DUPLICATE_WINDOW_MS = 3000;
-    let lastAcceptedQr = '';
-    let lastAcceptedQrAt = 0;
+
+    const recentQrReads = new Map();
+
+    let activeScanQr = null;
+    let scanBufferBusy = false;
+
+    function scannerBusy() {
+        return processingScan
+            || !resultOverlay.hidden
+            || !actionOverlay.hidden
+            || Boolean(pendingQr);
+    }
+
+    function pruneRecentQrReads(now) {
+        for (const [key, until] of recentQrReads) {
+            if (until <= now && key !== activeScanQr) {
+                recentQrReads.delete(key);
+            }
+        }
+    }
+
+    function releaseQrGuard() {
+        if (activeScanQr !== null) {
+            recentQrReads.set(
+                activeScanQr,
+                performance.now() + QR_DUPLICATE_WINDOW_MS
+            );
+
+            activeScanQr = null;
+        }
+
+        pruneRecentQrReads(performance.now());
+    }
+    // BEXIA_RRHH_SEG06_QR_GUARD_END
 
     let scanLastKeyAt = 0;
     let scanCommitTimer = null;
@@ -644,6 +677,9 @@
 
         overlayTimer = setTimeout(() => {
             resultOverlay.hidden = true;
+
+            releaseQrGuard();
+
             processingScan = false;
             scanTitle.textContent = 'PASA TU TARJETA';
             scanSubtitle.textContent = 'Escanea tu credencial y selecciona el registro que deseas realizar.';
@@ -662,6 +698,8 @@
         pendingPreview = null;
 
         if (releaseScanner) {
+            releaseQrGuard();
+
             processingScan = false;
             scanTitle.textContent = 'PASA TU TARJETA';
             scanSubtitle.textContent =
@@ -822,7 +860,11 @@
     }
 
     async function submitSelectedAction(action) {
-        if (! pendingQr || ! action) return;
+        if (
+            !pendingQr
+            || !action
+            || actionCancel.disabled
+        ) return;
 
         clearTimeout(actionTimer);
         actionTimer = null;
@@ -955,7 +997,8 @@
     }
 
     actionCancel.addEventListener('click', () => {
-        actionCancel.disabled = false;
+        if (actionCancel.disabled) return;
+
         resetActionSelection(true);
     });
 
@@ -1087,20 +1130,16 @@
     }
 
 
-    function dispatchScannerQr(raw) {
 
-        if (
-            !terminalReady ||
-            processingScan ||
-            !resultOverlay.hidden ||
-            pendingQr
-        ) {
-            return false;
-        }
-
+    // BEXIA_RRHH_SEG06_DISPATCH_START
+    function dispatchScannerQr(raw, startedBusy = false) {
         const value = String(raw || '').trim();
 
-        if (value.length < 6 || value.length > 2048) {
+        if (
+            !terminalReady
+            || value.length < 6
+            || value.length > 2048
+        ) {
             return false;
         }
 
@@ -1114,29 +1153,69 @@
             normalized = decodeURIComponent(normalized);
         } catch (_) {}
 
+        normalized = normalized.trim();
+
+        if (!normalized) return false;
+
         const now = performance.now();
 
-        if (
-            normalized === lastAcceptedQr &&
-            now - lastAcceptedQrAt < QR_DUPLICATE_WINDOW_MS
-        ) {
+        pruneRecentQrReads(now);
+
+        const duplicate =
+            normalized === activeScanQr
+            || recentQrReads.has(normalized);
+
+        if (duplicate) {
+            recentQrReads.set(
+                normalized,
+                now + QR_DUPLICATE_WINDOW_MS
+            );
+
+            if (!scannerBusy() && !startedBusy) {
+                scanTitle.textContent = 'RETIRA TU TARJETA';
+
+                scanSubtitle.textContent =
+                    'Lectura repetida. Retira tu credencial del lector.';
+
+                setScannerStatus(
+                    'warn',
+                    'Lector QR: lectura repetida ignorada'
+                );
+            }
+
             return false;
         }
 
-        lastAcceptedQr = normalized;
-        lastAcceptedQrAt = now;
+        // Never queue a scan received during another operation.
+        if (scannerBusy() || startedBusy) {
+            return false;
+        }
+
+        activeScanQr = normalized;
+
+        recentQrReads.set(
+            normalized,
+            now + QR_DUPLICATE_WINDOW_MS
+        );
 
         processEmployeeQr(value);
 
         return true;
     }
+    // BEXIA_RRHH_SEG06_DISPATCH_END
 
     function commitScannerBuffer() {
         clearTimeout(scanCommitTimer);
         scanCommitTimer = null;
         const value = scanBuffer.trim();
+        const startedBusy = scanBufferBusy;
+
         scanBuffer = '';
-        if (value.length >= 6) dispatchScannerQr(value);
+        scanBufferBusy = false;
+
+        if (value.length >= 6) {
+            dispatchScannerQr(value, startedBusy);
+        }
     }
 
     document.addEventListener('keydown', event => {
@@ -1145,12 +1224,22 @@
             event.target.getAttribute('aria-label') === 'Captura QR'
         ) return;
 
-        if (! terminalReady || processingScan || resultOverlay.hidden === false) return;
+        if (!terminalReady) return;
         if (event.ctrlKey || event.altKey || event.metaKey) return;
 
+        const busy = scannerBusy();
+
         const now = performance.now();
-        if (now - scanLastKeyAt > 1500) scanBuffer = '';
+        if (now - scanLastKeyAt > 1500) {
+            scanBuffer = '';
+            scanBufferBusy = false;
+        }
+
         scanLastKeyAt = now;
+
+        if (busy) {
+            scanBufferBusy = true;
+        }
 
         if (event.key === 'Enter' || event.key === 'Tab') {
             event.preventDefault();
@@ -1159,11 +1248,17 @@
         }
 
         if (event.key.length === 1) {
+            if (busy) {
+                event.preventDefault();
+            }
+
             scanBuffer += event.key;
             if (scanBuffer.length > 2048) scanBuffer = scanBuffer.slice(-2048);
             clearTimeout(scanCommitTimer);
             scanCommitTimer = setTimeout(commitScannerBuffer, 1200);
-            setScannerStatus('ok', 'Lector QR: leyendo');
+            if (!busy) {
+                setScannerStatus('ok', 'Lector QR: leyendo');
+            }
         }
     }, true);
 
@@ -1221,49 +1316,41 @@
             'border:0;border-radius:6px;';
 
         let timer = null;
+        let inputStartedBusy = false;
+
 
         function submit() {
-
             clearTimeout(timer);
-
-            if (
-                !terminalReady ||
-                processingScan ||
-                resultOverlay.hidden === false
-            ) {
-                input.value = '';
-                scanBuffer = '';
-
-                clearTimeout(scanCommitTimer);
-
-                status.textContent =
-                    'Terminal ocupada o no disponible';
-                return;
-            }
+            timer = null;
 
             const raw = input.value.trim();
 
-            if (raw.length < 6) {
-                return;
-            }
+            const startedBusy =
+                inputStartedBusy || scannerBusy();
 
-            if (raw.length > 2048) {
-                input.value = '';
-                status.textContent =
-                    'Lectura demasiado larga';
-                return;
-            }
+            input.value = '';
+            inputStartedBusy = false;
 
             clearTimeout(scanCommitTimer);
+            scanCommitTimer = null;
+
             scanBuffer = '';
-            input.value = '';
+            scanBufferBusy = false;
 
-            status.textContent =
-                'Lectura recibida: ' +
-                raw.length +
-                ' caracteres. Procesando...';
+            if (raw.length < 6 || raw.length > 2048) {
+                return;
+            }
 
-            dispatchScannerQr(raw);
+            if (!terminalReady) return;
+
+            const accepted = dispatchScannerQr(
+                raw,
+                startedBusy
+            );
+
+            status.textContent = accepted
+                ? 'Procesando lectura'
+                : 'Lectura ignorada';
         }
 
         input.addEventListener('keydown', event => {
@@ -1279,24 +1366,27 @@
             }
         });
 
-        input.addEventListener('input', () => {
 
+        input.addEventListener('input', () => {
             clearTimeout(timer);
 
-            if (
-                !terminalReady ||
-                processingScan ||
-                !resultOverlay.hidden ||
-                pendingQr
-            ) {
+            if (!terminalReady) {
                 input.value = '';
+                inputStartedBusy = false;
                 return;
             }
 
-            status.textContent =
-                'Recibiendo: ' +
-                input.value.length +
-                ' caracteres';
+            if (scannerBusy()) {
+                inputStartedBusy = true;
+            }
+
+            if (input.value.length > 2048) {
+                input.value = '';
+                inputStartedBusy = true;
+                return;
+            }
+
+            status.textContent = 'Recibiendo lectura';
 
             timer = setTimeout(submit, 1200);
         });
